@@ -7,6 +7,11 @@ from pie_models.models import TextClassificationModelWithPooler
 from pie_models.taskmodules import RETextClassificationWithIndicesTaskModule
 
 
+@pytest.fixture(scope="session")
+def documents(dataset):
+    return dataset["train"]
+
+
 @pytest.fixture(scope="module")
 def taskmodule():
     tokenizer_name_or_path = "bert-base-cased"

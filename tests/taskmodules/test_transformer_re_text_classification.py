@@ -32,6 +32,11 @@ def taskmodule(cfg):
     return taskmodule
 
 
+@pytest.fixture(scope="session")
+def documents(dataset):
+    return dataset["train"]
+
+
 @pytest.fixture
 def prepared_taskmodule(taskmodule, documents):
     taskmodule.prepare(documents)
@@ -182,7 +187,7 @@ def test_prepare(taskmodule, documents):
 
 def test_config(prepared_taskmodule):
     config = prepared_taskmodule._config()
-    assert config["taskmodule_type"] == "TransformerRETextClassificationTaskModule2"
+    assert config["taskmodule_type"] == "RETextClassificationWithIndicesTaskModule"
     assert "label_to_id" in config
     assert config["label_to_id"] == {
         "org:founded_by": 1,
