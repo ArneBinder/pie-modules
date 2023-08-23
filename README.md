@@ -1,8 +1,6 @@
-![Cake It](cake.png)
-
 # pie-models
 
-Model and Taskmodule implementations for [pytorch-ie](https://github.com/ChristophAlt/pytorch-ie).
+Model and Taskmodule implementations for [PyTorch-IE](https://github.com/ChristophAlt/pytorch-ie).
 
 ## Setup
 
@@ -20,6 +18,6 @@ pip install git+ssh://git@github.com/ArneBinder/pie-models.git
 
 ```bash
 git clone https://github.com/ArneBinder/pie-models
-cd pie-utils
+cd pie-models
 pip install -e ".[dev]"
 ```
