@@ -23,7 +23,7 @@ EXTRAS_REQUIRE = {
 
 setup(
     name="pie-models",
-    version="0.0.1",
+    version="0.1.0",
     description="Model and Taskmodule implementations for PyTorch-IE",
     author="Arne Binder",
     author_email="arne.b.binder@gmail.com",
