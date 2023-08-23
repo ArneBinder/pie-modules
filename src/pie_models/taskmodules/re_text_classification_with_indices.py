@@ -43,29 +43,29 @@ from transformers.file_utils import PaddingStrategy
 from transformers.tokenization_utils_base import TruncationStrategy
 from typing_extensions import TypeAlias
 
-TransformerReTextClassificationInputEncoding: TypeAlias = Dict[str, Any]
-TransformerReTextClassificationTargetEncoding: TypeAlias = Sequence[int]
+InputEncodingType: TypeAlias = Dict[str, Any]
+TargetEncodingType: TypeAlias = Sequence[int]
 
-TransformerReTextClassificationTaskEncoding: TypeAlias = TaskEncoding[
+TaskEncodingType: TypeAlias = TaskEncoding[
     TextDocument,
-    TransformerReTextClassificationInputEncoding,
-    TransformerReTextClassificationTargetEncoding,
+    InputEncodingType,
+    TargetEncodingType,
 ]
 
 
-class TransformerReTextClassificationTaskOutput(TypedDict, total=False):
+class TaskOutputType(TypedDict, total=False):
     labels: Sequence[str]
     probabilities: Sequence[float]
 
 
-_TransformerReTextClassificationTaskModule: TypeAlias = TaskModule[
+TaskModuleType: TypeAlias = TaskModule[
     # _InputEncoding, _TargetEncoding, _TaskBatchEncoding, _ModelBatchOutput, _TaskOutput
     TextDocument,
-    TransformerReTextClassificationInputEncoding,
-    TransformerReTextClassificationTargetEncoding,
+    InputEncodingType,
+    TargetEncodingType,
     TransformerTextClassificationModelStepBatchEncoding,
     TransformerTextClassificationModelBatchOutput,
-    TransformerReTextClassificationTaskOutput,
+    TaskOutputType,
 ]
 
 
@@ -123,7 +123,7 @@ class RelationArgument:
 
 
 @TaskModule.register()
-class RETextClassificationWithIndicesTaskModule(_TransformerReTextClassificationTaskModule):
+class RETextClassificationWithIndicesTaskModule(TaskModuleType):
     """Marker based relation extraction. This taskmodule prepares the input token ids in such a way
     that before and after the candidate head and tail entities special marker tokens are inserted.
     Then, the modified token ids can be simply passed into a transformer based text classifier
@@ -312,12 +312,7 @@ class RETextClassificationWithIndicesTaskModule(_TransformerReTextClassification
         self,
         document: TextDocument,
         is_training: bool = False,
-    ) -> Optional[
-        Union[
-            TransformerReTextClassificationTaskEncoding,
-            Sequence[TransformerReTextClassificationTaskEncoding],
-        ]
-    ]:
+    ) -> Optional[Union[TaskEncodingType, Sequence[TaskEncodingType],]]:
         relations: Sequence[BinaryRelation]
         if self.create_relation_candidates:
             relations = self._create_relation_candidates(document)
@@ -336,7 +331,7 @@ class RETextClassificationWithIndicesTaskModule(_TransformerReTextClassification
             # use single dummy partition
             partitions = [Span(start=0, end=len(document.text))]
 
-        task_encodings: List[TransformerReTextClassificationTaskEncoding] = []
+        task_encodings: List[TaskEncodingType] = []
         for partition in partitions:
             without_special_tokens = self.max_window is not None
             text = document.text[partition.start : partition.end]
@@ -539,8 +534,8 @@ class RETextClassificationWithIndicesTaskModule(_TransformerReTextClassification
 
     def _maybe_log_example(
         self,
-        task_encoding: TransformerReTextClassificationTaskEncoding,
-        target: TransformerReTextClassificationTargetEncoding,
+        task_encoding: TaskEncodingType,
+        target: TargetEncodingType,
     ):
         """Maybe log the example."""
 
@@ -559,8 +554,8 @@ class RETextClassificationWithIndicesTaskModule(_TransformerReTextClassification
 
     def encode_target(
         self,
-        task_encoding: TransformerReTextClassificationTaskEncoding,
-    ) -> TransformerReTextClassificationTargetEncoding:
+        task_encoding: TaskEncodingType,
+    ) -> TargetEncodingType:
         candidate_annotation = task_encoding.metadata["candidate_annotation"]
         if isinstance(candidate_annotation, BinaryRelation):
             labels = [candidate_annotation.label]
@@ -577,7 +572,7 @@ class RETextClassificationWithIndicesTaskModule(_TransformerReTextClassification
 
     def unbatch_output(
         self, model_output: TransformerTextClassificationModelBatchOutput
-    ) -> Sequence[TransformerReTextClassificationTaskOutput]:
+    ) -> Sequence[TaskOutputType]:
         logits = model_output["logits"]
 
         output_label_probs = logits.sigmoid() if self.multi_label else logits.softmax(dim=-1)
@@ -591,7 +586,7 @@ class RETextClassificationWithIndicesTaskModule(_TransformerReTextClassification
             for batch_idx, label_id in enumerate(label_ids):
                 label = self.id_to_label[label_id]
                 prob = float(output_label_probs[batch_idx, label_id])
-                result: TransformerReTextClassificationTaskOutput = {
+                result: TaskOutputType = {
                     "labels": [label],
                     "probabilities": [prob],
                 }
@@ -601,8 +596,8 @@ class RETextClassificationWithIndicesTaskModule(_TransformerReTextClassification
 
     def create_annotations_from_output(
         self,
-        task_encoding: TransformerReTextClassificationTaskEncoding,
-        task_output: TransformerReTextClassificationTaskOutput,
+        task_encoding: TaskEncodingType,
+        task_output: TaskOutputType,
     ) -> Iterator[Tuple[str, Union[BinaryRelation, MultiLabeledBinaryRelation, NaryRelation]]]:
         candidate_annotation = task_encoding.metadata["candidate_annotation"]
         new_annotation: Union[BinaryRelation, MultiLabeledBinaryRelation, NaryRelation]
@@ -641,7 +636,7 @@ class RETextClassificationWithIndicesTaskModule(_TransformerReTextClassification
                 yield self.relation_annotation, new_annotation
 
     def collate(
-        self, task_encodings: Sequence[TransformerReTextClassificationTaskEncoding]
+        self, task_encodings: Sequence[TaskEncodingType]
     ) -> TransformerTextClassificationModelStepBatchEncoding:
         input_features = [
             {"input_ids": task_encoding.inputs["input_ids"]} for task_encoding in task_encodings
@@ -666,7 +661,7 @@ class RETextClassificationWithIndicesTaskModule(_TransformerReTextClassification
         if not task_encodings[0].has_targets:
             return inputs, None
 
-        target_list: List[TransformerReTextClassificationTargetEncoding] = [
+        target_list: List[TargetEncodingType] = [
             task_encoding.targets for task_encoding in task_encodings
         ]
         targets = torch.tensor(target_list, dtype=torch.int64)
