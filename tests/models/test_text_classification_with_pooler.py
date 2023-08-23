@@ -121,7 +121,7 @@ def test_pooler(documents, prepared_taskmodule, mock_model):
     hidden_state = outputs.last_hidden_state
     # just as sanity check: compare the shape and the first values of the first batch element of the input
     assert hidden_state.shape == torch.Size([7, 22, 10])
-    torch.testing.assert_allclose(
+    torch.testing.assert_close(
         hidden_state[0, 0],
         torch.tensor(
             [
@@ -139,11 +139,11 @@ def test_pooler(documents, prepared_taskmodule, mock_model):
         ),
     )
     assert set(pooler_inputs) == {"start_indices", "end_indices"}
-    torch.testing.assert_allclose(
+    torch.testing.assert_close(
         pooler_inputs["start_indices"],
         torch.tensor([[2, 10], [5, 13], [5, 17], [17, 11], [5, 13], [14, 18], [18, 14]]),
     )
-    torch.testing.assert_allclose(
+    torch.testing.assert_close(
         pooler_inputs["end_indices"],
         torch.tensor([[6, 11], [9, 14], [9, 18], [18, 12], [9, 14], [15, 19], [19, 15]]),
     )
@@ -154,7 +154,7 @@ def test_pooler(documents, prepared_taskmodule, mock_model):
     # we compare just the shape and the first and last values of the first batch element
     if mock_model.pooler_config["type"] == "cls_token":
         assert pooled_output.shape == torch.Size([7, 10])
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             pooled_output[0],
             torch.tensor(
                 [
@@ -171,7 +171,7 @@ def test_pooler(documents, prepared_taskmodule, mock_model):
                 ],
             ),
         )
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             pooled_output[-1],
             torch.tensor(
                 [
@@ -191,7 +191,7 @@ def test_pooler(documents, prepared_taskmodule, mock_model):
 
     elif mock_model.pooler_config["type"] == "mention_pooling":
         assert pooled_output.shape == torch.Size([7, 20])
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             pooled_output[0],
             torch.tensor(
                 [
@@ -218,7 +218,7 @@ def test_pooler(documents, prepared_taskmodule, mock_model):
                 ],
             ),
         )
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             pooled_output[-1],
             torch.tensor(
                 [
@@ -247,7 +247,7 @@ def test_pooler(documents, prepared_taskmodule, mock_model):
         )
     elif mock_model.pooler_config["type"] == "start_tokens":
         assert pooled_output.shape == torch.Size([7, 20])
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             pooled_output[0],
             torch.tensor(
                 [
@@ -274,7 +274,7 @@ def test_pooler(documents, prepared_taskmodule, mock_model):
                 ],
             ),
         )
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             pooled_output[-1],
             torch.tensor(
                 [
