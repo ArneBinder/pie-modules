@@ -1,0 +1,39 @@
+
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main, "release/*"]
+
+jobs:
+  tests:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest"]
+        python-version: ["3.9"]
+
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --extra-index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[tests]"
+
+      - name: Run tests with coverage
+        run: |
+          pytest -k "not slow" --cov --cov-fail-under=100 --cov-report term-missing
