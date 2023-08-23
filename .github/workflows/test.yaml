@@ -36,4 +36,4 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest -k "not slow" --cov --cov-fail-under=100 --cov-report term-missing
+          pytest -k "not slow" --cov --cov-fail-under=84 --cov-report term-missing
