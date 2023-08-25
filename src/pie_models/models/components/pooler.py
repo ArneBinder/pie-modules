@@ -18,12 +18,21 @@ def pool_cls(hidden_state: Tensor, **kwargs) -> Tensor:
 
 
 class AtIndexPooler(nn.Module):
-    """Pooler that takes the hidden state at a given index.
+    """Pooler that takes the hidden states at given indices. If the index is negative, a learned
+    embedding is used.
+
+    The indices are expected to have the shape [batch_size, num_indices]. The resulting embeddings are concatenated,
+    so the output shape is [batch_size, num_indices * input_dim].
 
     Args:
         input_dim: The input dimension of the hidden state.
         num_indices: The number of indices to pool.
-        offset: The offset to add to the indices.
+        offset: An offset to add to the indices. This can be useful if the input is prepared with special
+            tokens at the beginning / at the end of indexed sequences, and we want to use the hidden state of this
+            token instead of the first / last token of the sequence.
+
+    Returns:
+        The pooled hidden states with shape [batch_size, num_indices * input_dim].
     """
 
     def __init__(self, input_dim: int, num_indices: int = 2, offset: int = 0, **kwargs):
