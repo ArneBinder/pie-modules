@@ -95,11 +95,18 @@ class ArgumentWrappedPooler(nn.Module):
 
 
 class SpanMaxPooler(nn.Module):
-    """Pooler that takes the max hidden state over a span.
+    """Pooler that takes the max hidden state over spans. If the start or end index is negative, a
+    learned.
+
+    embedding is used. The indices are expected to have the shape [batch_size, num_indices]. The resulting embeddings
+    are concatenated, so the output shape is [batch_size, num_indices * input_dim].
 
     Args:
         input_dim: The input dimension of the hidden state.
         num_indices: The number of indices to pool.
+
+    Returns:
+        The pooled hidden states with shape [batch_size, num_indices * input_dim].
     """
 
     def __init__(self, input_dim: int, num_indices: int = 2, **kwargs):
@@ -121,6 +128,16 @@ class SpanMaxPooler(nn.Module):
         if start_indices.shape[1] != self.num_indices:
             raise ValueError(
                 f"number of indices [{start_indices.shape[1]}] has to be the same as num_types [{self.num_indices}]."
+            )
+
+        # check that start_indices are before end_indices
+        mask_both_positive = (start_indices >= 0) & (end_indices >= 0)
+        mask_start_before_end = start_indices < end_indices
+        mask_valid = mask_start_before_end | ~mask_both_positive
+        if not torch.all(mask_valid):
+            raise ValueError(
+                f"values in start_indices have to be smaller than respective values in "
+                f"end_indices, but start_indices={start_indices} and end_indices={end_indices}."
             )
 
         # times num_indices due to concat
