@@ -464,3 +464,12 @@ def test_validation_step(batch, model):
 def test_test_step(batch, model):
     loss = model.test_step(batch, batch_idx=0)
     assert loss is not None
+
+
+def test_configure_optimizers(model):
+    optimizer = model.configure_optimizers()
+    assert optimizer is not None
+    assert isinstance(optimizer, torch.optim.AdamW)
+    assert optimizer.defaults["lr"] == 1e-05
+    assert optimizer.defaults["weight_decay"] == 0.01
+    assert optimizer.defaults["eps"] == 1e-08
