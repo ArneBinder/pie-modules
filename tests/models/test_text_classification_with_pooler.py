@@ -213,18 +213,28 @@ def pooler_type(request):
     return request.param
 
 
-def get_model(monkeypatch, pooler_type, batch_size, seq_len, num_classes, **model_kwargs):
+def get_model(
+    monkeypatch,
+    pooler_type,
+    batch_size,
+    seq_len,
+    num_classes,
+    add_dummy_linear=False,
+    **model_kwargs,
+):
     class MockConfig:
         def __init__(self, hidden_size: int = 10, classifier_dropout: float = 1.0) -> None:
             self.hidden_size = hidden_size
             self.classifier_dropout = classifier_dropout
 
     class MockModel(torch.nn.Module):
-        def __init__(self, batch_size, seq_len, hidden_size) -> None:
+        def __init__(self, batch_size, seq_len, hidden_size, add_dummy_linear) -> None:
             super().__init__()
             self.batch_size = batch_size
             self.seq_len = seq_len
             self.hidden_size = hidden_size
+            if add_dummy_linear:
+                self.dummy_linear = torch.nn.Linear(self.hidden_size, 99)
 
         def __call__(self, *args, **kwargs):
             last_hidden_state = torch.rand(self.batch_size, self.seq_len, self.hidden_size)
@@ -245,7 +255,10 @@ def get_model(monkeypatch, pooler_type, batch_size, seq_len, num_classes, **mode
         transformers.AutoModel,
         "from_pretrained",
         lambda model_name_or_path, config: MockModel(
-            batch_size=batch_size, seq_len=seq_len, hidden_size=hidden_size
+            batch_size=batch_size,
+            seq_len=seq_len,
+            hidden_size=hidden_size,
+            add_dummy_linear=add_dummy_linear,
         ),
     )
 
@@ -491,10 +504,25 @@ def test_configure_optimizers_with_task_learning_rate(monkeypatch):
         batch_size=7,
         seq_len=22,
         num_classes=4,
+        add_dummy_linear=True,
         task_learning_rate=0.1,
     )
     optimizer = model.configure_optimizers()
     assert optimizer is not None
+    assert isinstance(optimizer, torch.optim.AdamW)
+    assert len(optimizer.param_groups) == 2
+    param_group = optimizer.param_groups[0]
+    assert param_group["lr"] == 1e-05
+    # the dummy linear from the mock base model has 2 parameters
+    assert len(param_group["params"]) == 2
+    assert param_group["params"][0].shape == torch.Size([99, 10])
+    assert param_group["params"][1].shape == torch.Size([99])
+    param_group = optimizer.param_groups[1]
+    assert param_group["lr"] == 0.1
+    # the classifier head has 2 parameters
+    assert len(param_group["params"]) == 2
+    assert param_group["params"][0].shape == torch.Size([4, 10])
+    assert param_group["params"][1].shape == torch.Size([4])
 
 
 def test_freeze_base_model(monkeypatch, inputs, targets):
@@ -505,8 +533,11 @@ def test_freeze_base_model(monkeypatch, inputs, targets):
         batch_size=7,
         seq_len=22,
         num_classes=4,
+        add_dummy_linear=True,
         freeze_base_model=True,
     )
-
-    for param in model.model.parameters():
+    base_model_params = list(model.model.parameters())
+    # the dummy linear from the mock base model has 2 parameters
+    assert len(base_model_params) == 2
+    for param in base_model_params:
         assert not param.requires_grad
