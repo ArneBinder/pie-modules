@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 @PyTorchIEModel.register()
-class TextClassificationModelWithPooler(PyTorchIEModel):
+class SequenceClassificationModel(PyTorchIEModel):
     def __init__(
         self,
         model_name_or_path: str,

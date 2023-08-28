@@ -1,1 +1,1 @@
-from .classification_with_pooler import TextClassificationModelWithPooler
+from .sequence_classification import SequenceClassificationModel

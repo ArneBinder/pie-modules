@@ -3,7 +3,7 @@ import torch
 import transformers
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 
-from pie_models.models import TextClassificationModelWithPooler
+from pie_models.models import SequenceClassificationModel
 
 
 @pytest.fixture
@@ -264,7 +264,7 @@ def get_model(
 
     # set seed to make the classifier deterministic
     torch.manual_seed(42)
-    result = TextClassificationModelWithPooler(
+    result = SequenceClassificationModel(
         model_name_or_path="some-model-name",
         num_classes=num_classes,
         tokenizer_vocab_size=tokenizer_vocab_size,
