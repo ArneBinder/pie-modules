@@ -22,7 +22,7 @@ def cfg(request):
 
 
 @pytest.fixture(scope="module")
-def taskmodule(cfg):
+def unprepared_taskmodule(cfg):
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
         tokenizer_name_or_path=tokenizer_name_or_path, **cfg
@@ -32,15 +32,15 @@ def taskmodule(cfg):
     return taskmodule
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def documents(dataset):
     return dataset["train"]
 
 
-@pytest.fixture
-def prepared_taskmodule(taskmodule, documents):
-    taskmodule.prepare(documents)
-    return taskmodule
+@pytest.fixture(scope="module")
+def taskmodule(unprepared_taskmodule, documents):
+    unprepared_taskmodule.prepare(documents)
+    return unprepared_taskmodule
 
 
 @pytest.fixture
@@ -64,9 +64,7 @@ def model_output():
     }
 
 
-def test_prepare(taskmodule, documents):
-    assert not taskmodule.is_prepared
-    taskmodule.prepare(documents)
+def test_prepared_taskmodule(taskmodule, documents):
     assert taskmodule.is_prepared
 
     assert taskmodule.entity_labels == ["ORG", "PER"]
@@ -185,8 +183,8 @@ def test_prepare(taskmodule, documents):
     }
 
 
-def test_config(prepared_taskmodule):
-    config = prepared_taskmodule._config()
+def test_config(taskmodule):
+    config = taskmodule._config()
     assert config["taskmodule_type"] == "RETextClassificationWithIndicesTaskModule"
     assert "label_to_id" in config
     assert config["label_to_id"] == {
@@ -200,17 +198,17 @@ def test_config(prepared_taskmodule):
 
 
 @pytest.mark.parametrize("encode_target", [False, True])
-def test_encode(prepared_taskmodule, documents, encode_target):
-    task_encodings = prepared_taskmodule.encode(documents, encode_target=encode_target)
+def test_encode(taskmodule, documents, encode_target):
+    task_encodings = taskmodule.encode(documents, encode_target=encode_target)
 
     assert len(task_encodings) == 7
 
     encoding = task_encodings[0]
 
-    tokens = prepared_taskmodule.tokenizer.convert_ids_to_tokens(encoding.inputs["input_ids"])
+    tokens = taskmodule.tokenizer.convert_ids_to_tokens(encoding.inputs["input_ids"])
     assert len(tokens) == len(encoding.inputs["input_ids"])
 
-    if prepared_taskmodule.add_type_to_marker:
+    if taskmodule.add_type_to_marker:
         assert tokens[:14] == [
             "[CLS]",
             "[H:PER]",
@@ -244,7 +242,7 @@ def test_encode(prepared_taskmodule, documents, encode_target):
             ".",
             "[SEP]",
         ]
-    if prepared_taskmodule.append_markers:
+    if taskmodule.append_markers:
         assert len(tokens) == 14 + 4
         assert tokens[-4:] == ["[H=PER]", "[SEP]", "[T=ORG]", "[SEP]"]
     else:
@@ -260,10 +258,10 @@ def test_encode(prepared_taskmodule, documents, encode_target):
 
 
 @pytest.mark.parametrize("encode_target", [False, True])
-def test_collate(prepared_taskmodule, documents, encode_target):
+def test_collate(taskmodule, documents, encode_target):
     documents = [documents[i] for i in [0, 1, 4]]
 
-    encodings = prepared_taskmodule.encode(documents, encode_target=encode_target)
+    encodings = taskmodule.encode(documents, encode_target=encode_target)
 
     assert len(encodings) == 4
     if encode_target:
@@ -271,16 +269,16 @@ def test_collate(prepared_taskmodule, documents, encode_target):
     else:
         assert not any([encoding.has_targets for encoding in encodings])
 
-    batch_encoding = prepared_taskmodule.collate(encodings[:2])
+    batch_encoding = taskmodule.collate(encodings[:2])
     inputs, targets = batch_encoding
 
     assert "input_ids" in inputs
     assert "attention_mask" in inputs
     assert inputs["input_ids"].shape == inputs["attention_mask"].shape
 
-    if prepared_taskmodule.append_markers:
+    if taskmodule.append_markers:
         assert inputs["input_ids"].shape == (2, 25)
-        if prepared_taskmodule.add_type_to_marker:
+        if taskmodule.add_type_to_marker:
             torch.testing.assert_close(
                 inputs.input_ids,
                 torch.tensor(
@@ -417,7 +415,7 @@ def test_collate(prepared_taskmodule, documents, encode_target):
     else:
         assert inputs["input_ids"].shape == (2, 21)
 
-        if prepared_taskmodule.add_type_to_marker:
+        if taskmodule.add_type_to_marker:
             torch.testing.assert_close(
                 inputs.input_ids,
                 torch.tensor(
@@ -541,8 +539,8 @@ def test_collate(prepared_taskmodule, documents, encode_target):
         assert targets is None
 
 
-def test_unbatch_output(prepared_taskmodule, model_output):
-    unbatched_outputs = prepared_taskmodule.unbatch_output(model_output)
+def test_unbatch_output(taskmodule, model_output):
+    unbatched_outputs = taskmodule.unbatch_output(model_output)
 
     assert len(unbatched_outputs) == 8
 
@@ -565,12 +563,12 @@ def test_unbatch_output(prepared_taskmodule, model_output):
 
 
 @pytest.mark.parametrize("inplace", [False, True])
-def test_decode(prepared_taskmodule, documents, model_output, inplace):
+def test_decode(taskmodule, documents, model_output, inplace):
     documents = [documents[i] for i in [0, 1, 4]]
 
-    encodings = prepared_taskmodule.encode(documents, encode_target=False)
-    unbatched_outputs = prepared_taskmodule.unbatch_output(model_output)
-    decoded_documents = prepared_taskmodule.decode(
+    encodings = taskmodule.encode(documents, encode_target=False)
+    unbatched_outputs = taskmodule.unbatch_output(model_output)
+    decoded_documents = taskmodule.decode(
         task_encodings=encodings,
         task_outputs=unbatched_outputs,
         inplace=inplace,
