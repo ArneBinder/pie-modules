@@ -50,13 +50,16 @@ class AtIndexPooler(nn.Module):
                 f"number of indices [{indices.shape[1]}] has to be the same as num_types [{self.num_indices}]."
             )
 
+        # respect the offset
+        indices = indices + self.offset
+
         # times num_types due to concat
         result = torch.zeros(
             batch_size, hidden_size * self.num_indices, device=hidden_state.device
         )
         for batch_idx, current_indices in enumerate(indices):
             current_embeddings = [
-                hidden_state[batch_idx, current_indices[i] + self.offset, :]
+                hidden_state[batch_idx, current_indices[i], :]
                 if current_indices[i] >= 0
                 else self.missing_embeddings[i]
                 for i in range(self.num_indices)
