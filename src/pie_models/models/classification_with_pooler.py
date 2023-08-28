@@ -41,20 +41,13 @@ class TextClassificationModelWithPooler(PyTorchIEModel):
         learning_rate: float = 1e-5,
         task_learning_rate: float = 1e-4,
         warmup_proportion: float = 0.1,
-        freeze_model: bool = False,
         multi_label: bool = False,
-        t_total: Optional[int] = None,
         pooler: Optional[Union[Dict[str, Any], str]] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
 
-        if t_total is not None:
-            logger.warning(
-                "t_total is deprecated, we use estimated_stepping_batches from the pytorch lightning trainer instead"
-            )
-
-        self.save_hyperparameters(ignore=["t_total"])
+        self.save_hyperparameters()
 
         self.learning_rate = learning_rate
         self.task_learning_rate = task_learning_rate
@@ -66,10 +59,6 @@ class TextClassificationModelWithPooler(PyTorchIEModel):
         else:
             self.model = AutoModel.from_pretrained(model_name_or_path, config=config)
         self.model.resize_token_embeddings(tokenizer_vocab_size)
-
-        # if freeze_model:
-        #     for param in self.model.parameters():
-        #         param.requires_grad = False
 
         classifier_dropout = (
             config.classifier_dropout
