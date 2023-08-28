@@ -213,13 +213,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType):
 
     def get_entity_layer(self, document: Document) -> AnnotationList[LabeledSpan]:
         relations: AnnotationList[BinaryRelation] = self.get_relation_layer(document)
-        if len(relations._targets) != 1:
-            raise Exception(
-                f"the relation layer is expected to target exactly one entity layer, but it has "
-                f"the following targets: {relations._targets}"
-            )
-        entity_layer_name = relations._targets[0]
-        return document[entity_layer_name]
+        return relations.target_layer
 
     def _prepare(self, documents: Sequence[TextDocument]) -> None:
         entity_labels: Set[str] = set()
