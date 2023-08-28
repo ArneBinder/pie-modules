@@ -1,11 +1,16 @@
+import logging
 import re
+from dataclasses import dataclass
 
 import numpy
 import pytest
 import torch
+from pytorch_ie.annotations import BinaryRelation, Label, LabeledSpan, NaryRelation
+from pytorch_ie.core import Annotation, AnnotationList, annotation_field
+from pytorch_ie.documents import TextDocument
 
 from pie_models.taskmodules import RETextClassificationWithIndicesTaskModule
-from pie_models.taskmodules.re_text_classification_with_indices import HEAD
+from pie_models.taskmodules.re_text_classification_with_indices import HEAD, TAIL
 from tests import _config_to_str
 
 CONFIGS = [
@@ -842,4 +847,289 @@ def test_relation_argument_role_unknown(documents):
     taskmodule.prepare(documents)
     with pytest.raises(ValueError) as excinfo:
         task_encodings = taskmodule.encode(documents)
-    assert str(excinfo.value) == "role=tail not in role_to_marker={'head': 'H'}"
+    assert (
+        str(excinfo.value)
+        == "role=tail not in role_to_marker={'head': 'H'} (did you initialise the taskmodule with "
+        "the correct argument_role_to_marker dictionary?)"
+    )
+
+
+def test_encode_with_create_relation_candidates(documents):
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        create_relation_candidates=True,
+    )
+    taskmodule.prepare(documents)
+    documents_without_relations = []
+    # just take the first three documents
+    for doc in documents[:3]:
+        doc_without_relations = doc.copy()
+        doc_without_relations.relations.clear()
+        documents_without_relations.append(doc_without_relations)
+    encodings = taskmodule.encode(documents_without_relations)
+    assert len(encodings) == 4
+
+    # There are no entities in the first document, so there are no created relation candidates
+
+    encoding = encodings[0]
+    assert encoding.document == documents_without_relations[1]
+    assert encoding.document.text == "Entity A works at B."
+    relation = encoding.metadata["candidate_annotation"]
+    assert str(relation.head) == "Entity A"
+    assert str(relation.tail) == "B"
+    assert relation.label == "no_relation"
+
+    encoding = encodings[1]
+    assert encoding.document == documents_without_relations[1]
+    assert encoding.document.text == "Entity A works at B."
+    relation = encoding.metadata["candidate_annotation"]
+    assert str(relation.head) == "B"
+    assert str(relation.tail) == "Entity A"
+    assert relation.label == "no_relation"
+
+    encoding = encodings[2]
+    assert encoding.document == documents_without_relations[2]
+    assert encoding.document.text == "Entity C and D."
+    relation = encoding.metadata["candidate_annotation"]
+    assert str(relation.head) == "Entity C"
+    assert str(relation.tail) == "D"
+    assert relation.label == "no_relation"
+
+    encoding = encodings[3]
+    assert encoding.document == documents_without_relations[2]
+    assert encoding.document.text == "Entity C and D."
+    relation = encoding.metadata["candidate_annotation"]
+    assert str(relation.head) == "D"
+    assert str(relation.tail) == "Entity C"
+    assert relation.label == "no_relation"
+
+
+def test_encode_with_empty_partition_layer(documents):
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        partition_annotation="sentences",
+    )
+    taskmodule.prepare(documents)
+    documents_without_sentences = []
+    # just take the first three documents
+    for doc in documents[:3]:
+        doc_without_sentences = doc.copy()
+        doc_without_sentences.sentences.clear()
+        documents_without_sentences.append(doc_without_sentences)
+
+    encodings = taskmodule.encode(documents_without_sentences)
+    # since there are no sentences, but we use partition_annotation="sentences",
+    # there are no encodings
+    assert len(encodings) == 0
+
+
+def test_encode_binary_relation_with_wrong_argument_type():
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        # setting label_to_id and entity_labels makes the taskmodule prepared
+        label_to_id={"has_wrong_arguments": 1},
+        entity_labels=["a", "b"],
+    )
+    taskmodule._post_prepare()
+
+    @dataclass
+    class DocWithBinaryRelationAndWrongArgumentType(TextDocument):
+        entities: AnnotationList[Label] = annotation_field()
+        relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+
+    doc = DocWithBinaryRelationAndWrongArgumentType(text="hello world")
+    label_a = Label(label="a")
+    label_b = Label(label="b")
+    doc.entities.extend([label_a, label_b])
+    doc.relations.append(BinaryRelation(head=label_a, tail=label_b, label="has_wrong_arguments"))
+
+    with pytest.raises(ValueError) as excinfo:
+        taskmodule.encode([doc])
+    assert (
+        str(excinfo.value)
+        == "the taskmodule expects the relation arguments to be of type LabeledSpan, but got "
+        "<class 'pytorch_ie.annotations.Label'> and <class 'pytorch_ie.annotations.Label'>"
+    )
+
+
+def test_encode_nary_relatio():
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        argument_role_to_marker={"r1": "R1", "r2": "R2", "r3": "R3"},
+        # setting label_to_id and entity_labels makes the taskmodule prepared
+        label_to_id={"rel": 1},
+        entity_labels=["a", "b", "c"],
+    )
+    taskmodule._post_prepare()
+
+    @dataclass
+    class DocWithNaryRelation(TextDocument):
+        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
+        relations: AnnotationList[NaryRelation] = annotation_field(target="entities")
+
+    doc = DocWithNaryRelation(text="hello my world")
+    entity1 = LabeledSpan(start=0, end=5, label="a")
+    entity2 = LabeledSpan(start=6, end=8, label="b")
+    entity3 = LabeledSpan(start=9, end=14, label="c")
+    doc.entities.extend([entity1, entity2, entity3])
+    doc.relations.append(
+        NaryRelation(
+            arguments=tuple([entity1, entity2, entity3]),
+            roles=tuple(["r1", "r2", "r3"]),
+            label="rel",
+        )
+    )
+
+    task_encodings = taskmodule.encode([doc])
+    assert len(task_encodings) == 1
+    encoding = task_encodings[0]
+    assert encoding.document == doc
+    assert encoding.document.text == "hello my world"
+    rel = encoding.metadata["candidate_annotation"]
+    assert str(rel.arguments[0]) == "hello"
+    assert str(rel.arguments[1]) == "my"
+    assert str(rel.arguments[2]) == "world"
+    assert rel.label == "rel"
+
+
+def test_encode_nary_relation_with_wrong_argument_type():
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        # setting label_to_id and entity_labels makes the taskmodule prepared
+        label_to_id={"has_wrong_arguments": 1},
+        entity_labels=["a", "b", "c"],
+    )
+    taskmodule._post_prepare()
+
+    @dataclass
+    class DocWithNaryRelationAndWrongArgumentType(TextDocument):
+        entities: AnnotationList[Label] = annotation_field()
+        relations: AnnotationList[NaryRelation] = annotation_field(target="entities")
+
+    doc = DocWithNaryRelationAndWrongArgumentType(text="hello world")
+    label_a = Label(label="a")
+    label_b = Label(label="b")
+    label_c = Label(label="c")
+    doc.entities.extend([label_a, label_b, label_c])
+    doc.relations.append(
+        NaryRelation(
+            arguments=tuple([label_a, label_b, label_c]),
+            roles=tuple(["a", "b", "c"]),
+            label="has_wrong_arguments",
+        )
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        taskmodule.encode([doc])
+    assert (
+        str(excinfo.value)
+        == "the taskmodule expects the relation arguments to be of type LabeledSpan, but got "
+        "[<class 'pytorch_ie.annotations.Label'>, <class 'pytorch_ie.annotations.Label'>, "
+        "<class 'pytorch_ie.annotations.Label'>]"
+    )
+
+
+def test_encode_unknown_relation_type():
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        # setting label_to_id and entity_labels makes the taskmodule prepared
+        label_to_id={"has_wrong_type": 1},
+        entity_labels=["a"],
+    )
+    taskmodule._post_prepare()
+
+    @dataclass(frozen=True)
+    class UnknownRelation(Annotation):
+        arg: LabeledSpan
+        label: str
+
+    @dataclass
+    class DocWithUnknownRelationType(TextDocument):
+        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
+        relations: AnnotationList[UnknownRelation] = annotation_field(target="entities")
+
+    doc = DocWithUnknownRelationType(text="hello world")
+    entity = LabeledSpan(start=0, end=1, label="a")
+    doc.entities.append(entity)
+    doc.relations.append(UnknownRelation(arg=entity, label="has_wrong_type"))
+
+    with pytest.raises(NotImplementedError) as excinfo:
+        taskmodule.encode([doc])
+    assert str(excinfo.value).startswith(
+        "the taskmodule does not yet support relations of type: "
+    ) and str(excinfo.value).endswith("<locals>.UnknownRelation'>")
+
+
+def test_encode_with_unaligned_span(caplog):
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        # setting label_to_id and entity_labels makes the taskmodule prepared
+        label_to_id={"rel": 1},
+        entity_labels=["a"],
+    )
+    taskmodule._post_prepare()
+
+    @dataclass
+    class MyDocument(TextDocument):
+        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
+        relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+
+    doc = MyDocument(text="hello   space", id="doc1")
+    entity1 = LabeledSpan(start=0, end=5, label="a")
+    entity2 = LabeledSpan(start=7, end=13, label="a")
+    doc.entities.extend([entity1, entity2])
+    # the start of entity2 is not aligned with a token
+    assert str(entity2) == " space"
+    doc.relations.append(BinaryRelation(head=entity1, tail=entity2, label="rel"))
+
+    task_encodings = taskmodule.encode([doc])
+    # the relation is skipped because the start of entity2 is not aligned with a token
+    assert len(task_encodings) == 0
+
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelname == "WARNING"
+    assert (
+        caplog.records[0].message
+        == "Skipping invalid example doc1, cannot get argument token slice(s)"
+    )
+
+
+def test_encode_with_log_first_n_examples(caplog):
+    @dataclass
+    class DocumentWithLabeledEntitiesAndRelations(TextDocument):
+        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
+        relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+
+    doc = DocumentWithLabeledEntitiesAndRelations(text="hello world", id="doc1")
+    entity1 = LabeledSpan(start=0, end=5, label="a")
+    entity2 = LabeledSpan(start=6, end=11, label="a")
+    doc.entities.extend([entity1, entity2])
+    doc.relations.append(BinaryRelation(head=entity1, tail=entity2, label="rel"))
+
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        log_first_n_examples=1,
+    )
+    taskmodule.prepare([doc])
+
+    # we need to set the log level to INFO, otherwise the log messages are not captured
+    caplog.set_level(logging.INFO)
+    with caplog.at_level(logging.INFO):
+        task_encodings = taskmodule.encode([doc, doc], encode_target=True)
+    # the second example is skipped because log_first_n_examples=1
+    assert len(task_encodings) == 2
+    assert len(caplog.records) == 5
+    assert all([record.levelname == "INFO" for record in caplog.records])
+    assert caplog.records[0].message == "*** Example ***"
+    assert caplog.records[1].message == "doc id: doc1"
+    assert caplog.records[2].message == "tokens: [CLS] [H] hello [/H] [T] world [/T] [SEP]"
+    assert caplog.records[3].message == "input_ids: 101 28998 19082 28996 28999 1362 28997 102"
+    assert caplog.records[4].message == "Expected label: ['rel'] (ids = [1])"
