@@ -432,8 +432,12 @@ def test_forward(inputs, model, pooler_type):
         raise ValueError(f"Unknown pooler type: {pooler_type}")
 
 
-def test_step(inputs, targets, model, pooler_type):
-    batch = (inputs, targets)
+@pytest.fixture
+def batch(inputs, targets):
+    return (inputs, targets)
+
+
+def test_step(batch, model, pooler_type):
     # set the seed to make sure the loss is deterministic
     torch.manual_seed(42)
     loss = model.step("train", batch)
@@ -445,3 +449,18 @@ def test_step(inputs, targets, model, pooler_type):
         torch.testing.assert_close(loss, torch.tensor(1.5418565273284912))
     else:
         raise ValueError(f"Unknown pooler type: {pooler_type}")
+
+
+def test_training_step(batch, model):
+    loss = model.training_step(batch, batch_idx=0)
+    assert loss is not None
+
+
+def test_validation_step(batch, model):
+    loss = model.validation_step(batch, batch_idx=0)
+    assert loss is not None
+
+
+def test_test_step(batch, model):
+    loss = model.test_step(batch, batch_idx=0)
+    assert loss is not None
