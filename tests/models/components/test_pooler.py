@@ -1,6 +1,5 @@
 import pytest
 import torch
-from torch.nn import Module
 
 from pie_models.models.components.pooler import (
     CLS_TOKEN,
@@ -32,6 +31,12 @@ def test_get_pooler_and_output_size(pooler_type):
         assert output_size == 20 * 2
     else:
         raise ValueError(f"Unknown pooler type {pooler_type}")
+
+
+def test_get_pooler_and_output_size_wrong_type():
+    with pytest.raises(ValueError) as excinfo:
+        get_pooler_and_output_size(config={"type": "wrong_type"}, input_dim=20)
+    assert str(excinfo.value) == 'Unknown pooler type "wrong_type"'
 
 
 @pytest.fixture(scope="session")
@@ -102,24 +107,20 @@ def test_at_index_pooler_with_offset(hidde_state):
     )
 
 
+def test_at_index_pooler_wrong_indices_shapes(hidde_state):
+    pooler = AtIndexPooler(input_dim=hidde_state.shape[-1], num_indices=2)
+    indices = torch.tensor([[2, 0, 1], [1, 0, 0]])
+    with pytest.raises(ValueError) as excinfo:
+        pooler(hidden_state=hidde_state, indices=indices)
+    assert str(excinfo.value) == "number of indices [3] has to be the same as num_types [2]"
+
+
 def test_argument_wrapped_pooler(hidde_state):
-    class DummyPooler(Module):
-        def __init__(self, input_dim: int, **kwargs):
-            super().__init__(**kwargs)
-            self.input_dim = input_dim
+    def dummy_pooler(hidden_state, y):
+        return hidden_state[:, 0, :]
 
-        def forward(self, x, **kwargs):
-            return x[:, 0]
-
-        @property
-        def output_dim(self) -> int:
-            return self.input_dim
-
-    hidden_dim = hidde_state.shape[-1]
-    pooler = ArgumentWrappedPooler(
-        pooler=DummyPooler(input_dim=hidden_dim), argument_mapping={"x": "hidden_state"}
-    )
-    output = pooler(hidden_state=hidde_state)
+    pooler = ArgumentWrappedPooler(pooler=dummy_pooler, argument_mapping={"x": "y"})
+    output = pooler(hidden_state=hidde_state, x="dummy")
     assert output is not None
     batch_size = hidde_state.shape[0]
     hidden_size = hidde_state.shape[-1]
@@ -139,4 +140,40 @@ def test_span_max_pooler(hidde_state):
     assert output.shape == (batch_size, hidden_size * 2)
     torch.testing.assert_close(
         output, torch.tensor([[0.20, 0.21, 0.20, 0.21], [1.00, 1.01, 1.10, 1.11]])
+    )
+
+
+def test_span_max_pooler_wrong_start_indices_shape(hidde_state):
+    pooler = SpanMaxPooler(input_dim=hidde_state.shape[-1], num_indices=2)
+    start_indices = torch.tensor([[2, 0, 1], [0, 1, 0]])
+    end_indices = torch.tensor([[3, 3], [1, 2]])
+    with pytest.raises(ValueError) as excinfo:
+        pooler(hidden_state=hidde_state, start_indices=start_indices, end_indices=end_indices)
+    assert str(excinfo.value) == (
+        "number of start indices [3] has to be the same as num_types [2]"
+    )
+
+
+def test_span_max_pooler_wrong_end_indices_shape(hidde_state):
+    pooler = SpanMaxPooler(input_dim=hidde_state.shape[-1], num_indices=2)
+    start_indices = torch.tensor([[2, 0], [0, 1]])
+    end_indices = torch.tensor([[3, 3, 3], [1, 2, 1]])
+    with pytest.raises(ValueError) as excinfo:
+        pooler(hidden_state=hidde_state, start_indices=start_indices, end_indices=end_indices)
+    assert str(excinfo.value) == ("number of end indices [3] has to be the same as num_types [2]")
+
+
+def test_span_max_pooler_start_indices_bigger_than_end_indices(hidde_state):
+    pooler = SpanMaxPooler(input_dim=hidde_state.shape[-1], num_indices=2)
+    start_indices = torch.tensor([[2, 0], [0, 1]])
+    end_indices = torch.tensor([[1, 3], [1, 2]])
+    with pytest.raises(ValueError) as excinfo:
+        pooler(hidden_state=hidde_state, start_indices=start_indices, end_indices=end_indices)
+    assert str(excinfo.value) == (
+        "values in start_indices have to be smaller than respective values in end_indices, but start_indices=\n"
+        "tensor([[2, 0],\n"
+        "        [0, 1]])\n "
+        "and end_indices=\n"
+        "tensor([[1, 3],\n"
+        "        [1, 2]])"
     )

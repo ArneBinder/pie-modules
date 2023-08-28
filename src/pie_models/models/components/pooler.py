@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, Callable, Dict, Tuple, Union
 
 import torch
 from torch import Tensor, cat, nn
@@ -47,7 +47,7 @@ class AtIndexPooler(nn.Module):
         batch_size, seq_len, hidden_size = hidden_state.shape
         if indices.shape[1] != self.num_indices:
             raise ValueError(
-                f"number of indices [{indices.shape[1]}] has to be the same as num_types [{self.num_indices}]."
+                f"number of indices [{indices.shape[1]}] has to be the same as num_types [{self.num_indices}]"
             )
 
         # respect the offset
@@ -80,7 +80,9 @@ class ArgumentWrappedPooler(nn.Module):
         argument_mapping: A mapping from the arguments of the forward method to the arguments of the pooler.
     """
 
-    def __init__(self, pooler: nn.Module, argument_mapping: Dict[str, str], **kwargs):
+    def __init__(
+        self, pooler: Union[nn.Module, Callable], argument_mapping: Dict[str, str], **kwargs
+    ):
         super().__init__(**kwargs)
         self.pooler = pooler
         self.argument_mapping = argument_mapping
@@ -91,10 +93,6 @@ class ArgumentWrappedPooler(nn.Module):
             if k in self.argument_mapping:
                 pooler_kwargs[self.argument_mapping[k]] = v
         return self.pooler(hidden_state, **pooler_kwargs)
-
-    @property
-    def output_dim(self) -> int:
-        return self.pooler.output_dim
 
 
 class SpanMaxPooler(nn.Module):
@@ -123,14 +121,14 @@ class SpanMaxPooler(nn.Module):
         self, hidden_state: Tensor, start_indices: Tensor, end_indices: Tensor, **kwargs
     ) -> Tensor:
         batch_size, seq_len, hidden_size = hidden_state.shape
-        if start_indices.shape != end_indices.shape:
-            raise ValueError(
-                f"start_indices shape [{start_indices.shape}] has to be the same as end_indices shape "
-                f"[{end_indices.shape}]."
-            )
         if start_indices.shape[1] != self.num_indices:
             raise ValueError(
-                f"number of indices [{start_indices.shape[1]}] has to be the same as num_types [{self.num_indices}]."
+                f"number of start indices [{start_indices.shape[1]}] has to be the same as num_types [{self.num_indices}]"
+            )
+
+        if end_indices.shape[1] != self.num_indices:
+            raise ValueError(
+                f"number of end indices [{end_indices.shape[1]}] has to be the same as num_types [{self.num_indices}]"
             )
 
         # check that start_indices are before end_indices
@@ -140,7 +138,7 @@ class SpanMaxPooler(nn.Module):
         if not torch.all(mask_valid):
             raise ValueError(
                 f"values in start_indices have to be smaller than respective values in "
-                f"end_indices, but start_indices={start_indices} and end_indices={end_indices}."
+                f"end_indices, but start_indices=\n{start_indices}\n and end_indices=\n{end_indices}"
             )
 
         # times num_indices due to concat
@@ -183,4 +181,4 @@ def get_pooler_and_output_size(config: Dict[str, Any], input_dim: int) -> Tuple[
         pooler = SpanMaxPooler(input_dim=input_dim, **pooler_config)
         return pooler, pooler.output_dim
     else:
-        raise ValueError(f"Unknown pooler type {pooler_type}")
+        raise ValueError(f'Unknown pooler type "{pooler_type}"')
