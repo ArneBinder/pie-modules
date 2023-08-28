@@ -5,6 +5,7 @@ import pytest
 import torch
 
 from pie_models.taskmodules import RETextClassificationWithIndicesTaskModule
+from pie_models.taskmodules.re_text_classification_with_indices import HEAD
 from tests import _config_to_str
 
 CONFIGS = [
@@ -829,3 +830,16 @@ def test_collate_with_add_argument_indices(documents, add_argument_indices_to_in
     else:
         assert "pooler_start_indices" not in inputs
         assert "pooler_end_indices" not in inputs
+
+
+def test_relation_argument_role_unknown(documents):
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        # the tail argument is not in the role_to_marker
+        argument_role_to_marker={HEAD: "H"},
+    )
+    taskmodule.prepare(documents)
+    with pytest.raises(ValueError) as excinfo:
+        task_encodings = taskmodule.encode(documents)
+    assert str(excinfo.value) == "role=tail not in role_to_marker={'head': 'H'}"

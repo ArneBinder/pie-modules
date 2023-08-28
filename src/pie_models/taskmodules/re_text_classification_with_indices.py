@@ -90,7 +90,7 @@ class RelationArgument:
         self.entity = entity
         self.role_to_marker = role_to_marker
         if role not in self.role_to_marker:
-            raise Exception(f"role={role} not in role_to_marker={role_to_marker}")
+            raise ValueError(f"role={role} not in role_to_marker={role_to_marker}")
         self.role = role
         self.token_span = token_span
         self.add_type_to_marker = add_type_to_marker
