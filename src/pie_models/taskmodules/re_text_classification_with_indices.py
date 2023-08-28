@@ -149,8 +149,6 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType):
     def __init__(
         self,
         tokenizer_name_or_path: str,
-        # this is deprecated, the target of the relation layer already specifies the entity layer
-        entity_annotation: Optional[str] = None,
         relation_annotation: str = "relations",
         create_relation_candidates: bool = False,
         partition_annotation: Optional[str] = None,
@@ -173,12 +171,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        if entity_annotation is not None:
-            logger.warning(
-                "The parameter entity_annotation is deprecated and will be discarded because it is not necessary "
-                "anymore. The target of the relation layer already specifies the entity layer."
-            )
-        self.save_hyperparameters(ignore=["entity_annotation"])
+        self.save_hyperparameters()
 
         self.relation_annotation = relation_annotation
         self.create_relation_candidates = create_relation_candidates
