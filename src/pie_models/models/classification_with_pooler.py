@@ -43,6 +43,7 @@ class TextClassificationModelWithPooler(PyTorchIEModel):
         warmup_proportion: float = 0.1,
         multi_label: bool = False,
         pooler: Optional[Union[Dict[str, Any], str]] = None,
+        freeze_base_model: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -52,6 +53,7 @@ class TextClassificationModelWithPooler(PyTorchIEModel):
         self.learning_rate = learning_rate
         self.task_learning_rate = task_learning_rate
         self.warmup_proportion = warmup_proportion
+        self.freeze_base_model = freeze_base_model
 
         config = AutoConfig.from_pretrained(model_name_or_path)
         if self.is_from_pretrained:
@@ -59,6 +61,10 @@ class TextClassificationModelWithPooler(PyTorchIEModel):
         else:
             self.model = AutoModel.from_pretrained(model_name_or_path, config=config)
         self.model.resize_token_embeddings(tokenizer_vocab_size)
+
+        if self.freeze_base_model:
+            for param in self.model.parameters():
+                param.requires_grad = False
 
         classifier_dropout = (
             config.classifier_dropout

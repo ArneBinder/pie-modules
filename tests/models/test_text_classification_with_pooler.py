@@ -213,15 +213,15 @@ def pooler_type(request):
     return request.param
 
 
-@pytest.fixture
-def model(monkeypatch, pooler_type, inputs, targets):
+def get_model(monkeypatch, pooler_type, batch_size, seq_len, num_classes, **model_kwargs):
     class MockConfig:
         def __init__(self, hidden_size: int = 10, classifier_dropout: float = 1.0) -> None:
             self.hidden_size = hidden_size
             self.classifier_dropout = classifier_dropout
 
-    class MockModel:
+    class MockModel(torch.nn.Module):
         def __init__(self, batch_size, seq_len, hidden_size) -> None:
+            super().__init__()
             self.batch_size = batch_size
             self.seq_len = seq_len
             self.hidden_size = hidden_size
@@ -233,10 +233,7 @@ def model(monkeypatch, pooler_type, inputs, targets):
         def resize_token_embeddings(self, new_num_tokens):
             pass
 
-    batch_size = inputs["input_ids"].shape[0]
-    seq_len = inputs["input_ids"].shape[1]
     hidden_size = 10
-    num_classes = max(targets) + 1
     tokenizer_vocab_size = 30000
 
     monkeypatch.setattr(
@@ -262,10 +259,22 @@ def model(monkeypatch, pooler_type, inputs, targets):
         pooler=pooler_type,
         # disable warmup because it would require a trainer and a datamodule to get the total number of training steps
         warmup_proportion=0.0,
+        **model_kwargs,
     )
     assert not result.is_from_pretrained
 
     return result
+
+
+@pytest.fixture
+def model(monkeypatch, pooler_type, inputs, targets):
+    return get_model(
+        monkeypatch=monkeypatch,
+        pooler_type=pooler_type,
+        batch_size=inputs["input_ids"].shape[0],
+        seq_len=inputs["input_ids"].shape[1],
+        num_classes=max(targets) + 1,
+    )
 
 
 def test_forward(inputs, model, pooler_type):
@@ -473,3 +482,31 @@ def test_configure_optimizers(model):
     assert optimizer.defaults["lr"] == 1e-05
     assert optimizer.defaults["weight_decay"] == 0.01
     assert optimizer.defaults["eps"] == 1e-08
+
+
+def test_configure_optimizers_with_task_learning_rate(monkeypatch):
+    model = get_model(
+        monkeypatch=monkeypatch,
+        pooler_type="cls_token",
+        batch_size=7,
+        seq_len=22,
+        num_classes=4,
+        task_learning_rate=0.1,
+    )
+    optimizer = model.configure_optimizers()
+    assert optimizer is not None
+
+
+def test_freeze_base_model(monkeypatch, inputs, targets):
+    # set seed to make the classifier deterministic
+    model = get_model(
+        monkeypatch,
+        pooler_type="cls_token",
+        batch_size=7,
+        seq_len=22,
+        num_classes=4,
+        freeze_base_model=True,
+    )
+
+    for param in model.model.parameters():
+        assert not param.requires_grad
