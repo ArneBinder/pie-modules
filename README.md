@@ -23,6 +23,14 @@ git+https://github.com/ArneBinder/pie-models
 Note: You can specify a specific version by appending a version tag `@v<version>` to the URL,
 e.g. `git+https://github.com/ArneBinder/pie-models@v0.6.0`.
 
+## Development Setup
+
+```bash
+git clone https://github.com/ArneBinder/pie-models
+cd pie-models
+pip install -e ".[dev]"
+```
+
 ## Release Process
 
 1. create a branch `release` from the `main` branch
