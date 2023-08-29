@@ -14,6 +14,15 @@ or
 pip install git+ssh://git@github.com/ArneBinder/pie-models.git
 ```
 
+or add this to your `requirements.txt`:
+
+```
+git+https://github.com/ArneBinder/pie-models
+```
+
+Note: You can specify a specific version by appending a version tag `@v<version>` to the URL,
+e.g. `git+https://github.com/ArneBinder/pie-models@v0.6.0`.
+
 ## Release Process
 
 1. create a branch `release` from the `main` branch
