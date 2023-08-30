@@ -66,10 +66,17 @@ class SequenceClassificationModel(PyTorchIEModel):
             for param in self.model.parameters():
                 param.requires_grad = False
 
+        # This is a bit of a mess since some Configs use different variable names or change the semantics
+        # of the dropout (e.g. DistilBert has one dropout prob for QA and one for Seq classification, and a
+        # general one for embeddings, encoder and pooler).
         classifier_dropout = (
-            config.classifier_dropout
-            if config.classifier_dropout is not None
-            else config.hidden_dropout_prob
+            config.classifier_dropout_prob
+            if config.model_type == "albert" and config.classifier_dropout_prob is not None
+            else config.seq_classif_dropout
+                if config.model_type == "distilbert" and config.seq_classif_dropout is not None
+                else config.classifier_dropout
+                    if config.classifier_dropout is not None
+                    else config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
 
