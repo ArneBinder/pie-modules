@@ -27,6 +27,11 @@ TRAINING = "train"
 VALIDATION = "val"
 TEST = "test"
 
+hf_model_dropout_var_mappings = {
+    "albert": "classifier_dropout_prob",
+    "distilbert": "seq_classif_dropout",
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -69,14 +74,14 @@ class SequenceClassificationModel(PyTorchIEModel):
         # This is a bit of a mess since some Configs use different variable names or change the semantics
         # of the dropout (e.g. DistilBert has one dropout prob for QA and one for Seq classification, and a
         # general one for embeddings, encoder and pooler).
+
         classifier_dropout = (
-            config.classifier_dropout_prob
-            if config.model_type == "albert" and config.classifier_dropout_prob is not None
-            else config.seq_classif_dropout
-                if config.model_type == "distilbert" and config.seq_classif_dropout is not None
-                else config.classifier_dropout
-                    if config.classifier_dropout is not None
-                    else config.hidden_dropout_prob
+            getattr(config, hf_model_dropout_var_mappings[config.model_type])
+            if config.model_type in hf_model_dropout_var_mappings
+            and getattr(config, hf_model_dropout_var_mappings[config.model_type]) is not None
+            else config.classifier_dropout
+            if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None
+            else config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
 
