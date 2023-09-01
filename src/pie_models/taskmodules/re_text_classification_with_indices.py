@@ -206,7 +206,11 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType):
             role: i for i, role in enumerate(sorted(self.argument_role_to_marker))
         }
 
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
+        except ValueError as e:
+            logger.warning("Could not load fast tokenizer, using slow tokenizer fallback", e)
+            self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=False)
 
         self.argument_markers = None
 
