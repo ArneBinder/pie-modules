@@ -224,7 +224,9 @@ def get_model(
     **model_kwargs,
 ):
     class MockConfig:
-        def __init__(self, hidden_size: int = 10, classifier_dropout: float = 1.0, model_type="bert") -> None:
+        def __init__(
+            self, hidden_size: int = 10, classifier_dropout: float = 1.0, model_type="bert"
+        ) -> None:
             self.hidden_size = hidden_size
             self.model_type = model_type
             if self.model_type == "distilbert":
@@ -233,7 +235,6 @@ def get_model(
                 self.classifier_dropout_prob = classifier_dropout
             else:
                 self.classifier_dropout = classifier_dropout
-
 
     class MockModel(torch.nn.Module):
         def __init__(self, batch_size, seq_len, hidden_size, add_dummy_linear) -> None:
@@ -257,7 +258,9 @@ def get_model(
     monkeypatch.setattr(
         transformers.AutoConfig,
         "from_pretrained",
-        lambda model_name_or_path: MockConfig(hidden_size=hidden_size, classifier_dropout=1.0, model_type=model_type),
+        lambda model_name_or_path: MockConfig(
+            hidden_size=hidden_size, classifier_dropout=1.0, model_type=model_type
+        ),
     )
     monkeypatch.setattr(
         transformers.AutoModel,
@@ -551,7 +554,9 @@ def test_freeze_base_model(monkeypatch, inputs, targets):
         assert not param.requires_grad
 
 
-@pytest.mark.parametrize("model_type", ["bert", "albert", "distilbert", "roberta", "deberta", "electra", "xlm-roberta"])
+@pytest.mark.parametrize(
+    "model_type", ["bert", "albert", "distilbert", "roberta", "deberta", "electra", "xlm-roberta"]
+)
 def test_config_model_classifier_dropout(monkeypatch, model_type):
     model = get_model(
         monkeypatch,
@@ -559,6 +564,6 @@ def test_config_model_classifier_dropout(monkeypatch, model_type):
         batch_size=7,
         seq_len=22,
         num_classes=4,
-        model_type=model_type
+        model_type=model_type,
     )
     assert model is not None
