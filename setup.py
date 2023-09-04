@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 
 REQUIRED_PKGS = [
     "pytorch-ie>=0.19.0,<1.0.0",
-    "fsspec<=2021.06.0",  # 2021.09.0 causes a bug with datasets, i.e. test_datasets() fails
+    "fsspec<=2023.06.0",  # 2023.09.0 causes a bug with datasets, i.e. test_datasets() fails
 ]
 
 TESTS_REQUIRE = [
