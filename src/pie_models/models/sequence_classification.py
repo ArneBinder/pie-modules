@@ -27,7 +27,7 @@ TRAINING = "train"
 VALIDATION = "val"
 TEST = "test"
 
-HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE = {
+hf_model_dropout_var_mappings = {
     "albert": "classifier_dropout_prob",
     "distilbert": "seq_classif_dropout",
 }
@@ -43,7 +43,6 @@ class SequenceClassificationModel(PyTorchIEModel):
         num_classes: int,
         tokenizer_vocab_size: int,
         ignore_index: Optional[int] = None,
-        classifier_dropout: Optional[float] = None,
         learning_rate: float = 1e-5,
         task_learning_rate: Optional[float] = None,
         warmup_proportion: float = 0.1,
@@ -72,15 +71,18 @@ class SequenceClassificationModel(PyTorchIEModel):
             for param in self.model.parameters():
                 param.requires_grad = False
 
-        if classifier_dropout is None:
-            # Get the classifier dropout value from the Huggingface model config.
-            # This is a bit of a mess since some Configs use different variable names or change the semantics
-            # of the dropout (e.g. DistilBert has one dropout prob for QA and one for Seq classification, and a
-            # general one for embeddings, encoder and pooler).
-            classifier_dropout_attr = HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE.get(
-                config.model_type, "classifier_dropout"
-            )
-            classifier_dropout = getattr(config, classifier_dropout_attr, 0.0)
+        # This is a bit of a mess since some Configs use different variable names or change the semantics
+        # of the dropout (e.g. DistilBert has one dropout prob for QA and one for Seq classification, and a
+        # general one for embeddings, encoder and pooler).
+
+        classifier_dropout = (
+            getattr(config, hf_model_dropout_var_mappings[config.model_type])
+            if config.model_type in hf_model_dropout_var_mappings
+            and getattr(config, hf_model_dropout_var_mappings[config.model_type]) is not None
+            else config.classifier_dropout
+            if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None
+            else config.hidden_dropout_prob
+        )
         self.dropout = nn.Dropout(classifier_dropout)
 
         if isinstance(pooler, str):
