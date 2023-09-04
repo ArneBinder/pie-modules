@@ -38,16 +38,39 @@ def example_to_doc_dict(example):
     return doc.asdict()
 
 
+SPLIT_SIZES = {"train": 6, "validation": 2, "test": 2}
+
+
 @pytest.fixture(scope="session")
-def dataset():
-    hf_dataset = load_dataset(
+def hf_dataset():
+    result = load_dataset(
         "json",
         field="data",
         data_dir=str(FIXTURES_ROOT / "hf_datasets" / "json"),
     )
+
+    return result
+
+
+def test_hf_dataset(hf_dataset):
+    assert hf_dataset is not None
+    assert set(hf_dataset) == set(SPLIT_SIZES)
+    for split in hf_dataset:
+        assert len(hf_dataset[split]) == SPLIT_SIZES[split]
+
+
+@pytest.fixture(scope="session")
+def dataset(hf_dataset):
     mapped_dataset = hf_dataset.map(example_to_doc_dict)
     dataset = DatasetDict.from_hf(hf_dataset=mapped_dataset, document_type=TestDocument)
+    return dataset
+
+
+def test_dataset(dataset):
     assert dataset is not None
+    assert set(dataset) == set(SPLIT_SIZES)
+    for split in dataset:
+        assert len(dataset[split]) == SPLIT_SIZES[split]
     # try getting a split
     d_train = dataset["train"]
     assert d_train is not None
@@ -55,4 +78,3 @@ def dataset():
     doc0 = d_train[0]
     assert doc0 is not None
     assert isinstance(doc0, TestDocument)
-    return dataset
