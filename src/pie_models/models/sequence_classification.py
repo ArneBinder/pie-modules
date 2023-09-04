@@ -17,7 +17,7 @@ ModelInputType: TypeAlias = MutableMapping[str, Any]
 # A dict with a single key "logits".
 ModelOutputType: TypeAlias = Dict[str, Tensor]
 # This contains the input and target tensors for a single training step.
-StepInputType: TypeAlias = Tuple[
+ModelStepInputType: TypeAlias = Tuple[
     ModelInputType,  # input
     Optional[Tensor],  # targets
 ]
@@ -113,7 +113,7 @@ class SequenceClassificationModel(PyTorchIEModel):
         logits = self.classifier(pooled_output)
         return {"logits": logits}
 
-    def step(self, stage: str, batch: StepInputType):
+    def step(self, stage: str, batch: ModelStepInputType):
         input_, target = batch
         assert target is not None, "target has to be available for training"
 
@@ -129,13 +129,13 @@ class SequenceClassificationModel(PyTorchIEModel):
 
         return loss
 
-    def training_step(self, batch: StepInputType, batch_idx: int):
+    def training_step(self, batch: ModelStepInputType, batch_idx: int):
         return self.step(stage=TRAINING, batch=batch)
 
-    def validation_step(self, batch: StepInputType, batch_idx: int):
+    def validation_step(self, batch: ModelStepInputType, batch_idx: int):
         return self.step(stage=VALIDATION, batch=batch)
 
-    def test_step(self, batch: StepInputType, batch_idx: int):
+    def test_step(self, batch: ModelStepInputType, batch_idx: int):
         return self.step(stage=TEST, batch=batch)
 
     def configure_optimizers(self):
