@@ -1,6 +1,6 @@
 # pie-models
 
-Model and Taskmodule implementations for [PyTorch-IE](https://github.com/ChristophAlt/pytorch-ie) .
+Model and Taskmodule implementations for [PyTorch-IE](https://github.com/ChristophAlt/pytorch-ie).
 
 ## Setup
 
