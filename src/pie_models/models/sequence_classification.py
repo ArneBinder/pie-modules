@@ -80,7 +80,7 @@ class SequenceClassificationModel(PyTorchIEModel):
             classifier_dropout_attr = HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE.get(
                 config.model_type, "classifier_dropout"
             )
-            classifier_dropout = getattr(config, classifier_dropout_attr, 0.0)
+            classifier_dropout = getattr(config, classifier_dropout_attr) or 0.0
         self.dropout = nn.Dropout(classifier_dropout)
 
         if isinstance(pooler, str):
