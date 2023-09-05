@@ -3,7 +3,9 @@
 from setuptools import find_packages, setup
 
 REQUIRED_PKGS = [
-    "pytorch-ie @ git+https://github.com/ChristophAlt/pytorch-ie.git@update_datasets_and_transformers",
+    # requires:
+    # - https://github.com/ChristophAlt/pytorch-ie/pull/323
+    "pytorch-ie @ git+https://github.com/ChristophAlt/pytorch-ie.git",
 ]
 
 TESTS_REQUIRE = [
