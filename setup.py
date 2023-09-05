@@ -3,9 +3,8 @@
 from setuptools import find_packages, setup
 
 REQUIRED_PKGS = [
-    # requires:
-    # - https://github.com/ChristophAlt/pytorch-ie/pull/323
-    "pytorch-ie @ git+https://github.com/ChristophAlt/pytorch-ie.git",
+    "pytorch-ie >= 0.18.0",
+    "torchmetrics >= 0.11.0",
 ]
 
 TESTS_REQUIRE = [
