@@ -39,7 +39,10 @@ from transformers.file_utils import PaddingStrategy
 from transformers.tokenization_utils_base import TruncationStrategy
 from typing_extensions import TypeAlias
 
-from pie_models.models.sequence_classification import ModelOutputType, ModelStepInputType
+from pie_models.models.sequence_classification import (
+    ModelOutputType,
+    ModelStepInputType,
+)
 
 InputEncodingType: TypeAlias = Dict[str, Any]
 TargetEncodingType: TypeAlias = Sequence[int]
