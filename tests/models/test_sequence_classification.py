@@ -308,7 +308,7 @@ def test_forward(inputs, model, pooler_type):
     output = model.forward(inputs)
     assert set(output) == {"logits"}
     logits = output["logits"]
-    print(logits)
+
     assert logits.shape == (batch_size, 4)
 
     if pooler_type == "cls_token":
