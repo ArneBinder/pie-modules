@@ -27,6 +27,11 @@ TRAINING = "train"
 VALIDATION = "val"
 TEST = "test"
 
+HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE = {
+    "albert": "classifier_dropout_prob",
+    "distilbert": "seq_classif_dropout",
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,6 +43,7 @@ class SequenceClassificationModel(PyTorchIEModel):
         num_classes: int,
         tokenizer_vocab_size: int,
         ignore_index: Optional[int] = None,
+        classifier_dropout: Optional[float] = None,
         learning_rate: float = 1e-5,
         task_learning_rate: Optional[float] = None,
         warmup_proportion: float = 0.1,
@@ -66,11 +72,15 @@ class SequenceClassificationModel(PyTorchIEModel):
             for param in self.model.parameters():
                 param.requires_grad = False
 
-        classifier_dropout = (
-            config.classifier_dropout
-            if config.classifier_dropout is not None
-            else config.hidden_dropout_prob
-        )
+        if classifier_dropout is None:
+            # Get the classifier dropout value from the Huggingface model config.
+            # This is a bit of a mess since some Configs use different variable names or change the semantics
+            # of the dropout (e.g. DistilBert has one dropout prob for QA and one for Seq classification, and a
+            # general one for embeddings, encoder and pooler).
+            classifier_dropout_attr = HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE.get(
+                config.model_type, "classifier_dropout"
+            )
+            classifier_dropout = getattr(config, classifier_dropout_attr, 0.0)
         self.dropout = nn.Dropout(classifier_dropout)
 
         if isinstance(pooler, str):
@@ -109,6 +119,8 @@ class SequenceClassificationModel(PyTorchIEModel):
         hidden_state = output.last_hidden_state
 
         pooled_output = self.pooler(hidden_state, **pooler_inputs)
+
+        pooled_output = self.dropout(pooled_output)
 
         logits = self.classifier(pooled_output)
         return {"logits": logits}
