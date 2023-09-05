@@ -3,8 +3,9 @@
 from setuptools import find_packages, setup
 
 REQUIRED_PKGS = [
-    "pytorch-ie>=0.19.0,<1.0.0",
-    "fsspec<=2023.06.0",  # 2023.09.0 causes a bug with datasets, i.e. test_datasets() fails
+    # requires:
+    # - https://github.com/ChristophAlt/pytorch-ie/pull/323
+    "pytorch-ie @ git+https://github.com/ChristophAlt/pytorch-ie.git",
 ]
 
 TESTS_REQUIRE = [

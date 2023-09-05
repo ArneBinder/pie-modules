@@ -286,7 +286,7 @@ def model(monkeypatch, pooler_type, inputs, targets):
         pooler_type=pooler_type,
         batch_size=inputs["input_ids"].shape[0],
         seq_len=inputs["input_ids"].shape[1],
-        num_classes=max(targets) + 1,
+        num_classes=int(max(targets) + 1),
     )
 
 

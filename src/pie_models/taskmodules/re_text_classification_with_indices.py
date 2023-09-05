@@ -32,16 +32,17 @@ from pytorch_ie.annotations import (
 )
 from pytorch_ie.core import AnnotationList, Document, TaskEncoding, TaskModule
 from pytorch_ie.documents import TextDocument
-from pytorch_ie.models import (
-    TransformerTextClassificationModelBatchOutput,
-    TransformerTextClassificationModelStepBatchEncoding,
-)
 from pytorch_ie.utils.span import get_token_slice, is_contained_in
 from pytorch_ie.utils.window import get_window_around_slice
 from transformers import AutoTokenizer
 from transformers.file_utils import PaddingStrategy
 from transformers.tokenization_utils_base import TruncationStrategy
 from typing_extensions import TypeAlias
+
+from pie_models.models.sequence_classification import (
+    ModelOutputType,
+    ModelStepInputType,
+)
 
 InputEncodingType: TypeAlias = Dict[str, Any]
 TargetEncodingType: TypeAlias = Sequence[int]
@@ -63,8 +64,8 @@ TaskModuleType: TypeAlias = TaskModule[
     TextDocument,
     InputEncodingType,
     TargetEncodingType,
-    TransformerTextClassificationModelStepBatchEncoding,
-    TransformerTextClassificationModelBatchOutput,
+    ModelStepInputType,
+    ModelOutputType,
     TaskOutputType,
 ]
 
@@ -560,9 +561,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType):
 
         return target
 
-    def unbatch_output(
-        self, model_output: TransformerTextClassificationModelBatchOutput
-    ) -> Sequence[TaskOutputType]:
+    def unbatch_output(self, model_output: ModelOutputType) -> Sequence[TaskOutputType]:
         logits = model_output["logits"]
 
         output_label_probs = logits.sigmoid() if self.multi_label else logits.softmax(dim=-1)
@@ -625,9 +624,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType):
             if label != self.none_label:
                 yield self.relation_annotation, new_annotation
 
-    def collate(
-        self, task_encodings: Sequence[TaskEncodingType]
-    ) -> TransformerTextClassificationModelStepBatchEncoding:
+    def collate(self, task_encodings: Sequence[TaskEncodingType]) -> ModelStepInputType:
         input_features = [
             {"input_ids": task_encoding.inputs["input_ids"]} for task_encoding in task_encodings
         ]
