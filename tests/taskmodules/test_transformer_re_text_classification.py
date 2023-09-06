@@ -74,7 +74,6 @@ def test_prepared_taskmodule(taskmodule, documents):
     assert taskmodule.is_prepared
 
     assert taskmodule.entity_labels == ["ORG", "PER"]
-    assert taskmodule.sep_token_id
 
     if taskmodule.append_markers:
         if taskmodule.add_type_to_marker:

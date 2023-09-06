@@ -268,7 +268,6 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType):
         self.argument_markers_to_id = {
             marker: self.tokenizer.vocab[marker] for marker in self.argument_markers
         }
-        self.sep_token_id = self.tokenizer.vocab[self.tokenizer.sep_token]
 
         self.id_to_label = {v: k for k, v in self.label_to_id.items()}
 
@@ -491,9 +490,12 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType):
                             arg_end_indices[idx] = token_position + offset - 1
 
                 if self.append_markers:
+                    if self.tokenizer.sep_token is None:
+                        raise ValueError("append_markers is True, but tokenizer has no sep_token")
+                    sep_token_id = self.tokenizer.vocab[self.tokenizer.sep_token]
                     for arg in args:
                         if without_special_tokens:
-                            input_ids_with_markers.append(self.sep_token_id)
+                            input_ids_with_markers.append(sep_token_id)
                             input_ids_with_markers.append(
                                 self.argument_markers_to_id[arg.as_append_marker]
                             )
@@ -501,7 +503,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType):
                             input_ids_with_markers.append(
                                 self.argument_markers_to_id[arg.as_append_marker]
                             )
-                            input_ids_with_markers.append(self.sep_token_id)
+                            input_ids_with_markers.append(sep_token_id)
 
                 # when windowing is used, we have to add the special tokens manually
                 if without_special_tokens:
