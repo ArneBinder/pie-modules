@@ -3,7 +3,7 @@
 from setuptools import find_packages, setup
 
 REQUIRED_PKGS = [
-    "pytorch-ie >= 0.18.0",
+    "pytorch-ie >= 0.22.0",
     "torchmetrics >= 0.11.0",
 ]
 

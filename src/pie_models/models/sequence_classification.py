@@ -3,6 +3,7 @@ from typing import Any, Dict, MutableMapping, Optional, Tuple, Union
 
 import torchmetrics
 from pytorch_ie.core import PyTorchIEModel
+from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
 from torch import Tensor, nn
 from torch.optim import AdamW
 from transformers import AutoConfig, AutoModel, get_linear_schedule_with_warmup
@@ -36,12 +37,12 @@ logger = logging.getLogger(__name__)
 
 
 @PyTorchIEModel.register()
-class SequenceClassificationModel(PyTorchIEModel):
+class SequenceClassificationModel(PyTorchIEModel, RequiresModelNameOrPath, RequiresNumClasses):
     def __init__(
         self,
         model_name_or_path: str,
         num_classes: int,
-        tokenizer_vocab_size: int,
+        tokenizer_vocab_size: Optional[int] = None,
         ignore_index: Optional[int] = None,
         classifier_dropout: Optional[float] = None,
         learning_rate: float = 1e-5,
@@ -66,7 +67,9 @@ class SequenceClassificationModel(PyTorchIEModel):
             self.model = AutoModel.from_config(config=config)
         else:
             self.model = AutoModel.from_pretrained(model_name_or_path, config=config)
-        self.model.resize_token_embeddings(tokenizer_vocab_size)
+
+        if tokenizer_vocab_size is not None:
+            self.model.resize_token_embeddings(tokenizer_vocab_size)
 
         if self.freeze_base_model:
             for param in self.model.parameters():
