@@ -272,6 +272,19 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
 
         self.id_to_label = {v: k for k, v in self.label_to_id.items()}
 
+        if self.tokenizer.pad_token is None:
+            logger.warning(
+                "The tokenizer has no pad token, but this is required to pad the batches. We add a pad token to "
+                "the tokenizer."
+            )
+            self.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+        if self.append_markers and self.tokenizer.sep_token is None:
+            logger.warning(
+                "The tokenizer has no sep token, but this is required if append_markers=True. We add a sep token "
+                "to the tokenizer."
+            )
+            self.tokenizer.add_special_tokens({"sep_token": "[SEP]"})
+
     def _create_relation_candidates(
         self,
         document: Document,
