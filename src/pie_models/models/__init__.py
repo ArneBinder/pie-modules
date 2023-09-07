@@ -1,1 +1,2 @@
 from .sequence_classification import SequenceClassificationModel
+from .simple_sequence_classification import SimpleSequenceClassificationModel
