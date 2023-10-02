@@ -52,9 +52,10 @@ from pie_models.models.sequence_classification import (
 
 InputEncodingType: TypeAlias = Dict[str, Any]
 TargetEncodingType: TypeAlias = Sequence[int]
+DocumentType: TypeAlias = TextDocument
 
 TaskEncodingType: TypeAlias = TaskEncoding[
-    TextDocument,
+    DocumentType,
     InputEncodingType,
     TargetEncodingType,
 ]
@@ -67,7 +68,7 @@ class TaskOutputType(TypedDict, total=False):
 
 TaskModuleType: TypeAlias = TaskModule[
     # _InputEncoding, _TargetEncoding, _TaskBatchEncoding, _ModelBatchOutput, _TaskOutput
-    TextDocument,
+    DocumentType,
     InputEncodingType,
     TargetEncodingType,
     ModelStepInputType,
@@ -219,7 +220,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         self._logged_examples_counter = 0
 
     @property
-    def document_type(self) -> Optional[Type[TextDocument]]:
+    def document_type(self) -> Optional[Type[DocumentType]]:
         if self.partition_annotation is not None:
             return TextDocumentWithLabeledEntitiesRelationsAndLabeledPartitions
         else:
@@ -232,7 +233,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         relations: AnnotationList[BinaryRelation] = self.get_relation_layer(document)
         return relations.target_layer
 
-    def _prepare(self, documents: Sequence[TextDocument]) -> None:
+    def _prepare(self, documents: Sequence[DocumentType]) -> None:
         entity_labels: Set[str] = set()
         relation_labels: Set[str] = set()
         for document in documents:
@@ -313,7 +314,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
 
     def encode_input(
         self,
-        document: TextDocument,
+        document: DocumentType,
         is_training: bool = False,
     ) -> Optional[Union[TaskEncodingType, Sequence[TaskEncodingType],]]:
         relations: Sequence[BinaryRelation]
