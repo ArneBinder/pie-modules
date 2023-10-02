@@ -1,5 +1,6 @@
 import dataclasses
 
+import pkg_resources
 import pytest
 from datasets import load_dataset
 from pytorch_ie import DatasetDict
@@ -8,6 +9,8 @@ from pytorch_ie.core import AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument
 
 from tests import FIXTURES_ROOT
+
+_TABULATE_AVAILABLE = "tabulate" in {pkg.key for pkg in pkg_resources.working_set}
 
 
 @dataclasses.dataclass

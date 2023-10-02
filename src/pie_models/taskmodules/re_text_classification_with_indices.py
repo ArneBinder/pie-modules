@@ -8,9 +8,11 @@ workflow:
 """
 
 import logging
+from collections import defaultdict
 from typing import (
     Any,
     Dict,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -23,6 +25,7 @@ from typing import (
 )
 
 import numpy as np
+import pandas as pd
 import torch
 from pytorch_ie.annotations import (
     BinaryRelation,
@@ -31,14 +34,20 @@ from pytorch_ie.annotations import (
     NaryRelation,
     Span,
 )
-from pytorch_ie.core import AnnotationList, Document, TaskEncoding, TaskModule
+from pytorch_ie.core import (
+    Annotation,
+    AnnotationList,
+    Document,
+    TaskEncoding,
+    TaskModule,
+)
 from pytorch_ie.documents import (
     TextDocument,
     TextDocumentWithLabeledEntitiesAndRelations,
     TextDocumentWithLabeledEntitiesRelationsAndLabeledPartitions,
 )
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
-from pytorch_ie.utils.span import get_token_slice, is_contained_in
+from pytorch_ie.utils.span import get_token_slice, has_overlap, is_contained_in
 from pytorch_ie.utils.window import get_window_around_slice
 from transformers import AutoTokenizer
 from transformers.file_utils import PaddingStrategy
@@ -84,6 +93,25 @@ END = "end"
 
 
 logger = logging.getLogger(__name__)
+
+
+def inner_span_distance(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> int:
+    dist_start_other_end = abs(start_end[0] - other_start_end[1])
+    dist_end_other_start = abs(start_end[1] - other_start_end[0])
+    dist = min(dist_start_other_end, dist_end_other_start)
+    if not has_overlap(start_end, other_start_end):
+        return dist
+    else:
+        return -dist
+
+
+def span_distance(
+    start_end: Tuple[int, int], other_start_end: Tuple[int, int], distance_type: str
+) -> int:
+    if distance_type == "inner":
+        return inner_span_distance(start_end, other_start_end)
+    else:
+        raise ValueError(f"unknown distance_type={distance_type}. use one of: inner")
 
 
 class RelationArgument:
@@ -133,6 +161,28 @@ class RelationArgument:
         )
 
 
+def get_relation_argument_spans_and_roles(
+    relation: Annotation,
+) -> Tuple[Tuple[str, Annotation], ...]:
+    if isinstance(relation, BinaryRelation):
+        return (HEAD, relation.head), (TAIL, relation.tail)
+    elif isinstance(relation, NaryRelation):
+        # create unique order by sorting the arguments by their start and end positions and role
+        sorted_args = sorted(
+            zip(relation.roles, relation.arguments),
+            key=lambda role_and_span: (
+                role_and_span[1].start,
+                role_and_span[1].end,
+                role_and_span[0],
+            ),
+        )
+        return tuple(sorted_args)
+    else:
+        raise NotImplementedError(
+            f"the taskmodule does not yet support getting relation arguments for type: {type(relation)}"
+        )
+
+
 @TaskModule.register()
 class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizerVocabSize):
     """Marker based relation extraction. This taskmodule prepares the input token ids in such a way
@@ -161,7 +211,8 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         self,
         tokenizer_name_or_path: str,
         relation_annotation: str = "relations",
-        create_relation_candidates: bool = False,
+        add_candidate_relations: bool = False,
+        add_reversed_relations: bool = False,
         partition_annotation: Optional[str] = None,
         none_label: str = "no_relation",
         padding: Union[bool, str, PaddingStrategy] = True,
@@ -175,17 +226,23 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         single_argument_pair: bool = True,
         append_markers: bool = False,
         entity_labels: Optional[List[str]] = None,
-        reversed_relation_label_suffix: Optional[str] = None,
+        reversed_relation_label_suffix: str = "_reversed",
+        symmetric_relations: Optional[List[str]] = None,
+        reverse_symmetric_relations: bool = True,
+        max_argument_distance: Optional[int] = None,
+        max_argument_distance_type: str = "inner",
         max_window: Optional[int] = None,
         log_first_n_examples: int = 0,
         add_argument_indices_to_input: bool = False,
+        collect_statistics: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.save_hyperparameters()
 
         self.relation_annotation = relation_annotation
-        self.create_relation_candidates = create_relation_candidates
+        self.add_candidate_relations = add_candidate_relations
+        self.add_reversed_relations = add_reversed_relations
         self.padding = padding
         self.truncation = truncation
         self.label_to_id = label_to_id or {}
@@ -200,6 +257,10 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         self.partition_annotation = partition_annotation
         self.none_label = none_label
         self.reversed_relation_label_suffix = reversed_relation_label_suffix
+        self.symmetric_relations = set(symmetric_relations or [])
+        self.reverse_symmetric_relations = reverse_symmetric_relations
+        self.max_argument_distance = max_argument_distance
+        self.max_argument_distance_type = max_argument_distance_type
         self.max_window = max_window
         # overwrite None with 0 for backward compatibility
         self.log_first_n_examples = log_first_n_examples or 0
@@ -208,6 +269,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
             self.argument_role_to_marker = {HEAD: "H", TAIL: "T"}
         else:
             self.argument_role_to_marker = argument_role_to_marker
+        self.collect_statistics = collect_statistics
 
         self.argument_role2idx = {
             role: i for i, role in enumerate(sorted(self.argument_role_to_marker))
@@ -218,6 +280,8 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         self.argument_markers = None
 
         self._logged_examples_counter = 0
+
+        self.reset_statistics()
 
     @property
     def document_type(self) -> Optional[Type[DocumentType]]:
@@ -245,6 +309,16 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
 
             for relation in relations:
                 relation_labels.add(relation.label)
+                if self.add_reversed_relations:
+                    if relation.label.endswith(self.reversed_relation_label_suffix):
+                        raise ValueError(
+                            f"doc.id={document.id}: the relation label '{relation.label}' already ends with "
+                            f"the reversed_relation_label_suffix '{self.reversed_relation_label_suffix}', "
+                            f"this is not allowed because we would not know if we should strip the suffix and "
+                            f"revert the arguments during inference or not"
+                        )
+                    if relation.label not in self.symmetric_relations:
+                        relation_labels.add(relation.label + self.reversed_relation_label_suffix)
 
         if self.none_label in relation_labels:
             relation_labels.remove(self.none_label)
@@ -253,6 +327,58 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         self.label_to_id[self.none_label] = 0
 
         self.entity_labels = sorted(entity_labels)
+
+    def reset_statistics(self):
+        self._statistics = defaultdict(int)
+        self._collected_relations: Dict[str, List[Annotation]] = defaultdict(list)
+
+    def collect_relation(self, kind: str, relation: Annotation):
+        if self.collect_statistics:
+            self._collected_relations[kind].append(relation)
+
+    def collect_all_relations(self, kind: str, relations: Iterable[Annotation]):
+        if self.collect_statistics:
+            self._collected_relations[kind].extend(relations)
+
+    def finalize_statistics(self):
+        if self.collect_statistics:
+            all_relations = set(self._collected_relations["available"])
+            used_relations = set(self._collected_relations["used"])
+            skipped_other = all_relations - used_relations
+            for key, rels in self._collected_relations.items():
+                rels_set = set(rels)
+                if key.startswith("skipped_"):
+                    skipped_other -= rels_set
+                elif key.startswith("used_"):
+                    pass
+                elif key in ["available", "used"]:
+                    pass
+                else:
+                    raise ValueError(f"unknown key: {key}")
+                for rel in rels_set:
+                    self.increase_counter(key=(key, rel.label))
+            for rel in skipped_other:
+                self.increase_counter(key=("skipped_other", rel.label))
+
+    def show_statistics(self):
+        if self.collect_statistics:
+            self.finalize_statistics()
+
+            to_show = pd.Series(self._statistics)
+            if len(to_show.index.names) > 1:
+                to_show = to_show.unstack()
+            logger.info(f"statistics:\n{to_show.to_markdown()}")
+
+    def increase_counter(self, key: Tuple[Any, ...], value: Optional[int] = 1):
+        if self.collect_statistics:
+            key_str = tuple(str(k) for k in key)
+            self._statistics[key_str] += value
+
+    def encode(self, *args, **kwargs):
+        self.reset_statistics()
+        res = super().encode(*args, **kwargs)
+        self.show_statistics()
+        return res
 
     def construct_argument_markers(self) -> List[str]:
         # ignore the typing because we know that this is only called on a prepared taskmodule,
@@ -285,43 +411,141 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
 
         self.id_to_label = {v: k for k, v in self.label_to_id.items()}
 
-    def _create_relation_candidates(
+    def _add_reversed_relations(
         self,
-        document: Document,
-    ) -> List[BinaryRelation]:
-        relation_candidates: List[BinaryRelation] = []
-        relations: AnnotationList[BinaryRelation] = self.get_relation_layer(document)
-        entities: AnnotationList[LabeledSpan] = self.get_entity_layer(document)
-        arguments_to_relation = {(rel.head, rel.tail): rel for rel in relations}
-        # iterate over all possible argument candidates
-        for head in entities:
-            for tail in entities:
-                if head != tail:
-                    # If there is no relation with the candidate arguments, we create a relation candidate with the
-                    # none label. Otherwise, we use the existing relation.
-                    candidate = arguments_to_relation.get(
-                        (head, tail),
-                        BinaryRelation(
-                            head=head,
-                            tail=tail,
-                            label=self.none_label,
-                            score=1.0,
-                        ),
-                    )
-                    relation_candidates.append(candidate)
+        arguments2relation: Dict[Tuple[Tuple[str, Annotation], ...], Annotation],
+        doc_id: Optional[str] = None,
+    ) -> None:
+        if self.add_reversed_relations:
+            for arguments, rel in list(arguments2relation.items()):
+                arg_roles, arg_spans = zip(*arguments)
+                if isinstance(rel, BinaryRelation):
+                    label = rel.label
+                    if label in self.symmetric_relations and not self.reverse_symmetric_relations:
+                        continue
+                    if label.endswith(self.reversed_relation_label_suffix):
+                        raise ValueError(
+                            f"doc.id={doc_id}: The relation has the label '{label}' which already ends with the "
+                            f"reversed_relation_label_suffix='{self.reversed_relation_label_suffix}'. "
+                            f"It looks like the relation is already reversed, which is not allowed."
+                        )
+                    if rel.label not in self.symmetric_relations:
+                        label += self.reversed_relation_label_suffix
 
-        return relation_candidates
+                    reversed_rel = BinaryRelation(
+                        head=rel.tail,
+                        tail=rel.head,
+                        label=label,
+                        score=rel.score,
+                    )
+                    reversed_arguments = get_relation_argument_spans_and_roles(reversed_rel)
+                    if reversed_arguments in arguments2relation:
+                        prev_rel = arguments2relation[reversed_arguments]
+                        prev_label = prev_rel.label
+                        logger.warning(
+                            f"doc.id={doc_id}: there is already a relation with reversed "
+                            f"arguments={reversed_arguments} and label={prev_label}, so we do not add the reversed "
+                            f"relation (with label {prev_label}) for these arguments"
+                        )
+                        if self.collect_statistics:
+                            self.increase_counter(("skipped_reversed_same_arguments", rel.label))
+                        continue
+                    elif rel.label in self.symmetric_relations:
+                        # warn if the original relation arguments were not sorted by their start and end positions
+                        # in the case of symmetric relations
+                        if not all(isinstance(arg_span, Span) for arg_span in arg_spans):
+                            raise NotImplementedError(
+                                f"doc.id={doc_id}: the taskmodule does not yet support adding reversed relations "
+                                f"for symmetric relations with arguments that are no Spans: {arguments}"
+                            )
+                        args_sorted = sorted(
+                            [rel.head, rel.tail], key=lambda span: (span.start, span.end)
+                        )
+                        if args_sorted != [rel.head, rel.tail]:
+                            logger.warning(
+                                f"doc.id={doc_id}: The symmetric relation with label '{label}' has arguments "
+                                f"{arguments} which are not sorted by their start and end positions. "
+                                f"This may lead to problems during evaluation because we assume that the "
+                                f"arguments of symmetric relations were sorted in the beginning and, thus, interpret "
+                                f"relations where this is not the case as reversed. All reversed relations will get "
+                                f"their arguments swapped during inference in the case of add_reversed_relations=True "
+                                f"to remove duplicates. You may consider adding reversed versions of the *symmetric* "
+                                f"relations on your own and then setting *reverse_symmetric_relations* to False."
+                            )
+                            if self.collect_statistics:
+                                self.increase_counter(
+                                    ("used_not_sorted_reversed_arguments", rel.label)
+                                )
+
+                    arguments2relation[reversed_arguments] = reversed_rel
+                else:
+                    raise NotImplementedError(
+                        f"doc.id={doc_id}: the taskmodule does not yet support adding reversed relations for type: "
+                        f"{type(rel)}"
+                    )
+
+    def _add_candidate_relations(
+        self,
+        arguments2relation: Dict[Tuple[Tuple[str, Annotation], ...], Annotation],
+        entities: Iterable[Span],
+        doc_id: Optional[str] = None,
+    ) -> None:
+        if self.add_candidate_relations:
+            if set(self.argument_role_to_marker) == {HEAD, TAIL}:
+                # iterate over all possible argument candidates
+                for head in entities:
+                    for tail in entities:
+                        if head != tail:
+                            # Create a relation candidate with the none label. Otherwise, we use the existing relation.
+                            new_relation = BinaryRelation(
+                                head=head, tail=tail, label=self.none_label, score=1.0
+                            )
+                            new_relation_args = get_relation_argument_spans_and_roles(new_relation)
+                            # we use the new relation only if there is no existing relation with the same arguments
+                            if new_relation_args not in arguments2relation:
+                                arguments2relation[new_relation_args] = new_relation
+            else:
+                raise NotImplementedError(
+                    f"doc.id={doc_id}: the taskmodule does not yet support adding relation candidates "
+                    f"with argument roles other than 'head' and 'tail': {sorted(self.argument_role_to_marker)}"
+                )
+
+    def _filter_relations_by_argument_distance(
+        self,
+        arguments2relation: Dict[Tuple[Tuple[str, Annotation], ...], Annotation],
+        doc_id: Optional[str] = None,
+    ) -> None:
+        if self.max_argument_distance is not None:
+            for arguments, rel in list(arguments2relation.items()):
+                if isinstance(rel, BinaryRelation):
+                    if isinstance(rel.head, Span) and isinstance(rel.tail, Span):
+                        dist = span_distance(
+                            (rel.head.start, rel.head.end),
+                            (rel.tail.start, rel.tail.end),
+                            self.max_argument_distance_type,
+                        )
+                        if dist > self.max_argument_distance:
+                            arguments2relation.pop(arguments)
+                            self.collect_relation("skipped_argument_distance", rel)
+                    else:
+                        raise NotImplementedError(
+                            f"doc.id={doc_id}: the taskmodule does not yet support filtering relation candidates "
+                            f"with arguments of type: {type(rel.head)} and {type(rel.tail)}"
+                        )
+                else:
+                    raise NotImplementedError(
+                        f"doc.id={doc_id}: the taskmodule does not yet support filtering relation candidates for "
+                        f"type: {type(rel)}"
+                    )
 
     def encode_input(
         self,
         document: DocumentType,
         is_training: bool = False,
-    ) -> Optional[Union[TaskEncodingType, Sequence[TaskEncodingType],]]:
-        relations: Sequence[BinaryRelation]
-        if self.create_relation_candidates:
-            relations = self._create_relation_candidates(document)
-        else:
-            relations = self.get_relation_layer(document)
+    ) -> Optional[Union[TaskEncodingType, Sequence[TaskEncodingType]]]:
+        all_relations: Sequence[Annotation] = self.get_relation_layer(document)
+        all_entities: Sequence[Span] = self.get_entity_layer(document)
+        self.collect_all_relations("available", all_relations)
 
         partitions: Sequence[Span]
         if self.partition_annotation is not None:
@@ -337,6 +561,47 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
 
         task_encodings: List[TaskEncodingType] = []
         for partition in partitions:
+            # get all entities that are contained in the current partition
+            entities: List[Span] = [
+                entity
+                for entity in all_entities
+                if is_contained_in((entity.start, entity.end), (partition.start, partition.end))
+            ]
+
+            # create a mapping from relation arguments to the respective relation objects
+            entities_set = set(entities)
+            arguments2relation: Dict[Tuple[Tuple[str, Annotation], ...], Annotation] = {}
+            for rel in all_relations:
+                arguments = get_relation_argument_spans_and_roles(rel)
+                arg_roles, arg_spans = zip(*arguments)
+                # filter out all relations that have arguments not in the current partition
+                if all(arg_span in entities_set for arg_span in arg_spans):
+                    # check if there are multiple relations with the same argument tuple
+                    if arguments in arguments2relation:
+                        prev_label = arguments2relation[arguments].label
+                        logger.warning(
+                            f"doc.id={document.id}: there are multiple relations with the same arguments {arguments}: "
+                            f"previous label='{prev_label}' and current label='{rel.label}'. We only keep the first "
+                            f"occurring relation which has the label='{prev_label}'."
+                        )
+                        self.collect_relation("skipped_same_arguments", rel)
+                    else:
+                        arguments2relation[arguments] = rel
+                elif any(arg_span in entities_set for arg_span in arg_spans):
+                    logger.warning(
+                        f"doc.id={document.id}: there is a relation with label '{rel.label}' and arguments "
+                        f"{arguments} that is only partially contained in the current partition. We skip this relation."
+                    )
+                    self.collect_relation("skipped_partially_contained", rel)
+
+            self._add_reversed_relations(arguments2relation=arguments2relation, doc_id=document.id)
+            self._add_candidate_relations(
+                arguments2relation=arguments2relation, entities=entities, doc_id=document.id
+            )
+            self._filter_relations_by_argument_distance(
+                arguments2relation=arguments2relation, doc_id=document.id
+            )
+
             without_special_tokens = self.max_window is not None
             text = document.text[partition.start : partition.end]
             encoding = self.tokenizer(
@@ -349,37 +614,14 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
                 add_special_tokens=not without_special_tokens,
             )
 
-            for rel in relations:
-                arg_spans: List[LabeledSpan]
-                if isinstance(rel, BinaryRelation):
-                    if not isinstance(rel.head, LabeledSpan) or not isinstance(
-                        rel.tail, LabeledSpan
-                    ):
-                        raise ValueError(
-                            f"the taskmodule expects the relation arguments to be of type LabeledSpan, "
-                            f"but got {type(rel.head)} and {type(rel.tail)}"
-                        )
-                    arg_spans = [rel.head, rel.tail]
-                    arg_roles = [HEAD, TAIL]
-                elif isinstance(rel, NaryRelation):
-                    if any(not isinstance(arg, LabeledSpan) for arg in rel.arguments):
-                        raise ValueError(
-                            f"the taskmodule expects the relation arguments to be of type LabeledSpan, "
-                            f"but got {[type(arg) for arg in rel.arguments]}"
-                        )
-                    arg_spans = list(rel.arguments)
-                    arg_roles = list(rel.roles)
-                else:
-                    raise NotImplementedError(
-                        f"the taskmodule does not yet support relations of type: {type(rel)}"
+            for arguments, rel in arguments2relation.items():
+                arg_roles, arg_spans = zip(*arguments)
+                if not all(isinstance(arg, LabeledSpan) for arg in arg_spans):
+                    # TODO: add test case for this
+                    raise ValueError(
+                        f"the taskmodule expects the relation arguments to be of type LabeledSpan, "
+                        f"but got {[type(arg) for arg in arg_spans]}"
                     )
-
-                # check if the argument spans are in the current partition
-                if any(
-                    not is_contained_in((arg.start, arg.end), (partition.start, partition.end))
-                    for arg in arg_spans
-                ):
-                    continue
 
                 # map character spans to token spans
                 arg_token_slices_including_none = [
@@ -393,9 +635,12 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
                 # Check if the mapping was successful. It may fail (and is None) if any argument start or end does not
                 # match a token start or end, respectively.
                 if any(token_slice is None for token_slice in arg_token_slices_including_none):
+                    arg_spans_dict = {arg_span: str(arg_span) for arg_span in arg_spans}
                     logger.warning(
-                        f"Skipping invalid example {document.id}, cannot get argument token slice(s)"
+                        f"doc.id={document.id}: Skipping invalid example, cannot get argument token slices for "
+                        f"{arg_spans_dict}"
                     )
+                    self.collect_relation("skipped_args_not_aligned", rel)
                     continue
 
                 # ignore the typing, because we checked for None above
@@ -429,6 +674,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
                     # if we add the markers also to the end, this decreases the available window again by
                     # two tokens (marker + sep) per argument
                     if self.append_markers:
+                        # TODO: add test case for this
                         max_tokens -= len(args) * 2
                     # the slice from the beginning of the first entity to the end of the second is required
                     slice_required = (
@@ -442,6 +688,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
                     )
                     # this happens if slice_required (all arguments) does not fit into max_tokens (the available window)
                     if window_slice is None:
+                        self.collect_relation("skipped_too_long", rel)
                         continue
 
                     window_start, window_end = window_slice
@@ -488,6 +735,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
                         idx = self.argument_role2idx[arg.role]
                         if marker_type == START:
                             if arg_start_indices[idx] != -1:
+                                # TODO: add test case for this
                                 raise ValueError(
                                     f"Trying to overwrite arg_start_indices[{idx}]={arg_start_indices[idx]} with "
                                     f"{token_position + offset} for document {document.id}"
@@ -495,6 +743,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
                             arg_start_indices[idx] = token_position + offset
                         elif marker_type == END:
                             if arg_end_indices[idx] != -1:
+                                # TODO: add test case for this
                                 raise ValueError(
                                     f"Trying to overwrite arg_start_indices[{idx}]={arg_end_indices[idx]} with "
                                     f"{token_position + offset} for document {document.id}"
@@ -505,10 +754,12 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
 
                 if self.append_markers:
                     if self.tokenizer.sep_token is None:
+                        # TODO: add test case for this
                         raise ValueError("append_markers is True, but tokenizer has no sep_token")
                     sep_token_id = self.tokenizer.vocab[self.tokenizer.sep_token]
                     for arg in args:
                         if without_special_tokens:
+                            # TODO: add test case for this
                             input_ids_with_markers.append(sep_token_id)
                             input_ids_with_markers.append(
                                 self.argument_markers_to_id[arg.as_append_marker]
@@ -536,6 +787,8 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
                         metadata=({"candidate_annotation": rel}),
                     )
                 )
+
+                self.collect_relation("used", rel)
 
         return task_encodings
 
@@ -614,16 +867,27 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
             if isinstance(candidate_annotation, BinaryRelation):
                 head = candidate_annotation.head
                 tail = candidate_annotation.tail
-                # reverse any predicted reversed relations back
-                if self.reversed_relation_label_suffix is not None and label.endswith(
-                    self.reversed_relation_label_suffix
-                ):
-                    label = label[: -len(self.reversed_relation_label_suffix)]
-                    head, tail = tail, head
+                # Reverse predicted reversed relations back. Serialization will remove any duplicated relations.
+                if self.add_reversed_relations:
+                    # TODO: add test case for this
+                    if label.endswith(self.reversed_relation_label_suffix):
+                        label = label[: -len(self.reversed_relation_label_suffix)]
+                        head, tail = tail, head
+                    # If the predicted label is symmetric, we sort the arguments by its center.
+                    elif label in self.symmetric_relations and self.reverse_symmetric_relations:
+                        if not (isinstance(head, Span) and isinstance(tail, Span)):
+                            raise ValueError(
+                                f"the taskmodule expects the relation arguments of the candidate_annotation"
+                                f"to be of type Span, but got head of type: {type(head)} and tail of type: "
+                                f"{type(tail)}"
+                            )
+                        # use a unique order for the arguments: sort by start and end positions
+                        head, tail = sorted([head, tail], key=lambda span: (span.start, span.end))
                 new_annotation = BinaryRelation(
                     head=head, tail=tail, label=label, score=probability
                 )
             elif isinstance(candidate_annotation, NaryRelation):
+                # TODO: add test case for this
                 if self.reversed_relation_label_suffix is not None:
                     raise ValueError("can not reverse a NaryRelation")
                 new_annotation = NaryRelation(
