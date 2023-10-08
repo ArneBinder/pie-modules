@@ -28,19 +28,16 @@ pip install git+https://git@github.com/ArneBinder/pie-models.git
 
 ### Setup
 
-0. This project is build with [Poetry](https://python-poetry.org/). See here for [installation instructions](https://python-poetry.org/docs/#installation).
-1. Get the code and switch into the project directory:
-
-```bash
-git clone https://github.com/ArneBinder/pie-models
-cd pie-models
-```
-
-2. Create a virtual environment and install the dependencies:
-
-```bash
-poetry install
-```
+1. This project is build with [Poetry](https://python-poetry.org/). See here for [installation instructions](https://python-poetry.org/docs/#installation).
+2. Get the code and switch into the project directory:
+   ```bash
+   git clone https://github.com/ArneBinder/pie-models
+   cd pie-models
+   ```
+3. Create a virtual environment and install the dependencies:
+   ```bash
+   poetry install
+   ```
 
 Finally, to run any of the below commands, you need to activate the virtual environment:
 
