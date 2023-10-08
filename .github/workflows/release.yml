@@ -1,0 +1,86 @@
+name: Release
+
+on:
+    push:
+        branches:
+            - main
+            - master
+
+jobs:
+    release:
+        name: Release
+        runs-on: ubuntu-latest
+        steps:
+          #----------------------------------------------
+          #       check-out repo and set-up python
+          #----------------------------------------------
+          - name: Check out repository
+            uses: actions/checkout@v3
+          - name: Set up Python 3.9
+            id: setup-python
+            uses: actions/setup-python@v4
+            with:
+              python-version: "3.9"
+
+          #----------------------------------------------
+          #  -----  install & configure poetry  -----
+          #----------------------------------------------
+          - name: Install Poetry
+            uses: snok/install-poetry@v1
+            with:
+              virtualenvs-create: true
+              virtualenvs-in-project: true
+              installer-parallel: true
+
+          #----------------------------------------------
+          #  -----  build the package  -----
+          #----------------------------------------------
+          - name: Check if there is a parent commit
+            id: check-parent-commit
+            run: |
+                echo "::set-output name=sha::$(git rev-parse --verify --quiet HEAD^)"
+          - name: Detect and tag new version
+            id: check-version
+            if: steps.check-parent-commit.outputs.sha
+            uses: salsify/action-detect-and-tag-new-version@v2.0.1
+            with:
+                version-command: |
+                    bash -o pipefail -c "poetry version | awk '{ print \$2 }'"
+          - name: Bump version for developmental release
+            if: "! steps.check-version.outputs.tag"
+            run: |
+                poetry version patch &&
+                version=$(poetry version | awk '{ print $2 }') &&
+                poetry version $version.dev.$(date +%s)
+          - name: Build package
+            run: |
+                poetry build --ansi
+
+          #----------------------------------------------
+          #  -----  publish the package  -----
+          #----------------------------------------------
+          - name: Publish package on PyPI
+            if: steps.check-version.outputs.tag
+            uses: pypa/gh-action-pypi-publish@v1.5.0
+            with:
+                user: __token__
+                password: ${{ secrets.PYPI_TOKEN }}
+
+          - name: Publish package on TestPyPI
+            if: "! steps.check-version.outputs.tag"
+            uses: pypa/gh-action-pypi-publish@v1.5.0
+            with:
+                user: __token__
+                password: ${{ secrets.TEST_PYPI_TOKEN }}
+                repository_url: https://test.pypi.org/legacy/
+
+          #----------------------------------------------
+          #  -----  create github release  -----
+          #----------------------------------------------
+          - name: Publish the release notes
+            uses: release-drafter/release-drafter@v5.18.1
+            with:
+                publish: ${{ steps.check-version.outputs.tag != '' }}
+                tag: ${{ steps.check-version.outputs.tag }}
+            env:
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
