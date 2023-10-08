@@ -4,7 +4,6 @@ on:
     push:
         branches:
             - main
-            - master
 
 jobs:
     release:
@@ -75,7 +74,7 @@ jobs:
                 repository_url: https://test.pypi.org/legacy/
 
           #----------------------------------------------
-          #  -----  create github release  -----
+          #  -----  create github release notes -----
           #----------------------------------------------
           - name: Publish the release notes
             uses: release-drafter/release-drafter@v5.18.1
