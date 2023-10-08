@@ -15,7 +15,6 @@ packages = [
 ]
 classifiers = [
     "Framework :: Pytest",
-    "Framework :: PyTorch-IE",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3 :: Only",
 ]
@@ -25,7 +24,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.9"
-pytorch-ie = "^0.23"
+pytorch-ie = ">=0.23.0"
 torchmetrics = "^1"
 
 [tool.poetry.group.dev.dependencies]
