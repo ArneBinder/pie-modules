@@ -37,11 +37,29 @@ e.g. `git+https://github.com/ArneBinder/pie-models@v0.6.0`.
 
 ### Setup
 
+This project is build with [Poetry](https://python-poetry.org/). See here for
+[installation instructions](https://python-poetry.org/docs/#installation).
+
+1. Get the code and switch into the project directory:
+
 ```bash
 git clone https://github.com/ArneBinder/pie-models
 cd pie-models
-pip install -e ".[dev]"
 ```
+
+2. Create a virtual environment and install the dependencies:
+
+```bash
+poetry install
+```
+
+Finally, to run any of the below commands, you need to activate the virtual environment:
+
+```bash
+poetry shell
+```
+
+Note: You can also run commands in the virtual environment without activating it first: `poetry run <command>`.
 
 ### Code Formatting, Linting and Static Type Checking
 
