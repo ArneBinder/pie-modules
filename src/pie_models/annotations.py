@@ -19,6 +19,8 @@ class Question(Annotation):
 class ExtractiveAnswer(Span):
     """An answer to a question."""
 
+    TARGET_NAMES = ["base", "questions"]
+
     question: Question
     # The score of the answer. This is not considered when comparing two answers (e.g. prediction with gold).
     score: Optional[float] = dataclasses.field(default=None, compare=False)
@@ -26,5 +28,6 @@ class ExtractiveAnswer(Span):
     def __str__(self) -> str:
         if self.targets is None:
             return ""
-        context = self.targets[0]
+        # we assume that the first target is the text
+        context = self.named_targets["base"]
         return str(context[self.start : self.end])
