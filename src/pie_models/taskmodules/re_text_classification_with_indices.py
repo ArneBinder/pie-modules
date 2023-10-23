@@ -43,8 +43,8 @@ from pytorch_ie.core import (
 )
 from pytorch_ie.documents import (
     TextDocument,
-    TextDocumentWithLabeledEntitiesAndRelations,
-    TextDocumentWithLabeledEntitiesRelationsAndLabeledPartitions,
+    TextDocumentWithLabeledSpansAndBinaryRelations,
+    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
 from pytorch_ie.utils.span import get_token_slice, has_overlap, is_contained_in
@@ -210,7 +210,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
     def __init__(
         self,
         tokenizer_name_or_path: str,
-        relation_annotation: str = "relations",
+        relation_annotation: str = "binary_relations",
         add_candidate_relations: bool = False,
         add_reversed_relations: bool = False,
         partition_annotation: Optional[str] = None,
@@ -286,9 +286,19 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
     @property
     def document_type(self) -> Optional[Type[DocumentType]]:
         if self.partition_annotation is not None:
-            return TextDocumentWithLabeledEntitiesRelationsAndLabeledPartitions
+            dt = TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
         else:
-            return TextDocumentWithLabeledEntitiesAndRelations
+            dt = TextDocumentWithLabeledSpansAndBinaryRelations
+        if self.relation_annotation == "binary_relations":
+            return dt
+        else:
+            logger.warning(
+                f"relation_annotation={self.relation_annotation} is "
+                f"not the default value ('binary_relations'), so the taskmodule {type(self).__name__} can not request "
+                f"the usual document type for auto-conversion ({dt.__name__}) because this has the bespoken default "
+                f"value as layer name instead of the provided one."
+            )
+            return None
 
     def get_relation_layer(self, document: Document) -> AnnotationList[BinaryRelation]:
         return document[self.relation_annotation]

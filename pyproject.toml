@@ -24,7 +24,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.9"
-pytorch-ie = ">=0.23.0,<0.26.0"
+pytorch-ie = ">=0.26.0,<0.27.0"
 torchmetrics = "^1"
 
 [tool.poetry.group.dev.dependencies]
@@ -37,6 +37,12 @@ pre-commit = "^3.4.0"
 name = "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
 priority = "explicit"
+
+[[tool.poetry.source]]
+name = "pre-release"
+url = "https://test.pypi.org/simple/"
+priority = "explicit"
+
 
 [tool.pytest.ini_options]
 addopts = [

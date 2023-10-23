@@ -38,7 +38,7 @@ def cfg(request):
 def unprepared_taskmodule(cfg):
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
-        tokenizer_name_or_path=tokenizer_name_or_path, **cfg
+        relation_annotation="relations", tokenizer_name_or_path=tokenizer_name_or_path, **cfg
     )
     assert not taskmodule.is_from_pretrained
 
@@ -613,6 +613,7 @@ def test_decode(taskmodule, documents, model_output, inplace):
 def test_encode_with_partition(documents):
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path=tokenizer_name_or_path,
         partition_annotation="sentences",
     )
@@ -708,6 +709,7 @@ def test_encode_with_partition(documents):
 def test_encode_with_windowing(documents):
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path=tokenizer_name_or_path,
         max_window=12,
     )
@@ -771,6 +773,7 @@ def test_encode_with_windowing(documents):
 def encodings_and_taskmodule_with_argument_indices(request, documents):
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path=tokenizer_name_or_path,
         add_argument_indices_to_input=request.param,
     )
@@ -841,6 +844,7 @@ def test_collate_with_add_argument_indices(encodings_and_taskmodule_with_argumen
 
 def test_encode_input_multiple_relations_for_same_arguments(caplog):
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path="bert-base-cased",
     )
     document = TestDocument(text="A founded B.", id="multiple_relations_for_same_arguments")
@@ -877,6 +881,7 @@ def test_encode_input_multiple_relations_for_same_arguments(caplog):
 
 def test_encode_input_argument_role_unknown(documents):
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path="bert-base-cased",
         # the tail argument is not in the role_to_marker
         argument_role_to_marker={HEAD: "H"},
@@ -893,6 +898,7 @@ def test_encode_input_argument_role_unknown(documents):
 
 def test_encode_input_with_add_candidate_relations(documents):
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path="bert-base-cased",
         add_candidate_relations=True,
     )
@@ -958,6 +964,7 @@ def test_encode_input_with_add_candidate_relations_with_wrong_relation_type(
     doc = document_with_nary_relations
 
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path="bert-base-cased",
         add_candidate_relations=True,
         argument_role_to_marker={HEAD: "H", "arg2": "T"},
@@ -975,6 +982,7 @@ def test_encode_input_with_add_candidate_relations_with_wrong_relation_type(
 def test_encode_input_with_add_reversed_relations(documents):
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path=tokenizer_name_or_path,
         add_reversed_relations=True,
     )
@@ -1025,6 +1033,7 @@ def test_encode_input_with_add_reversed_relations(documents):
 def test_prepare_with_add_reversed_relations_with_label_has_suffix():
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path=tokenizer_name_or_path,
         add_reversed_relations=True,
     )
@@ -1091,6 +1100,7 @@ def test_encode_input_with_add_reversed_relations_with_symmetric_relations(
 
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path=tokenizer_name_or_path,
         add_reversed_relations=True,
         symmetric_relations=["per:is_married_with"],
@@ -1181,6 +1191,7 @@ def test_encode_input_with_add_reversed_relations_with_wrong_relation_type(
 ):
     doc = document_with_nary_relations
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path="bert-base-cased",
         add_reversed_relations=True,
         symmetric_relations=["per:employee_of"],
@@ -1234,6 +1245,7 @@ def test_encode_input_with_max_argument_distance():
 
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path=tokenizer_name_or_path,
         max_argument_distance=10,
     )
@@ -1253,6 +1265,7 @@ def test_encode_input_with_max_argument_distance_with_wrong_relation_type(
 ):
     doc = document_with_nary_relations
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path="bert-base-cased",
         max_argument_distance=10,
     )
@@ -1269,6 +1282,7 @@ def test_encode_input_with_max_argument_distance_with_wrong_relation_type(
 def test_encode_with_empty_partition_layer(documents):
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path=tokenizer_name_or_path,
         partition_annotation="sentences",
     )
@@ -1289,6 +1303,7 @@ def test_encode_with_empty_partition_layer(documents):
 def test_encode_nary_relatio():
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path=tokenizer_name_or_path,
         argument_role_to_marker={"r1": "R1", "r2": "R2", "r3": "R3"},
         # setting label_to_id and entity_labels makes the taskmodule prepared
@@ -1330,6 +1345,7 @@ def test_encode_nary_relatio():
 def test_encode_unknown_relation_type():
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path=tokenizer_name_or_path,
         # setting label_to_id and entity_labels makes the taskmodule prepared
         label_to_id={"has_wrong_type": 1},
@@ -1362,6 +1378,7 @@ def test_encode_unknown_relation_type():
 def test_encode_with_unaligned_span(caplog):
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path=tokenizer_name_or_path,
         # setting label_to_id and entity_labels makes the taskmodule prepared
         label_to_id={"rel": 1},
@@ -1410,6 +1427,7 @@ def test_encode_with_log_first_n_examples(caplog):
 
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path=tokenizer_name_or_path,
         log_first_n_examples=1,
     )
@@ -1433,6 +1451,7 @@ def test_encode_with_log_first_n_examples(caplog):
 @pytest.mark.skipif(condition=not _TABULATE_AVAILABLE, reason="requires the 'tabulate' package")
 def test_encode_with_collect_statistics(documents, caplog):
     taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
         tokenizer_name_or_path="bert-base-cased",
         collect_statistics=True,
     )
