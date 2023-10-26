@@ -26,6 +26,7 @@ classifiers = [
 python = "^3.9"
 pytorch-ie = ">=0.26.0,<0.27.0"
 torchmetrics = "^1"
+pytorch-crf = ">=0.7.2"
 
 [tool.poetry.group.dev.dependencies]
 torch = {version = "^2.1.0+cpu", source = "pytorch"}
