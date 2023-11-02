@@ -28,8 +28,10 @@ StepBatchEncodingType: TypeAlias = Tuple[
 
 HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE = {
     "bert": "hidden_dropout_prob",
+    "roberta": "hidden_dropout_prob",
     "albert": "classifier_dropout_prob",
     "distilbert": "seq_classif_dropout",
+    "deberta-v2": "hidden_dropout_prob",
     "longformer": "hidden_dropout_prob",
 }
 
