@@ -46,11 +46,6 @@ def unprepared_taskmodule(cfg):
 
 
 @pytest.fixture(scope="module")
-def documents(dataset):
-    return dataset["train"]
-
-
-@pytest.fixture(scope="module")
 def taskmodule(unprepared_taskmodule, documents):
     unprepared_taskmodule.prepare(documents)
     return unprepared_taskmodule
@@ -576,7 +571,8 @@ def test_unbatch_output(taskmodule, model_output):
 
 @pytest.mark.parametrize("inplace", [False, True])
 def test_decode(taskmodule, documents, model_output, inplace):
-    documents = [documents[i] for i in [0, 1, 4]]
+    # copy the documents, because the taskmodule may modify them
+    documents = [documents[i].copy() for i in [0, 1, 4]]
 
     encodings = taskmodule.encode(documents, encode_target=False)
     unbatched_outputs = taskmodule.unbatch_output(model_output)

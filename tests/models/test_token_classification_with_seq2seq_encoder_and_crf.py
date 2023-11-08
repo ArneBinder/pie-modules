@@ -19,11 +19,6 @@ FIXTURES_TASKMODULE_DATA_PATH = (
 )
 
 
-@pytest.fixture(scope="module")
-def documents(dataset):
-    return dataset["train"]
-
-
 @pytest.mark.skipif(
     condition=not DUMP_FIXTURES, reason="Only need to dump the data if taskmodule has changed"
 )
