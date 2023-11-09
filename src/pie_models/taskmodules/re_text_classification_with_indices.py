@@ -911,7 +911,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
                     f"creating a new annotation from a candidate_annotation of another type than BinaryRelation is "
                     f"not yet supported. candidate_annotation has the type: {type(candidate_annotation)}"
                 )
-            if label != self.none_label:
+            if not (self.add_candidate_relations and label == self.none_label):
                 yield self.relation_annotation, new_annotation
 
     def collate(self, task_encodings: Sequence[TaskEncodingType]) -> ModelStepInputType:
