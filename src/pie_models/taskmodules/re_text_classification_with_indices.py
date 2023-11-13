@@ -205,7 +205,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
             contains relation annotations including negative examples (i.e. relations with the none_label).
     """
 
-    PREPARED_ATTRIBUTES = ["label_to_id", "entity_labels"]
+    PREPARED_ATTRIBUTES = ["labels", "entity_labels"]
 
     def __init__(
         self,
@@ -220,6 +220,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         multi_label: bool = False,
+        labels: Optional[List[str]] = None,
         label_to_id: Optional[Dict[str, int]] = None,
         add_type_to_marker: bool = False,
         argument_role_to_marker: Optional[Dict[str, str]] = None,
@@ -238,15 +239,24 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        self.save_hyperparameters()
+        if label_to_id is not None:
+            logger.warning(
+                "The parameter label_to_id is deprecated and will be removed in a future version. "
+                "Please use labels instead."
+            )
+            id_to_label = {v: k for k, v in label_to_id.items()}
+            # reconstruct labels from label_to_id. Note that we need to remove the none_label
+            labels = [
+                id_to_label[i] for i in range(len(id_to_label)) if id_to_label[i] != none_label
+            ]
+        self.save_hyperparameters(ignore=["label_to_id"])
 
         self.relation_annotation = relation_annotation
         self.add_candidate_relations = add_candidate_relations
         self.add_reversed_relations = add_reversed_relations
         self.padding = padding
         self.truncation = truncation
-        self.label_to_id = label_to_id or {}
-        self.id_to_label = {v: k for k, v in self.label_to_id.items()}
+        self.labels = labels
         self.max_length = max_length
         self.pad_to_multiple_of = pad_to_multiple_of
         self.multi_label = multi_label
@@ -333,9 +343,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         if self.none_label in relation_labels:
             relation_labels.remove(self.none_label)
 
-        self.label_to_id = {label: i + 1 for i, label in enumerate(sorted(relation_labels))}
-        self.label_to_id[self.none_label] = 0
-
+        self.labels = sorted(relation_labels)
         self.entity_labels = sorted(entity_labels)
 
     def reset_statistics(self):
@@ -412,14 +420,16 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         return sorted(list(argument_markers))
 
     def _post_prepare(self):
+        self.label_to_id = {label: i + 1 for i, label in enumerate(self.labels)}
+        self.label_to_id[self.none_label] = 0
+        self.id_to_label = {v: k for k, v in self.label_to_id.items()}
+
         self.argument_markers = self.construct_argument_markers()
         self.tokenizer.add_tokens(self.argument_markers, special_tokens=True)
 
         self.argument_markers_to_id = {
             marker: self.tokenizer.vocab[marker] for marker in self.argument_markers
         }
-
-        self.id_to_label = {v: k for k, v in self.label_to_id.items()}
 
     def _add_reversed_relations(
         self,
@@ -582,6 +592,11 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
             entities_set = set(entities)
             arguments2relation: Dict[Tuple[Tuple[str, Annotation], ...], Annotation] = {}
             for rel in all_relations:
+                # skip relations with unknown labels
+                if rel.label not in self.label_to_id:
+                    self.collect_relation("skipped_unknown_label", rel)
+                    continue
+
                 arguments = get_relation_argument_spans_and_roles(rel)
                 arg_roles, arg_spans = zip(*arguments)
                 # filter out all relations that have arguments not in the current partition

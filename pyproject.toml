@@ -33,6 +33,7 @@ torch = {version = "^2.1.0+cpu", source = "pytorch"}
 pytest = "^7.4.2"
 pytest-cov = "^4.1.0"
 pre-commit = "^3.4.0"
+tabulate = "^0.9"
 
 [[tool.poetry.source]]
 name = "pytorch"
