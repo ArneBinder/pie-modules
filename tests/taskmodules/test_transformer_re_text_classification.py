@@ -626,7 +626,7 @@ def test_encode_with_partition(documents):
     assert not taskmodule.is_from_pretrained
     taskmodule.prepare(documents)
 
-    assert len(documents) == 8
+    assert len(documents) == 7
     encodings = taskmodule.encode(documents)
     tokens = [
         taskmodule.tokenizer.convert_ids_to_tokens(encoding.inputs["input_ids"])
@@ -722,7 +722,7 @@ def test_encode_with_windowing(documents):
     assert not taskmodule.is_from_pretrained
     taskmodule.prepare(documents)
 
-    assert len(documents) == 8
+    assert len(documents) == 7
     encodings = taskmodule.encode(documents)
     assert len(encodings) == 3
     for encoding in encodings:

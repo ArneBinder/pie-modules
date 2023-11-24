@@ -89,17 +89,7 @@
             }
         },
         {
-            "id": "val_doc1",
-            "text": "A single sentence.",
-            "sentences": [{ "start": 0, "end": 18 }],
-            "entities": [],
-            "relations": [],
-            "metadata": {
-                "description": "single sentence per document, without annotations"
-            }
-        },
-        {
-            "id": "val_doc2",
+            "id": "train_doc7",
             "text": "First sentence. Entity M works at N. And it founded O.",
             "sentences": [
                 { "start": 0, "end": 15 },
