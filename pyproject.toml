@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "pie-models"
-version = "0.7.5"
+version = "0.7.6"
 description = "Model and Taskmodule implementations for PyTorch-IE"
 authors = ["Arne Binder <arne.binder@dfki.de>"]
 readme = "README.md"
