@@ -10,7 +10,7 @@
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)][pre-commit]
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)][black]
 
-Model and Taskmodule implementations for [PyTorch-IE](https://github.com/ChristophAlt/pytorch-ie).
+Model-, taskmodule-, and metric-implementations for [PyTorch-IE](https://github.com/ChristophAlt/pytorch-ie).
 
 Available models:
 
@@ -21,6 +21,10 @@ Available models:
 Available taskmodules:
 
 - [RETextClassificationWithIndicesTaskModule](src/pie_modules/taskmodules/re_text_classification_with_indices.py)
+
+Available metrics:
+
+- [SpanLengthCollector](src/pie_modules/metrics/span_length_collector.py)
 
 ## Setup
 
