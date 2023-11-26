@@ -21,6 +21,7 @@ Available models:
 Available taskmodules:
 
 - [RETextClassificationWithIndicesTaskModule](src/pie_modules/taskmodules/re_text_classification_with_indices.py)
+- [TokenClassificationTaskModule](src/pie_modules/taskmodules/token_classification.py)
 
 Available metrics:
 
