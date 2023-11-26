@@ -10,7 +10,7 @@
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)][pre-commit]
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)][black]
 
-Model-, taskmodule-, and metric-implementations for [PyTorch-IE](https://github.com/ChristophAlt/pytorch-ie).
+Model-, taskmodule-, and metric-implementations  for [PyTorch-IE](https://github.com/ChristophAlt/pytorch-ie).
 
 Available models:
 
