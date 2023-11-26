@@ -54,7 +54,7 @@ from transformers.file_utils import PaddingStrategy
 from transformers.tokenization_utils_base import TruncationStrategy
 from typing_extensions import TypeAlias
 
-from pie_models.models.sequence_classification import (
+from pie_modules.models.sequence_classification import (
     ModelOutputType,
     ModelStepInputType,
 )

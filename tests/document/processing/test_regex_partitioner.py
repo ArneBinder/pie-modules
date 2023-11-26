@@ -8,8 +8,8 @@ from pytorch_ie.annotations import LabeledSpan
 from pytorch_ie.core import AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument
 
-from pie_models.document.processing import RegexPartitioner
-from pie_models.document.processing.regex_partitioner import (
+from pie_modules.document.processing import RegexPartitioner
+from pie_modules.document.processing.regex_partitioner import (
     _get_partitions_with_matcher,
 )
 

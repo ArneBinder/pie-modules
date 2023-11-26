@@ -3,7 +3,7 @@ import torch
 import transformers
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 
-from pie_models.models import SequenceClassificationModel
+from pie_modules.models import SequenceClassificationModel
 
 
 @pytest.fixture

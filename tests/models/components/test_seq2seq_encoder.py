@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from pie_models.models.components.seq2seq_encoder import (
+from pie_modules.models.components.seq2seq_encoder import (
     ACTIVATION_TYPE2CLASS,
     RNN_TYPE2CLASS,
     build_seq2seq_encoder,

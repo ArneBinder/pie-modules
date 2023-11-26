@@ -1,12 +1,12 @@
-# pie-models
+# pie-modules
 
 <a href="https://pytorch.org/get-started/locally/"><img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-ee4c2c?logo=pytorch&logoColor=white"></a>
 <a href="https://pytorchlightning.ai/"><img alt="Lightning" src="https://img.shields.io/badge/-Lightning-792ee5?logo=pytorchlightning&logoColor=white"></a>
 <a href="https://github.com/ChristophAlt/pytorch-ie"><img alt="PyTorch-IE" src="https://img.shields.io/badge/-PyTorch--IE-017F2F?style=flat&logo=github&labelColor=gray"></a><br>
 
-[![PyPI](https://img.shields.io/pypi/v/pie-models.svg)][pypi status]
-[![Tests](https://github.com/arnebinder/pie-models/workflows/Tests/badge.svg)][tests]
-[![Codecov](https://codecov.io/gh/arnebinder/pie-models/branch/main/graph/badge.svg)][codecov]
+[![PyPI](https://img.shields.io/pypi/v/pie-modules.svg)][pypi status]
+[![Tests](https://github.com/arnebinder/pie-modules/workflows/Tests/badge.svg)][tests]
+[![Codecov](https://codecov.io/gh/arnebinder/pie-modules/branch/main/graph/badge.svg)][codecov]
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)][pre-commit]
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)][black]
 
@@ -14,24 +14,24 @@ Model and Taskmodule implementations for [PyTorch-IE](https://github.com/Christo
 
 Available models:
 
-- [SimpleSequenceClassificationModel](src/pie_models/models/simple_sequence_classification.py)
-- [SequenceClassificationModel](src/pie_models/models/sequence_classification.py)
-- [TokenClassificationModelWithSeq2SeqEncoderAndCrf](src/pie_models/models/token_classification_with_seq2seq_encoder_and_crf.py)
+- [SimpleSequenceClassificationModel](src/pie_modules/models/simple_sequence_classification.py)
+- [SequenceClassificationModel](src/pie_modules/models/sequence_classification.py)
+- [TokenClassificationModelWithSeq2SeqEncoderAndCrf](src/pie_modules/models/token_classification_with_seq2seq_encoder_and_crf.py)
 
 Available taskmodules:
 
-- [RETextClassificationWithIndicesTaskModule](src/pie_models/taskmodules/re_text_classification_with_indices.py)
+- [RETextClassificationWithIndicesTaskModule](src/pie_modules/taskmodules/re_text_classification_with_indices.py)
 
 ## Setup
 
 ```bash
-pip install pie-models
+pip install pie-modules
 ```
 
 To install the latest version from GitHub:
 
 ```bash
-pip install git+https://git@github.com/ArneBinder/pie-models.git
+pip install git+https://git@github.com/ArneBinder/pie-modules.git
 ```
 
 ## Development
@@ -41,8 +41,8 @@ pip install git+https://git@github.com/ArneBinder/pie-models.git
 1. This project is build with [Poetry](https://python-poetry.org/). See here for [installation instructions](https://python-poetry.org/docs/#installation).
 2. Get the code and switch into the project directory:
    ```bash
-   git clone https://github.com/ArneBinder/pie-models
-   cd pie-models
+   git clone https://github.com/ArneBinder/pie-modules
+   cd pie-modules
    ```
 3. Create a virtual environment and install the dependencies:
    ```bash
@@ -92,7 +92,7 @@ pytest --cov --cov-report term-missing
 8. Cleanup: Delete the `release` branch. This is important, because otherwise the next release will fail.
 
 [black]: https://github.com/psf/black
-[codecov]: https://app.codecov.io/gh/arnebinder/pie-models
+[codecov]: https://app.codecov.io/gh/arnebinder/pie-modules
 [pre-commit]: https://github.com/pre-commit/pre-commit
-[pypi status]: https://pypi.org/project/pie-models/
-[tests]: https://github.com/arnebinder/pie-models/actions?workflow=Tests
+[pypi status]: https://pypi.org/project/pie-modules/
+[tests]: https://github.com/arnebinder/pie-modules/actions?workflow=Tests

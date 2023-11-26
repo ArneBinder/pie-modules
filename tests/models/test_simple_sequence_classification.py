@@ -6,7 +6,7 @@ from transformers.modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 
-from pie_models.models import SimpleSequenceClassificationModel
+from pie_modules.models import SimpleSequenceClassificationModel
 
 
 @pytest.fixture

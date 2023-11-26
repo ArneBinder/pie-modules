@@ -10,8 +10,8 @@ from pytorch_ie.documents import (
     TextDocumentWithLabeledSpansAndBinaryRelations,
 )
 
-from pie_models.document.processing import RelationArgumentSorter
-from pie_models.document.processing.relation_argument_sorter import (
+from pie_modules.document.processing import RelationArgumentSorter
+from pie_modules.document.processing.relation_argument_sorter import (
     construct_relation_with_new_args,
     get_relation_args,
 )

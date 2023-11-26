@@ -6,7 +6,7 @@ from pytorch_ie.annotations import LabeledSpan, Span
 from pytorch_ie.core import Document
 from pytorch_ie.documents import TextBasedDocument
 
-from pie_models.utils import resolve_type
+from pie_modules.utils import resolve_type
 
 
 @dataclasses.dataclass

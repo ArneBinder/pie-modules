@@ -20,7 +20,7 @@ from pytorch_ie.core import Annotation
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from transformers import PreTrainedTokenizer
 
-from pie_models.utils import resolve_type
+from pie_modules.utils import resolve_type
 
 logger = logging.getLogger(__name__)
 
