@@ -4,10 +4,10 @@ from typing import Any, Dict, List
 import numpy as np
 import pytest
 import torch
-from transformers import BatchEncoding
-
 from pytorch_ie import AnnotationLayer, Document, annotation_field
 from pytorch_ie.annotations import LabeledSpan, Span
+from transformers import BatchEncoding
+
 from pie_modules.taskmodules import TokenClassificationTaskModule
 
 
@@ -305,9 +305,8 @@ def test_target(targets, taskmodule, config):
     # If config is empty
     if config == {}:
         assert len(targets) == 1
-        """
-        expected_input_tokens = ["[CLS]","mount","everest","is","the","highest","peak","in","the","world",".","[SEP]",]
-        """
+        """expected_input_tokens =
+        ["[CLS]","mount","everest","is","the","highest","peak","in","the","world",".","[SEP]",]"""
         expected_labels = [
             ["<pad>", "B-head", "I-head", "O", "O", "O", "O", "O", "O", "O", "O", "<pad>"]
         ]
@@ -318,14 +317,11 @@ def test_target(targets, taskmodule, config):
     # If config has the specified values (max_window=8, window_overlap=2)
     elif config == {"max_window": 8, "window_overlap": 2}:
         assert len(targets) == 4
-        """
-        expected_input_tokens = [
-            ["[CLS]","mount","everest","is","the","highest","peak","[SEP]"],
-            ["[CLS]","is","the","highest","peak","in","the","[SEP]"],
-            ["[CLS]","highest","peak","in","the","world",".","[SEP]"],
-            ["[CLS]", "in", "the", "world", ".", "[SEP]"],
-        ]
-        """
+        """expected_input_tokens = [
+        ["[CLS]","mount","everest","is","the","highest","peak","[SEP]"],
+        ["[CLS]","is","the","highest","peak","in","the","[SEP]"],
+        ["[CLS]","highest","peak","in","the","world",".","[SEP]"], ["[CLS]", "in", "the", "world",
+        ".", "[SEP]"], ]"""
         expected_labels = [
             ["<pad>", "B-head", "I-head", "O", "O", "<pad>", "<pad>", "<pad>"],
             ["<pad>", "<pad>", "<pad>", "O", "O", "<pad>", "<pad>", "<pad>"],
@@ -340,12 +336,9 @@ def test_target(targets, taskmodule, config):
     # If config has the specified value (max_window=8)
     elif config == {"max_window": 8}:
         assert len(targets) == 2
-        """
-        expected_input_tokens = [
-            ["[CLS]","mount","everest","is","the","highest","peak","[SEP]"],
-            ["[CLS]", "in", "the", "world", ".", "[SEP]"]
-        ]
-        """
+        """expected_input_tokens = [
+        ["[CLS]","mount","everest","is","the","highest","peak","[SEP]"], ["[CLS]", "in", "the",
+        "world", ".", "[SEP]"] ]"""
         expected_labels = [
             ["<pad>", "B-head", "I-head", "O", "O", "O", "O", "<pad>"],
             ["<pad>", "O", "O", "O", "O", "<pad>"],
@@ -358,9 +351,7 @@ def test_target(targets, taskmodule, config):
     # If config has the specified value (partition_annotation=sentences)
     elif config == {"partition_annotation": "sentences"}:
         assert len(targets) == 1
-        """
-        expected_input_tokens = ["[CLS]", "bob", "enjoys", "playing", "soccer", ".", "[SEP]"]
-        """
+        """expected_input_tokens = ["[CLS]", "bob", "enjoys", "playing", "soccer", ".", "[SEP]"]"""
         expected_labels = [["<pad>", "O", "O", "O", "O", "O", "<pad>"]]
         labels_tokens.append(
             [taskmodule.id_to_label[x] if x != -100 else "<pad>" for x in targets[0]]
@@ -511,7 +502,7 @@ def model_predict_output(batch, taskmodule):
     - Returns the model's output predictions.
 
     """
-    from pytorch_ie import TransformerTokenClassificationModel
+    from pytorch_ie.models import TransformerTokenClassificationModel
 
     model = TransformerTokenClassificationModel(
         model_name_or_path="prajjwal1/bert-tiny",

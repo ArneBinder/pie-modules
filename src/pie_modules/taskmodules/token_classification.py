@@ -13,11 +13,6 @@ from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Type, U
 
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer
-from transformers.file_utils import PaddingStrategy
-from transformers.tokenization_utils_base import BatchEncoding, TruncationStrategy
-from typing_extensions import TypeAlias
-
 from pytorch_ie.annotations import LabeledSpan, Span
 from pytorch_ie.core import TaskEncoding, TaskModule
 from pytorch_ie.documents import (
@@ -25,7 +20,10 @@ from pytorch_ie.documents import (
     TextDocumentWithLabeledSpans,
     TextDocumentWithLabeledSpansAndLabeledPartitions,
 )
-from pytorch_ie.models.transformer_token_classification import ModelOutputType, ModelStepInputType
+from pytorch_ie.models.transformer_token_classification import (
+    ModelOutputType,
+    ModelStepInputType,
+)
 from pytorch_ie.utils.span import (
     bio_tags_to_spans,
     convert_span_annotations_to_tag_sequence,
@@ -34,6 +32,10 @@ from pytorch_ie.utils.span import (
     has_overlap,
 )
 from pytorch_ie.utils.window import enumerate_windows
+from transformers import AutoTokenizer
+from transformers.file_utils import PaddingStrategy
+from transformers.tokenization_utils_base import BatchEncoding, TruncationStrategy
+from typing_extensions import TypeAlias
 
 InputEncodingType: TypeAlias = Union[Dict[str, Any], BatchEncoding]
 TargetEncodingType: TypeAlias = Sequence[int]
@@ -140,7 +142,7 @@ class TokenClassificationTaskModule(TaskModuleType):
         self, text, partition: Optional[Span] = None, add_special_tokens: bool = True
     ) -> BatchEncoding:
         if self.partition_annotation is not None and partition is None:
-            raise ValueError(f"partitioning is enabled, but no partition is provided")
+            raise ValueError("partitioning is enabled, but no partition is provided")
 
         text_partition = text[partition.start : partition.end] if partition is not None else text
         return self.tokenizer(
