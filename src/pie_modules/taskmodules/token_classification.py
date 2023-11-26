@@ -100,18 +100,28 @@ class TokenClassificationTaskModule(TaskModuleType):
     @property
     def document_type(self) -> Optional[Type[TextDocument]]:
         dt: Type[TextDocument]
-        if self.partition_annotation is not None:
-            dt = TextDocumentWithLabeledSpansAndLabeledPartitions
-        else:
+        errors = []
+        if self.entity_annotation != "labeled_spans":
+            errors.append(
+                f"entity_annotation={self.entity_annotation} is not the default value ('labeled_spans')"
+            )
+        if self.partition_annotation is None:
             dt = TextDocumentWithLabeledSpans
-        if self.entity_annotation == "labeled_spans":
+        else:
+            if self.partition_annotation != "labeled_partitions":
+                errors.append(
+                    f"partition_annotation={self.partition_annotation} is not the default value "
+                    f"('labeled_partitions')"
+                )
+            dt = TextDocumentWithLabeledSpansAndLabeledPartitions
+
+        if len(errors) == 0:
             return dt
         else:
             logger.warning(
-                f"entity_annotation={self.entity_annotation} is "
-                f"not the default value ('labeled_spans'), so the taskmodule {type(self).__name__} can not request "
+                f"{' and '.join(errors)}, so the taskmodule {type(self).__name__} can not request "
                 f"the usual document type ({dt.__name__}) for auto-conversion because this has the bespoken default "
-                f"value as layer name instead of the provided one."
+                f"value as layer name(s) instead of the provided one(s)."
             )
             return None
 
