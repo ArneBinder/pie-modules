@@ -10,8 +10,8 @@ from pytorch_ie.annotations import BinaryRelation, LabeledSpan, NaryRelation
 from pytorch_ie.core import Annotation, AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument, TextDocument
 
-from pie_models.taskmodules import RETextClassificationWithIndicesTaskModule
-from pie_models.taskmodules.re_text_classification_with_indices import (
+from pie_modules.taskmodules import RETextClassificationWithIndicesTaskModule
+from pie_modules.taskmodules.re_text_classification_with_indices import (
     HEAD,
     TAIL,
     inner_span_distance,

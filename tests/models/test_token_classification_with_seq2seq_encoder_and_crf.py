@@ -6,8 +6,8 @@ import transformers
 from pytorch_ie.taskmodules import TransformerTokenClassificationTaskModule
 from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
 
-from pie_models.models.components.seq2seq_encoder import RNN_TYPE2CLASS
-from pie_models.models.token_classification_with_seq2seq_encoder_and_crf import (
+from pie_modules.models.components.seq2seq_encoder import RNN_TYPE2CLASS
+from pie_modules.models.token_classification_with_seq2seq_encoder_and_crf import (
     HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE,
     TokenClassificationModelWithSeq2SeqEncoderAndCrf,
 )

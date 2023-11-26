@@ -8,8 +8,8 @@ from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from pytorch_ie.utils.hydra import resolve_optional_document_type
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
-from pie_models.document.processing import tokenize_document
-from pie_models.utils import resolve_type
+from pie_modules.document.processing import tokenize_document
+from pie_modules.utils import resolve_type
 
 logger = logging.getLogger(__name__)
 

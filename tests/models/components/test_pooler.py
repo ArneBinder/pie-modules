@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from pie_models.models.components.pooler import (
+from pie_modules.models.components.pooler import (
     CLS_TOKEN,
     MENTION_POOLING,
     START_TOKENS,

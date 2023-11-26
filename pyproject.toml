@@ -3,15 +3,15 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
-name = "pie-models"
+name = "pie-modules"
 version = "0.7.6"
 description = "Model and Taskmodule implementations for PyTorch-IE"
 authors = ["Arne Binder <arne.binder@dfki.de>"]
 readme = "README.md"
-homepage = "https://github.com/arnebinder/pie-models"
-repository = "https://github.com/arnebinder/pie-models"
+homepage = "https://github.com/arnebinder/pie-modules"
+repository = "https://github.com/arnebinder/pie-modules"
 packages = [
-    { include = "pie_models", from = "src" },
+    { include = "pie_modules", from = "src" },
 ]
 classifiers = [
     "Framework :: Pytest",
@@ -19,8 +19,8 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
 ]
 [tool.poetry.urls]
-"Bug Tracker" = "https://github.com/arnebinder/pie-models/issues"
-"Changelog" = "https://github.com/arnebinder/pie-models/releases"
+"Bug Tracker" = "https://github.com/arnebinder/pie-modules/issues"
+"Changelog" = "https://github.com/arnebinder/pie-modules/releases"
 
 [tool.poetry.dependencies]
 python = "^3.9"

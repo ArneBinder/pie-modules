@@ -6,7 +6,7 @@ from pytorch_ie.annotations import Label, LabeledSpan
 from pytorch_ie.core import AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 
-from pie_models.metrics import SpanLengthCollector
+from pie_modules.metrics import SpanLengthCollector
 
 
 @pytest.fixture

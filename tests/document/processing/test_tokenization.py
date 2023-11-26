@@ -6,12 +6,12 @@ from pytorch_ie.core import AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
-from pie_models.document.processing import (
+from pie_modules.document.processing import (
     text_based_document_to_token_based,
     token_based_document_to_text_based,
     tokenize_document,
 )
-from pie_models.document.processing.tokenization import find_token_offset_mapping
+from pie_modules.document.processing.tokenization import find_token_offset_mapping
 from tests.conftest import TestDocument
 
 

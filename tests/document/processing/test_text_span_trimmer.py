@@ -5,7 +5,7 @@ from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.core import AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument
 
-from pie_models.document.processing import TextSpanTrimmer
+from pie_modules.document.processing import TextSpanTrimmer
 
 
 @dataclasses.dataclass
