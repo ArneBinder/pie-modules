@@ -5,7 +5,6 @@ from typing import Any, Callable, Dict, List, Optional, Type, Union
 from pytorch_ie.annotations import Span
 from pytorch_ie.core import Document, DocumentStatistic
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
-from pytorch_ie.utils.hydra import resolve_optional_document_type
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
 from pie_modules.document.processing import tokenize_document
