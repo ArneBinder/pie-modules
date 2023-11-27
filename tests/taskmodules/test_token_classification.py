@@ -711,9 +711,9 @@ def test_document_type_with_non_default_entity_annotation(caplog):
     assert (
         caplog.records[0].message
         == "entity_annotation=entities is not the default value ('labeled_spans'), so the taskmodule "
-           "TokenClassificationTaskModule can not request the usual document type "
-           "(TextDocumentWithLabeledSpans) for auto-conversion because this has the bespoken default value "
-           "as layer name(s) instead of the provided one(s)."
+        "TokenClassificationTaskModule can not request the usual document type "
+        "(TextDocumentWithLabeledSpans) for auto-conversion because this has the bespoken default value "
+        "as layer name(s) instead of the provided one(s)."
     )
 
 
