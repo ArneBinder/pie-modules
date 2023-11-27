@@ -1,13 +1,15 @@
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
 import numpy as np
 import pytest
 import torch
-from pytorch_ie import AnnotationLayer, Document, annotation_field
+from pytorch_ie import AnnotationLayer, annotation_field
 from pytorch_ie.annotations import LabeledSpan, Span
 from pytorch_ie.documents import (
+    TextBasedDocument,
     TextDocumentWithLabeledSpans,
     TextDocumentWithLabeledSpansAndLabeledPartitions,
 )
@@ -61,8 +63,7 @@ def unprepared_taskmodule(config):
 
 
 @dataclass
-class ExampleDocument(Document):
-    text: str
+class ExampleDocument(TextBasedDocument):
     entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
     sentences: AnnotationLayer[Span] = annotation_field(target="text")
 
@@ -74,17 +75,14 @@ def documents():
     - Assigns labels to the documents for testing purposes.
 
     """
-    doc1 = ExampleDocument(text="Mount Everest is the highest peak in the world.")
-    doc2 = ExampleDocument(text="Alice loves reading books. Bob enjoys playing soccer.")
-    entity_1 = LabeledSpan(start=0, end=13, label="head")
-    entity_2 = LabeledSpan(start=0, end=5, label="head")
-    sentence_2 = Span(start=27, end=53)
-    doc1.entities.append(entity_1)
-    doc2.entities.append(entity_2)
-    doc2.sentences.append(sentence_2)
-    assert str(entity_1) == "Mount Everest"
-    assert str(entity_2) == "Alice"
-    assert str(sentence_2) == "Bob enjoys playing soccer."
+    doc1 = ExampleDocument(text="Mount Everest is the highest peak in the world.", id="doc1")
+    doc1.entities.append(LabeledSpan(start=0, end=13, label="head"))
+    assert str(doc1.entities[0]) == "Mount Everest"
+    doc2 = ExampleDocument(text="Alice loves reading books. Bob enjoys playing soccer.", id="doc2")
+    doc2.entities.append(LabeledSpan(start=0, end=5, label="head"))
+    assert str(doc2.entities[0]) == "Alice"
+    doc2.sentences.append(Span(start=27, end=53))
+    assert str(doc2.sentences[0]) == "Bob enjoys playing soccer."
     return [doc1, doc2]
 
 
@@ -121,15 +119,14 @@ def test_config(taskmodule):
 @pytest.fixture(scope="module")
 def task_encodings_without_targets(taskmodule, documents):
     """
-    - Generates input encodings for all the documents, but without associated targets.
+    - Generates task encodings for all the documents, but without associated targets.
     """
-    task_encodings = []
-    for i in range(len(documents)):
-        task_encodings.append(taskmodule.encode_input(documents[i]))
-    return task_encodings
+    return taskmodule.encode(documents, encode_target=False)
 
 
-def test_encode_inputs(task_encodings_without_targets, documents, taskmodule, config):
+def test_task_encodings_without_targets(
+    task_encodings_without_targets, documents, taskmodule, config
+):
     """
     - Test the encoding of inputs for the model based on the given configuration.
 
@@ -140,12 +137,15 @@ def test_encode_inputs(task_encodings_without_targets, documents, taskmodule, co
         config (dict): The configuration to check different cases.
     """
     assert task_encodings_without_targets is not None
+    task_encodings_by_document = defaultdict(list)
+    for task_encoding in task_encodings_without_targets:
+        task_encodings_by_document[task_encoding.document.id].append(task_encoding)
     # If config is empty
     if config == {}:
         # Check first document encoding
-        assert task_encodings_without_targets[0][0].document == documents[0]
-        assert not task_encodings_without_targets[0][0].has_targets
-        assert set(task_encodings_without_targets[0][0].inputs) == {
+        assert task_encodings_by_document["doc1"][0].document == documents[0]
+        assert not task_encodings_by_document["doc1"][0].has_targets
+        assert set(task_encodings_by_document["doc1"][0].inputs) == {
             "token_type_ids",
             "input_ids",
             "attention_mask",
@@ -166,21 +166,21 @@ def test_encode_inputs(task_encodings_without_targets, documents, taskmodule, co
         ]
 
         input_tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-            task_encodings_without_targets[0][0].inputs["input_ids"]
+            task_encodings_by_document["doc1"][0].inputs["input_ids"]
         )
         assert input_tokens == expected_input_tokens
-        assert task_encodings_without_targets[0][0].inputs["attention_mask"] == [1] * len(
+        assert task_encodings_by_document["doc1"][0].inputs["attention_mask"] == [1] * len(
             expected_input_tokens
         )
     # If config has the specified values (max_window=8, window_overlap=2)
     elif config == {"max_window": 8, "window_overlap": 2}:
-        assert len(task_encodings_without_targets[0]) == 4
-        # Iterate over each part of task_encodings_without_targets[0]
-        for i in range(0, len(task_encodings_without_targets[0])):
-            assert task_encodings_without_targets[0][i].document == documents[0]
-            assert not task_encodings_without_targets[0][i].has_targets
+        assert len(task_encodings_by_document["doc1"]) == 4
+        # Iterate over each part of task_encodings_by_document["doc1"]
+        for i in range(0, len(task_encodings_by_document["doc1"])):
+            assert task_encodings_by_document["doc1"][i].document == documents[0]
+            assert not task_encodings_by_document["doc1"][i].has_targets
             if i == 0:
-                assert set(task_encodings_without_targets[0][i].inputs) == {"input_ids"}
+                assert set(task_encodings_by_document["doc1"][i].inputs) == {"input_ids"}
                 expected_input_tokens = [
                     "[CLS]",
                     "mount",
@@ -192,11 +192,11 @@ def test_encode_inputs(task_encodings_without_targets, documents, taskmodule, co
                     "[SEP]",
                 ]
                 input_tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-                    task_encodings_without_targets[0][i].inputs["input_ids"]
+                    task_encodings_by_document["doc1"][i].inputs["input_ids"]
                 )
                 assert input_tokens == expected_input_tokens
             elif i == 1:
-                assert set(task_encodings_without_targets[0][i].inputs) == {"input_ids"}
+                assert set(task_encodings_by_document["doc1"][i].inputs) == {"input_ids"}
                 expected_input_tokens = [
                     "[CLS]",
                     "is",
@@ -208,11 +208,11 @@ def test_encode_inputs(task_encodings_without_targets, documents, taskmodule, co
                     "[SEP]",
                 ]
                 input_tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-                    task_encodings_without_targets[0][i].inputs["input_ids"]
+                    task_encodings_by_document["doc1"][i].inputs["input_ids"]
                 )
                 assert input_tokens == expected_input_tokens
             elif i == 2:
-                assert set(task_encodings_without_targets[0][i].inputs) == {"input_ids"}
+                assert set(task_encodings_by_document["doc1"][i].inputs) == {"input_ids"}
                 expected_input_tokens = [
                     "[CLS]",
                     "highest",
@@ -224,26 +224,26 @@ def test_encode_inputs(task_encodings_without_targets, documents, taskmodule, co
                     "[SEP]",
                 ]
                 input_tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-                    task_encodings_without_targets[0][i].inputs["input_ids"]
+                    task_encodings_by_document["doc1"][i].inputs["input_ids"]
                 )
                 assert input_tokens == expected_input_tokens
             else:
-                assert set(task_encodings_without_targets[0][i].inputs) == {"input_ids"}
+                assert set(task_encodings_by_document["doc1"][i].inputs) == {"input_ids"}
                 expected_input_tokens = ["[CLS]", "in", "the", "world", ".", "[SEP]"]
                 input_tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-                    task_encodings_without_targets[0][i].inputs["input_ids"]
+                    task_encodings_by_document["doc1"][i].inputs["input_ids"]
                 )
                 assert input_tokens == expected_input_tokens
 
     # If config has the specified value (max_window=8)
     elif config == {"max_window": 8}:
-        assert len(task_encodings_without_targets[0]) == 2
-        # Iterate over each part of task_encodings_without_targets[0]
-        for i in range(0, len(task_encodings_without_targets[0])):
-            assert task_encodings_without_targets[0][i].document == documents[0]
-            assert not task_encodings_without_targets[0][i].has_targets
+        assert len(task_encodings_by_document["doc1"]) == 2
+        # Iterate over each part of task_encodings_by_document["doc1"]
+        for i in range(0, len(task_encodings_by_document["doc1"])):
+            assert task_encodings_by_document["doc1"][i].document == documents[0]
+            assert not task_encodings_by_document["doc1"][i].has_targets
             if i == 0:
-                assert set(task_encodings_without_targets[0][i].inputs) == {"input_ids"}
+                assert set(task_encodings_by_document["doc1"][i].inputs) == {"input_ids"}
                 expected_input_tokens = [
                     "[CLS]",
                     "mount",
@@ -255,29 +255,29 @@ def test_encode_inputs(task_encodings_without_targets, documents, taskmodule, co
                     "[SEP]",
                 ]
                 input_tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-                    task_encodings_without_targets[0][i].inputs["input_ids"]
+                    task_encodings_by_document["doc1"][i].inputs["input_ids"]
                 )
                 assert input_tokens == expected_input_tokens
             else:
-                assert set(task_encodings_without_targets[0][i].inputs) == {"input_ids"}
+                assert set(task_encodings_by_document["doc1"][i].inputs) == {"input_ids"}
                 expected_input_tokens = ["[CLS]", "in", "the", "world", ".", "[SEP]"]
                 input_tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-                    task_encodings_without_targets[0][i].inputs["input_ids"]
+                    task_encodings_by_document["doc1"][i].inputs["input_ids"]
                 )
                 assert input_tokens == expected_input_tokens
 
     # If config has the specified value (partition_annotation=sentences)
     elif config == {"partition_annotation": "sentences"}:
-        assert task_encodings_without_targets[1][0].document == documents[1]
-        assert not task_encodings_without_targets[1][0].has_targets
-        assert set(task_encodings_without_targets[1][0].inputs) == {
+        assert task_encodings_by_document["doc2"][0].document == documents[1]
+        assert not task_encodings_by_document["doc2"][0].has_targets
+        assert set(task_encodings_by_document["doc2"][0].inputs) == {
             "token_type_ids",
             "input_ids",
             "attention_mask",
         }
         expected_input_tokens = ["[CLS]", "bob", "enjoys", "playing", "soccer", ".", "[SEP]"]
         input_tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-            task_encodings_without_targets[1][0].inputs["input_ids"]
+            task_encodings_by_document["doc2"][0].inputs["input_ids"]
         )
         assert input_tokens == expected_input_tokens
 
@@ -292,15 +292,17 @@ def targets(taskmodule, task_encodings_without_targets, config):
     - Generates encoded targets for a specific task encoding.
     - For config value (partition_annotation=sentences), taking the second documents as first document don't have sentences entity.
     """
+    task_encodings_by_document = defaultdict(list)
+    for task_encoding in task_encodings_without_targets:
+        task_encodings_by_document[task_encoding.document.id].append(task_encoding)
     targets = []
     # Here ctr represents document index
-    ctr = 0
     if config != {"partition_annotation": "sentences"}:
-        ctr = 0
+        ctr = "doc1"
     else:
-        ctr = 1
-    for i in range(len(task_encodings_without_targets[ctr])):
-        targets.append(taskmodule.encode_target(task_encodings_without_targets[ctr][i]))
+        ctr = "doc2"
+    for i in range(len(task_encodings_by_document[ctr])):
+        targets.append(taskmodule.encode_target(task_encodings_by_document[ctr][i]))
     return targets
 
 
@@ -375,15 +377,19 @@ def batch(taskmodule, task_encodings_without_targets, config):
     - Prepares a batch of task encodings for efficient processing.
     - To maintain the same batch size for all configs, the first document is duplicated in task_encodings_without_targets when using the "partition_annotation=sentences" config, as it initially contains no values for the first document.
     """
+    task_encodings_by_document = defaultdict(list)
+    for task_encoding in task_encodings_without_targets:
+        task_encodings_by_document[task_encoding.document.id].append(task_encoding)
+
     if config != {"partition_annotation": "sentences"}:
         task_encodings = [
-            task_encodings_without_targets[0][0],
-            task_encodings_without_targets[1][0],
+            task_encodings_by_document["doc1"][0],
+            task_encodings_by_document["doc2"][0],
         ]
     else:
         task_encodings = [
-            task_encodings_without_targets[1][0],
-            task_encodings_without_targets[1][0],
+            task_encodings_by_document["doc2"][0],
+            task_encodings_by_document["doc2"][0],
         ]
     return taskmodule.collate(task_encodings)
 
@@ -910,17 +916,21 @@ def annotations_from_output(taskmodule, task_encodings_without_targets, unbatche
     into human-readable  annotations.
 
     """
+    task_encodings_by_document = defaultdict(list)
+    for task_encoding in task_encodings_without_targets:
+        task_encodings_by_document[task_encoding.document.id].append(task_encoding)
+
     if config != {"partition_annotation": "sentences"}:
         task_encodings = [
-            task_encodings_without_targets[0][0],
-            task_encodings_without_targets[1][0],
+            task_encodings_by_document["doc1"][0],
+            task_encodings_by_document["doc2"][0],
         ]
     else:
         task_encodings = [
-            task_encodings_without_targets[1][0],
-            task_encodings_without_targets[1][0],
+            task_encodings_by_document["doc2"][0],
+            task_encodings_by_document["doc2"][0],
         ]
-    assert len(task_encodings_without_targets) == len(unbatched_outputs)
+    assert len(task_encodings) == len(unbatched_outputs)
     named_annotations = []
     for task_encoding, task_output in zip(task_encodings, unbatched_outputs):
         annotations = taskmodule.create_annotations_from_output(task_encoding, task_output)
