@@ -403,132 +403,14 @@ def real_model_output(batch, taskmodule):
 
 
 @pytest.fixture(scope="module")
-def model_output(config):
-    # If config is empty
-    if config == {}:
-        result = {
-            "logits": torch.tensor(
-                [
-                    [
-                        [-0.0659, 0.0170, -0.2684],
-                        [-0.0418, 0.1595, -0.2855],
-                        [0.0561, 0.1375, -0.2456],
-                        [-0.1719, 0.2413, -0.2220],
-                        [-0.2429, 0.1623, -0.2379],
-                        [-0.2246, 0.1382, -0.2564],
-                        [-0.1231, 0.1595, -0.3846],
-                        [-0.2681, 0.1534, -0.2445],
-                        [-0.2461, 0.2414, -0.3293],
-                        [-0.1729, 0.2220, -0.1880],
-                        [-0.2740, 0.2431, -0.1882],
-                        [-0.2420, 0.1079, -0.2696],
-                    ],
-                    [
-                        [0.0140, -0.1751, 0.1674],
-                        [0.0297, -0.0988, 0.0006],
-                        [-0.1173, -0.1797, 0.0936],
-                        [-0.2464, -0.2545, 0.1067],
-                        [-0.3522, -0.1276, 0.0111],
-                        [-0.1681, 0.0503, 0.0019],
-                        [0.0713, 0.1196, -0.1907],
-                        [-0.1181, -0.0307, 0.0633],
-                        [-0.3371, 0.1819, 0.0052],
-                        [-0.2783, -0.0957, -0.0271],
-                        [-0.2880, 0.0547, 0.0221],
-                        [-0.2033, -0.0376, 0.0898],
-                    ],
-                ]
-            )
-        }
-
-    # If config has the specified values (max_window=8, window_overlap=2)
-    elif config == {"max_window": 8, "window_overlap": 2}:
-        result = {
-            "logits": torch.tensor(
-                [
-                    [
-                        [-0.2204, 0.2539, 0.0036],
-                        [-0.2380, 0.1804, 0.0673],
-                        [-0.3890, 0.2565, 0.1223],
-                        [-0.2411, 0.3255, -0.1082],
-                        [-0.2355, 0.4625, -0.1610],
-                        [-0.1030, 0.1193, -0.1866],
-                        [-0.1501, 0.2016, -0.1718],
-                        [-0.2469, 0.2522, -0.1166],
-                    ],
-                    [
-                        [-0.2366, 0.1041, -0.2780],
-                        [-0.3588, 0.0749, -0.1663],
-                        [-0.4543, 0.0175, -0.3157],
-                        [-0.4051, 0.0334, -0.1502],
-                        [-0.4849, 0.3890, -0.2533],
-                        [-0.6248, 0.3296, -0.0093],
-                        [-0.5428, 0.3440, 0.0266],
-                        [-0.3864, 0.0836, -0.0438],
-                    ],
-                ]
-            )
-        }
-    # If config has the specified values (max_window=8)
-    elif config == {"max_window": 8}:
-        result = {
-            "logits": torch.tensor(
-                [
-                    [
-                        [-0.1508, 0.3434, 0.3668],
-                        [-0.1872, 0.1007, 0.2948],
-                        [-0.0732, 0.0601, 0.2213],
-                        [-0.1128, 0.0704, 0.2546],
-                        [-0.0987, 0.2763, 0.2852],
-                        [0.1105, 0.2054, 0.4415],
-                        [-0.0376, 0.3338, 0.3140],
-                        [-0.0937, 0.2559, 0.0492],
-                    ],
-                    [
-                        [-0.3258, 0.1260, 0.1610],
-                        [-0.3489, -0.0896, 0.0903],
-                        [-0.2561, -0.2279, 0.0045],
-                        [-0.2420, -0.1238, 0.0231],
-                        [-0.3167, -0.0356, -0.0050],
-                        [-0.2999, 0.0668, -0.1417],
-                        [-0.2031, -0.1222, 0.0272],
-                        [-0.3968, -0.2068, -0.2290],
-                    ],
-                ]
-            )
-        }
-
-    # If config has the specified value (partition_annotation=sentences)
-    elif config == {"partition_annotation": "sentences"}:
-        result = {
-            "logits": torch.tensor(
-                [
-                    [
-                        [0.2960, -0.0264, -0.1626],
-                        [0.0915, 0.1708, 0.0648],
-                        [0.2399, -0.1459, -0.1110],
-                        [0.3249, 0.2534, -0.1120],
-                        [0.2190, 0.1073, 0.0196],
-                        [0.1986, 0.2853, 0.3358],
-                        [0.1038, 0.1871, -0.0320],
-                    ],
-                    [
-                        [0.2960, -0.0264, -0.1626],
-                        [0.0915, 0.1708, 0.0648],
-                        [0.2399, -0.1459, -0.1110],
-                        [0.3249, 0.2534, -0.1120],
-                        [0.2190, 0.1073, 0.0196],
-                        [0.1986, 0.2853, 0.3358],
-                        [0.1038, 0.1871, -0.0320],
-                    ],
-                ]
-            )
-        }
-
-    else:
-        raise ValueError(f"unknown config: {config}")
-
-    return result
+def model_output(config, batch):
+    # create "perfect" output from targets
+    targets = batch[1].clone()
+    targets[targets == -100] = 0
+    one_hot_targets = torch.nn.functional.one_hot(targets, num_classes=3).float() * 0.99 + 0.005
+    # convert to logits (logit = log(p/(1-p)))
+    logits = torch.log(one_hot_targets / (1 - one_hot_targets))
+    return {"logits": logits}
 
 
 @pytest.fixture(scope="module")
@@ -553,239 +435,187 @@ def test_unbatched_output(unbatched_outputs, config):
     if config == {}:
         # Assertions for the first unbatched output
         assert unbatched_outputs[0]["tags"] == [
+            "O",
             "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
+            "I-head",
+            "O",
+            "O",
+            "O",
+            "O",
+            "O",
+            "O",
+            "O",
+            "O",
+            "O",
         ]
-        assert np.all(
-            unbatched_outputs[0]["probabilities"]
-            == np.array(
+        np.testing.assert_almost_equal(
+            unbatched_outputs[0]["probabilities"].round(4),
+            np.array(
                 [
-                    [0.344457, 0.37422952, 0.2813134],
-                    [0.33258897, 0.4067535, 0.26065755],
-                    [0.35406193, 0.38408807, 0.26185],
-                    [0.2887852, 0.43654135, 0.2746735],
-                    [0.28533804, 0.4278936, 0.2867683],
-                    [0.29359534, 0.42199877, 0.2844059],
-                    [0.32294837, 0.42841503, 0.2486366],
-                    [0.28183886, 0.4295918, 0.28856936],
-                    [0.28181657, 0.45886514, 0.25931832],
-                    [0.2882468, 0.42782623, 0.283927],
-                    [0.2654812, 0.44525358, 0.28926522],
-                    [0.29483712, 0.41835198, 0.2868109],
+                    [0.9999, 0.0, 0.0],
+                    [0.0, 0.9999, 0.0],
+                    [0.0, 0.0, 0.9999],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
                 ],
                 dtype=np.float32,
-            )
+            ),
         )
         # Assertions for the second unbatched output
         assert unbatched_outputs[1]["tags"] == [
-            "I-head",
             "O",
-            "I-head",
-            "I-head",
-            "I-head",
             "B-head",
-            "B-head",
-            "I-head",
-            "B-head",
-            "I-head",
-            "B-head",
-            "I-head",
+            "O",
+            "O",
+            "O",
+            "O",
+            "O",
+            "O",
+            "O",
+            "O",
+            "O",
+            "O",
         ]
-        assert np.all(
-            unbatched_outputs[1]["probabilities"]
-            == np.array(
+        np.testing.assert_almost_equal(
+            unbatched_outputs[1]["probabilities"].round(4),
+            np.array(
                 [
-                    [0.3340577, 0.2765008, 0.38944152],
-                    [0.35078698, 0.30848682, 0.34072617],
-                    [0.3150305, 0.29597336, 0.38899615],
-                    [0.29279095, 0.2904289, 0.41678014],
-                    [0.27101088, 0.3392573, 0.38973182],
-                    [0.2915971, 0.36277145, 0.34563145],
-                    [0.35473615, 0.37229043, 0.2729734],
-                    [0.3039303, 0.33168924, 0.36438042],
-                    [0.24458675, 0.41099048, 0.34442282],
-                    [0.28686982, 0.34433967, 0.36879045],
-                    [0.26508972, 0.3734441, 0.36146614],
-                    [0.2840267, 0.33521372, 0.38075963],
+                    [0.9999, 0.0, 0.0],
+                    [0.0, 0.9999, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
                 ],
                 dtype=np.float32,
-            )
+            ),
         )
 
     elif config == {"max_window": 8, "window_overlap": 2}:
         # Assertions for the first unbatched output
-        assert unbatched_outputs[0]["tags"] == [
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-        ]
-        assert np.all(
-            unbatched_outputs[0]["probabilities"]
-            == np.array(
+        assert unbatched_outputs[0]["tags"] == ["O", "B-head", "I-head", "O", "O", "O", "O", "O"]
+        np.testing.assert_almost_equal(
+            unbatched_outputs[0]["probabilities"].round(4),
+            np.array(
                 [
-                    [0.25920436, 0.4165126, 0.32428306],
-                    [0.25796065, 0.3919785, 0.35006085],
-                    [0.21860804, 0.41687244, 0.3645196],
-                    [0.25612125, 0.45135355, 0.29252523],
-                    [0.24467377, 0.49172804, 0.26359814],
-                    [0.31558236, 0.3941453, 0.29027236],
-                    [0.2941163, 0.41808102, 0.28780273],
-                    [0.26410252, 0.43503976, 0.30085772],
+                    [0.9999, 0.0, 0.0],
+                    [0.0, 0.9999, 0.0],
+                    [0.0, 0.0, 0.9999],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
                 ],
                 dtype=np.float32,
-            )
+            ),
         )
         # Assertions for the second unbatched output
-        assert unbatched_outputs[1]["tags"] == [
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-            "B-head",
-        ]
-        assert np.all(
-            unbatched_outputs[1]["probabilities"]
-            == np.array(
+        assert unbatched_outputs[1]["tags"] == ["O", "B-head", "O", "O", "O", "O", "O", "O"]
+        np.testing.assert_almost_equal(
+            unbatched_outputs[1]["probabilities"].round(4),
+            np.array(
                 [
-                    [0.29714355, 0.41776344, 0.28509298],
-                    [0.26629514, 0.4108816, 0.3228233],
-                    [0.26655713, 0.4272582, 0.3061847],
-                    [0.26036835, 0.40366986, 0.3359618],
-                    [0.2147373, 0.51456165, 0.2707011],
-                    [0.18356392, 0.47673604, 0.33970004],
-                    [0.19250922, 0.46728724, 0.34020358],
-                    [0.24946368, 0.39914045, 0.35139585],
+                    [0.9999, 0.0, 0.0],
+                    [0.0, 0.9999, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
                 ],
                 dtype=np.float32,
-            )
+            ),
         )
 
     elif config == {"max_window": 8}:
         # Assertions for the first unbatched output
-        assert unbatched_outputs[0]["tags"] == [
-            "I-head",
-            "I-head",
-            "I-head",
-            "I-head",
-            "I-head",
-            "I-head",
-            "B-head",
-            "B-head",
-        ]
-        assert np.all(
-            unbatched_outputs[0]["probabilities"]
-            == np.array(
+        assert unbatched_outputs[0]["tags"] == ["O", "B-head", "I-head", "O", "O", "O", "O", "O"]
+        np.testing.assert_almost_equal(
+            unbatched_outputs[0]["probabilities"].round(4),
+            np.array(
                 [
-                    [0.23163259, 0.37968898, 0.38867846],
-                    [0.25297666, 0.33737573, 0.4096476],
-                    [0.28694013, 0.3278557, 0.3852042],
-                    [0.27434617, 0.32950473, 0.3961491],
-                    [0.25490764, 0.3708884, 0.37420404],
-                    [0.28637636, 0.31488478, 0.3987389],
-                    [0.25832433, 0.374509, 0.36716667],
-                    [0.27994624, 0.39710376, 0.32295004],
+                    [0.9999, 0.0, 0.0],
+                    [0.0, 0.9999, 0.0],
+                    [0.0, 0.0, 0.9999],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
                 ],
                 dtype=np.float32,
-            )
+            ),
         )
 
         # Assertions for the second unbatched output
-        assert unbatched_outputs[1]["tags"] == [
-            "I-head",
-            "I-head",
-            "I-head",
-            "I-head",
-            "I-head",
-            "B-head",
-            "I-head",
-            "B-head",
-        ]
-        assert np.all(
-            unbatched_outputs[1]["probabilities"]
-            == np.array(
+        assert unbatched_outputs[1]["tags"] == ["O", "B-head", "O", "O", "O", "O", "O", "O"]
+        np.testing.assert_almost_equal(
+            unbatched_outputs[1]["probabilities"].round(4),
+            np.array(
                 [
-                    [0.2381951, 0.37423733, 0.38756755],
-                    [0.25990984, 0.336849, 0.40324116],
-                    [0.30063346, 0.30923197, 0.39013457],
-                    [0.29162762, 0.32821786, 0.38015446],
-                    [0.2709784, 0.35893422, 0.3700874],
-                    [0.27667376, 0.39923054, 0.32409576],
-                    [0.29911104, 0.32431486, 0.3765741],
-                    [0.29481572, 0.35650578, 0.34867856],
+                    [0.9999, 0.0, 0.0],
+                    [0.0, 0.9999, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
                 ],
                 dtype=np.float32,
-            )
+            ),
         )
 
     elif config == {"partition_annotation": "sentences"}:
         # Assertions for the first unbatched output
-        assert unbatched_outputs[0]["tags"] == [
-            "O",
-            "B-head",
-            "O",
-            "O",
-            "O",
-            "I-head",
-            "B-head",
-        ]
-        assert np.all(
-            unbatched_outputs[0]["probabilities"]
-            == np.array(
+        assert unbatched_outputs[0]["tags"] == ["O", "O", "O", "O", "O", "O", "O"]
+        np.testing.assert_almost_equal(
+            unbatched_outputs[0]["probabilities"].round(4),
+            np.array(
                 [
-                    [0.4243444, 0.30739865, 0.26825696],
-                    [0.3272056, 0.35420957, 0.31858483],
-                    [0.41947, 0.2852004, 0.2953296],
-                    [0.38804325, 0.36126682, 0.25068992],
-                    [0.36852303, 0.32957476, 0.30190223],
-                    [0.3088682, 0.3368422, 0.3542896],
-                    [0.33785096, 0.36719933, 0.29494968],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
                 ],
                 dtype=np.float32,
-            )
+            ),
         )
 
         # Assertions for the second unbatched output
-        assert unbatched_outputs[1]["tags"] == [
-            "O",
-            "B-head",
-            "O",
-            "O",
-            "O",
-            "I-head",
-            "B-head",
-        ]
-        assert np.all(
-            unbatched_outputs[1]["probabilities"]
-            == np.array(
+        assert unbatched_outputs[1]["tags"] == ["O", "O", "O", "O", "O", "O", "O"]
+        np.testing.assert_almost_equal(
+            unbatched_outputs[1]["probabilities"].round(4),
+            np.array(
                 [
-                    [0.4243444, 0.30739865, 0.26825696],
-                    [0.3272056, 0.35420957, 0.31858483],
-                    [0.41947, 0.2852004, 0.2953296],
-                    [0.38804325, 0.36126682, 0.25068992],
-                    [0.36852303, 0.32957476, 0.30190223],
-                    [0.3088682, 0.3368422, 0.3542896],
-                    [0.33785096, 0.36719933, 0.29494968],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0],
                 ],
                 dtype=np.float32,
-            )
+            ),
         )
 
     else:
@@ -800,14 +630,14 @@ def annotations_from_output(taskmodule, task_encodings_for_batch, unbatched_outp
 
     """
 
-    named_annotations = []
+    named_annotations_per_document = defaultdict(list)
     for task_encoding, task_output in zip(task_encodings_for_batch, unbatched_outputs):
         annotations = taskmodule.create_annotations_from_output(task_encoding, task_output)
-        named_annotations.append(list(annotations))
-    return named_annotations
+        named_annotations_per_document[task_encoding.document.id].extend(list(annotations))
+    return named_annotations_per_document
 
 
-def test_annotations_from_output(annotations_from_output, config):
+def test_annotations_from_output(annotations_from_output, config, documents):
     """
     - Test the annotations generated from the output.
 
@@ -819,99 +649,40 @@ def test_annotations_from_output(annotations_from_output, config):
     """
     assert annotations_from_output is not None  # Check that annotations_from_output is not None
     # Sort the annotations in each document by start and end positions
-    annotations_from_output = [
-        sorted(annotations, key=lambda x: (x[0], x[1].start, x[1].end))
-        for annotations in annotations_from_output
-    ]
-    assert annotations_from_output is not None
+    annotations_from_output = {
+        doc_id: sorted(annotations, key=lambda x: (x[0], x[1].start, x[1].end))
+        for doc_id, annotations in annotations_from_output.items()
+    }
+    documents_by_id = {doc.id: doc for doc in documents}
+    documents_with_annotations = []
+    resolved_annotations = defaultdict(list)
+    # Check that the number of annotations is correct
+    for doc_id, layer_names_and_annotations in annotations_from_output.items():
+        new_doc = documents_by_id[doc_id].copy()
+        for layer_name, annotation in layer_names_and_annotations:
+            assert layer_name == "entities"
+            assert isinstance(annotation, LabeledSpan)
+            new_doc.entities.predictions.append(annotation)
+            resolved_annotations[doc_id].append(str(annotation))
+        documents_with_annotations.append(new_doc)
+
+    resolved_annotations = dict(resolved_annotations)
     # Check based on the config
     if config == {}:
         # Assertions for the first document
-        assert len(annotations_from_output[0]) == 10
-        assert annotations_from_output[0][0] == (
-            "entities",
-            LabeledSpan(start=0, end=5, label="head", score=1.0),
-        )
-        assert annotations_from_output[0][1] == (
-            "entities",
-            LabeledSpan(start=6, end=13, label="head", score=1.0),
-        )
-        # Assertions for the second document
-        assert len(annotations_from_output[1]) == 5
-        assert annotations_from_output[1][0] == (
-            "entities",
-            LabeledSpan(start=6, end=25, label="head", score=1.0),
-        )
-        assert annotations_from_output[1][1] == (
-            "entities",
-            LabeledSpan(start=25, end=26, label="head", score=1.0),
-        )
+        assert resolved_annotations == {"doc1": ["Mount Everest"], "doc2": ["Alice"]}
 
     elif config == {"max_window": 8, "window_overlap": 2}:
         # Assertions for the first document
-        assert len(annotations_from_output[0]) == 4
-        assert annotations_from_output[0][0] == (
-            "entities",
-            LabeledSpan(start=0, end=5, label="head", score=1.0),
-        )
-        assert annotations_from_output[0][1] == (
-            "entities",
-            LabeledSpan(start=6, end=13, label="head", score=1.0),
-        )
-        # Assertions for the second document
-        assert len(annotations_from_output[1]) == 4
-        assert annotations_from_output[1][0] == (
-            "entities",
-            LabeledSpan(start=0, end=5, label="head", score=1.0),
-        )
-        assert annotations_from_output[1][1] == (
-            "entities",
-            LabeledSpan(start=6, end=11, label="head", score=1.0),
-        )
+        assert resolved_annotations == {"doc1": ["Mount Everest"], "doc2": ["Alice"]}
 
     elif config == {"max_window": 8}:
         # Assertions for the first document
-        assert len(annotations_from_output[0]) == 2
-        assert annotations_from_output[0][0] == (
-            "entities",
-            LabeledSpan(start=0, end=28, label="head", score=1.0),
-        )
-        assert annotations_from_output[0][1] == (
-            "entities",
-            LabeledSpan(start=29, end=33, label="head", score=1.0),
-        )
-        # Assertions for the second document
-        assert len(annotations_from_output[1]) == 2
-        assert annotations_from_output[1][0] == (
-            "entities",
-            LabeledSpan(start=0, end=25, label="head", score=1.0),
-        )
-        assert annotations_from_output[1][1] == (
-            "entities",
-            LabeledSpan(start=25, end=30, label="head", score=1.0),
-        )
+        assert resolved_annotations == {"doc1": ["Mount Everest"], "doc2": ["Alice"]}
 
     elif config == {"partition_annotation": "sentences"}:
         # Assertions for the first document
-        assert len(annotations_from_output[0]) == 2
-        assert annotations_from_output[0][0] == (
-            "entities",
-            LabeledSpan(start=27, end=30, label="head", score=1.0),
-        )
-        assert annotations_from_output[0][1] == (
-            "entities",
-            LabeledSpan(start=52, end=53, label="head", score=1.0),
-        )
-        # Assertions for the second document
-        assert len(annotations_from_output[1]) == 2
-        assert annotations_from_output[1][0] == (
-            "entities",
-            LabeledSpan(start=27, end=30, label="head", score=1.0),
-        )
-        assert annotations_from_output[1][1] == (
-            "entities",
-            LabeledSpan(start=52, end=53, label="head", score=1.0),
-        )
+        assert resolved_annotations == {}
 
     else:
         raise ValueError(f"unknown config: {config}")
@@ -939,7 +710,10 @@ def test_document_type_with_non_default_entity_annotation(caplog):
     assert caplog.records[0].levelname == "WARNING"
     assert (
         caplog.records[0].message
-        == "entity_annotation=entities is not the default value ('labeled_spans'), so the taskmodule TokenClassificationTaskModule can not request the usual document type (TextDocumentWithLabeledSpans) for auto-conversion because this has the bespoken default value as layer name(s) instead of the provided one(s)."
+        == "entity_annotation=entities is not the default value ('labeled_spans'), so the taskmodule "
+           "TokenClassificationTaskModule can not request the usual document type "
+           "(TextDocumentWithLabeledSpans) for auto-conversion because this has the bespoken default value "
+           "as layer name(s) instead of the provided one(s)."
     )
 
 
