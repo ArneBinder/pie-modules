@@ -124,97 +124,37 @@ def task_encodings_without_targets(taskmodule, documents):
     return taskmodule.encode(documents, encode_target=False)
 
 
-def test_task_encodings_without_targets(
-    task_encodings_without_targets, documents, taskmodule, config
-):
-    """
-    - Test the encoding of inputs for the model based on the given configuration.
+@pytest.fixture(scope="module")
+def task_encodings(taskmodule, documents):
+    return taskmodule.encode(documents, encode_target=True)
 
-    - Parameters:
-        task_encodings_without_targets (list): List of task encodings without targets.
-        documents (list): List of documents for testing.
-        taskmodule (object): The task module to test.
-        config (dict): The configuration to check different cases.
-    """
-    assert task_encodings_without_targets is not None
-    task_encodings_by_document = defaultdict(list)
-    for task_encoding in task_encodings_without_targets:
-        task_encodings_by_document[task_encoding.document.id].append(task_encoding)
+
+def test_task_encodings(task_encodings, taskmodule, config):
+    tokens = [
+        taskmodule.tokenizer.convert_ids_to_tokens(task_encoding.inputs["input_ids"])
+        for task_encoding in task_encodings
+    ]
+    labels_tokens = [
+        [taskmodule.id_to_label[x] if x != -100 else "<pad>" for x in task_encoding.targets]
+        for task_encoding in task_encodings
+    ]
+    assert len(labels_tokens) == len(tokens)
+
+    tokens_with_labels = list(zip(tokens, labels_tokens))
+
+    for tokens, labels in tokens_with_labels:
+        assert len(tokens) == len(labels)
+
     # If config is empty
     if config == {}:
-        # Check first document encoding
-        assert task_encodings_by_document["doc1"][0].document == documents[0]
-        assert not task_encodings_by_document["doc1"][0].has_targets
-        assert set(task_encodings_by_document["doc1"][0].inputs) == {
-            "token_type_ids",
-            "input_ids",
-            "attention_mask",
-        }
-        expected_input_tokens = [
-            "[CLS]",
-            "mount",
-            "everest",
-            "is",
-            "the",
-            "highest",
-            "peak",
-            "in",
-            "the",
-            "world",
-            ".",
-            "[SEP]",
-        ]
-
-        input_tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-            task_encodings_by_document["doc1"][0].inputs["input_ids"]
-        )
-        assert input_tokens == expected_input_tokens
-        assert task_encodings_by_document["doc1"][0].inputs["attention_mask"] == [1] * len(
-            expected_input_tokens
-        )
-    # If config has the specified values (max_window=8, window_overlap=2)
-    elif config == {"max_window": 8, "window_overlap": 2}:
-        assert len(task_encodings_by_document["doc1"]) == 4
-        # Iterate over each part of task_encodings_by_document["doc1"]
-        for i in range(0, len(task_encodings_by_document["doc1"])):
-            assert task_encodings_by_document["doc1"][i].document == documents[0]
-            assert not task_encodings_by_document["doc1"][i].has_targets
-            if i == 0:
-                assert set(task_encodings_by_document["doc1"][i].inputs) == {"input_ids"}
-                expected_input_tokens = [
+        assert tokens_with_labels == [
+            (
+                [
                     "[CLS]",
                     "mount",
                     "everest",
                     "is",
                     "the",
-                    "highest",
-                    "peak",
-                    "[SEP]",
-                ]
-                input_tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-                    task_encodings_by_document["doc1"][i].inputs["input_ids"]
-                )
-                assert input_tokens == expected_input_tokens
-            elif i == 1:
-                assert set(task_encodings_by_document["doc1"][i].inputs) == {"input_ids"}
-                expected_input_tokens = [
-                    "[CLS]",
-                    "is",
-                    "the",
-                    "highest",
-                    "peak",
-                    "in",
-                    "the",
-                    "[SEP]",
-                ]
-                input_tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-                    task_encodings_by_document["doc1"][i].inputs["input_ids"]
-                )
-                assert input_tokens == expected_input_tokens
-            elif i == 2:
-                assert set(task_encodings_by_document["doc1"][i].inputs) == {"input_ids"}
-                expected_input_tokens = [
-                    "[CLS]",
                     "highest",
                     "peak",
                     "in",
@@ -222,176 +162,120 @@ def test_task_encodings_without_targets(
                     "world",
                     ".",
                     "[SEP]",
-                ]
-                input_tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-                    task_encodings_by_document["doc1"][i].inputs["input_ids"]
-                )
-                assert input_tokens == expected_input_tokens
-            else:
-                assert set(task_encodings_by_document["doc1"][i].inputs) == {"input_ids"}
-                expected_input_tokens = ["[CLS]", "in", "the", "world", ".", "[SEP]"]
-                input_tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-                    task_encodings_by_document["doc1"][i].inputs["input_ids"]
-                )
-                assert input_tokens == expected_input_tokens
-
-    # If config has the specified value (max_window=8)
-    elif config == {"max_window": 8}:
-        assert len(task_encodings_by_document["doc1"]) == 2
-        # Iterate over each part of task_encodings_by_document["doc1"]
-        for i in range(0, len(task_encodings_by_document["doc1"])):
-            assert task_encodings_by_document["doc1"][i].document == documents[0]
-            assert not task_encodings_by_document["doc1"][i].has_targets
-            if i == 0:
-                assert set(task_encodings_by_document["doc1"][i].inputs) == {"input_ids"}
-                expected_input_tokens = [
+                ],
+                ["<pad>", "B-head", "I-head", "O", "O", "O", "O", "O", "O", "O", "O", "<pad>"],
+            ),
+            (
+                [
                     "[CLS]",
-                    "mount",
-                    "everest",
-                    "is",
-                    "the",
-                    "highest",
-                    "peak",
+                    "alice",
+                    "loves",
+                    "reading",
+                    "books",
+                    ".",
+                    "bob",
+                    "enjoys",
+                    "playing",
+                    "soccer",
+                    ".",
                     "[SEP]",
-                ]
-                input_tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-                    task_encodings_by_document["doc1"][i].inputs["input_ids"]
-                )
-                assert input_tokens == expected_input_tokens
-            else:
-                assert set(task_encodings_by_document["doc1"][i].inputs) == {"input_ids"}
-                expected_input_tokens = ["[CLS]", "in", "the", "world", ".", "[SEP]"]
-                input_tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-                    task_encodings_by_document["doc1"][i].inputs["input_ids"]
-                )
-                assert input_tokens == expected_input_tokens
-
-    # If config has the specified value (partition_annotation=sentences)
-    elif config == {"partition_annotation": "sentences"}:
-        assert task_encodings_by_document["doc2"][0].document == documents[1]
-        assert not task_encodings_by_document["doc2"][0].has_targets
-        assert set(task_encodings_by_document["doc2"][0].inputs) == {
-            "token_type_ids",
-            "input_ids",
-            "attention_mask",
-        }
-        expected_input_tokens = ["[CLS]", "bob", "enjoys", "playing", "soccer", ".", "[SEP]"]
-        input_tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-            task_encodings_by_document["doc2"][0].inputs["input_ids"]
-        )
-        assert input_tokens == expected_input_tokens
-
-    else:
-        raise ValueError(f"unknown config: {config}")
-
-
-@pytest.fixture(scope="module")
-def targets(taskmodule, task_encodings_without_targets, config):
-    """
-    - Encodes the target for a given task encoding.
-    - Generates encoded targets for a specific task encoding.
-    - For config value (partition_annotation=sentences), taking the second documents as first document don't have sentences entity.
-    """
-    task_encodings_by_document = defaultdict(list)
-    for task_encoding in task_encodings_without_targets:
-        task_encodings_by_document[task_encoding.document.id].append(task_encoding)
-    targets = []
-    # Here ctr represents document index
-    if config != {"partition_annotation": "sentences"}:
-        ctr = "doc1"
-    else:
-        ctr = "doc2"
-    for i in range(len(task_encodings_by_document[ctr])):
-        targets.append(taskmodule.encode_target(task_encodings_by_document[ctr][i]))
-    return targets
-
-
-def test_target(targets, taskmodule, config):
-    labels_tokens = []
-
-    # If config is empty
-    if config == {}:
-        assert len(targets) == 1
-        """expected_input_tokens =
-        ["[CLS]","mount","everest","is","the","highest","peak","in","the","world",".","[SEP]",]"""
-        expected_labels = [
-            ["<pad>", "B-head", "I-head", "O", "O", "O", "O", "O", "O", "O", "O", "<pad>"]
+                ],
+                ["<pad>", "B-head", "O", "O", "O", "O", "O", "O", "O", "O", "O", "<pad>"],
+            ),
         ]
-        labels_tokens.append(
-            [taskmodule.id_to_label[x] if x != -100 else "<pad>" for x in targets[0]]
-        )
 
     # If config has the specified values (max_window=8, window_overlap=2)
     elif config == {"max_window": 8, "window_overlap": 2}:
-        assert len(targets) == 4
-        """expected_input_tokens = [
-        ["[CLS]","mount","everest","is","the","highest","peak","[SEP]"],
-        ["[CLS]","is","the","highest","peak","in","the","[SEP]"],
-        ["[CLS]","highest","peak","in","the","world",".","[SEP]"], ["[CLS]", "in", "the", "world",
-        ".", "[SEP]"], ]"""
-        expected_labels = [
-            ["<pad>", "B-head", "I-head", "O", "O", "<pad>", "<pad>", "<pad>"],
-            ["<pad>", "<pad>", "<pad>", "O", "O", "<pad>", "<pad>", "<pad>"],
-            ["<pad>", "<pad>", "<pad>", "O", "O", "O", "O", "<pad>"],
-            ["<pad>", "<pad>", "<pad>", "O", "O", "<pad>"],
+        for tokens, labels in tokens_with_labels:
+            assert len(tokens) <= 8
+
+        assert tokens_with_labels == [
+            (
+                ["[CLS]", "mount", "everest", "is", "the", "highest", "peak", "[SEP]"],
+                ["<pad>", "B-head", "I-head", "O", "O", "<pad>", "<pad>", "<pad>"],
+            ),
+            (
+                ["[CLS]", "is", "the", "highest", "peak", "in", "the", "[SEP]"],
+                ["<pad>", "<pad>", "<pad>", "O", "O", "<pad>", "<pad>", "<pad>"],
+            ),
+            (
+                ["[CLS]", "highest", "peak", "in", "the", "world", ".", "[SEP]"],
+                ["<pad>", "<pad>", "<pad>", "O", "O", "O", "O", "<pad>"],
+            ),
+            (
+                ["[CLS]", "in", "the", "world", ".", "[SEP]"],
+                ["<pad>", "<pad>", "<pad>", "O", "O", "<pad>"],
+            ),
+            (
+                ["[CLS]", "alice", "loves", "reading", "books", ".", "bob", "[SEP]"],
+                ["<pad>", "B-head", "O", "O", "O", "<pad>", "<pad>", "<pad>"],
+            ),
+            (
+                ["[CLS]", "reading", "books", ".", "bob", "enjoys", "playing", "[SEP]"],
+                ["<pad>", "<pad>", "<pad>", "O", "O", "<pad>", "<pad>", "<pad>"],
+            ),
+            (
+                ["[CLS]", ".", "bob", "enjoys", "playing", "soccer", ".", "[SEP]"],
+                ["<pad>", "<pad>", "<pad>", "O", "O", "O", "O", "<pad>"],
+            ),
+            (
+                ["[CLS]", "enjoys", "playing", "soccer", ".", "[SEP]"],
+                ["<pad>", "<pad>", "<pad>", "O", "O", "<pad>"],
+            ),
         ]
-        for i in range(len(targets)):
-            labels_tokens.append(
-                [taskmodule.id_to_label[x] if x != -100 else "<pad>" for x in targets[i]]
-            )
 
     # If config has the specified value (max_window=8)
     elif config == {"max_window": 8}:
-        assert len(targets) == 2
-        """expected_input_tokens = [
-        ["[CLS]","mount","everest","is","the","highest","peak","[SEP]"], ["[CLS]", "in", "the",
-        "world", ".", "[SEP]"] ]"""
-        expected_labels = [
-            ["<pad>", "B-head", "I-head", "O", "O", "O", "O", "<pad>"],
-            ["<pad>", "O", "O", "O", "O", "<pad>"],
+        for tokens, labels in tokens_with_labels:
+            assert len(tokens) <= 8
+
+        assert tokens_with_labels == [
+            (
+                ["[CLS]", "mount", "everest", "is", "the", "highest", "peak", "[SEP]"],
+                ["<pad>", "B-head", "I-head", "O", "O", "O", "O", "<pad>"],
+            ),
+            (
+                ["[CLS]", "in", "the", "world", ".", "[SEP]"],
+                ["<pad>", "O", "O", "O", "O", "<pad>"],
+            ),
+            (
+                ["[CLS]", "alice", "loves", "reading", "books", ".", "bob", "[SEP]"],
+                ["<pad>", "B-head", "O", "O", "O", "O", "O", "<pad>"],
+            ),
+            (
+                ["[CLS]", "enjoys", "playing", "soccer", ".", "[SEP]"],
+                ["<pad>", "O", "O", "O", "O", "<pad>"],
+            ),
         ]
-        for i in range(len(targets)):
-            labels_tokens.append(
-                [taskmodule.id_to_label[x] if x != -100 else "<pad>" for x in targets[i]]
-            )
 
     # If config has the specified value (partition_annotation=sentences)
     elif config == {"partition_annotation": "sentences"}:
-        assert len(targets) == 1
-        """expected_input_tokens = ["[CLS]", "bob", "enjoys", "playing", "soccer", ".", "[SEP]"]"""
-        expected_labels = [["<pad>", "O", "O", "O", "O", "O", "<pad>"]]
-        labels_tokens.append(
-            [taskmodule.id_to_label[x] if x != -100 else "<pad>" for x in targets[0]]
-        )
+        assert tokens_with_labels == [
+            (
+                ["[CLS]", "bob", "enjoys", "playing", "soccer", ".", "[SEP]"],
+                ["<pad>", "O", "O", "O", "O", "O", "<pad>"],
+            )
+        ]
 
     else:
         raise ValueError(f"unknown config: {config}")
 
-    assert expected_labels == labels_tokens
+
+@pytest.fixture(scope="module")
+def task_encodings_for_batch(task_encodings, config):
+    task_encodings_by_document = defaultdict(list)
+    for task_encoding in task_encodings:
+        task_encodings_by_document[task_encoding.document.id].append(task_encoding)
+
+    if "partition_annotation" in config:
+        return task_encodings_by_document["doc2"][0], task_encodings_by_document["doc2"][0]
+    else:
+        return task_encodings_by_document["doc1"][0], task_encodings_by_document["doc2"][0]
 
 
 @pytest.fixture(scope="module")
-def batch(taskmodule, task_encodings_without_targets, config):
-    """
-    - Collates a list of task encodings into a batch.
-    - Prepares a batch of task encodings for efficient processing.
-    - To maintain the same batch size for all configs, the first document is duplicated in task_encodings_without_targets when using the "partition_annotation=sentences" config, as it initially contains no values for the first document.
-    """
-    task_encodings_by_document = defaultdict(list)
-    for task_encoding in task_encodings_without_targets:
-        task_encodings_by_document[task_encoding.document.id].append(task_encoding)
-
-    if config != {"partition_annotation": "sentences"}:
-        task_encodings = [
-            task_encodings_by_document["doc1"][0],
-            task_encodings_by_document["doc2"][0],
-        ]
-    else:
-        task_encodings = [
-            task_encodings_by_document["doc2"][0],
-            task_encodings_by_document["doc2"][0],
-        ]
-    return taskmodule.collate(task_encodings)
+def batch(taskmodule, task_encodings_for_batch, config):
+    return taskmodule.collate(task_encodings_for_batch)
 
 
 def test_collate(batch, config):
@@ -506,29 +390,23 @@ def test_collate(batch, config):
 
 # This is not used, but can be used to create a batch of task encodings with targets for the unbatched_outputs fixture.
 @pytest.fixture(scope="module")
-def model_predict_output(batch, taskmodule):
-    """
-    - Initializes and predicts the model outputs for the given batch.
-    - Creates an instance of TransformerTextClassificationModel and passes the batch through it.
-    - Returns the model's output predictions.
-
-    """
+def real_model_output(batch, taskmodule):
     from pytorch_ie.models import TransformerTokenClassificationModel
 
     model = TransformerTokenClassificationModel(
         model_name_or_path="prajjwal1/bert-tiny",
         num_classes=len(taskmodule.label_to_id),
     )
-    input, target = batch
-    result = model(input)
+    inputs, targets = batch
+    result = model(inputs)
     return result
 
 
 @pytest.fixture(scope="module")
-def unbatched_outputs(taskmodule, config):
+def model_output(config):
     # If config is empty
     if config == {}:
-        model_output = {
+        result = {
             "logits": torch.tensor(
                 [
                     [
@@ -565,7 +443,7 @@ def unbatched_outputs(taskmodule, config):
 
     # If config has the specified values (max_window=8, window_overlap=2)
     elif config == {"max_window": 8, "window_overlap": 2}:
-        model_output = {
+        result = {
             "logits": torch.tensor(
                 [
                     [
@@ -593,7 +471,7 @@ def unbatched_outputs(taskmodule, config):
         }
     # If config has the specified values (max_window=8)
     elif config == {"max_window": 8}:
-        model_output = {
+        result = {
             "logits": torch.tensor(
                 [
                     [
@@ -622,7 +500,7 @@ def unbatched_outputs(taskmodule, config):
 
     # If config has the specified value (partition_annotation=sentences)
     elif config == {"partition_annotation": "sentences"}:
-        model_output = {
+        result = {
             "logits": torch.tensor(
                 [
                     [
@@ -650,10 +528,15 @@ def unbatched_outputs(taskmodule, config):
     else:
         raise ValueError(f"unknown config: {config}")
 
+    return result
+
+
+@pytest.fixture(scope="module")
+def unbatched_outputs(taskmodule, model_output):
     return taskmodule.unbatch_output(model_output)
 
 
-def test_unbatch_output(unbatched_outputs, config):
+def test_unbatched_output(unbatched_outputs, config):
     """
     - Test the unbatched outputs generated by the model.
 
@@ -910,29 +793,15 @@ def test_unbatch_output(unbatched_outputs, config):
 
 
 @pytest.fixture(scope="module")
-def annotations_from_output(taskmodule, task_encodings_without_targets, unbatched_outputs, config):
+def annotations_from_output(taskmodule, task_encodings_for_batch, unbatched_outputs, config):
     """
     - Converts the inputs (task_encoding_without_targets) and the respective model outputs (unbatched_outputs)
     into human-readable  annotations.
 
     """
-    task_encodings_by_document = defaultdict(list)
-    for task_encoding in task_encodings_without_targets:
-        task_encodings_by_document[task_encoding.document.id].append(task_encoding)
 
-    if config != {"partition_annotation": "sentences"}:
-        task_encodings = [
-            task_encodings_by_document["doc1"][0],
-            task_encodings_by_document["doc2"][0],
-        ]
-    else:
-        task_encodings = [
-            task_encodings_by_document["doc2"][0],
-            task_encodings_by_document["doc2"][0],
-        ]
-    assert len(task_encodings) == len(unbatched_outputs)
     named_annotations = []
-    for task_encoding, task_output in zip(task_encodings, unbatched_outputs):
+    for task_encoding, task_output in zip(task_encodings_for_batch, unbatched_outputs):
         annotations = taskmodule.create_annotations_from_output(task_encoding, task_output)
         named_annotations.append(list(annotations))
     return named_annotations
