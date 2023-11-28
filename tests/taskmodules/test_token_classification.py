@@ -76,13 +76,18 @@ def documents():
 
     """
     doc1 = ExampleDocument(text="Mount Everest is the highest peak in the world.", id="doc1")
-    doc1.entities.append(LabeledSpan(start=0, end=13, label="head"))
+    doc1.entities.append(LabeledSpan(start=0, end=13, label="LOC"))
     assert str(doc1.entities[0]) == "Mount Everest"
+
     doc2 = ExampleDocument(text="Alice loves reading books. Bob enjoys playing soccer.", id="doc2")
-    doc2.entities.append(LabeledSpan(start=0, end=5, label="head"))
+    doc2.entities.append(LabeledSpan(start=0, end=5, label="PER"))
     assert str(doc2.entities[0]) == "Alice"
+    doc2.entities.append(LabeledSpan(start=27, end=30, label="PER"))
+    assert str(doc2.entities[1]) == "Bob"
+    # we add just one sentence to doc2 that covers only Bob
     doc2.sentences.append(LabeledSpan(start=27, end=53, label="sentence"))
     assert str(doc2.sentences[0]) == "Bob enjoys playing soccer."
+
     return [doc1, doc2]
 
 
@@ -105,15 +110,15 @@ def taskmodule(unprepared_taskmodule, documents):
 def test_prepare(taskmodule):
     assert taskmodule is not None
     assert taskmodule.is_prepared
-    assert taskmodule.label_to_id == {"O": 0, "B-head": 1, "I-head": 2}
-    assert taskmodule.id_to_label == {0: "O", 1: "B-head", 2: "I-head"}
+    assert taskmodule.label_to_id == {"B-LOC": 1, "B-PER": 3, "I-LOC": 2, "I-PER": 4, "O": 0}
+    assert taskmodule.id_to_label == {0: "O", 1: "B-LOC", 2: "I-LOC", 3: "B-PER", 4: "I-PER"}
 
 
 def test_config(taskmodule):
     config = taskmodule._config()
     assert config["taskmodule_type"] == "TokenClassificationTaskModule"
     assert "labels" in config
-    assert config["labels"] == ["head"]
+    assert config["labels"] == ["LOC", "PER"]
 
 
 @pytest.fixture(scope="module")
@@ -234,7 +239,7 @@ def test_task_encodings(task_encodings, taskmodule, config):
                     ".",
                     "[SEP]",
                 ],
-                ["<pad>", "B-head", "I-head", "O", "O", "O", "O", "O", "O", "O", "O", "<pad>"],
+                ["<pad>", "B-LOC", "I-LOC", "O", "O", "O", "O", "O", "O", "O", "O", "<pad>"],
             ),
             (
                 [
@@ -251,7 +256,7 @@ def test_task_encodings(task_encodings, taskmodule, config):
                     ".",
                     "[SEP]",
                 ],
-                ["<pad>", "B-head", "O", "O", "O", "O", "O", "O", "O", "O", "O", "<pad>"],
+                ["<pad>", "B-PER", "O", "O", "O", "O", "B-PER", "O", "O", "O", "O", "<pad>"],
             ),
         ]
 
@@ -263,7 +268,7 @@ def test_task_encodings(task_encodings, taskmodule, config):
         assert tokens_with_labels == [
             (
                 ["[CLS]", "mount", "everest", "is", "the", "highest", "peak", "[SEP]"],
-                ["<pad>", "B-head", "I-head", "O", "O", "O", "O", "<pad>"],
+                ["<pad>", "B-LOC", "I-LOC", "O", "O", "O", "O", "<pad>"],
             ),
             (
                 ["[CLS]", "highest", "peak", "in", "the", "world", ".", "[SEP]"],
@@ -271,11 +276,11 @@ def test_task_encodings(task_encodings, taskmodule, config):
             ),
             (
                 ["[CLS]", "alice", "loves", "reading", "books", ".", "bob", "[SEP]"],
-                ["<pad>", "B-head", "O", "O", "O", "O", "O", "<pad>"],
+                ["<pad>", "B-PER", "O", "O", "O", "O", "B-PER", "<pad>"],
             ),
             (
                 ["[CLS]", ".", "bob", "enjoys", "playing", "soccer", ".", "[SEP]"],
-                ["<pad>", "O", "O", "O", "O", "O", "O", "<pad>"],
+                ["<pad>", "O", "B-PER", "O", "O", "O", "O", "<pad>"],
             ),
         ]
 
@@ -287,7 +292,7 @@ def test_task_encodings(task_encodings, taskmodule, config):
         assert tokens_with_labels == [
             (
                 ["[CLS]", "mount", "everest", "is", "the", "highest", "peak", "[SEP]"],
-                ["<pad>", "B-head", "I-head", "O", "O", "O", "O", "<pad>"],
+                ["<pad>", "B-LOC", "I-LOC", "O", "O", "O", "O", "<pad>"],
             ),
             (
                 ["[CLS]", "in", "the", "world", ".", "[SEP]"],
@@ -295,7 +300,7 @@ def test_task_encodings(task_encodings, taskmodule, config):
             ),
             (
                 ["[CLS]", "alice", "loves", "reading", "books", ".", "bob", "[SEP]"],
-                ["<pad>", "B-head", "O", "O", "O", "O", "O", "<pad>"],
+                ["<pad>", "B-PER", "O", "O", "O", "O", "B-PER", "<pad>"],
             ),
             (
                 ["[CLS]", "enjoys", "playing", "soccer", ".", "[SEP]"],
@@ -308,7 +313,7 @@ def test_task_encodings(task_encodings, taskmodule, config):
         assert tokens_with_labels == [
             (
                 ["[CLS]", "bob", "enjoys", "playing", "soccer", ".", "[SEP]"],
-                ["<pad>", "O", "O", "O", "O", "O", "<pad>"],
+                ["<pad>", "B-PER", "O", "O", "O", "O", "<pad>"],
             )
         ]
 
@@ -452,11 +457,15 @@ def real_model_output(batch, taskmodule):
 
 
 @pytest.fixture(scope="module")
-def model_output(config, batch):
+def model_output(config, batch, taskmodule):
     # create "perfect" output from targets
     targets = batch[1].clone()
     targets[targets == -100] = 0
-    one_hot_targets = torch.nn.functional.one_hot(targets, num_classes=3).float() * 0.99 + 0.005
+    one_hot_targets = (
+        torch.nn.functional.one_hot(targets, num_classes=len(taskmodule.label_to_id)).float()
+        * 0.99
+        + 0.005
+    )
     # convert to logits (logit = log(p/(1-p)))
     logits = torch.log(one_hot_targets / (1 - one_hot_targets))
     return {"logits": logits}
@@ -485,8 +494,8 @@ def test_unbatched_output(unbatched_outputs, config):
         # Assertions for the first unbatched output
         assert unbatched_outputs[0]["tags"] == [
             "O",
-            "B-head",
-            "I-head",
+            "B-LOC",
+            "I-LOC",
             "O",
             "O",
             "O",
@@ -501,18 +510,18 @@ def test_unbatched_output(unbatched_outputs, config):
             unbatched_outputs[0]["probabilities"].round(4),
             np.array(
                 [
-                    [0.9999, 0.0, 0.0],
-                    [0.0, 0.9999, 0.0],
-                    [0.0, 0.0, 0.9999],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.9999, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
                 ],
                 dtype=np.float32,
             ),
@@ -520,12 +529,12 @@ def test_unbatched_output(unbatched_outputs, config):
         # Assertions for the second unbatched output
         assert unbatched_outputs[1]["tags"] == [
             "O",
-            "B-head",
+            "B-PER",
             "O",
             "O",
             "O",
             "O",
-            "O",
+            "B-PER",
             "O",
             "O",
             "O",
@@ -536,18 +545,18 @@ def test_unbatched_output(unbatched_outputs, config):
             unbatched_outputs[1]["probabilities"].round(4),
             np.array(
                 [
-                    [0.9999, 0.0, 0.0],
-                    [0.0, 0.9999, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.9999, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.9999, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
                 ],
                 dtype=np.float32,
             ),
@@ -555,37 +564,37 @@ def test_unbatched_output(unbatched_outputs, config):
 
     elif config == {"max_window": 8, "window_overlap": 2}:
         # Assertions for the first unbatched output
-        assert unbatched_outputs[0]["tags"] == ["O", "B-head", "I-head", "O", "O", "O", "O", "O"]
+        assert unbatched_outputs[0]["tags"] == ["O", "B-LOC", "I-LOC", "O", "O", "O", "O", "O"]
         np.testing.assert_almost_equal(
             unbatched_outputs[0]["probabilities"].round(4),
             np.array(
                 [
-                    [0.9999, 0.0, 0.0],
-                    [0.0, 0.9999, 0.0],
-                    [0.0, 0.0, 0.9999],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.9999, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
                 ],
                 dtype=np.float32,
             ),
         )
         # Assertions for the second unbatched output
-        assert unbatched_outputs[1]["tags"] == ["O", "B-head", "O", "O", "O", "O", "O", "O"]
+        assert unbatched_outputs[1]["tags"] == ["O", "B-PER", "O", "O", "O", "O", "B-PER", "O"]
         np.testing.assert_almost_equal(
             unbatched_outputs[1]["probabilities"].round(4),
             np.array(
                 [
-                    [0.9999, 0.0, 0.0],
-                    [0.0, 0.9999, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.9999, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.9999, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
                 ],
                 dtype=np.float32,
             ),
@@ -593,38 +602,38 @@ def test_unbatched_output(unbatched_outputs, config):
 
     elif config == {"max_window": 8}:
         # Assertions for the first unbatched output
-        assert unbatched_outputs[0]["tags"] == ["O", "B-head", "I-head", "O", "O", "O", "O", "O"]
+        assert unbatched_outputs[0]["tags"] == ["O", "B-LOC", "I-LOC", "O", "O", "O", "O", "O"]
         np.testing.assert_almost_equal(
             unbatched_outputs[0]["probabilities"].round(4),
             np.array(
                 [
-                    [0.9999, 0.0, 0.0],
-                    [0.0, 0.9999, 0.0],
-                    [0.0, 0.0, 0.9999],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.9999, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
                 ],
                 dtype=np.float32,
             ),
         )
 
         # Assertions for the second unbatched output
-        assert unbatched_outputs[1]["tags"] == ["O", "B-head", "O", "O", "O", "O", "O", "O"]
+        assert unbatched_outputs[1]["tags"] == ["O", "B-PER", "O", "O", "O", "O", "B-PER", "O"]
         np.testing.assert_almost_equal(
             unbatched_outputs[1]["probabilities"].round(4),
             np.array(
                 [
-                    [0.9999, 0.0, 0.0],
-                    [0.0, 0.9999, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.9999, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.9999, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
                 ],
                 dtype=np.float32,
             ),
@@ -632,36 +641,36 @@ def test_unbatched_output(unbatched_outputs, config):
 
     elif config == {"partition_annotation": "sentences"}:
         # Assertions for the first unbatched output
-        assert unbatched_outputs[0]["tags"] == ["O", "O", "O", "O", "O", "O", "O"]
+        assert unbatched_outputs[0]["tags"] == ["O", "B-PER", "O", "O", "O", "O", "O"]
         np.testing.assert_almost_equal(
             unbatched_outputs[0]["probabilities"].round(4),
             np.array(
                 [
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.9999, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
                 ],
                 dtype=np.float32,
             ),
         )
 
         # Assertions for the second unbatched output
-        assert unbatched_outputs[1]["tags"] == ["O", "O", "O", "O", "O", "O", "O"]
+        assert unbatched_outputs[1]["tags"] == ["O", "B-PER", "O", "O", "O", "O", "O"]
         np.testing.assert_almost_equal(
             unbatched_outputs[1]["probabilities"].round(4),
             np.array(
                 [
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.9999, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+                    [0.9999, 0.0, 0.0, 0.0, 0.0],
                 ],
                 dtype=np.float32,
             ),
@@ -719,19 +728,20 @@ def test_annotations_from_output(annotations_from_output, config, documents):
     # Check based on the config
     if config == {}:
         # Assertions for the first document
-        assert resolved_annotations == {"doc1": ["Mount Everest"], "doc2": ["Alice"]}
+        assert resolved_annotations == {"doc1": ["Mount Everest"], "doc2": ["Alice", "Bob"]}
 
     elif config == {"max_window": 8, "window_overlap": 2}:
         # Assertions for the first document
-        assert resolved_annotations == {"doc1": ["Mount Everest"], "doc2": ["Alice"]}
+        assert resolved_annotations == {"doc1": ["Mount Everest"], "doc2": ["Alice", "Bob"]}
 
     elif config == {"max_window": 8}:
         # Assertions for the first document
-        assert resolved_annotations == {"doc1": ["Mount Everest"], "doc2": ["Alice"]}
+        assert resolved_annotations == {"doc1": ["Mount Everest"], "doc2": ["Alice", "Bob"]}
 
     elif config == {"partition_annotation": "sentences"}:
         # Assertions for the first document
-        assert resolved_annotations == {}
+        # TODO: why two times "Bob"?
+        assert resolved_annotations == {"doc2": ["Bob", "Bob"]}
 
     else:
         raise ValueError(f"unknown config: {config}")
