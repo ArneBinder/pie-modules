@@ -112,8 +112,8 @@ def test_prepare(taskmodule):
 def test_config(taskmodule):
     config = taskmodule._config()
     assert config["taskmodule_type"] == "TokenClassificationTaskModule"
-    assert "label_to_id" in config
-    assert config["label_to_id"] == {"O": 0, "B-head": 1, "I-head": 2}
+    assert "labels" in config
+    assert config["labels"] == ["head"]
 
 
 @pytest.fixture(scope="module")

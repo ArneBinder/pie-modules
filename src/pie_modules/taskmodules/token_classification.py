@@ -9,10 +9,22 @@ workflow:
 
 import copy
 import logging
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Type, Union
+from typing import (
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Type,
+    Union,
+)
 
 import torch
 import torch.nn.functional as F
+from pytorch_ie import AnnotationLayer, Document
 from pytorch_ie.annotations import LabeledSpan, Span
 from pytorch_ie.core import TaskEncoding, TaskModule
 from pytorch_ie.documents import (
@@ -39,16 +51,17 @@ from typing_extensions import TypeAlias
 
 InputEncodingType: TypeAlias = Union[Dict[str, Any], BatchEncoding]
 TargetEncodingType: TypeAlias = Sequence[int]
+DocumentType: TypeAlias = TextDocument
 
 TaskEncodingType: TypeAlias = TaskEncoding[
-    TextDocument,
+    DocumentType,
     InputEncodingType,
     TargetEncodingType,
 ]
 TaskOutputType: TypeAlias = Dict[str, Any]
 
 TaskModuleType: TypeAlias = TaskModule[
-    TextDocument,
+    DocumentType,
     InputEncodingType,
     TargetEncodingType,
     ModelStepInputType,
@@ -62,6 +75,9 @@ logger = logging.getLogger(__name__)
 # TODO: re-add "Transformer" prefix to class name when the original taskmodule is removed from pytorch-ie
 @TaskModule.register()
 class TokenClassificationTaskModule(TaskModuleType):
+    # list of attribute names that need to be set by _prepare()
+    PREPARED_ATTRIBUTES: List[str] = ["labels"]
+
     def __init__(
         self,
         tokenizer_name_or_path: str,
@@ -72,7 +88,7 @@ class TokenClassificationTaskModule(TaskModuleType):
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         label_pad_token_id: int = -100,
-        label_to_id: Optional[Dict[str, int]] = None,
+        labels: Optional[List[str]] = None,
         max_window: Optional[int] = None,
         window_overlap: int = 0,
         show_statistics: bool = False,
@@ -85,8 +101,7 @@ class TokenClassificationTaskModule(TaskModuleType):
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
         self.entity_annotation = entity_annotation
         self.partition_annotation = partition_annotation
-        self.label_to_id = label_to_id or {}
-        self.id_to_label = {v: k for k, v in self.label_to_id.items()}
+        self.labels = labels
         self.padding = padding
         self.truncation = truncation
         self.max_length = max_length
@@ -125,23 +140,25 @@ class TokenClassificationTaskModule(TaskModuleType):
             )
             return None
 
-    def _config(self) -> Dict[str, Any]:
-        config = super()._config()
-        config["label_to_id"] = self.label_to_id
-        return config
+    def get_span_layer(self, document: DocumentType) -> AnnotationLayer[LabeledSpan]:
+        return document[self.entity_annotation]
 
-    def prepare(self, documents: Sequence[TextDocument]) -> None:
-        labels = set()
+    def _prepare(self, documents: Sequence[DocumentType]) -> None:
+        # collect all possible labels
+        labels: Set[str] = set()
         for document in documents:
-            entities: Sequence[LabeledSpan] = document[self.entity_annotation]
+            spans: AnnotationLayer[LabeledSpan] = self.get_span_layer(document)
 
-            for entity in entities:
-                labels.add(entity.label)
-                # labels.update(entity.label)
+            for span in spans:
+                labels.add(span.label)
 
-        self.label_to_id["O"] = 0
+        self.labels = sorted(labels)
+
+    def _post_prepare(self):
+        # creat the real token labels (BIO scheme) from the labels
+        self.label_to_id = {"O": 0}
         current_id = 1
-        for label in sorted(labels):
+        for label in sorted(self.labels):
             for prefix in ["B", "I"]:
                 self.label_to_id[f"{prefix}-{label}"] = current_id
                 current_id += 1
