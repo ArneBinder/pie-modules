@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import torch
 from pytorch_ie import AnnotationLayer, annotation_field
-from pytorch_ie.annotations import LabeledSpan, Span
+from pytorch_ie.annotations import LabeledSpan
 from pytorch_ie.documents import (
     TextBasedDocument,
     TextDocumentWithLabeledSpans,
@@ -65,7 +65,7 @@ def unprepared_taskmodule(config):
 @dataclass
 class ExampleDocument(TextBasedDocument):
     entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
-    sentences: AnnotationLayer[Span] = annotation_field(target="text")
+    sentences: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
 
 
 @pytest.fixture(scope="module")
@@ -81,7 +81,7 @@ def documents():
     doc2 = ExampleDocument(text="Alice loves reading books. Bob enjoys playing soccer.", id="doc2")
     doc2.entities.append(LabeledSpan(start=0, end=5, label="head"))
     assert str(doc2.entities[0]) == "Alice"
-    doc2.sentences.append(Span(start=27, end=53))
+    doc2.sentences.append(LabeledSpan(start=27, end=53, label="sentence"))
     assert str(doc2.sentences[0]) == "Bob enjoys playing soccer."
     return [doc1, doc2]
 
@@ -124,6 +124,77 @@ def task_encodings_without_targets(taskmodule, documents):
     return taskmodule.encode(documents, encode_target=False)
 
 
+def test_task_encodings_without_targets(task_encodings_without_targets, taskmodule, config):
+    tokens = [
+        taskmodule.tokenizer.convert_ids_to_tokens(task_encoding.inputs.ids)
+        for task_encoding in task_encodings_without_targets
+    ]
+
+    # If config is empty
+    if config == {}:
+        assert tokens == [
+            [
+                "[CLS]",
+                "mount",
+                "everest",
+                "is",
+                "the",
+                "highest",
+                "peak",
+                "in",
+                "the",
+                "world",
+                ".",
+                "[SEP]",
+            ],
+            [
+                "[CLS]",
+                "alice",
+                "loves",
+                "reading",
+                "books",
+                ".",
+                "bob",
+                "enjoys",
+                "playing",
+                "soccer",
+                ".",
+                "[SEP]",
+            ],
+        ]
+
+    # If config has the specified values (max_window=8, window_overlap=2)
+    elif config == {"max_window": 8, "window_overlap": 2}:
+        for t in tokens:
+            assert len(t) <= 8
+
+        assert tokens == [
+            ["[CLS]", "mount", "everest", "is", "the", "highest", "peak", "[SEP]"],
+            ["[CLS]", "highest", "peak", "in", "the", "world", ".", "[SEP]"],
+            ["[CLS]", "alice", "loves", "reading", "books", ".", "bob", "[SEP]"],
+            ["[CLS]", ".", "bob", "enjoys", "playing", "soccer", ".", "[SEP]"],
+        ]
+
+    # If config has the specified value (max_window=8)
+    elif config == {"max_window": 8}:
+        for t in tokens:
+            assert len(t) <= 8
+
+        assert tokens == [
+            ["[CLS]", "mount", "everest", "is", "the", "highest", "peak", "[SEP]"],
+            ["[CLS]", "in", "the", "world", ".", "[SEP]"],
+            ["[CLS]", "alice", "loves", "reading", "books", ".", "bob", "[SEP]"],
+            ["[CLS]", "enjoys", "playing", "soccer", ".", "[SEP]"],
+        ]
+
+    # If config has the specified value (partition_annotation=sentences)
+    elif config == {"partition_annotation": "sentences"}:
+        assert tokens
+
+    else:
+        raise ValueError(f"unknown config: {config}")
+
+
 @pytest.fixture(scope="module")
 def task_encodings(taskmodule, documents):
     return taskmodule.encode(documents, encode_target=True)
@@ -131,7 +202,7 @@ def task_encodings(taskmodule, documents):
 
 def test_task_encodings(task_encodings, taskmodule, config):
     tokens = [
-        taskmodule.tokenizer.convert_ids_to_tokens(task_encoding.inputs["input_ids"])
+        taskmodule.tokenizer.convert_ids_to_tokens(task_encoding.inputs.ids)
         for task_encoding in task_encodings
     ]
     labels_tokens = [
@@ -192,35 +263,19 @@ def test_task_encodings(task_encodings, taskmodule, config):
         assert tokens_with_labels == [
             (
                 ["[CLS]", "mount", "everest", "is", "the", "highest", "peak", "[SEP]"],
-                ["<pad>", "B-head", "I-head", "O", "O", "<pad>", "<pad>", "<pad>"],
-            ),
-            (
-                ["[CLS]", "is", "the", "highest", "peak", "in", "the", "[SEP]"],
-                ["<pad>", "<pad>", "<pad>", "O", "O", "<pad>", "<pad>", "<pad>"],
+                ["<pad>", "B-head", "I-head", "O", "O", "O", "O", "<pad>"],
             ),
             (
                 ["[CLS]", "highest", "peak", "in", "the", "world", ".", "[SEP]"],
-                ["<pad>", "<pad>", "<pad>", "O", "O", "O", "O", "<pad>"],
-            ),
-            (
-                ["[CLS]", "in", "the", "world", ".", "[SEP]"],
-                ["<pad>", "<pad>", "<pad>", "O", "O", "<pad>"],
+                ["<pad>", "O", "O", "O", "O", "O", "O", "<pad>"],
             ),
             (
                 ["[CLS]", "alice", "loves", "reading", "books", ".", "bob", "[SEP]"],
-                ["<pad>", "B-head", "O", "O", "O", "<pad>", "<pad>", "<pad>"],
-            ),
-            (
-                ["[CLS]", "reading", "books", ".", "bob", "enjoys", "playing", "[SEP]"],
-                ["<pad>", "<pad>", "<pad>", "O", "O", "<pad>", "<pad>", "<pad>"],
+                ["<pad>", "B-head", "O", "O", "O", "O", "O", "<pad>"],
             ),
             (
                 ["[CLS]", ".", "bob", "enjoys", "playing", "soccer", ".", "[SEP]"],
-                ["<pad>", "<pad>", "<pad>", "O", "O", "O", "O", "<pad>"],
-            ),
-            (
-                ["[CLS]", "enjoys", "playing", "soccer", ".", "[SEP]"],
-                ["<pad>", "<pad>", "<pad>", "O", "O", "<pad>"],
+                ["<pad>", "O", "O", "O", "O", "O", "O", "<pad>"],
             ),
         ]
 
@@ -299,10 +354,6 @@ def test_collate(batch, config):
             ],
             dtype=torch.int64,
         )
-        token_type_ids_expected = torch.tensor(
-            [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-            dtype=torch.int64,
-        )
         attention_mask_expected = torch.tensor(
             [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
             dtype=torch.int64,
@@ -312,12 +363,10 @@ def test_collate(batch, config):
             data={
                 "input_ids": input_ids_expected,
                 "attention_mask": attention_mask_expected,
-                "token_type_ids": token_type_ids_expected,
             }
         )
         torch.testing.assert_close(batch_encoding.input_ids, encoding_expected.input_ids)
         torch.testing.assert_close(batch_encoding.attention_mask, encoding_expected.attention_mask)
-        torch.testing.assert_close(batch_encoding.token_type_ids, encoding_expected.token_type_ids)
 
     # If config has the specified values (max_window=8, window_overlap=2)
     elif config == {"max_window": 8, "window_overlap": 2}:
@@ -377,13 +426,13 @@ def test_collate(batch, config):
             data={
                 "input_ids": input_ids_expected,
                 "attention_mask": attention_mask_expected,
-                "token_type_ids": token_type_ids_expected,
             }
         )
 
         torch.testing.assert_close(batch_encoding.input_ids, encoding_expected.input_ids)
         torch.testing.assert_close(batch_encoding.attention_mask, encoding_expected.attention_mask)
-        torch.testing.assert_close(batch_encoding.token_type_ids, encoding_expected.token_type_ids)
+    else:
+        raise ValueError(f"unknown config: {config}")
 
     assert set(batch_encoding.data) == set(encoding_expected.data)
 
