@@ -3,7 +3,6 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
-import numpy as np
 import pytest
 import torch
 from pytorch_ie import AnnotationLayer, annotation_field
@@ -323,14 +322,8 @@ def test_task_encodings(task_encodings, taskmodule, config):
 
 @pytest.fixture(scope="module")
 def task_encodings_for_batch(task_encodings, config):
-    task_encodings_by_document = defaultdict(list)
-    for task_encoding in task_encodings:
-        task_encodings_by_document[task_encoding.document.id].append(task_encoding)
-
-    if "partition_annotation" in config:
-        return task_encodings_by_document["doc2"][0], task_encodings_by_document["doc2"][0]
-    else:
-        return task_encodings_by_document["doc1"][0], task_encodings_by_document["doc2"][0]
+    # just take everything we have
+    return task_encodings
 
 
 @pytest.fixture(scope="module")
@@ -339,107 +332,90 @@ def batch(taskmodule, task_encodings_for_batch, config):
 
 
 def test_collate(batch, config):
-    """
-    - Test the collate function that creates batch encodings based on the specified configuration.
-
-    - Parameters:
-        batch (tuple): A tuple containing the batch encoding and other metadata.
-        config (dict): A dictionary containing configuration settings for the collation.
-    """
     assert batch is not None
     assert len(batch) == 2
-    batch_encoding, _ = batch
+    inputs, targets = batch
+
+    assert set(inputs.data) == {"input_ids", "attention_mask"}
+    input_ids_list = inputs.input_ids.tolist()
+    attention_mask_list = inputs.attention_mask.tolist()
+    targets_list = targets.tolist()
 
     # If config is empty
     if config == {}:
-        input_ids_expected = torch.tensor(
-            [
-                [101, 4057, 23914, 2003, 1996, 3284, 4672, 1999, 1996, 2088, 1012, 102],
-                [101, 5650, 7459, 3752, 2808, 1012, 3960, 15646, 2652, 4715, 1012, 102],
-            ],
-            dtype=torch.int64,
-        )
-        attention_mask_expected = torch.tensor(
-            [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
-            dtype=torch.int64,
-        )
-
-        encoding_expected = BatchEncoding(
-            data={
-                "input_ids": input_ids_expected,
-                "attention_mask": attention_mask_expected,
-            }
-        )
-        torch.testing.assert_close(batch_encoding.input_ids, encoding_expected.input_ids)
-        torch.testing.assert_close(batch_encoding.attention_mask, encoding_expected.attention_mask)
+        assert input_ids_list == [
+            [101, 4057, 23914, 2003, 1996, 3284, 4672, 1999, 1996, 2088, 1012, 102],
+            [101, 5650, 7459, 3752, 2808, 1012, 3960, 15646, 2652, 4715, 1012, 102],
+        ]
+        assert attention_mask_list == [
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        ]
+        assert targets_list == [
+            [-100, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, -100],
+            [-100, 3, 0, 0, 0, 0, 3, 0, 0, 0, 0, -100],
+        ]
 
     # If config has the specified values (max_window=8, window_overlap=2)
     elif config == {"max_window": 8, "window_overlap": 2}:
-        input_ids_expected = torch.tensor(
-            [
-                [101, 4057, 23914, 2003, 1996, 3284, 4672, 102],
-                [101, 5650, 7459, 3752, 2808, 1012, 3960, 102],
-            ],
-            dtype=torch.int64,
-        )
-        attention_mask_expected = torch.tensor(
-            [[1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1]], dtype=torch.int64
-        )
-        encoding_expected = BatchEncoding(
-            data={
-                "input_ids": input_ids_expected,
-                "attention_mask": attention_mask_expected,
-            }
-        )
-        torch.testing.assert_close(batch_encoding.input_ids, encoding_expected.input_ids)
-        torch.testing.assert_close(batch_encoding.attention_mask, encoding_expected.attention_mask)
+        assert input_ids_list == [
+            [101, 4057, 23914, 2003, 1996, 3284, 4672, 102],
+            [101, 3284, 4672, 1999, 1996, 2088, 1012, 102],
+            [101, 5650, 7459, 3752, 2808, 1012, 3960, 102],
+            [101, 1012, 3960, 15646, 2652, 4715, 1012, 102],
+        ]
+        assert attention_mask_list == [
+            [1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1],
+        ]
+        assert targets_list == [
+            [-100, 1, 2, 0, 0, 0, 0, -100],
+            [-100, 0, 0, 0, 0, 0, 0, -100],
+            [-100, 3, 0, 0, 0, 0, 3, -100],
+            [-100, 0, 3, 0, 0, 0, 0, -100],
+        ]
 
     # If config has the specified values (max_window=8)
     elif config == {"max_window": 8}:
-        input_ids_expected = torch.tensor(
-            [
-                [101, 4057, 23914, 2003, 1996, 3284, 4672, 102],
-                [101, 5650, 7459, 3752, 2808, 1012, 3960, 102],
-            ],
-            dtype=torch.int64,
-        )
-        attention_mask_expected = torch.tensor(
-            [[1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1]], dtype=torch.int64
-        )
-        encoding_expected = BatchEncoding(
-            data={
-                "input_ids": input_ids_expected,
-                "attention_mask": attention_mask_expected,
-            }
-        )
-        torch.testing.assert_close(batch_encoding.input_ids, encoding_expected.input_ids)
-        torch.testing.assert_close(batch_encoding.attention_mask, encoding_expected.attention_mask)
+        assert input_ids_list == [
+            [101, 4057, 23914, 2003, 1996, 3284, 4672, 102],
+            [101, 1999, 1996, 2088, 1012, 102, 0, 0],
+            [101, 5650, 7459, 3752, 2808, 1012, 3960, 102],
+            [101, 15646, 2652, 4715, 1012, 102, 0, 0],
+        ]
+        assert attention_mask_list == [
+            [1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 1, 1, 0, 0],
+            [1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 1, 1, 0, 0],
+        ]
+        assert targets_list == [
+            [-100, 1, 2, 0, 0, 0, 0, -100],
+            [-100, 0, 0, 0, 0, -100, -100, -100],
+            [-100, 3, 0, 0, 0, 0, 3, -100],
+            [-100, 0, 0, 0, 0, -100, -100, -100],
+        ]
 
     # If config has the specified value (partition_annotation=sentences)
     elif config == {"partition_annotation": "sentences"}:
-        input_ids_expected = torch.tensor(
-            [[101, 3960, 15646, 2652, 4715, 1012, 102], [101, 3960, 15646, 2652, 4715, 1012, 102]],
-            dtype=torch.int64,
-        )
-        token_type_ids_expected = torch.tensor(
-            [[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0]], dtype=torch.int64
-        )
-        attention_mask_expected = torch.tensor(
-            [[1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1]], dtype=torch.int64
-        )
-        encoding_expected = BatchEncoding(
-            data={
-                "input_ids": input_ids_expected,
-                "attention_mask": attention_mask_expected,
-            }
-        )
+        assert input_ids_list == [[101, 3960, 15646, 2652, 4715, 1012, 102]]
+        assert attention_mask_list == [[1, 1, 1, 1, 1, 1, 1]]
+        assert targets_list == [[-100, 3, 0, 0, 0, 0, -100]]
 
-        torch.testing.assert_close(batch_encoding.input_ids, encoding_expected.input_ids)
-        torch.testing.assert_close(batch_encoding.attention_mask, encoding_expected.attention_mask)
     else:
         raise ValueError(f"unknown config: {config}")
 
-    assert set(batch_encoding.data) == set(encoding_expected.data)
+    inputs_expected = BatchEncoding(
+        data={
+            "input_ids": torch.tensor(input_ids_list, dtype=torch.int64),
+            "attention_mask": torch.tensor(attention_mask_list, dtype=torch.int64),
+        }
+    )
+    assert set(inputs.data) == set(inputs_expected.data)
+    targets_expected = torch.tensor(targets_list, dtype=torch.int64)
+    assert torch.equal(targets, targets_expected)
 
 
 # This is not used, but can be used to create a batch of task encodings with targets for the unbatched_outputs fixture.
@@ -477,204 +453,182 @@ def unbatched_outputs(taskmodule, model_output):
 
 
 def test_unbatched_output(unbatched_outputs, config):
-    """
-    - Test the unbatched outputs generated by the model.
-
-    - Parameters:
-        unbatched_outputs (list): List of unbatched outputs from the model.
-        config (dict): The configuration to check different cases.
-
-    - Perform assertions for each unbatched output based on the given configuration.
-    """
     assert unbatched_outputs is not None
-    assert len(unbatched_outputs) == 2
+
+    result = [
+        {
+            "tags": unbatched_output["tags"],
+            "probabilities": unbatched_output["probabilities"].round(3).tolist(),
+        }
+        for unbatched_output in unbatched_outputs
+    ]
 
     # Based on the config, perform assertions for each unbatched output
     if config == {}:
-        # Assertions for the first unbatched output
-        assert unbatched_outputs[0]["tags"] == [
-            "O",
-            "B-LOC",
-            "I-LOC",
-            "O",
-            "O",
-            "O",
-            "O",
-            "O",
-            "O",
-            "O",
-            "O",
-            "O",
-        ]
-        np.testing.assert_almost_equal(
-            unbatched_outputs[0]["probabilities"].round(4),
-            np.array(
-                [
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.9999, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+        assert result == [
+            {
+                "tags": ["O", "B-LOC", "I-LOC", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
+                "probabilities": [
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
                 ],
-                dtype=np.float32,
-            ),
-        )
-        # Assertions for the second unbatched output
-        assert unbatched_outputs[1]["tags"] == [
-            "O",
-            "B-PER",
-            "O",
-            "O",
-            "O",
-            "O",
-            "B-PER",
-            "O",
-            "O",
-            "O",
-            "O",
-            "O",
-        ]
-        np.testing.assert_almost_equal(
-            unbatched_outputs[1]["probabilities"].round(4),
-            np.array(
-                [
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.9999, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.9999, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+            },
+            {
+                "tags": ["O", "B-PER", "O", "O", "O", "O", "B-PER", "O", "O", "O", "O", "O"],
+                "probabilities": [
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
                 ],
-                dtype=np.float32,
-            ),
-        )
+            },
+        ]
 
     elif config == {"max_window": 8, "window_overlap": 2}:
-        # Assertions for the first unbatched output
-        assert unbatched_outputs[0]["tags"] == ["O", "B-LOC", "I-LOC", "O", "O", "O", "O", "O"]
-        np.testing.assert_almost_equal(
-            unbatched_outputs[0]["probabilities"].round(4),
-            np.array(
-                [
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.9999, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+        assert result == [
+            {
+                "tags": ["O", "B-LOC", "I-LOC", "O", "O", "O", "O", "O"],
+                "probabilities": [
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
                 ],
-                dtype=np.float32,
-            ),
-        )
-        # Assertions for the second unbatched output
-        assert unbatched_outputs[1]["tags"] == ["O", "B-PER", "O", "O", "O", "O", "B-PER", "O"]
-        np.testing.assert_almost_equal(
-            unbatched_outputs[1]["probabilities"].round(4),
-            np.array(
-                [
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.9999, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.9999, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+            },
+            {
+                "tags": ["O", "O", "O", "O", "O", "O", "O", "O"],
+                "probabilities": [
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
                 ],
-                dtype=np.float32,
-            ),
-        )
+            },
+            {
+                "tags": ["O", "B-PER", "O", "O", "O", "O", "B-PER", "O"],
+                "probabilities": [
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                ],
+            },
+            {
+                "tags": ["O", "O", "B-PER", "O", "O", "O", "O", "O"],
+                "probabilities": [
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                ],
+            },
+        ]
 
     elif config == {"max_window": 8}:
-        # Assertions for the first unbatched output
-        assert unbatched_outputs[0]["tags"] == ["O", "B-LOC", "I-LOC", "O", "O", "O", "O", "O"]
-        np.testing.assert_almost_equal(
-            unbatched_outputs[0]["probabilities"].round(4),
-            np.array(
-                [
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.9999, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.9999, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+        assert result == [
+            {
+                "tags": ["O", "B-LOC", "I-LOC", "O", "O", "O", "O", "O"],
+                "probabilities": [
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
                 ],
-                dtype=np.float32,
-            ),
-        )
-
-        # Assertions for the second unbatched output
-        assert unbatched_outputs[1]["tags"] == ["O", "B-PER", "O", "O", "O", "O", "B-PER", "O"]
-        np.testing.assert_almost_equal(
-            unbatched_outputs[1]["probabilities"].round(4),
-            np.array(
-                [
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.9999, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.9999, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+            },
+            {
+                "tags": ["O", "O", "O", "O", "O", "O", "O", "O"],
+                "probabilities": [
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
                 ],
-                dtype=np.float32,
-            ),
-        )
+            },
+            {
+                "tags": ["O", "B-PER", "O", "O", "O", "O", "B-PER", "O"],
+                "probabilities": [
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                ],
+            },
+            {
+                "tags": ["O", "O", "O", "O", "O", "O", "O", "O"],
+                "probabilities": [
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                ],
+            },
+        ]
 
     elif config == {"partition_annotation": "sentences"}:
-        # Assertions for the first unbatched output
-        assert unbatched_outputs[0]["tags"] == ["O", "B-PER", "O", "O", "O", "O", "O"]
-        np.testing.assert_almost_equal(
-            unbatched_outputs[0]["probabilities"].round(4),
-            np.array(
-                [
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.9999, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
+        assert result == [
+            {
+                "tags": ["O", "B-PER", "O", "O", "O", "O", "O"],
+                "probabilities": [
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0, 0.0, 0.0],
                 ],
-                dtype=np.float32,
-            ),
-        )
-
-        # Assertions for the second unbatched output
-        assert unbatched_outputs[1]["tags"] == ["O", "B-PER", "O", "O", "O", "O", "O"]
-        np.testing.assert_almost_equal(
-            unbatched_outputs[1]["probabilities"].round(4),
-            np.array(
-                [
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.9999, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                    [0.9999, 0.0, 0.0, 0.0, 0.0],
-                ],
-                dtype=np.float32,
-            ),
-        )
+            }
+        ]
 
     else:
         raise ValueError(f"unknown config: {config}")
@@ -682,12 +636,6 @@ def test_unbatched_output(unbatched_outputs, config):
 
 @pytest.fixture(scope="module")
 def annotations_from_output(taskmodule, task_encodings_for_batch, unbatched_outputs, config):
-    """
-    - Converts the inputs (task_encoding_without_targets) and the respective model outputs (unbatched_outputs)
-    into human-readable  annotations.
-
-    """
-
     named_annotations_per_document = defaultdict(list)
     for task_encoding, task_output in zip(task_encodings_for_batch, unbatched_outputs):
         annotations = taskmodule.create_annotations_from_output(task_encoding, task_output)
@@ -696,16 +644,7 @@ def annotations_from_output(taskmodule, task_encodings_for_batch, unbatched_outp
 
 
 def test_annotations_from_output(annotations_from_output, config, documents):
-    """
-    - Test the annotations generated from the output.
-
-    - Parameters:
-        annotations_from_output (list): List of annotations from the model output.
-        config (dict): The configuration to check different cases.
-
-    - For each configuration, check the first two entries from annotations_from_output for both documents.
-    """
-    assert annotations_from_output is not None  # Check that annotations_from_output is not None
+    assert annotations_from_output is not None
     # Sort the annotations in each document by start and end positions
     annotations_from_output = {
         doc_id: sorted(annotations, key=lambda x: (x[0], x[1].start, x[1].end))
@@ -727,21 +666,18 @@ def test_annotations_from_output(annotations_from_output, config, documents):
     resolved_annotations = dict(resolved_annotations)
     # Check based on the config
     if config == {}:
-        # Assertions for the first document
         assert resolved_annotations == {"doc1": ["Mount Everest"], "doc2": ["Alice", "Bob"]}
 
     elif config == {"max_window": 8, "window_overlap": 2}:
-        # Assertions for the first document
-        assert resolved_annotations == {"doc1": ["Mount Everest"], "doc2": ["Alice", "Bob"]}
+        # We get two annotations for Bob because the window overlaps with the previous one.
+        # This is not a problem because annotations get de-duplicated during serialization.
+        assert resolved_annotations == {"doc1": ["Mount Everest"], "doc2": ["Alice", "Bob", "Bob"]}
 
     elif config == {"max_window": 8}:
-        # Assertions for the first document
         assert resolved_annotations == {"doc1": ["Mount Everest"], "doc2": ["Alice", "Bob"]}
 
     elif config == {"partition_annotation": "sentences"}:
-        # Assertions for the first document
-        # TODO: why two times "Bob"?
-        assert resolved_annotations == {"doc2": ["Bob", "Bob"]}
+        assert resolved_annotations == {"doc2": ["Bob"]}
 
     else:
         raise ValueError(f"unknown config: {config}")
