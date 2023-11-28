@@ -81,7 +81,7 @@ class TokenClassificationTaskModule(TaskModuleType):
     def __init__(
         self,
         tokenizer_name_or_path: str,
-        entity_annotation: str = "labeled_spans",
+        span_annotation: str = "labeled_spans",
         partition_annotation: Optional[str] = None,
         padding: Union[bool, str, PaddingStrategy] = True,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -99,7 +99,7 @@ class TokenClassificationTaskModule(TaskModuleType):
         self.save_hyperparameters()
 
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
-        self.entity_annotation = entity_annotation
+        self.span_annotation = span_annotation
         self.partition_annotation = partition_annotation
         self.labels = labels
         self.padding = padding
@@ -116,9 +116,9 @@ class TokenClassificationTaskModule(TaskModuleType):
     def document_type(self) -> Optional[Type[TextDocument]]:
         dt: Type[TextDocument]
         errors = []
-        if self.entity_annotation != "labeled_spans":
+        if self.span_annotation != "labeled_spans":
             errors.append(
-                f"entity_annotation={self.entity_annotation} is not the default value ('labeled_spans')"
+                f"span_annotation={self.span_annotation} is not the default value ('labeled_spans')"
             )
         if self.partition_annotation is None:
             dt = TextDocumentWithLabeledSpans
@@ -141,7 +141,7 @@ class TokenClassificationTaskModule(TaskModuleType):
             return None
 
     def get_span_layer(self, document: DocumentType) -> AnnotationLayer[LabeledSpan]:
-        return document[self.entity_annotation]
+        return document[self.span_annotation]
 
     def _prepare(self, documents: Sequence[DocumentType]) -> None:
         # collect all possible labels
@@ -283,7 +283,7 @@ class TokenClassificationTaskModule(TaskModuleType):
         metadata = task_encoding.metadata
         document = task_encoding.document
 
-        entities: Sequence[LabeledSpan] = document[self.entity_annotation]
+        entities: Sequence[LabeledSpan] = document[self.span_annotation]
 
         partition = None
         if self.partition_annotation is not None:
@@ -353,7 +353,7 @@ class TokenClassificationTaskModule(TaskModuleType):
                 if not has_overlap((start, end + 1), task_encoding.metadata["window_labels"]):
                     continue
             yield (
-                self.entity_annotation,
+                self.span_annotation,
                 LabeledSpan(
                     task_encoding.metadata["offset_mapping"][start][0] + offset,
                     task_encoding.metadata["offset_mapping"][end][1] + offset,

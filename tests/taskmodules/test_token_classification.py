@@ -58,7 +58,7 @@ def unprepared_taskmodule(config):
 
     """
     return TokenClassificationTaskModule(
-        tokenizer_name_or_path="bert-base-uncased", entity_annotation="entities", **config
+        tokenizer_name_or_path="bert-base-uncased", span_annotation="entities", **config
     )
 
 
@@ -700,17 +700,17 @@ def test_document_type_with_partitions():
     assert taskmodule.document_type == TextDocumentWithLabeledSpansAndLabeledPartitions
 
 
-def test_document_type_with_non_default_entity_annotation(caplog):
+def test_document_type_with_non_default_span_annotation(caplog):
     with caplog.at_level(logging.WARNING):
         taskmodule = TokenClassificationTaskModule(
-            tokenizer_name_or_path="bert-base-uncased", entity_annotation="entities"
+            tokenizer_name_or_path="bert-base-uncased", span_annotation="entities"
         )
     assert taskmodule.document_type is None
     assert len(caplog.records) == 1
     assert caplog.records[0].levelname == "WARNING"
     assert (
         caplog.records[0].message
-        == "entity_annotation=entities is not the default value ('labeled_spans'), so the taskmodule "
+        == "span_annotation=entities is not the default value ('labeled_spans'), so the taskmodule "
         "TokenClassificationTaskModule can not request the usual document type "
         "(TextDocumentWithLabeledSpans) for auto-conversion because this has the bespoken default value "
         "as layer name(s) instead of the provided one(s)."
@@ -734,11 +734,11 @@ def test_document_type_with_non_default_partition_annotation(caplog):
     )
 
 
-def test_document_type_with_non_default_entity_and_partition_annotation(caplog):
+def test_document_type_with_non_default_span_and_partition_annotation(caplog):
     with caplog.at_level(logging.WARNING):
         taskmodule = TokenClassificationTaskModule(
             tokenizer_name_or_path="bert-base-uncased",
-            entity_annotation="entities",
+            span_annotation="entities",
             partition_annotation="sentences",
         )
     assert taskmodule.document_type is None
@@ -746,7 +746,7 @@ def test_document_type_with_non_default_entity_and_partition_annotation(caplog):
     assert caplog.records[0].levelname == "WARNING"
     assert (
         caplog.records[0].message
-        == "entity_annotation=entities is not the default value ('labeled_spans') and "
+        == "span_annotation=entities is not the default value ('labeled_spans') and "
         "partition_annotation=sentences is not the default value ('labeled_partitions'), "
         "so the taskmodule TokenClassificationTaskModule can not request the usual document "
         "type (TextDocumentWithLabeledSpansAndLabeledPartitions) for auto-conversion because "
