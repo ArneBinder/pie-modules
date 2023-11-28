@@ -187,24 +187,6 @@ class TokenClassificationTaskModule(TaskModuleType):
 
         self.id_to_label = {v: k for k, v in self.label_to_id.items()}
 
-    def encode_text(
-        self, text, partition: Optional[Span] = None, add_special_tokens: bool = True
-    ) -> BatchEncoding:
-        if self.partition_annotation is not None and partition is None:
-            raise ValueError("partitioning is enabled, but no partition is provided")
-
-        text_partition = text[partition.start : partition.end] if partition is not None else text
-        return self.tokenizer(
-            text_partition,
-            padding=False,
-            truncation=False,
-            max_length=None,
-            is_split_into_words=False,
-            return_offsets_mapping=True,
-            return_special_tokens_mask=True,
-            add_special_tokens=add_special_tokens,
-        )
-
     def encode_input(
         self,
         document: TextDocument,
