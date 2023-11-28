@@ -177,7 +177,7 @@ class TokenClassificationTaskModule(TaskModuleType):
         self.labels = sorted(labels)
 
     def _post_prepare(self):
-        # creat the real token labels (BIO scheme) from the labels
+        # create the real token labels (BIO scheme) from the labels
         self.label_to_id = {"O": 0}
         current_id = 1
         for label in sorted(self.labels):
