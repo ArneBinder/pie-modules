@@ -82,7 +82,6 @@ class TokenDocumentWithLabeledSpansAndLabeledPartitions(TokenDocumentWithLabeled
     labeled_partitions: AnnotationLayer[LabeledSpan] = annotation_field(target="tokens")
 
 
-# TODO: re-add "Transformer" prefix to class name when the original taskmodule is removed from pytorch-ie
 @TaskModule.register()
 class TokenClassificationTaskModule(TaskModuleType):
     # list of attribute names that need to be set by _prepare()
