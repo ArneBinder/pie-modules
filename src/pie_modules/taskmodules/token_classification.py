@@ -1,12 +1,3 @@
-"""
-workflow:
-    Document
-        -> (InputEncoding, TargetEncoding) -> TaskEncoding -> TaskBatchEncoding
-            -> ModelBatchEncoding -> ModelBatchOutput
-        -> TaskOutput
-    -> Document
-"""
-
 import copy
 import dataclasses
 import logging
@@ -26,7 +17,7 @@ from typing import (
 import torch
 import torch.nn.functional as F
 from pytorch_ie import AnnotationLayer, annotation_field
-from pytorch_ie.annotations import LabeledSpan, Span
+from pytorch_ie.annotations import LabeledSpan
 from pytorch_ie.core import TaskEncoding, TaskModule
 from pytorch_ie.documents import (
     TextDocument,
@@ -41,18 +32,25 @@ from pytorch_ie.models.transformer_token_classification import (
 from pytorch_ie.utils.span import bio_tags_to_spans
 from tokenizers import Encoding
 from transformers import AutoTokenizer
-from transformers.tokenization_utils_base import BatchEncoding
 from typing_extensions import TypeAlias
 
 from pie_modules.document.processing import (
     token_based_document_to_text_based,
     tokenize_document,
 )
+"""
+workflow:
+    Document
+        -> (InputEncoding, TargetEncoding) -> TaskEncoding
+            -> ModelStepInputType -> ModelBatchOutput
+        -> TaskOutput
+    -> Document
+"""
+
+DocumentType: TypeAlias = TextDocument
 
 InputEncodingType: TypeAlias = Encoding
 TargetEncodingType: TypeAlias = Sequence[int]
-DocumentType: TypeAlias = TextDocument
-
 TaskEncodingType: TypeAlias = TaskEncoding[
     DocumentType,
     InputEncodingType,
