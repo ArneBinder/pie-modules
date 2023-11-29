@@ -1,3 +1,12 @@
+"""
+workflow:
+    Document
+        -> (InputEncoding, TargetEncoding) -> TaskEncoding
+            -> ModelStepInputType -> ModelBatchOutput
+        -> TaskOutput
+    -> Document
+"""
+
 import copy
 import dataclasses
 import logging
@@ -38,14 +47,6 @@ from pie_modules.document.processing import (
     token_based_document_to_text_based,
     tokenize_document,
 )
-"""
-workflow:
-    Document
-        -> (InputEncoding, TargetEncoding) -> TaskEncoding
-            -> ModelStepInputType -> ModelBatchOutput
-        -> TaskOutput
-    -> Document
-"""
 
 DocumentType: TypeAlias = TextDocument
 
