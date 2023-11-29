@@ -86,21 +86,24 @@ class TokenClassificationTaskModule(TaskModuleType):
 
     This taskmodule expects the input documents to be of TextBasedDocument with an annotation layer of
     labeled spans (e.g. TextDocumentWithLabeledSpans). The text is tokenized using the provided tokenizer and
-    the labels are converted to BIO tags. To handle long documents, the text can be windowed using the respective
-    parameters for the tokenizer, i.e. max_length (and stride). Note, that this requires to set
-    return_overflowing_tokens=True, otherwise just the first window of input tokens is considered. The windowing
-    is done in a way that the spans are not split across windows. If a span is split across windows, it is ignored
-    during training and evaluation. Thus, if you have long spans in your data, it is recommended to set a stride that
-    is as large as the average span length to avoid missing many spans.
+    the labels are converted to BIO tags.
+
+    To handle long documents, the text can be windowed using the respective parameters for the tokenizer,
+    i.e. max_length (and stride). Note, that this requires to set return_overflowing_tokens=True, otherwise just
+    the first window of input tokens is considered. The windowing is done in a way that the spans are not split
+    across windows. If a span is split across windows, it is ignored during training and evaluation. Thus, if you
+    have long spans in your data, it is recommended to set a stride that is as large as the average span length
+    to avoid missing many spans.
 
     If a partition annotation is provided, the taskmodule expects the input documents to be of
     TextBasedDocument with two annotation layers of labeled spans, one for the spans and one for the partitions
-    (e.g. TextDocumentWithLabeledSpansAndLabeledPartitions). Then, the text is tokenized individually per partition
-    (e.g. per sentence). This is useful for long documents that can not be processed by the model as a whole, but
-    where a natural partitioning exists (e.g. sentences) and, thus, windowing is not necessary.
+    (e.g. TextDocumentWithLabeledSpansAndLabeledPartitions). Then, the text is tokenized and fed to the model
+    individually per partition (e.g. per sentence). This is useful for long documents that can not be processed
+    by the model as a whole, but where a natural partitioning exists (e.g. sentences or paragraphs) and, thus,
+    windowing is not necessary (or a combination of both can be used).
 
-    If labels are not provided, they are collected from the data during the prepare() step. Spans with labels that
-    are not in the collected labels are ignored during training and evaluation.
+    If labels are not provided, they are collected from the data during the prepare() step. If provided, they act as
+    whitelist, i.e. spans with labels that are not in the labels are ignored during training and evaluation.
 
     Args:
         tokenizer_name_or_path: Name or path of the HuggingFace tokenizer to use.
