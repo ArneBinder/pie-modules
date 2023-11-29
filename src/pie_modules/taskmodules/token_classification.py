@@ -175,6 +175,7 @@ class TokenClassificationTaskModule(TaskModuleType):
                 labels.add(span.label)
 
         self.labels = sorted(labels)
+        logger.info(f"Collected {len(self.labels)} labels from the data: {self.labels}")
 
     def _post_prepare(self):
         # create the real token labels (BIO scheme) from the labels
