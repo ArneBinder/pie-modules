@@ -82,6 +82,41 @@ class TokenDocumentWithLabeledSpansAndLabeledPartitions(TokenDocumentWithLabeled
 
 @TaskModule.register()
 class TokenClassificationTaskModule(TaskModuleType):
+    """Taskmodule for span prediction (e.g. NER) as token classification.
+
+    This taskmodule expects the input documents to be of TextBasedDocument with an annotation layer of
+    labeled spans (e.g. TextDocumentWithLabeledSpans). The text is tokenized using the provided tokenizer and
+    the labels are converted to BIO tags. To handle long documents, the text can be windowed using the respective
+    parameters for the tokenizer, i.e. max_length (and stride). Note, that this requires to set
+    return_overflowing_tokens=True, otherwise just the first window of input tokens is considered. The windowing
+    is done in a way that the spans are not split across windows. If a span is split across windows, it is ignored
+    during training and evaluation. Thus, if you have long spans in your data, it is recommended to set a stride that
+    is as large as the average span length to avoid missing many spans.
+
+    If a partition annotation is provided, the taskmodule expects the input documents to be of
+    TextBasedDocument with two annotation layers of labeled spans, one for the spans and one for the partitions
+    (e.g. TextDocumentWithLabeledSpansAndLabeledPartitions). Then, the text is tokenized individually per partition
+    (e.g. per sentence). This is useful for long documents that can not be processed by the model as a whole, but
+    where a natural partitioning exists (e.g. sentences) and, thus, windowing is not necessary.
+
+    If labels are not provided, they are collected from the data during the prepare() step. Spans with labels that
+    are not in the collected labels are ignored during training and evaluation.
+
+    Args:
+        tokenizer_name_or_path: Name or path of the HuggingFace tokenizer to use.
+        span_annotation: Name of the annotation layer that contains the labeled spans. Default: "labeled_spans".
+        partition_annotation: Name of the annotation layer that contains the labeled partitions. If provided, the
+            text is tokenized individually per partition. Default: None.
+        label_pad_token_id: ID of the padding tag label. The model should ignore this for training. Default: -100.
+        labels: List of labels to use. If not provided, the labels are collected from the data during the prepare()
+            step. Default: None.
+        include_ill_formed_predictions: Whether to include ill-formed predictions in the output. If False, the
+            predictions are corrected to be well-formed. Default: True.
+        tokenize_kwargs: Keyword arguments to pass to the tokenizer during tokenization. Default: None.
+        pad_kwargs: Keyword arguments to pass to the tokenizer during padding. Note, that this is used to pad the
+            token ids *and* the tag ids, if available (i.e. during training or evaluation). Default: None.
+    """
+
     # list of attribute names that need to be set by _prepare()
     PREPARED_ATTRIBUTES: List[str] = ["labels"]
 
