@@ -23,11 +23,16 @@ def _config_to_str(cfg: Dict[str, Any]) -> str:
     return result
 
 
+CONFIG_DEFAULT = {}
+CONFIG_MAX_WINDOW = {"max_window": 8}
+CONFIG_MAX_WINDOW_WITH_STRIDE = {"max_window": 8, "window_overlap": 2}
+CONFIG_PARTITIONS = {"partition_annotation": "sentences"}
+
 CONFIGS: List[Dict[str, Any]] = [
-    {},
-    {"max_window": 8},
-    {"max_window": 8, "window_overlap": 2},
-    {"partition_annotation": "sentences"},
+    CONFIG_DEFAULT,
+    CONFIG_MAX_WINDOW,
+    CONFIG_MAX_WINDOW_WITH_STRIDE,
+    CONFIG_PARTITIONS,
 ]
 
 CONFIGS_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
@@ -135,7 +140,7 @@ def test_task_encodings_without_targets(task_encodings_without_targets, taskmodu
     ]
 
     # If config is empty
-    if config == {}:
+    if config == CONFIG_DEFAULT:
         assert tokens == [
             [
                 "[CLS]",
@@ -168,7 +173,7 @@ def test_task_encodings_without_targets(task_encodings_without_targets, taskmodu
         ]
 
     # If config has the specified values (max_window=8, window_overlap=2)
-    elif config == {"max_window": 8, "window_overlap": 2}:
+    elif config == CONFIG_MAX_WINDOW_WITH_STRIDE:
         for t in tokens:
             assert len(t) <= 8
 
@@ -180,7 +185,7 @@ def test_task_encodings_without_targets(task_encodings_without_targets, taskmodu
         ]
 
     # If config has the specified value (max_window=8)
-    elif config == {"max_window": 8}:
+    elif config == CONFIG_MAX_WINDOW:
         for t in tokens:
             assert len(t) <= 8
 
@@ -192,7 +197,7 @@ def test_task_encodings_without_targets(task_encodings_without_targets, taskmodu
         ]
 
     # If config has the specified value (partition_annotation=sentences)
-    elif config == {"partition_annotation": "sentences"}:
+    elif config == CONFIG_PARTITIONS:
         assert tokens
 
     else:
@@ -221,7 +226,7 @@ def test_task_encodings(task_encodings, taskmodule, config):
         assert len(tokens) == len(labels)
 
     # If config is empty
-    if config == {}:
+    if config == CONFIG_DEFAULT:
         assert tokens_with_labels == [
             (
                 [
@@ -260,7 +265,7 @@ def test_task_encodings(task_encodings, taskmodule, config):
         ]
 
     # If config has the specified values (max_window=8, window_overlap=2)
-    elif config == {"max_window": 8, "window_overlap": 2}:
+    elif config == CONFIG_MAX_WINDOW_WITH_STRIDE:
         for tokens, labels in tokens_with_labels:
             assert len(tokens) <= 8
 
@@ -284,7 +289,7 @@ def test_task_encodings(task_encodings, taskmodule, config):
         ]
 
     # If config has the specified value (max_window=8)
-    elif config == {"max_window": 8}:
+    elif config == CONFIG_MAX_WINDOW:
         for tokens, labels in tokens_with_labels:
             assert len(tokens) <= 8
 
@@ -308,7 +313,7 @@ def test_task_encodings(task_encodings, taskmodule, config):
         ]
 
     # If config has the specified value (partition_annotation=sentences)
-    elif config == {"partition_annotation": "sentences"}:
+    elif config == CONFIG_PARTITIONS:
         assert tokens_with_labels == [
             (
                 ["[CLS]", "bob", "enjoys", "playing", "soccer", ".", "[SEP]"],
@@ -342,7 +347,7 @@ def test_collate(batch, config):
     targets_list = targets.tolist()
 
     # If config is empty
-    if config == {}:
+    if config == CONFIG_DEFAULT:
         assert input_ids_list == [
             [101, 4057, 23914, 2003, 1996, 3284, 4672, 1999, 1996, 2088, 1012, 102],
             [101, 5650, 7459, 3752, 2808, 1012, 3960, 15646, 2652, 4715, 1012, 102],
@@ -357,7 +362,7 @@ def test_collate(batch, config):
         ]
 
     # If config has the specified values (max_window=8, window_overlap=2)
-    elif config == {"max_window": 8, "window_overlap": 2}:
+    elif config == CONFIG_MAX_WINDOW_WITH_STRIDE:
         assert input_ids_list == [
             [101, 4057, 23914, 2003, 1996, 3284, 4672, 102],
             [101, 3284, 4672, 1999, 1996, 2088, 1012, 102],
@@ -378,7 +383,7 @@ def test_collate(batch, config):
         ]
 
     # If config has the specified values (max_window=8)
-    elif config == {"max_window": 8}:
+    elif config == CONFIG_MAX_WINDOW:
         assert input_ids_list == [
             [101, 4057, 23914, 2003, 1996, 3284, 4672, 102],
             [101, 1999, 1996, 2088, 1012, 102, 0, 0],
@@ -399,7 +404,7 @@ def test_collate(batch, config):
         ]
 
     # If config has the specified value (partition_annotation=sentences)
-    elif config == {"partition_annotation": "sentences"}:
+    elif config == CONFIG_PARTITIONS:
         assert input_ids_list == [[101, 3960, 15646, 2652, 4715, 1012, 102]]
         assert attention_mask_list == [[1, 1, 1, 1, 1, 1, 1]]
         assert targets_list == [[-100, 3, 0, 0, 0, 0, -100]]
@@ -464,7 +469,7 @@ def test_unbatched_output(unbatched_outputs, config):
     ]
 
     # Based on the config, perform assertions for each unbatched output
-    if config == {}:
+    if config == CONFIG_DEFAULT:
         assert result == [
             {
                 "tags": ["O", "B-LOC", "I-LOC", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
@@ -502,7 +507,7 @@ def test_unbatched_output(unbatched_outputs, config):
             },
         ]
 
-    elif config == {"max_window": 8, "window_overlap": 2}:
+    elif config == CONFIG_MAX_WINDOW_WITH_STRIDE:
         assert result == [
             {
                 "tags": ["O", "B-LOC", "I-LOC", "O", "O", "O", "O", "O"],
@@ -558,7 +563,7 @@ def test_unbatched_output(unbatched_outputs, config):
             },
         ]
 
-    elif config == {"max_window": 8}:
+    elif config == CONFIG_MAX_WINDOW:
         assert result == [
             {
                 "tags": ["O", "B-LOC", "I-LOC", "O", "O", "O", "O", "O"],
@@ -614,7 +619,7 @@ def test_unbatched_output(unbatched_outputs, config):
             },
         ]
 
-    elif config == {"partition_annotation": "sentences"}:
+    elif config == CONFIG_PARTITIONS:
         assert result == [
             {
                 "tags": ["O", "B-PER", "O", "O", "O", "O", "O"],
@@ -665,18 +670,18 @@ def test_annotations_from_output(annotations_from_output, config, documents):
 
     resolved_annotations = dict(resolved_annotations)
     # Check based on the config
-    if config == {}:
+    if config == CONFIG_DEFAULT:
         assert resolved_annotations == {"doc1": ["Mount Everest"], "doc2": ["Alice", "Bob"]}
 
-    elif config == {"max_window": 8, "window_overlap": 2}:
+    elif config == CONFIG_MAX_WINDOW_WITH_STRIDE:
         # We get two annotations for Bob because the window overlaps with the previous one.
         # This is not a problem because annotations get de-duplicated during serialization.
         assert resolved_annotations == {"doc1": ["Mount Everest"], "doc2": ["Alice", "Bob", "Bob"]}
 
-    elif config == {"max_window": 8}:
+    elif config == CONFIG_MAX_WINDOW:
         assert resolved_annotations == {"doc1": ["Mount Everest"], "doc2": ["Alice", "Bob"]}
 
-    elif config == {"partition_annotation": "sentences"}:
+    elif config == CONFIG_PARTITIONS:
         assert resolved_annotations == {"doc2": ["Bob"]}
 
     else:
