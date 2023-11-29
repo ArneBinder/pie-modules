@@ -15,29 +15,26 @@ logger = logging.getLogger(__name__)
 
 # FIXTURES_DIR = FIXTURES_ROOT / "taskmodules" / "gmam_taskmodule"
 
+DUMP_FIXTURE_DATA = False
+
 
 def _config_to_str(cfg: Dict[str, str]) -> str:
     result = "-".join([f"{k}={cfg[k]}" for k in sorted(cfg)])
     return result
 
 
-CONFIGS = [
-    {"span_end_mode": "first_token_of_last_word"},
-    {"span_end_mode": "last_token"},
-]
-CONFIGS_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
-
-DUMP_FIXTURE_DATA = False
+CONFIGS = [{}, {"partition_layer_name": "sentences"}]
+CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
 
 
-@pytest.fixture(scope="module", params=CONFIGS_DICT.keys())
-def config(request):
-    return CONFIGS_DICT[request.param]
+@pytest.fixture(scope="module", params=CONFIG_DICT.keys())
+def config_str(request):
+    return request.param
 
 
 @pytest.fixture(scope="module")
-def config_str(config):
-    return _config_to_str(config)
+def config(config_str):
+    return CONFIG_DICT[config_str]
 
 
 @pytest.fixture(scope="module")
@@ -85,20 +82,6 @@ def test_document(document):
     assert len(sentences) == 2
     assert str(sentences[0]) == "This is a dummy text about nothing."
     assert str(sentences[1]) == "Trust me."
-
-
-CONFIGS = [{}, {"partition_layer_name": "sentences"}]
-CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
-
-
-@pytest.fixture(scope="module", params=CONFIG_DICT.keys())
-def config_str(request):
-    return request.param
-
-
-@pytest.fixture(scope="module")
-def config(config_str):
-    return CONFIG_DICT[config_str]
 
 
 @pytest.fixture(scope="module")
