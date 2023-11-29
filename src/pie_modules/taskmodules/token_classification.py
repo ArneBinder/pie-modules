@@ -94,7 +94,6 @@ class TokenClassificationTaskModule(TaskModuleType):
         labels: Optional[List[str]] = None,
         max_window: Optional[int] = None,
         window_overlap: int = 0,
-        show_statistics: bool = False,
         include_ill_formed_predictions: bool = True,
         tokenize_kwargs: Optional[Dict[str, Any]] = None,
         pad_kwargs: Optional[Dict[str, Any]] = None,
@@ -125,7 +124,6 @@ class TokenClassificationTaskModule(TaskModuleType):
         self.partition_annotation = partition_annotation
         self.labels = labels
         self.label_pad_token_id = label_pad_token_id
-        self.show_statistics = show_statistics
         self.include_ill_formed_predictions = include_ill_formed_predictions
         self.tokenize_kwargs = tokenize_kwargs or {}
         self.pad_kwargs = pad_kwargs or {}
