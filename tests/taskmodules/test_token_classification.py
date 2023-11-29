@@ -24,8 +24,17 @@ def _config_to_str(cfg: Dict[str, Any]) -> str:
 
 
 CONFIG_DEFAULT = {}
-CONFIG_MAX_WINDOW = {"max_window": 8}
-CONFIG_MAX_WINDOW_WITH_STRIDE = {"max_window": 8, "window_overlap": 2}
+CONFIG_MAX_WINDOW = {
+    "tokenize_kwargs": {"max_length": 8, "truncation": True, "return_overflowing_tokens": True}
+}
+CONFIG_MAX_WINDOW_WITH_STRIDE = {
+    "tokenize_kwargs": {
+        "max_length": 8,
+        "stride": 2,
+        "truncation": True,
+        "return_overflowing_tokens": True,
+    }
+}
 CONFIG_PARTITIONS = {"partition_annotation": "sentences"}
 
 CONFIGS: List[Dict[str, Any]] = [
