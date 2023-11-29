@@ -1,3 +1,4 @@
+from .pointer_network_for_joint_taskmodule import PointerNetworkForJointTaskModule
 from .extractive_question_answering import ExtractiveQuestionAnsweringTaskModule
 from .re_text_classification_with_indices import (
     RETextClassificationWithIndicesTaskModule,
