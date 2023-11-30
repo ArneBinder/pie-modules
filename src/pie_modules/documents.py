@@ -15,7 +15,7 @@ class ExtractiveQADocument(TextBasedDocument):
     # targets the text field and (one entry of) the questions layer, so named_targets needs to contain
     # these keys. See ExtractiveAnswer.TARGET_NAMES for the required *values* for named_targets.
     answers: AnnotationList[ExtractiveAnswer] = annotation_field(
-        named_targets={"text": "base", "questions": "questions"}
+        named_targets={"base": "text", "questions": "questions"}
     )
 
 
@@ -28,5 +28,5 @@ class TokenizedExtractiveQADocument(TokenBasedDocument):
     # targets the text field and (one entry of) the questions layer, so named_targets needs to contain
     # these keys. See ExtractiveAnswer.TARGET_NAMES for the required *values* for named_targets.
     answers: AnnotationList[ExtractiveAnswer] = annotation_field(
-        named_targets={"tokens": "base", "questions": "questions"}
+        named_targets={"base": "tokens", "questions": "questions"}
     )
