@@ -3,7 +3,7 @@ import logging
 import re
 import string
 from collections import defaultdict
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import pandas as pd
 from pytorch_ie.core import DocumentMetric
@@ -16,12 +16,10 @@ logger = logging.getLogger(__name__)
 class SQuADF1(DocumentMetric):
     def __init__(
         self,
-        no_answer_probs: Optional[Dict[str, float]] = None,
         no_answer_probability_threshold: float = 1.0,
         show_as_markdown: bool = False,
     ) -> None:
         super().__init__()
-        self.no_answer_probs = no_answer_probs
         self.no_answer_probability_threshold = no_answer_probability_threshold
         self.default_na_prob = 0.0
         self.show_as_markdown = show_as_markdown
@@ -29,11 +27,8 @@ class SQuADF1(DocumentMetric):
     def reset(self):
         self.exact_scores = {}
         self.f1_scores = {}
-        # qas_id_to_has_answer = {example.qas_id: bool(example.answers) for example in examples}
         self.qas_id_to_has_answer = {}
-        # has_answer_qids = [qas_id for qas_id, has_answer in qas_id_to_has_answer.items() if has_answer]
         self.has_answer_qids = []
-        # no_answer_qids = [qas_id for qas_id, has_answer in qas_id_to_has_answer.items() if not has_answer]
         self.no_answer_qids = []
 
     def _update(self, document: ExtractiveQADocument):
@@ -45,22 +40,17 @@ class SQuADF1(DocumentMetric):
             predicted_answers_for_questions[ann.question].append(ann)
 
         for idx, question in enumerate(document.questions):
-            # qas_id = example.qas_id
             if document.id is None:
                 qas_id = f"text={document.text},question={question}"
             else:
                 qas_id = document.id + f"_{idx}"
 
-            # qas_id_to_has_answer = {example.qas_id: bool(example.answers) for example in examples}
             self.qas_id_to_has_answer[qas_id] = bool(gold_answers_for_questions[question])
-            # has_answer_qids = [qas_id for qas_id, has_answer in qas_id_to_has_answer.items() if has_answer]
-            # no_answer_qids = [qas_id for qas_id, has_answer in qas_id_to_has_answer.items() if not has_answer]
             if self.qas_id_to_has_answer[qas_id]:
                 self.has_answer_qids.append(qas_id)
             else:
                 self.no_answer_qids.append(qas_id)
 
-            # gold_answers = [answer["text"] for answer in example.answers if self.normalize_answer(answer["text"])]
             gold_answers = [
                 str(answer)
                 for answer in gold_answers_for_questions[question]
@@ -72,10 +62,7 @@ class SQuADF1(DocumentMetric):
                 gold_answers = [""]
 
             predicted_answers = predicted_answers_for_questions[question]
-            # prediction = preds[qas_id]
-            # if qas_id not in preds:
             if len(predicted_answers) == 0:
-                # logger.warning(f"Missing prediction for {qas_id}")
                 prediction = ""
             else:
                 prediction = str(max(predicted_answers, key=lambda ann: ann.score))
@@ -88,12 +75,7 @@ class SQuADF1(DocumentMetric):
     def apply_no_ans_threshold(self, scores: Dict[str, float]) -> Dict[str, float]:
         new_scores = {}
         for qid, s in scores.items():
-            # pred_na = na_probs[qid] > na_prob_thresh
-            no_prob = (
-                self.no_answer_probs[qid]
-                if self.no_answer_probs is not None
-                else self.default_na_prob
-            )
+            no_prob = self.default_na_prob
             pred_na = no_prob > self.no_answer_probability_threshold
             if pred_na:
                 new_scores[qid] = float(not self.qas_id_to_has_answer[qid])
@@ -146,10 +128,6 @@ class SQuADF1(DocumentMetric):
                 exact_threshold, f1_threshold, qid_list=self.no_answer_qids
             )
             self.merge_eval(evaluation, no_ans_eval, "NoAns")
-
-        if self.no_answer_probs:
-            raise NotImplementedError
-            # find_all_best_thresh(evaluation, preds, exact, f1, no_answer_probs, qas_id_to_has_answer)
 
         # return evaluation
         result = dict(evaluation)
