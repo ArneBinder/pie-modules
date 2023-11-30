@@ -1,10 +1,12 @@
+import logging
+
 from pie_modules.annotations import ExtractiveAnswer, Question
 from pie_modules.documents import ExtractiveQADocument
 from pie_modules.metrics import SQuADF1
 
 
-def test_squad_f1_exact_match():
-    metric = SQuADF1()
+def test_squad_f1_exact_match(caplog):
+    metric = SQuADF1(show_as_markdown=True)
 
     # create a test document
     # sample edit
@@ -30,7 +32,22 @@ def test_squad_f1_exact_match():
         "text=This is a test document.,question=What is this?": True
     }
 
-    metric_values = metric._compute()
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        metric_values = metric._compute()
+    assert len(caplog.records) == 1
+    assert str(caplog.records[0].message) == (
+        "\n"
+        "|              |   0 |\n"
+        "|:-------------|----:|\n"
+        "| exact        | 100 |\n"
+        "| f1           | 100 |\n"
+        "| total        |   1 |\n"
+        "| HasAns_exact | 100 |\n"
+        "| HasAns_f1    | 100 |\n"
+        "| HasAns_total |   1 |"
+    )
+
     assert metric_values == {
         "HasAns_exact": 100.0,
         "HasAns_f1": 100.0,
