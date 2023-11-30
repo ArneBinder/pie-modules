@@ -3,7 +3,7 @@ import dataclasses
 from pytorch_ie.core import AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 
-from pie_models.annotations import ExtractiveAnswer, Question
+from pie_modules.annotations import ExtractiveAnswer, Question
 
 
 @dataclasses.dataclass
