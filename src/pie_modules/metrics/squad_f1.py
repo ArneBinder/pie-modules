@@ -13,15 +13,26 @@ from pie_modules.documents import ExtractiveQADocument
 logger = logging.getLogger(__name__)
 
 
+def prefix_keys(d: Dict[str, float], prefix: str) -> Dict[str, float]:
+    return {f"{prefix}_{k}": v for k, v in d.items()}
+
+
 class SQuADF1(DocumentMetric):
-    def __init__(
-        self,
-        no_answer_probability_threshold: float = 1.0,
-        show_as_markdown: bool = False,
-    ) -> None:
+    """Computes the F1 score for extractive question answering in the style of the official SQuAD
+    evaluation script. The metric is computed for each document-question pair and then averaged
+    over all these pairs.
+
+    The code is a simplified version of
+    https://github.com/huggingface/transformers/blob/ac5893756bafcd745d93a442cf36f984545dbad8/src/transformers/data/metrics/squad_metrics.py.
+
+    Args:
+        show_as_markdown: If True, the metric result is printed as markdown table when calling `compute()`.
+            Default: False.
+    """
+
+    def __init__(self, show_as_markdown: bool = False) -> None:
         super().__init__()
-        self.no_answer_probability_threshold = no_answer_probability_threshold
-        self.default_na_prob = 0.0
+
         self.show_as_markdown = show_as_markdown
 
     def reset(self):
@@ -72,68 +83,40 @@ class SQuADF1(DocumentMetric):
             )
             self.f1_scores[qas_id] = max(self.compute_f1(a, prediction) for a in gold_answers)
 
-    def apply_no_ans_threshold(self, scores: Dict[str, float]) -> Dict[str, float]:
-        new_scores = {}
-        for qid, s in scores.items():
-            no_prob = self.default_na_prob
-            pred_na = no_prob > self.no_answer_probability_threshold
-            if pred_na:
-                new_scores[qid] = float(not self.qas_id_to_has_answer[qid])
-            else:
-                new_scores[qid] = s
-        return new_scores
-
-    def make_eval_dict(
-        self, exact_scores: Dict[str, float], f1_scores: Dict[str, float], qid_list=None
-    ) -> collections.OrderedDict:
-        if not qid_list:
-            total = len(exact_scores)
-            return collections.OrderedDict(
-                [
-                    ("exact", 100.0 * sum(exact_scores.values()) / total),
-                    ("f1", 100.0 * sum(f1_scores.values()) / total),
-                    ("total", total),
-                ]
-            )
+    def make_eval_dict(self, qid_list=None) -> Dict[str, float]:
+        if qid_list:
+            exact_scores = [self.exact_scores[k] for k in qid_list]
+            f1_scores = [self.f1_scores[k] for k in qid_list]
         else:
-            total = len(qid_list)
-            return collections.OrderedDict(
-                [
-                    ("exact", 100.0 * sum(exact_scores[k] for k in qid_list) / total),
-                    ("f1", 100.0 * sum(f1_scores[k] for k in qid_list) / total),
-                    ("total", total),
-                ]
-            )
+            exact_scores = self.exact_scores.values()
+            f1_scores = self.f1_scores.values()
 
-    def merge_eval(
-        self, main_eval: Dict[str, float], new_eval: Dict[str, float], prefix: str
-    ) -> None:
-        for k in new_eval:
-            main_eval[f"{prefix}_{k}"] = new_eval[k]
+        total = len(exact_scores)
+        return {
+            "exact": 100.0 * sum(exact_scores) / total,
+            "f1": 100.0 * sum(f1_scores) / total,
+            "total": total,
+        }
 
-    def _compute(self) -> Dict[str, Dict[str, float]]:
-        exact_threshold = self.apply_no_ans_threshold(self.exact_scores)
-        f1_threshold = self.apply_no_ans_threshold(self.f1_scores)
-
-        evaluation = self.make_eval_dict(exact_threshold, f1_threshold)
+    def _compute(self) -> Dict[str, float]:
+        evaluation = self.make_eval_dict()
 
         if self.has_answer_qids:
-            has_ans_eval = self.make_eval_dict(
-                exact_threshold, f1_threshold, qid_list=self.has_answer_qids
+            has_ans_eval = prefix_keys(
+                self.make_eval_dict(qid_list=self.has_answer_qids), "HasAns"
             )
-            self.merge_eval(evaluation, has_ans_eval, "HasAns")
+            evaluation.update(has_ans_eval)
 
         if self.no_answer_qids:
-            no_ans_eval = self.make_eval_dict(
-                exact_threshold, f1_threshold, qid_list=self.no_answer_qids
-            )
-            self.merge_eval(evaluation, no_ans_eval, "NoAns")
+            no_ans_eval = prefix_keys(self.make_eval_dict(qid_list=self.no_answer_qids), "NoAns")
+            evaluation.update(no_ans_eval)
 
         # return evaluation
-        result = dict(evaluation)
         if self.show_as_markdown:
-            logger.info(f"\n{pd.Series(result, name=self.current_split).round(3).to_markdown()}")
-        return result
+            logger.info(
+                f"\n{pd.Series(evaluation, name=self.current_split).round(3).to_markdown()}"
+            )
+        return evaluation
 
     def normalize_answer(self, s: str) -> str:
         """Lower text and remove punctuation, articles and extra whitespace."""
@@ -163,16 +146,16 @@ class SQuADF1(DocumentMetric):
         return int(self.normalize_answer(a_gold) == self.normalize_answer(a_pred))
 
     def compute_f1(self, a_gold: str, a_pred: str) -> float:
-        gold_toks = self.get_tokens(a_gold)
-        pred_toks = self.get_tokens(a_pred)
-        common = collections.Counter(gold_toks) & collections.Counter(pred_toks)
+        gold_tokens = self.get_tokens(a_gold)
+        pred_tokens = self.get_tokens(a_pred)
+        common = collections.Counter(gold_tokens) & collections.Counter(pred_tokens)
         num_same = sum(common.values())
-        if len(gold_toks) == 0 or len(pred_toks) == 0:
+        if len(gold_tokens) == 0 or len(pred_tokens) == 0:
             # If either is no-answer, then F1 is 1 if they agree, 0 otherwise
-            return int(gold_toks == pred_toks)
+            return int(gold_tokens == pred_tokens)
         if num_same == 0:
             return 0
-        precision = 1.0 * num_same / len(pred_toks)
-        recall = 1.0 * num_same / len(gold_toks)
+        precision = 1.0 * num_same / len(pred_tokens)
+        recall = 1.0 * num_same / len(gold_tokens)
         f1 = (2 * precision * recall) / (precision + recall)
         return f1
