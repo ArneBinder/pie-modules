@@ -1,6 +1,5 @@
 import dataclasses
 import logging
-from collections import defaultdict
 from typing import (
     Any,
     Callable,
@@ -17,7 +16,6 @@ from typing import (
 
 import torch
 import torch.nn.functional as F
-from pytorch_ie import Document
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 from pytorch_ie.core import (
     Annotation,
