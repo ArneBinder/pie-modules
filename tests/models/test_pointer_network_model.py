@@ -103,6 +103,7 @@ def taskmodule(document):
         50265: [45260],
         50266: [39763],
     }
+    assert taskmodule.label2id == {"topic": 2, "none": 3, "is_about": 4, "person": 5, "content": 6}
 
     return taskmodule
 
@@ -115,9 +116,6 @@ def test_taskmodule(taskmodule):
 def model(taskmodule) -> PointerNetworkModel:
     torch.manual_seed(42)
     model = PointerNetworkModel(
-        relation_ids=taskmodule.relation_ids,
-        span_ids=taskmodule.span_ids,
-        none_ids=taskmodule.none_ids,
         label_ids=taskmodule.label_ids,
         bart_model="facebook/bart-base",
         bos_id=taskmodule.bos_id,
@@ -145,6 +143,11 @@ def model(taskmodule) -> PointerNetworkModel:
         biloss=True,
         lr=5e-5,
         max_target_positions=512,
+        annotation_encoder_decoder_kwargs=dict(
+            span_ids=taskmodule.span_ids,
+            none_id=taskmodule.none_ids,
+            relation_ids=taskmodule.relation_ids,
+        ),
     )
     # set model to training mode, otherwise model.encoder.bart_encoder.training will be False!
     model.train()

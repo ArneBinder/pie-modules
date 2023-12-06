@@ -516,11 +516,6 @@ class PointerNetworkModel(PyTorchIEModel):
 
     def __init__(
         self,
-        # just required for the decoding constraints
-        relation_ids: List[int],
-        span_ids: List[int],
-        none_ids: int,
-        # seq2seq_model: Seq2SeqModel START
         bart_model: str,
         bos_id: int,
         eos_id: int,
@@ -571,8 +566,6 @@ class PointerNetworkModel(PyTorchIEModel):
 
         self.save_hyperparameters()
 
-        assert relation_ids is not None and span_ids is not None and none_ids is not None
-
         model = BartModel.from_pretrained(bart_model)
         num_tokens, _ = model.encoder.embed_tokens.weight.shape
         model.resize_token_embeddings(vocab_size)
@@ -613,9 +606,6 @@ class PointerNetworkModel(PyTorchIEModel):
         else:
             raise RuntimeError("Unsupported feature.")
 
-        self.decoder.relation_ids = relation_ids
-        self.decoder.span_ids = span_ids
-        self.decoder.none_ids = none_ids
         self.generator = SequenceGenerator(
             self.decoder,
             max_length=max_length,
@@ -641,11 +631,11 @@ class PointerNetworkModel(PyTorchIEModel):
                 id2label=target_id2token,
                 bos_id=bos_id,
                 eos_id=eos_id,
-                span_ids=span_ids,
-                relation_ids=relation_ids,
-                none_id=none_ids,
                 **(annotation_encoder_decoder_kwargs or {}),
             )
+            self.decoder.relation_ids = annotation_encoder_decoder.relation_ids
+            self.decoder.span_ids = annotation_encoder_decoder.span_ids
+            self.decoder.none_ids = annotation_encoder_decoder.none_id
         else:
             raise Exception(
                 f"Unsupported annotation encoder decoder: {annotation_encoder_decoder_name}"
