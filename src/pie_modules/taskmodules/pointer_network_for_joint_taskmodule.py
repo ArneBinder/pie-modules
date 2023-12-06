@@ -126,6 +126,13 @@ class AnnotationEncoderDecoderInterface:
     ) -> Tuple[Dict[str, List[Annotation]], Any]:
         raise NotImplementedError
 
+    def build_constraints(
+        self,
+        src_len: int,
+        tgt_tokens: List[int],
+    ) -> List[List[int]]:
+        raise NotImplementedError
+
 
 class AnnotationEncoderDecoder(AnnotationEncoderDecoderInterface):
     span_layer_name = "span"
@@ -159,6 +166,10 @@ class AnnotationEncoderDecoder(AnnotationEncoderDecoderInterface):
     @property
     def target_ids(self):
         return [self.bos_id, self.eos_id] + self.relation_ids + [self.none_id] + self.span_ids
+
+    @property
+    def pointer_offset(self) -> int:
+        return len(self.target_ids)
 
     def sanitize_sequence(
         self,
@@ -387,6 +398,66 @@ class AnnotationEncoderDecoder(AnnotationEncoderDecoderInterface):
             self.relation_layer_name: relation_layer,
         }, _errors
 
+    def _pointer_tag(
+        self,
+        last: List[int],
+        t: int,
+        idx: int,
+        arr: np.ndarray,
+    ) -> np.ndarray:
+        if t == 0:  # start # c1 [0, 1]
+            arr[: self.pointer_offset] = 0
+        elif idx % 7 == 0:  # c1 [0,1, 23]
+            arr[:t] = 0
+        elif idx % 7 == 1:  # tc1 [0,1,23, tc] span标签设为1
+            arr = np.zeros_like(arr, dtype=int)
+            for i in self.span_ids:
+                arr[i] = 1
+        elif idx % 7 == 2:  # c2 [0,1,23,tc, 45]
+            arr[: self.pointer_offset] = 0
+            arr[last[-3] : last[-2]] = 0
+        elif idx % 7 == 3:  # c2 [0,1,23,tc,45, 67]
+            arr[:t] = 0
+            if t < last[-4]:
+                arr[last[-4] :] = 0
+            else:
+                arr[last[-4] : last[-3]] = 0
+        elif idx % 7 == 4:  # tc2 [0,1,23,tc,45,67, tc]
+            arr = np.zeros_like(arr, dtype=int)
+            for i in self.span_ids:
+                arr[i] = 1
+        elif idx % 7 == 5:  # r [0,1,23,tc,45,67,tc, r]
+            arr = np.zeros_like(arr, dtype=int)
+            for i in self.relation_ids:
+                arr[i] = 1
+        elif idx % 7 == 6:  # next
+            arr[: self.pointer_offset] = 0
+        return arr
+
+    def build_constraints(
+        self,
+        src_len: int,
+        tgt_tokens: List[int],
+    ) -> List[List[int]]:
+        # strip the bos token
+        target = tgt_tokens[1:]
+        # pad for 0
+        likely_hood = np.ones(src_len + self.pointer_offset, dtype=int)
+        likely_hood[: self.pointer_offset] = 0
+        CMP_tag: List[np.ndarray] = [likely_hood]
+        for idx, t in enumerate(target[:-1]):
+            last7 = target[idx - 7 if idx - 7 > 0 else 0 : idx + 1]
+            likely_hood = np.ones(src_len + self.pointer_offset, dtype=int)
+            tag = self._pointer_tag(last=last7, t=t, idx=idx, arr=likely_hood)
+            tag[self.none_id] = 1
+            CMP_tag.append(tag)
+        last_end = np.zeros(src_len + self.pointer_offset, dtype=int)
+        last_end[self.none_id] = 1
+        last_end[target[-1]] = 1
+        CMP_tag[-1] = last_end
+        result = [i.tolist() for i in CMP_tag]
+        return result
+
 
 @dataclasses.dataclass
 class DocumentType(Document):
@@ -484,71 +555,6 @@ def _span_is_in_partition(span: Span, partition: Optional[Span] = None):
         partition.start <= span.start < partition.end
         and partition.start < span.end <= partition.end
     )
-
-
-def pointer_tag(
-    last: List[int],
-    t: int,
-    idx: int,
-    arr: np.ndarray,
-    span_ids: List[int],
-    relation_ids: List[int],
-    shift: int,
-) -> np.ndarray:
-    if t == 0:  # start # c1 [0, 1]
-        arr[:shift] = 0
-    elif idx % 7 == 0:  # c1 [0,1, 23]
-        arr[:t] = 0
-    elif idx % 7 == 1:  # tc1 [0,1,23, tc] span标签设为1
-        arr = np.zeros_like(arr, dtype=int)
-        for i in span_ids:
-            arr[i] = 1
-    elif idx % 7 == 2:  # c2 [0,1,23,tc, 45]
-        arr[:shift] = 0
-        arr[last[-3] : last[-2]] = 0
-    elif idx % 7 == 3:  # c2 [0,1,23,tc,45, 67]
-        arr[:t] = 0
-        if t < last[-4]:
-            arr[last[-4] :] = 0
-        else:
-            arr[last[-4] : last[-3]] = 0
-    elif idx % 7 == 4:  # tc2 [0,1,23,tc,45,67, tc]
-        arr = np.zeros_like(arr, dtype=int)
-        for i in span_ids:
-            arr[i] = 1
-    elif idx % 7 == 5:  # r [0,1,23,tc,45,67,tc, r]
-        arr = np.zeros_like(arr, dtype=int)
-        for i in relation_ids:
-            arr[i] = 1
-    elif idx % 7 == 6:  # next
-        arr[:shift] = 0
-    return arr
-
-
-def CPM_prepare(
-    src_len: int,
-    target: list,
-    span_ids: List[int],
-    relation_ids: List[int],
-    none_ids: int,
-    shift: int = 0,
-) -> List[List[int]]:
-    # pad for 0
-    likely_hood = np.ones(src_len + shift, dtype=int)
-    likely_hood[:shift] = 0
-    CMP_tag: List[np.ndarray] = [likely_hood]
-    for idx, t in enumerate(target[:-1]):
-        last7 = target[idx - 7 if idx - 7 > 0 else 0 : idx + 1]
-        likely_hood = np.ones(src_len + shift, dtype=int)
-        tag = pointer_tag(last7, t, idx, likely_hood, span_ids, relation_ids, shift)
-        tag[none_ids] = 1
-        CMP_tag.append(tag)
-    last_end = np.zeros(src_len + shift, dtype=int)
-    last_end[none_ids] = 1
-    last_end[target[-1]] = 1
-    CMP_tag[-1] = last_end
-    result = [i.tolist() for i in CMP_tag]
-    return result
 
 
 # TODO: use enable BucketSampler (just mentioning here because no better place available for now)
@@ -1013,18 +1019,12 @@ class PointerNetworkForJointTaskModule(TaskModule):
             "tgt_seq_len": len(tgt_tokens),
         }
         if self.create_constraints:
-            CPM_tag = CPM_prepare(
+            constraints = self.annotation_encoder_decoder.build_constraints(
                 src_len=task_encoding.inputs["src_seq_len"],
-                # strip the bos token
-                target=tgt_tokens[1:],
-                # shift=target_shift,
-                shift=self.pointer_offset,
-                span_ids=self.span_ids,
-                relation_ids=self.relation_ids,
-                none_ids=self.none_ids,
+                tgt_tokens=tgt_tokens,
             )
-            assert CPM_tag is not None
-            result["CPM_tag"] = CPM_tag
+            assert constraints is not None
+            result["CPM_tag"] = constraints
         self.maybe_log_example(task_encoding=task_encoding, targets=result)
         return result
 
