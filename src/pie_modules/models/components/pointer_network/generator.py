@@ -209,10 +209,6 @@ def _beam_search_generate(
     decode_mask=True,
 ) -> torch.LongTensor:
     assert do_sample is False
-    # 进行beam search
-    relation_ids = decoder.relation_ids
-    span_ids = decoder.span_ids
-    none_ids = decoder.none_ids
     device = _get_model_device(decoder)
     if tokens is None:
         if bos_token_id is None:
@@ -318,6 +314,9 @@ def _beam_search_generate(
         decode_idx = (cur_len - 1) % 7
         scores = decoder.decode(token_ids, state)[0]  # (bsz x num_beams, vocab_size)
         if decode_mask:
+            relation_ids = decoder.relation_ids
+            span_ids = decoder.span_ids
+            none_ids = decoder.none_ids
             if decode_idx == 3:
                 eoc = token_ids[:, -2].squeeze()
                 soc = token_ids[:, -3].squeeze()
