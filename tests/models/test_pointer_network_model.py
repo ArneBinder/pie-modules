@@ -97,6 +97,7 @@ def taskmodule(document):
         "<<person>>": 5,
         "<<content>>": 6,
     }
+    assert taskmodule.id2label == {2: "topic", 3: "none", 4: "is_about", 5: "person", 6: "content"}
     assert len(taskmodule.tokenizer) == 50270
     assert taskmodule.embedding_weight_mapping == {
         50267: [354, 1215, 9006],
@@ -118,13 +119,12 @@ def test_taskmodule(taskmodule):
 def model(taskmodule) -> PointerNetworkModel:
     torch.manual_seed(42)
     model = PointerNetworkModel(
-        label_ids=taskmodule.label_ids,
         bart_model="facebook/bart-base",
+        label_ids=taskmodule.label_ids,
         bos_id=taskmodule.bos_id,
         eos_id=taskmodule.eos_id,
         pad_id=taskmodule.pad_id,
         target_token_ids=taskmodule.target_token_ids,
-        target_tokens=taskmodule.target_tokens,
         pad_token_id=taskmodule.tokenizer.pad_token_id,
         vocab_size=len(taskmodule.tokenizer),
         embedding_weight_mapping=taskmodule.embedding_weight_mapping,
@@ -146,6 +146,7 @@ def model(taskmodule) -> PointerNetworkModel:
         lr=5e-5,
         max_target_positions=512,
         annotation_encoder_decoder_kwargs=dict(
+            id2label=taskmodule.id2label,
             span_ids=taskmodule.span_ids,
             none_id=taskmodule.none_ids,
             relation_ids=taskmodule.relation_ids,
@@ -246,12 +247,12 @@ def test_metric_val(model, batch):
     assert values == {
         "em": 0.0,
         "span": {
-            "<<content>>": {"acc": 0, "recall": 0.0, "f1": 0.0},
-            "<<person>>": {"acc": 0, "recall": 0.0, "f1": 0.0},
-            "<<topic>>": {"acc": 0, "recall": 0.0, "f1": 0.0},
+            "content": {"acc": 0, "recall": 0.0, "f1": 0.0},
+            "person": {"acc": 0, "recall": 0.0, "f1": 0.0},
+            "topic": {"acc": 0, "recall": 0.0, "f1": 0.0},
         },
         "span/micro": {"acc": 0, "recall": 0.0, "f1": 0.0},
-        "relation": {"<<is_about>>": {"acc": 0, "recall": 0.0, "f1": 0.0}},
+        "relation": {"is_about": {"acc": 0, "recall": 0.0, "f1": 0.0}},
         "relation/micro": {"acc": 0, "recall": 0.0, "f1": 0.0},
         "invalid/len": 0.0,
         "invalid/order": 0.0,
