@@ -53,6 +53,24 @@ class TaskOutput:
 
 @TaskModule.register()
 class ExtractiveQuestionAnsweringTaskModule(TaskModule):
+    """Task module for extractive question answering.
+
+    This task module expects that the document contains an annotation layer for answers.
+    Each answer is expected to have a target layer for the question it answers.
+
+    The task module will create a task encoding for each question-answer pair.
+    The input encoding will be the tokenized document with the question as the second sequence.
+    The target encoding will be the start and end position of the answer in the context.
+    The task module will create a dummy target encoding if there is no answer for the question.
+
+    Args:
+        tokenizer_name_or_path: The name or path of the tokenizer to use.
+        max_length: The maximum length of the input sequence.
+        answer_annotation: The name of the annotation layer for answers. Defaults to "answers".
+        question_annotation: The name of the annotation layer for questions. Defaults to "questions".
+        tokenize_kwargs: Additional keyword arguments for the tokenizer. Defaults to None.
+    """
+
     DOCUMENT_TYPE = ExtractiveQADocument
 
     def __init__(

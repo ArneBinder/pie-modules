@@ -36,6 +36,16 @@ TEST = "test"
 class SimpleExtractiveQuestionAnsweringModel(
     PyTorchIEModel, RequiresModelNameOrPath, RequiresMaxInputLength
 ):
+    """A simple extractive question answering model that uses the Pytorch-Lightning transformers
+    library. This model wraps around the question answering model from the transformers library. It
+    uses the ExtractiveQuestionAnsweringTaskModule to create the input and target encodings.
+
+    Args:
+        model_name_or_path: The name or path of the model to use.
+        max_input_length: The maximum length of the input sequence.
+        learning_rate: The learning rate to use for training. Defaults to 1e-5.
+    """
+
     def __init__(
         self,
         model_name_or_path: str,
