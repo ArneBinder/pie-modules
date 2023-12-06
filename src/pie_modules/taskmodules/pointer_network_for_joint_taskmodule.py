@@ -11,11 +11,13 @@ from typing import (
     Sequence,
     Set,
     Tuple,
+    Type,
     Union,
 )
 
 import torch
 import torch.nn.functional as F
+from pytorch_ie import Document
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 from pytorch_ie.core import (
     Annotation,
@@ -39,7 +41,7 @@ from pytorch_ie.documents import (
 from transformers import AutoTokenizer, PreTrainedTokenizer
 from typing_extensions import TypeAlias
 
-from ..document.processing import tokenize_document
+from ..document.processing import token_based_document_to_text_based, tokenize_document
 from .components.seq2seq import (
     PointerNetworkSpanAndRelationEncoderDecoder,
     PointerNetworkSpanEncoderDecoder,
@@ -219,14 +221,14 @@ class PointerNetworkForJointTaskModule(
         self.log_first_n_examples = log_first_n_examples
 
     @property
-    def document_type(self):
+    def document_type(self) -> Type[TextBasedDocument]:
         if self.partition_layer_name is None:
             return TextDocumentWithLabeledSpansAndBinaryRelations
         else:
             return TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
 
     @property
-    def tokenized_document_type(self):
+    def tokenized_document_type(self) -> Type[TokenBasedDocument]:
         if self.partition_layer_name is None:
             return TokenDocumentWithLabeledSpansAndBinaryRelations
         else:
@@ -402,134 +404,47 @@ class PointerNetworkForJointTaskModule(
             logger.info(f"tgt_tokens:    {' '.join(tgt_tokens)}")
             self.log_first_n_examples -= 1
 
+    def tokenize_document(self, document: DocumentType) -> List[TokenBasedDocument]:
+        field_mapping = {
+            self.span_layer_name: "labeled_spans",
+            self.relation_layer_name: "binary_relations",
+        }
+        if self.partition_layer_name is not None:
+            field_mapping[self.partition_layer_name] = "labeled_partitions"
+            partition_layer = "labeled_partitions"
+        else:
+            partition_layer = None
+        casted_document = document.as_type(self.document_type, field_mapping=field_mapping)
+        tokenized_docs = tokenize_document(
+            casted_document,
+            tokenizer=self.tokenizer,
+            result_document_type=self.tokenized_document_type,
+            partition_layer=partition_layer,
+            # TODO: set both to True (will require changes in tokenize_document for windowing)
+            strict_span_conversion=False,
+            verbose=False,
+            **self.tokenizer_kwargs,
+        )
+
+        return tokenized_docs
+
     def encode_input(
         self, document: DocumentType, is_training: bool = False
     ) -> Optional[Union[TaskEncodingType, Sequence[TaskEncodingType]]]:
-        task_encodings = []
-        text = getattr(document, self.text_field_name)
-
-        if self.word_layer_name is not None:
-            char2word = {}
-            word2char = []
-            for word_idx, word in enumerate(document[self.word_layer_name]):
-                word2char.append((word.start, word.end))
-                for char_idx in range(word.start, word.end):
-                    char2word[char_idx] = word_idx
-        else:
-            char2word = None
-            word2char = None
-
-        if self.partition_layer_name is not None:
-            partitions = document[self.partition_layer_name]
-        else:
-            partitions = [None]
-        for partition in partitions:
-            tokenizer_encodings = []
-            if self.tokenize_per_word:
-                # TODO: implement truncation? striding?
-                if len(self.tokenizer_kwargs) > 0:
-                    raise NotImplementedError(
-                        "tokenizer_kwargs not supported for tokenize_per_word"
-                    )
-                if self.word_layer_name not in document:
-                    raise Exception(
-                        f'the annotation layer "{self.word_layer_name}" that should contain word annotations '
-                        f"is required if tokenize_per_word is enabled"
-                    )
-                token2char = []
-                src_tokens = [self.tokenizer.bos_token_id]
-                special_tokens_mask = [1]
-                token2char.append((0, 0))
-                for word in document[self.word_layer_name]:
-                    if _span_is_in_partition(span=word, partition=partition):
-                        word_str = text[word.start : word.end]
-                        tokenizer_output = self.tokenizer(
-                            word_str, return_offsets_mapping=True, add_special_tokens=False
-                        )
-                        token_ids = tokenizer_output.input_ids
-                        for start, end in tokenizer_output.offset_mapping:
-                            token2char.append((start + word.start, end + word.start))
-                        src_tokens.extend(token_ids)
-                        special_tokens_mask.extend([0] * len(token_ids))
-                src_tokens.append(self.tokenizer.eos_token_id)
-                special_tokens_mask.append(1)
-                tokenizer_encodings.append((src_tokens, token2char, special_tokens_mask))
-            else:
-                text_partition = (
-                    text[partition.start : partition.end] if partition is not None else text
-                )
-                tokenizer_output = self.tokenizer(
-                    text_partition,
-                    return_offsets_mapping=True,
-                    add_special_tokens=True,
-                    return_special_tokens_mask=True,
-                    return_overflowing_tokens=True,
-                    **self.tokenizer_kwargs,
-                )
-                for encoding in tokenizer_output.encodings:
-                    src_tokens = encoding.ids
-                    if partition is not None:
-                        token2char = [
-                            (start + partition.start, end + partition.start)
-                            if not is_special_token
-                            else (start, end)
-                            for (start, end), is_special_token in zip(
-                                encoding.offsets, encoding.special_tokens_mask
-                            )
-                        ]
-                    else:
-                        token2char = encoding.offsets
-                    special_tokens_mask = encoding.special_tokens_mask
-                    tokenizer_encodings.append((src_tokens, token2char, special_tokens_mask))
-
-            for src_tokens, token2char, special_tokens_mask in tokenizer_encodings:
-                src_seq_len = len(src_tokens)
-                inputs = InputEncodingType(src_tokens=src_tokens, src_seq_len=src_seq_len)
-
-                char2token = defaultdict(list)
-                for token_idx, (char_start, char_end) in enumerate(token2char):
-                    for char_idx in range(char_start, char_end):
-                        char2token[char_idx].append(token_idx)
-
-                no_special_token2char = [
-                    start_end
-                    for start_end, is_special_token in zip(token2char, special_tokens_mask)
-                    if not is_special_token
-                ]
-                tokenized_span = Span(
-                    start=no_special_token2char[0][0], end=no_special_token2char[-1][1]
-                )
-                metadata = {
-                    "token2char": token2char,
-                    "char2token": dict(char2token),
-                    "tokenized_span": tokenized_span,
-                }
-                if partition is not None:
-                    metadata["partition"] = partition
-
-                if char2word is not None and word2char is not None:
-                    metadata["char2word"] = char2word
-                    metadata["word2char"] = word2char
-
-                    word2token = []
-                    for char_start, char_end in word2char:
-                        token_start = char2token[char_start][0]
-                        token_end = char2token[char_end - 1][-1] + 1
-                        word2token.append((token_start, token_end))
-
-                    token2word = {}
-                    for word_idx, (token_start, token_end) in enumerate(word2token):
-                        for token_idx in range(token_start, token_end):
-                            token2word[token_idx] = word_idx
-                    metadata["word2token"] = word2token
-                    metadata["token2word"] = token2word
-
-                task_encoding = TaskEncoding(
+        tokenized_docs = self.tokenize_document(document)
+        task_encodings: List[TaskEncodingType] = []
+        for tokenized_doc in tokenized_docs:
+            tokenizer_encoding = tokenized_doc.metadata["tokenizer_encoding"]
+            task_encodings.append(
+                TaskEncoding(
                     document=document,
-                    inputs=inputs,
-                    metadata=metadata,
+                    inputs=InputEncodingType(
+                        src_tokens=tokenizer_encoding.ids,
+                        src_seq_len=len(tokenizer_encoding.ids),
+                    ),
+                    metadata={"tokenized_document": tokenized_doc},
                 )
-                task_encodings.append(task_encoding)
+            )
 
         return task_encodings
 
@@ -567,18 +482,20 @@ class PointerNetworkForJointTaskModule(
             raise Exception(f"annotation has unknown type: {annotation}")
 
     def encode_target(self, task_encoding: TaskEncodingType) -> Optional[TargetEncodingType]:
-        document = task_encoding.document
+        document = task_encoding.metadata["tokenized_document"]
 
-        partition = task_encoding.metadata.get("partition", None)
-        tokenized_span = task_encoding.metadata["tokenized_span"]
+        # partitioning and windowing is already applied in tokenize_document
+        partition = None
+        tokenized_span = None
+        # this filters out annotations with excluded labels
         valid_relations = [
             rel
-            for rel in document[self.relation_layer_name]
+            for rel in document["binary_relations"]
             if self._is_valid_annotation(rel, partition=partition, tokenized_span=tokenized_span)
         ]
         valid_spans = [
             span
-            for span in document[self.span_layer_name]
+            for span in document["labeled_spans"]
             if self._is_valid_annotation(span, partition=partition, tokenized_span=tokenized_span)
         ]
 
@@ -674,9 +591,21 @@ class PointerNetworkForJointTaskModule(
         layers, _errors = self.annotation_encoder_decoder.decode(
             targets=task_output.tolist(), metadata=task_encoding.metadata
         )
+        tokenized_document = task_encoding.metadata["tokenized_document"]
 
-        for span in layers["span"]:
-            yield self.span_layer_name, span
+        # Note: token_based_document_to_text_based() does not yet consider predictions, so we need to clear
+        # the main annotations and attach the predictions to that
+        tokenized_document.labeled_spans.clear()
+        tokenized_document.binary_relations.clear()
+        tokenized_document.labeled_spans.extend(layers["span"])
+        tokenized_document.binary_relations.extend(layers["relation"])
 
-        for rel in layers["relation"]:
-            yield self.relation_layer_name, rel
+        untokenized_document = token_based_document_to_text_based(
+            tokenized_document, result_document_type=self.document_type
+        )
+
+        for span in untokenized_document.labeled_spans:
+            yield self.span_layer_name, span.copy()
+
+        for rel in untokenized_document.binary_relations:
+            yield self.relation_layer_name, rel.copy()
