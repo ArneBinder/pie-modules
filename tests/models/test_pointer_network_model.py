@@ -9,6 +9,7 @@ from pytorch_ie.documents import TextBasedDocument
 
 from pie_modules.models import PointerNetworkModel
 from pie_modules.taskmodules import PointerNetworkForJointTaskModule
+
 # from src.models.components.gmam.metrics import LabeledAnnotationScore, AnnotationLayerMetric
 from tests import FIXTURES_ROOT
 
