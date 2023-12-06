@@ -76,51 +76,27 @@ class PointerNetworkSpanEncoderDecoder(SpanEncoderDecoder):
         self.pointer_offset = pointer_offset
 
     def encode(self, span: Span, metadata: Optional[Dict[str, Any]] = None) -> Optional[List[int]]:
-        # map word indices (open interval) to src_token indices (closed interval, end index points to beginning
-        # of the last word!)
-        if metadata is None:
-            raise Exception("encoding with SpanEncoderDecoder requires metadata")
-        char_start, char_end = span.start, span.end
-        if char_start not in metadata["char2token"]:
-            return None
-        token_start = metadata["char2token"][char_start][0]
-
         if self.span_end_mode == "first_token_of_last_word":
-            if "char2word" not in metadata or "word2token" not in metadata:
-                raise Exception(
-                    "encoding with span_end_mode=first_token_of_last_word requires char2word and word2token mappings"
-                )
-            word_end = metadata["char2word"][char_end - 1] + 1
-            token_end = metadata["word2token"][word_end - 1][0]
+            raise NotImplementedError("span_end_mode=first_token_of_last_word not implemented")
         elif self.span_end_mode == "last_token":
-            if char_end - 1 not in metadata["char2token"]:
-                return None
-            token_end = metadata["char2token"][char_end - 1][-1]
+            return [span.start + self.pointer_offset, span.end + self.pointer_offset - 1]
         else:
             raise Exception(f"unknown span_end_mode: {self.span_end_mode}")
-
-        return [token_start + self.pointer_offset, token_end + self.pointer_offset]
 
     def decode(self, targets: List[int], metadata: Optional[Dict[str, Any]] = None) -> Span:
-        if metadata is None:
-            raise Exception("decoding with SpanEncoderDecoder requires metadata")
-        assert len(targets) == 2
-        token_start, token_end = targets[0] - self.pointer_offset, targets[1] - self.pointer_offset
-        char_start = metadata["token2char"][token_start][0]
+        if len(targets) != 2:
+            raise Exception(
+                f"two target values are required to decode as Span, but targets is: {targets}"
+            )
 
         if self.span_end_mode == "first_token_of_last_word":
-            if "char2word" not in metadata or "word2token" not in metadata:
-                raise Exception(
-                    "decoding with span_end_mode=first_token_of_last_word requires token2word and word2char mappings"
-                )
-            word_end = metadata["token2word"][token_end] + 1
-            char_end = metadata["word2char"][word_end - 1][1]
+            raise NotImplementedError("span_end_mode=first_token_of_last_word not implemented")
         elif self.span_end_mode == "last_token":
-            char_end = metadata["token2char"][token_end][1]
+            return Span(
+                start=targets[0] - self.pointer_offset, end=targets[1] - self.pointer_offset + 1
+            )
         else:
             raise Exception(f"unknown span_end_mode: {self.span_end_mode}")
-
-        return Span(char_start, char_end)
 
 
 class PointerNetworkSpanAndRelationEncoderDecoder(PointerNetworkEncoderDecoder):

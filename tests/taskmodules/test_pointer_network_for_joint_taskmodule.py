@@ -50,13 +50,26 @@ def document():
     span2 = LabeledSpan(start=27, end=34, label="topic")
     span3 = LabeledSpan(start=42, end=44, label="person")
     doc.entities.extend([span1, span2, span3])
+    assert str(span1) == "dummy text"
+    assert str(span2) == "nothing"
+    assert str(span3) == "me"
     rel = BinaryRelation(head=span1, tail=span2, label="is_about")
     doc.relations.append(rel)
+    assert str(rel.label) == "is_about"
+    assert str(rel.head) == "dummy text"
+    assert str(rel.tail) == "nothing"
+
     no_rel = BinaryRelation(head=span1, tail=span3, label="no_relation")
     doc.relations.append(no_rel)
+    assert str(no_rel.label) == "no_relation"
+    assert str(no_rel.head) == "dummy text"
+    assert str(no_rel.tail) == "me"
+
     sent1 = LabeledSpan(start=0, end=35, label="1")
     sent2 = LabeledSpan(start=36, end=45, label="2")
     doc.sentences.extend([sent1, sent2])
+    assert str(sent1) == "This is a dummy text about nothing."
+    assert str(sent2) == "Trust me."
     return doc
 
 
@@ -137,139 +150,17 @@ def encoded_input(encoded_inputs):
 
 def test_encoded_input(encoded_input, taskmodule):
     assert encoded_input is not None
+    tokens = taskmodule.tokenizer.convert_ids_to_tokens(encoded_input.inputs.src_tokens)
     if taskmodule.partition_layer_name is None:
         assert asdict(encoded_input.inputs) == {
             "src_tokens": [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 3101, 162, 4, 2],
             "src_seq_len": 13,
         }
-        assert set(encoded_input.metadata) == {"token2char", "char2token", "tokenized_span"}
-        token2char = encoded_input.metadata["token2char"]
-        assert token2char == [
-            (0, 0),
-            (0, 4),
-            (5, 7),
-            (8, 9),
-            (10, 15),
-            (16, 20),
-            (21, 26),
-            (27, 34),
-            (34, 35),
-            (36, 41),
-            (42, 44),
-            (44, 45),
-            (0, 0),
-        ]
-        char2token = encoded_input.metadata["char2token"]
-        assert char2token == {
-            0: [1],
-            1: [1],
-            2: [1],
-            3: [1],
-            5: [2],
-            6: [2],
-            8: [3],
-            10: [4],
-            11: [4],
-            12: [4],
-            13: [4],
-            14: [4],
-            16: [5],
-            17: [5],
-            18: [5],
-            19: [5],
-            21: [6],
-            22: [6],
-            23: [6],
-            24: [6],
-            25: [6],
-            27: [7],
-            28: [7],
-            29: [7],
-            30: [7],
-            31: [7],
-            32: [7],
-            33: [7],
-            34: [8],
-            36: [9],
-            37: [9],
-            38: [9],
-            39: [9],
-            40: [9],
-            42: [10],
-            43: [10],
-            44: [11],
-        }
-        assert encoded_input.metadata.get("partition") is None
-        tokenized_span = encoded_input.metadata["tokenized_span"]
-        text = encoded_input.document.text
-        assert (
-            text[tokenized_span.start : tokenized_span.end]
-            == "This is a dummy text about nothing. Trust me."
-        )
     elif taskmodule.partition_layer_name == "sentences":
         assert asdict(encoded_input.inputs) == {
             "src_tokens": [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 2],
             "src_seq_len": 10,
         }
-        assert set(encoded_input.metadata) == {
-            "token2char",
-            "char2token",
-            "partition",
-            "tokenized_span",
-        }
-        token2char = encoded_input.metadata["token2char"]
-        assert token2char == [
-            (0, 0),
-            (0, 4),
-            (5, 7),
-            (8, 9),
-            (10, 15),
-            (16, 20),
-            (21, 26),
-            (27, 34),
-            (34, 35),
-            (0, 0),
-        ]
-        char2token = encoded_input.metadata["char2token"]
-        assert char2token == {
-            0: [1],
-            1: [1],
-            2: [1],
-            3: [1],
-            5: [2],
-            6: [2],
-            8: [3],
-            10: [4],
-            11: [4],
-            12: [4],
-            13: [4],
-            14: [4],
-            16: [5],
-            17: [5],
-            18: [5],
-            19: [5],
-            21: [6],
-            22: [6],
-            23: [6],
-            24: [6],
-            25: [6],
-            27: [7],
-            28: [7],
-            29: [7],
-            30: [7],
-            31: [7],
-            32: [7],
-            33: [7],
-            34: [8],
-        }
-        partition = encoded_input.metadata.get("partition")
-        assert (partition.start, partition.end) == (0, 35)
-        tokenized_span = encoded_input.metadata["tokenized_span"]
-        text = encoded_input.document.text
-        assert (
-            text[tokenized_span.start : tokenized_span.end]
-            == "This is a dummy text about nothing."
-        )
     else:
         raise Exception(f"unknown partition_layer_name: {taskmodule.partition_layer_name}")
 
