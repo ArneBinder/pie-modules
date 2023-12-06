@@ -522,7 +522,6 @@ class PointerNetworkModel(PyTorchIEModel):
         label_ids: List[int],
         pad_id: int,
         target_token_ids: List[int],
-        target_tokens: List[str],
         vocab_size: int,
         pad_token_id: int,
         embedding_weight_mapping: Optional[Dict[int, List[int]]] = None,
@@ -623,12 +622,9 @@ class PointerNetworkModel(PyTorchIEModel):
 
         self.losses = {"train": {"seq2seq": Seq2SeqLoss(biloss=biloss)}}
 
-        # target_token2id = {target_token: idx for idx, target_token in enumerate(target_tokens)}
-        target_id2token = {idx: target_token for idx, target_token in enumerate(target_tokens)}
         # also allow "gmam_annotation_encoder_decoder" for backward compatibility
         if annotation_encoder_decoder_name in ["gmam_annotation_encoder_decoder", "gmam"]:
             annotation_encoder_decoder = PointerNetworkSpanAndRelationEncoderDecoder(
-                id2label=target_id2token,
                 bos_id=bos_id,
                 eos_id=eos_id,
                 **(annotation_encoder_decoder_kwargs or {}),
