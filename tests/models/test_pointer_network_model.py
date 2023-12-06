@@ -69,12 +69,14 @@ def taskmodule(document):
 
     taskmodule.prepare(documents=[document])
 
+    # arbitrary ids
     assert taskmodule.bos_id == 0
     assert taskmodule.eos_id == 1
     assert taskmodule.relation_ids == [4]
     assert taskmodule.none_ids == 3
     assert taskmodule.span_ids == [6, 5, 2]
     assert taskmodule.label_ids == [2, 3, 4, 5, 6]
+    # ids from tokenizer
     assert taskmodule.target_token_ids == [0, 2, 50265, 50266, 50267, 50268, 50269]
     assert taskmodule.target_tokens == [
         "<s>",
