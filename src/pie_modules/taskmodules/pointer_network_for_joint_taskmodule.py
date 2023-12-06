@@ -20,7 +20,6 @@ from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 from pytorch_ie.core import (
     Annotation,
     AnnotationList,
-    Document,
     TaskEncoding,
     TaskModule,
     annotation_field,
@@ -31,9 +30,16 @@ from pytorch_ie.core.taskmodule import (
     TargetEncoding,
     TaskBatchEncoding,
 )
+from pytorch_ie.documents import (
+    TextBasedDocument,
+    TextDocumentWithLabeledSpansAndBinaryRelations,
+    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
+    TokenBasedDocument,
+)
 from transformers import AutoTokenizer, PreTrainedTokenizer
 from typing_extensions import TypeAlias
 
+from ..document.processing import tokenize_document
 from .components.seq2seq import (
     PointerNetworkSpanAndRelationEncoderDecoder,
     PointerNetworkSpanEncoderDecoder,
@@ -42,16 +48,41 @@ from .components.seq2seq import (
 logger = logging.getLogger(__name__)
 
 
+DocumentType: TypeAlias = TextBasedDocument
+
+
 @dataclasses.dataclass
-class DocumentType(Document):
-    text: str
-    words: AnnotationList[Span] = annotation_field(target="text")
-    spans: AnnotationList[LabeledSpan] = annotation_field(target="text")
-    relations: AnnotationList[BinaryRelation] = annotation_field(target="spans")
-    metadata: Dict[str, Any] = dataclasses.field(default_factory=dict)
+class InputEncodingType:
+    src_tokens: List[int]
+    src_seq_len: int
 
 
+@dataclasses.dataclass
+class TargetEncodingType:
+    tgt_tokens: List[int]
+    tgt_seq_len: int
+    CPM_tag: Optional[List[int]] = None
+
+
+TaskEncodingType: TypeAlias = TaskEncoding[
+    DocumentType,
+    InputEncodingType,
+    TargetEncodingType,
+]
 TaskOutput: TypeAlias = torch.Tensor
+
+
+@dataclasses.dataclass
+class TokenDocumentWithLabeledSpansAndBinaryRelations(TokenBasedDocument):
+    labeled_spans: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
+    binary_relations: AnnotationList[BinaryRelation] = annotation_field(target="labeled_spans")
+
+
+@dataclasses.dataclass
+class TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions(
+    TokenDocumentWithLabeledSpansAndBinaryRelations
+):
+    labeled_partitions: AnnotationList[Span] = annotation_field(target="labeled_spans")
 
 
 def _pad_tensor(tensor: torch.Tensor, target_shape: List[int], pad_value: float) -> torch.Tensor:
@@ -62,10 +93,6 @@ def _pad_tensor(tensor: torch.Tensor, target_shape: List[int], pad_value: float)
     result = F.pad(tensor, pad=pad, value=pad_value)
     assert list(result.shape) == target_shape
     return result
-
-
-# aspect with relation  component_r
-# opinion without relation component
 
 
 def ld2dl(
@@ -97,7 +124,16 @@ def _span_is_in_partition(span: Span, partition: Optional[Span] = None):
 
 
 @TaskModule.register()
-class PointerNetworkForJointTaskModule(TaskModule):
+class PointerNetworkForJointTaskModule(
+    TaskModule[
+        DocumentType,
+        InputEncoding,
+        TargetEncoding,
+        TaskBatchEncoding,
+        ModelBatchOutput,
+        TaskOutput,
+    ]
+):
     PREPARED_ATTRIBUTES = ["span_labels", "relation_labels"]
 
     def __init__(
@@ -113,9 +149,9 @@ class PointerNetworkForJointTaskModule(TaskModule):
         exclude_annotation_names: Optional[Dict[str, List[str]]] = None,
         span_end_mode: str = "last_token",
         tokenize_per_word: bool = False,
-        text_field_name: str = "raw_words",
-        span_layer_name: str = "argument_components",
-        relation_layer_name: str = "relations",
+        text_field_name: str = "text",
+        span_layer_name: str = "labeled_spans",
+        relation_layer_name: str = "binary_relations",
         word_layer_name: Optional[str] = None,
         partition_layer_name: Optional[str] = None,
         log_first_n_examples: Optional[int] = None,
@@ -181,6 +217,20 @@ class PointerNetworkForJointTaskModule(TaskModule):
         }
 
         self.log_first_n_examples = log_first_n_examples
+
+    @property
+    def document_type(self):
+        if self.partition_layer_name is None:
+            return TextDocumentWithLabeledSpansAndBinaryRelations
+        else:
+            return TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
+
+    @property
+    def tokenized_document_type(self):
+        if self.partition_layer_name is None:
+            return TokenDocumentWithLabeledSpansAndBinaryRelations
+        else:
+            return TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
 
     def _prepare(self, documents: Sequence[DocumentType]):
         span_labels: Set[str] = set()
@@ -326,15 +376,15 @@ class PointerNetworkForJointTaskModule(TaskModule):
 
     def maybe_log_example(
         self,
-        task_encoding: TaskEncoding[DocumentType, InputEncoding, TargetEncoding],
-        targets: Optional[TargetEncoding] = None,
+        task_encoding: TaskEncodingType,
+        targets: Optional[TargetEncodingType] = None,
     ):
         if self.log_first_n_examples is not None and self.log_first_n_examples > 0:
             inputs = task_encoding.inputs
             targets = targets or task_encoding.targets
-            src_token_ids = inputs["src_tokens"]
+            src_token_ids = inputs.src_tokens
             src_tokens = self.tokenizer.convert_ids_to_tokens(src_token_ids)
-            tgt_token_ids = targets["tgt_tokens"]
+            tgt_token_ids = targets.tgt_tokens
             tgt_tokens = [
                 self.tokenizer.convert_ids_to_tokens(self.target_token_ids[tgt_token_id])
                 if tgt_token_id < self.pointer_offset
@@ -354,12 +404,7 @@ class PointerNetworkForJointTaskModule(TaskModule):
 
     def encode_input(
         self, document: DocumentType, is_training: bool = False
-    ) -> Optional[
-        Union[
-            TaskEncoding[DocumentType, InputEncoding, TargetEncoding],
-            Sequence[TaskEncoding[DocumentType, InputEncoding, TargetEncoding]],
-        ]
-    ]:
+    ) -> Optional[Union[TaskEncodingType, Sequence[TaskEncodingType]]]:
         task_encodings = []
         text = getattr(document, self.text_field_name)
 
@@ -439,7 +484,7 @@ class PointerNetworkForJointTaskModule(TaskModule):
 
             for src_tokens, token2char, special_tokens_mask in tokenizer_encodings:
                 src_seq_len = len(src_tokens)
-                inputs = {"src_tokens": src_tokens, "src_seq_len": src_seq_len}
+                inputs = InputEncodingType(src_tokens=src_tokens, src_seq_len=src_seq_len)
 
                 char2token = defaultdict(list)
                 for token_idx, (char_start, char_end) in enumerate(token2char):
@@ -521,9 +566,7 @@ class PointerNetworkForJointTaskModule(TaskModule):
         else:
             raise Exception(f"annotation has unknown type: {annotation}")
 
-    def encode_target(
-        self, task_encoding: TaskEncoding[DocumentType, InputEncoding, TargetEncoding]
-    ) -> Optional[TargetEncoding]:
+    def encode_target(self, task_encoding: TaskEncodingType) -> Optional[TargetEncodingType]:
         document = task_encoding.document
 
         partition = task_encoding.metadata.get("partition", None)
@@ -549,17 +592,15 @@ class PointerNetworkForJointTaskModule(TaskModule):
                 f"target length {len(tgt_tokens)} exceeds max_target_length {self.max_target_length}"
             )
 
-        result = {
-            "tgt_tokens": tgt_tokens,
-            "tgt_seq_len": len(tgt_tokens),
-        }
+        constraints = None
         if self.create_constraints:
             constraints = self.annotation_encoder_decoder.build_constraints(
-                src_len=task_encoding.inputs["src_seq_len"],
+                src_len=task_encoding.inputs.src_seq_len,
                 tgt_tokens=tgt_tokens,
             )
-            assert constraints is not None
-            result["CPM_tag"] = constraints
+        result = TargetEncodingType(
+            tgt_tokens=tgt_tokens, tgt_seq_len=len(tgt_tokens), CPM_tag=constraints
+        )
         self.maybe_log_example(task_encoding=task_encoding, targets=result)
         return result
 
@@ -597,21 +638,23 @@ class PointerNetworkForJointTaskModule(TaskModule):
         maybe_tensor = self._to_tensor(values=maybe_padded, name=name)
         return maybe_tensor
 
-    def collate(
-        self, task_encodings: Sequence[TaskEncoding[DocumentType, InputEncoding, TargetEncoding]]
-    ) -> TaskBatchEncoding:
+    def collate(self, task_encodings: Sequence[TaskEncodingType]) -> TaskBatchEncoding:
         if len(task_encodings) == 0:
             raise ValueError("no task_encodings available")
         inputs = {
             k: self._prepare_values(values=v, name=k)
-            for k, v in ld2dl(task_encodings, getter=lambda x: x.inputs).items()
+            for k, v in ld2dl(
+                task_encodings, getter=lambda x: dataclasses.asdict(x.inputs)
+            ).items()
         }
 
         targets = None
         if task_encodings[0].has_targets:
             targets = {
                 k: self._prepare_values(values=v, name=k)
-                for k, v in ld2dl(task_encodings, getter=lambda x: x.targets).items()
+                for k, v in ld2dl(
+                    task_encodings, getter=lambda x: dataclasses.asdict(x.targets)
+                ).items()
             }
 
         return inputs, targets
@@ -625,7 +668,7 @@ class PointerNetworkForJointTaskModule(TaskModule):
 
     def create_annotations_from_output(
         self,
-        task_encoding: TaskEncoding[DocumentType, InputEncoding, TargetEncoding],
+        task_encoding: TaskEncodingType,
         task_output: TaskOutput,
     ) -> Iterator[Tuple[str, Annotation]]:
         layers, _errors = self.annotation_encoder_decoder.decode(

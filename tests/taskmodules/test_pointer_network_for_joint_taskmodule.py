@@ -1,5 +1,5 @@
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Dict, List, Set
 
 import pytest
@@ -43,7 +43,7 @@ def document():
     class ExampleDocument(TextBasedDocument):
         entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
         relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
-        sentences: AnnotationList[Span] = annotation_field(target="text")
+        sentences: AnnotationList[LabeledSpan] = annotation_field(target="text")
 
     doc = ExampleDocument(text="This is a dummy text about nothing. Trust me.")
     span1 = LabeledSpan(start=10, end=20, label="content")
@@ -54,8 +54,8 @@ def document():
     doc.relations.append(rel)
     no_rel = BinaryRelation(head=span1, tail=span3, label="no_relation")
     doc.relations.append(no_rel)
-    sent1 = Span(start=0, end=35)
-    sent2 = Span(start=36, end=45)
+    sent1 = LabeledSpan(start=0, end=35, label="1")
+    sent2 = LabeledSpan(start=36, end=45, label="2")
     doc.sentences.extend([sent1, sent2])
     return doc
 
@@ -138,7 +138,7 @@ def encoded_input(encoded_inputs):
 def test_encoded_input(encoded_input, taskmodule):
     assert encoded_input is not None
     if taskmodule.partition_layer_name is None:
-        assert encoded_input.inputs == {
+        assert asdict(encoded_input.inputs) == {
             "src_tokens": [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 3101, 162, 4, 2],
             "src_seq_len": 13,
         }
@@ -207,7 +207,7 @@ def test_encoded_input(encoded_input, taskmodule):
             == "This is a dummy text about nothing. Trust me."
         )
     elif taskmodule.partition_layer_name == "sentences":
-        assert encoded_input.inputs == {
+        assert asdict(encoded_input.inputs) == {
             "src_tokens": [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 2],
             "src_seq_len": 10,
         }
@@ -288,7 +288,7 @@ def task_encoding(taskmodule, task_encodings):
 
 
 def test_encode_target_with_dummy_relations(task_encoding, taskmodule):
-    targets = task_encoding.targets
+    targets = asdict(task_encoding.targets)
     if taskmodule.partition_layer_name is None:
         assert targets["tgt_tokens"] == [0, 14, 14, 2, 11, 12, 6, 4, 17, 17, 5, 3, 3, 3, 3, 1]
         assert targets["tgt_seq_len"] == 16
