@@ -4,7 +4,7 @@ from typing import Dict, List, Set
 
 import pytest
 import torch
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
+from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.core import AnnotationList, Document, annotation_field
 from pytorch_ie.documents import TextBasedDocument
 
@@ -100,10 +100,15 @@ def test_document(document):
 @pytest.fixture(scope="module")
 def taskmodule(document, config):
     taskmodule = PointerNetworkForJointTaskModule(
-        text_field_name="text",
-        span_layer_name="entities",
-        relation_layer_name="relations",
-        exclude_annotation_names={"relations": ["no_relation"]},
+        annotation_encoder_decoder_kwargs={
+            "span_layer_name": "entities",
+            "relation_layer_name": "relations",
+            "exclude_labels_per_layer": {"relations": ["no_relation"]},
+        },
+        annotation_field_mapping={
+            "entities": "labeled_spans",
+            "relations": "binary_relations",
+        },
         **config,
     )
 
@@ -113,29 +118,62 @@ def taskmodule(document, config):
 
 def test_taskmodule(taskmodule):
     tm = taskmodule
-    assert tm.prepared_attributes == {
-        "span_labels": ["content", "person", "topic"],
-        "relation_labels": ["is_about"],
+
+    # check the annotation_encoder_decoder
+    annotation_encoder_decoder = tm.annotation_encoder_decoder
+    assert annotation_encoder_decoder.is_prepared
+    assert annotation_encoder_decoder.prepared_attributes == {
+        "bos_token": "<s>",
+        "eos_token": "</s>",
+        "labels_per_layer": {
+            "entities": ["content", "person", "topic"],
+            "relations": ["is_about"],
+        },
     }
-    assert tm.labels == ["content", "person", "topic", "is_about", "none"]
-    assert tm.label_tokens == [
-        "<<is_about>>",
-        "<<content>>",
-        "<<person>>",
-        "<<topic>>",
-        "<<none>>",
+    assert annotation_encoder_decoder.layer_names == ["entities", "relations"]
+    assert annotation_encoder_decoder.special_targets == ["<s>", "</s>"]
+    assert annotation_encoder_decoder.labels == ["none", "content", "person", "topic", "is_about"]
+    assert annotation_encoder_decoder.targets == [
+        "<s>",
+        "</s>",
+        "none",
+        "content",
+        "person",
+        "topic",
+        "is_about",
     ]
-    assert tm.label_ids == [2, 3, 4, 5, 6]
+    assert annotation_encoder_decoder.bos_id == 0
+    assert annotation_encoder_decoder.eos_id == 1
+    assert annotation_encoder_decoder.none_id == 2
+    assert annotation_encoder_decoder.span_ids == [3, 4, 5]
+    assert annotation_encoder_decoder.relation_ids == [6]
+    assert annotation_encoder_decoder.label2id == {
+        "content": 3,
+        "is_about": 6,
+        "none": 2,
+        "person": 4,
+        "topic": 5,
+    }
+
+    # check taskmodule properties
+    assert tm.prepared_attributes == {}
+    assert tm.label_embedding_weight_mapping == {
+        50265: [45260],
+        50266: [39763],
+        50267: [354, 1215, 9006],
+        50268: [5970],
+        50269: [10166],
+    }
     assert tm.target_tokens == [
         "<s>",
         "</s>",
-        "<<topic>>",
         "<<none>>",
-        "<<is_about>>",
-        "<<person>>",
         "<<content>>",
+        "<<person>>",
+        "<<topic>>",
+        "<<is_about>>",
     ]
-    assert tm.target_token_ids == [0, 2, 50265, 50266, 50267, 50268, 50269]
+    assert tm.target_token_ids == [0, 2, 50266, 50269, 50268, 50265, 50267]
 
 
 @pytest.fixture()
@@ -181,37 +219,37 @@ def task_encoding(taskmodule, task_encodings):
 def test_encode_target_with_dummy_relations(task_encoding, taskmodule):
     targets = asdict(task_encoding.targets)
     if taskmodule.partition_layer_name is None:
-        assert targets["tgt_tokens"] == [0, 14, 14, 2, 11, 12, 6, 4, 17, 17, 5, 3, 3, 3, 3, 1]
+        assert targets["tgt_tokens"] == [0, 14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]
         assert targets["tgt_seq_len"] == 16
         assert targets["CPM_tag"] == [
             [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
-            [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-            [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
-            [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         ]
     elif taskmodule.partition_layer_name == "sentences":
-        assert targets["tgt_tokens"] == [0, 14, 14, 2, 11, 12, 6, 4, 1]
+        assert targets["tgt_tokens"] == [0, 14, 14, 5, 11, 12, 3, 6, 1]
         assert targets["tgt_seq_len"] == 9
         assert targets["CPM_tag"] == [
             [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-            [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0],
-            [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0],
+            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         ]
     else:
         raise Exception(f"unknown partition_layer_name: {taskmodule.partition_layer_name}")
@@ -241,24 +279,24 @@ def test_collate(batch, taskmodule):
             "CPM_tag": [
                 [
                     [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-                    [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
-                    [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                 ]
             ],
             "tgt_seq_len": [16],
-            "tgt_tokens": [[0, 14, 14, 2, 11, 12, 6, 4, 17, 17, 5, 3, 3, 3, 3, 1]],
+            "tgt_tokens": [[0, 14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]],
         }
     elif taskmodule.partition_layer_name == "sentences":
         assert inputs_lists == {
@@ -272,27 +310,27 @@ def test_collate(batch, taskmodule):
             "CPM_tag": [
                 [
                     [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-                    [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0],
-                    [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0],
+                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                 ],
                 [
                     [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1],
-                    [0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1, -1, -1, -1, -1, -1],
-                    [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
-                    [0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1],
-                    [0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, -1, -1, -1, -1, -1],
-                    [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
-                    [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
-                    [0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
+                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, -1, -1, -1, -1, -1],
+                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
+                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1],
+                    [0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, -1, -1, -1, -1, -1],
+                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
+                    [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
+                    [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
                 ],
             ],
             "tgt_seq_len": [9, 9],
-            "tgt_tokens": [[0, 14, 14, 2, 11, 12, 6, 4, 1], [0, 9, 9, 5, 3, 3, 3, 3, 1]],
+            "tgt_tokens": [[0, 14, 14, 5, 11, 12, 3, 6, 1], [0, 9, 9, 4, 2, 2, 2, 2, 1]],
         }
     else:
         raise Exception(f"unknown partition_layer_name: {taskmodule.partition_layer_name}")
@@ -319,9 +357,9 @@ def task_output(task_outputs):
 def test_task_output(task_output, taskmodule):
     output_list = task_output.tolist()
     if taskmodule.partition_layer_name is None:
-        assert output_list == [0, 14, 14, 2, 11, 12, 6, 4, 17, 17, 5, 3, 3, 3, 3, 1]
+        assert output_list == [0, 14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]
     elif taskmodule.partition_layer_name == "sentences":
-        assert output_list == [0, 14, 14, 2, 11, 12, 6, 4, 1]
+        assert output_list == [0, 14, 14, 5, 11, 12, 3, 6, 1]
     else:
         raise Exception(f"unknown partition_layer_name: {taskmodule.partition_layer_name}")
 
@@ -356,10 +394,12 @@ def _test_annotations_from_output(task_encodings, task_outputs, taskmodule, laye
             layer = {
                 str(ann)
                 for ann in document[layer_name].predictions
-                if taskmodule._is_valid_annotation(ann)
+                if ann.label in taskmodule.annotation_encoder_decoder.labels_per_layer[layer_name]
             }
             layer_expected = {
-                str(ann) for ann in document[layer_name] if taskmodule._is_valid_annotation(ann)
+                str(ann)
+                for ann in document[layer_name]
+                if ann.label in taskmodule.annotation_encoder_decoder.labels_per_layer[layer_name]
             }
             assert layer == layer_expected
 

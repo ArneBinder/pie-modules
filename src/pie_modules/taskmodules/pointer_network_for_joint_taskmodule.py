@@ -16,6 +16,7 @@ from typing import (
 
 import torch
 import torch.nn.functional as F
+from pytorch_ie import AnnotationLayer, Document
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 from pytorch_ie.core import (
     Annotation,
@@ -42,7 +43,7 @@ from typing_extensions import TypeAlias
 from ..document.processing import token_based_document_to_text_based, tokenize_document
 from .components.seq2seq import (
     PointerNetworkSpanAndRelationEncoderDecoder,
-    PointerNetworkSpanEncoderDecoder,
+    SpanEncoderDecoderWithOffset,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,7 +62,7 @@ class InputEncodingType:
 class TargetEncodingType:
     tgt_tokens: List[int]
     tgt_seq_len: int
-    CPM_tag: Optional[List[int]] = None
+    CPM_tag: Optional[List[List[int]]] = None
 
 
 TaskEncodingType: TypeAlias = TaskEncoding[
@@ -134,77 +135,62 @@ class PointerNetworkForJointTaskModule(
         TaskOutput,
     ]
 ):
-    PREPARED_ATTRIBUTES = ["span_labels", "relation_labels"]
-
     def __init__(
         self,
+        # tokenization
         tokenizer_name_or_path: str = "facebook/bart-base",
-        span_labels: Optional[List[str]] = None,
-        relation_labels: Optional[List[str]] = None,
-        none_label: str = "none",
-        # so that the label word can be initialized in a better embedding.
-        label2special_token: Optional[Dict[str, str]] = None,
-        # dummy relation type to encode entities that do not belong to any relation
-        loop_dummy_relation_name: str = "loop",
-        exclude_annotation_names: Optional[Dict[str, List[str]]] = None,
-        span_end_mode: str = "last_token",
-        tokenize_per_word: bool = False,
-        text_field_name: str = "text",
-        span_layer_name: str = "labeled_spans",
-        relation_layer_name: str = "binary_relations",
-        word_layer_name: Optional[str] = None,
-        partition_layer_name: Optional[str] = None,
-        log_first_n_examples: Optional[int] = None,
-        tokenizer_kwargs: Optional[Dict[str, Any]] = None,
         tokenizer_init_kwargs: Optional[Dict[str, Any]] = None,
+        tokenizer_kwargs: Optional[Dict[str, Any]] = None,
+        partition_layer_name: Optional[str] = None,
+        annotation_field_mapping: Optional[Dict[str, str]] = None,
+        # how to encode and decode the annotations
+        annotation_encoder_decoder_name: str = "pointer_network_span_and_relation",
+        annotation_encoder_decoder_kwargs: Optional[Dict[str, Any]] = None,
+        label_tokens: Optional[Dict[str, str]] = None,
+        label_representations: Optional[Dict[str, str]] = None,
+        # target encoding
         max_target_length: Optional[int] = None,
         create_constraints: bool = True,
-        annotation_encoder_decoder_name: str = "gmam",
-        annotation_encoder_decoder_kwargs: Optional[Dict[str, Any]] = None,
+        # logging
+        log_first_n_examples: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.save_hyperparameters()
 
-        self.label2special_token = label2special_token or {}
-        self.span_labels = span_labels
-        self.relation_labels = relation_labels
-        self.none_label = none_label
-
-        self.loop_dummy_relation_name = loop_dummy_relation_name
-        self.exclude_annotation_names = exclude_annotation_names or dict()
-        self.create_constraints = create_constraints
-
+        # tokenization
         self.tokenizer_name_or_path = tokenizer_name_or_path
+        self.tokenizer_kwargs = tokenizer_kwargs or {}
         self.tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
             tokenizer_name_or_path,
             **(tokenizer_init_kwargs or {}),
         )
+        self.annotation_field_mapping = annotation_field_mapping or dict()
+        self.partition_layer_name = partition_layer_name
 
-        self.tokenizer_kwargs = tokenizer_kwargs or {}
-
-        # how to encode the end of the span
+        # how to encode and decode the annotations
         self.annotation_encoder_decoder_name = annotation_encoder_decoder_name
         self.annotation_encoder_decoder_kwargs = annotation_encoder_decoder_kwargs or {}
+        if self.annotation_encoder_decoder_name == "pointer_network_span_and_relation":
+            # do not pass bos_token and eos_token directly as constructor arguments,
+            # because they may be already in annotation_encoder_decoder_kwargs
+            self.annotation_encoder_decoder_kwargs["bos_token"] = self.tokenizer.bos_token
+            self.annotation_encoder_decoder_kwargs["eos_token"] = self.tokenizer.eos_token
+            self.annotation_encoder_decoder = PointerNetworkSpanAndRelationEncoderDecoder(
+                **self.annotation_encoder_decoder_kwargs
+            )
+        else:
+            raise Exception(
+                f"unknown annotation_encoder_decoder_name: {self.annotation_encoder_decoder_name}"
+            )
+        self.label_tokens = label_tokens or dict()
+        self.label_representations = label_representations or dict()
 
-        self.span_end_mode = span_end_mode
-
-        self.text_field_name = text_field_name
-        self.span_layer_name = span_layer_name
-        self.relation_layer_name = relation_layer_name
-        self.partition_layer_name = partition_layer_name
-        self.word_layer_name = word_layer_name
-
-        self.tokenize_per_word = tokenize_per_word
-
+        # target encoding
         self.max_target_length = max_target_length
-
-        # see fastNLP.core.batch.DataSetGetter
-        # self.input_names = {"src_tokens", "src_seq_len", "tgt_tokens", "tgt_seq_len", "CPM_tag"}
-        # self.target_names = {"src_seq_len", "tgt_tokens", "tgt_seq_len", "target_span"}
-
+        self.create_constraints = create_constraints
         self.pad_values = {
-            # "tgt_tokens": 1,  # this will be set in _post_prepare()
+            "tgt_tokens": self.annotation_encoder_decoder.target_pad_id,
             "src_tokens": self.tokenizer.pad_token_id,
             "CPM_tag": -1,
         }
@@ -216,6 +202,7 @@ class PointerNetworkForJointTaskModule(
             "CPM_tag": torch.int64,
         }
 
+        # logging
         self.log_first_n_examples = log_first_n_examples
 
     @property
@@ -232,46 +219,37 @@ class PointerNetworkForJointTaskModule(
         else:
             return TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
 
+    @property
+    def is_prepared(self):
+        return self.annotation_encoder_decoder.is_prepared
+
     def _prepare(self, documents: Sequence[DocumentType]):
-        span_labels: Set[str] = set()
-        relation_labels: Set[str] = set()
-        for doc in documents:
-            span_labels.update(
-                ac.label
-                for ac in doc[self.span_layer_name]
-                if ac.label not in self.exclude_annotation_names.get(self.span_layer_name, [])
-            )
-            relation_labels.update(
-                rel.label
-                for rel in doc[self.relation_layer_name]
-                if rel.label not in self.exclude_annotation_names.get(self.relation_layer_name, [])
-            )
-        self.span_labels = sorted(span_labels)
-        self.relation_labels = sorted(relation_labels)
+        self.annotation_encoder_decoder._prepare(documents=documents)
+
+    def construct_label_token(self, label: str) -> str:
+        return self.label_tokens.get(label, f"<<{label}>>")
+
+    def get_label_representation(self, label: str) -> str:
+        return self.label_representations.get(label, label)
 
     def _post_prepare(self):
-        # we need the following:
-        # 1. labels: entity and relation labels and the none label
-        # 2. label tokens: labels encapsulated with "<<" and ">>"
-        # 3. target tokens: "<bos>", "<eos>", and (2)
-        # 4. target ids (3)
-        # 5. token ids of (3)
-        # + various mappings
+        self.annotation_encoder_decoder._post_prepare()
+        # This is a bit hacky, but we need to update the kwargs of the encoder decoder.
+        # Note, that this also updates the content of self.hparams and thus the saved hyperparameters
+        self.annotation_encoder_decoder_kwargs.update(
+            self.annotation_encoder_decoder.prepared_attributes
+        )
 
-        self.labels = self.span_labels + self.relation_labels + [self.none_label]
-        self.label2token = {
-            label: self.label2special_token.get(label, f"<<{label}>>") for label in self.labels
+        label2token = {
+            label: self.construct_label_token(label=label)
+            for label in self.annotation_encoder_decoder.labels
         }
-        self.token2label = {v: k for k, v in self.label2token.items()}
-        if len(self.label2token) != len(self.token2label):
-            raise Exception(
-                f"all entries in label2token need to map to different entries, which is not the case: "
-                f"{self.label2token}"
-            )
-        self.label_tokens = sorted(self.label2token.values(), key=lambda x: len(x), reverse=True)
+        if len(set(label2token.values())) != len(label2token):
+            raise Exception(f"label2token values are not unique: {label2token}")
+
         already_in_vocab = [
             tok
-            for tok in self.label_tokens
+            for tok in label2token.values()
             if self.tokenizer.convert_tokens_to_ids(tok) != self.tokenizer.unk_token_id
         ]
         if len(already_in_vocab) > 0:
@@ -279,100 +257,40 @@ class PointerNetworkForJointTaskModule(
                 f"some special tokens to add (mapped label ids) are already in the tokenizer vocabulary, "
                 f"this is not allowed: {already_in_vocab}. You may want to adjust the label2special_token mapping"
             )
-        # self.tokenizer.unique_no_split_tokens = unique_no_split_tokens + sorted_label_ids
+        # sort by length, so that longer tokens are added first
+        label_tokens_sorted = sorted(label2token.values(), key=lambda x: len(x), reverse=True)
         self.tokenizer.add_special_tokens(
-            special_tokens_dict={"additional_special_tokens": self.label_tokens}
+            special_tokens_dict={"additional_special_tokens": label_tokens_sorted}
         )
 
-        self.label_token_ids = self.tokenizer.convert_tokens_to_ids(self.label_tokens)
-        # this returns all the token ids that can occur in the output
-        self.target_token_ids = [
-            self.tokenizer.bos_token_id,
-            self.tokenizer.eos_token_id,
-        ] + sorted(self.label_token_ids)
+        # target tokens are the special tokens plus the mapped label tokens
+        self.target_tokens: List[str] = self.annotation_encoder_decoder.special_targets + [
+            label2token[label] for label in self.annotation_encoder_decoder.labels
+        ]
+        self.target_token_ids: List[int] = self.tokenizer.convert_tokens_to_ids(self.target_tokens)
 
-        self.label2id: Dict[str, int] = {}
-        self.target_token2id: Dict[str, int] = {}
-        for idx, target_token_id in enumerate(self.target_token_ids):
-            target_token = self.tokenizer.convert_ids_to_tokens(target_token_id)
-            self.target_token2id[target_token] = idx
-            if target_token in self.label_tokens:
-                self.label2id[self.token2label[target_token]] = idx
-        self.id2label = {v: k for k, v in self.label2id.items()}
-
-        self.bos_id = self.target_token2id[self.tokenizer.bos_token]
-        self.eos_id = self.target_token2id[self.tokenizer.eos_token]
-        self.span_ids = [self.label2id[i] for i in self.span_labels]
-        self.relation_ids = [self.label2id[i] for i in self.relation_labels]
-        self.none_ids = self.label2id[self.none_label]
-        # Set to the id where eos is located (设置为eos所在的id)
-        self.pad_id = self.eos_id
-
-        # TODO: make that configurable and do not depend on << >> syntax
-        self.embedding_weight_mapping = dict()
-        for label_token in self.label_tokens:
-            # sanity check: label_tokens should not be split up
-            special_token_index = self.tokenizer.convert_tokens_to_ids(
+        # construct a mapping from label_token_id to token_ids that will be used to initialize the embeddings
+        # of the labels
+        self.label_embedding_weight_mapping = dict()
+        for label, label_token in label2token.items():
+            label_token_indices = self.tokenizer.convert_tokens_to_ids(
                 self.tokenizer.tokenize(label_token)
             )
-            if len(special_token_index) > 1:
+            # sanity check: label_tokens should not be split up
+            if len(label_token_indices) > 1:
                 raise RuntimeError(f"{label_token} wrong split")
             else:
-                special_token_index = special_token_index[0]
+                label_token_idx = label_token_indices[0]
 
-            assert label_token[:2] == "<<" and label_token[-2:] == ">>"
+            label_representation = self.get_label_representation(label)
             source_indices = self.tokenizer.convert_tokens_to_ids(
-                self.tokenizer.tokenize(label_token[2:-2])
+                self.tokenizer.tokenize(label_representation)
             )
-            assert self.tokenizer.unk_token_id not in source_indices
-            self.embedding_weight_mapping[special_token_index] = source_indices
-
-        if self.annotation_encoder_decoder_name == "gmam":
-            span_encoder_decoder = PointerNetworkSpanEncoderDecoder(
-                span_end_mode=self.span_end_mode,
-                pointer_offset=self.pointer_offset,
-            )
-            self.annotation_encoder_decoder = PointerNetworkSpanAndRelationEncoderDecoder(
-                span_encoder_decoder=span_encoder_decoder,
-                id2label=self.id2label,
-                bos_id=self.bos_id,
-                eos_id=self.eos_id,
-                span_ids=self.span_ids,
-                relation_ids=self.relation_ids,
-                none_id=self.none_ids,
-                **self.annotation_encoder_decoder_kwargs,
-            )
-        else:
-            raise Exception(
-                f"unknown annotation_encoder_decoder_name: {self.annotation_encoder_decoder_name}"
-            )
-
-    @property
-    def target_tokens(self) -> List[str]:
-        return self.tokenizer.convert_ids_to_tokens(self.target_token_ids)
-
-    @property
-    def target_ids(self) -> List[int]:
-        return list(self.target_token2id.values())
-
-    @property
-    def label_ids(self):
-        return sorted(self.label2id.values())
-
-    @property
-    def pointer_offset(self) -> int:
-        return len(self.target_token_ids)
-
-    @property
-    def pad_id(self) -> int:
-        v = self.pad_values.get("tgt_tokens", None)
-        if v is None:
-            raise Exception("pad value for tgt_tokens is not set")
-        return v
-
-    @pad_id.setter
-    def pad_id(self, value):
-        self.pad_values["tgt_tokens"] = value
+            if self.tokenizer.unk_token_id in source_indices:
+                raise RuntimeError(
+                    f"tokenized label_token={label_token} [{source_indices}] contains unk_token"
+                )
+            self.label_embedding_weight_mapping[label_token_idx] = source_indices
 
     def maybe_log_example(
         self,
@@ -386,11 +304,11 @@ class PointerNetworkForJointTaskModule(
             src_tokens = self.tokenizer.convert_ids_to_tokens(src_token_ids)
             tgt_token_ids = targets.tgt_tokens
             tgt_tokens = [
-                self.tokenizer.convert_ids_to_tokens(self.target_token_ids[tgt_token_id])
-                if tgt_token_id < self.pointer_offset
+                self.annotation_encoder_decoder.targets[tgt_token_id]
+                if tgt_token_id < self.annotation_encoder_decoder.pointer_offset
                 else str(tgt_token_id)
                 + " {"
-                + str(src_tokens[tgt_token_id - self.pointer_offset])
+                + str(src_tokens[tgt_token_id - self.annotation_encoder_decoder.pointer_offset])
                 + "}"
                 for tgt_token_id in tgt_token_ids
             ]
@@ -403,10 +321,7 @@ class PointerNetworkForJointTaskModule(
             self.log_first_n_examples -= 1
 
     def tokenize_document(self, document: DocumentType) -> List[TokenBasedDocument]:
-        field_mapping = {
-            self.span_layer_name: "labeled_spans",
-            self.relation_layer_name: "binary_relations",
-        }
+        field_mapping = dict(self.annotation_field_mapping)
         if self.partition_layer_name is not None:
             field_mapping[self.partition_layer_name] = "labeled_partitions"
             partition_layer = "labeled_partitions"
@@ -446,60 +361,20 @@ class PointerNetworkForJointTaskModule(
 
         return task_encodings
 
-    def _is_valid_annotation(
-        self,
-        annotation: Annotation,
-        partition: Optional[Span] = None,
-        tokenized_span: Optional[Span] = None,
-    ) -> bool:
-        if isinstance(annotation, BinaryRelation):
-            excluded_rel_names = set(
-                self.exclude_annotation_names.get(self.relation_layer_name, [])
-            )
-            return (
-                annotation.label not in excluded_rel_names
-                and self._is_valid_annotation(
-                    annotation.head, partition=partition, tokenized_span=tokenized_span
-                )
-                and self._is_valid_annotation(
-                    annotation.tail, partition=partition, tokenized_span=tokenized_span
-                )
-            )
-        elif isinstance(annotation, LabeledSpan):
-            excluded_names = set(self.exclude_annotation_names.get(self.span_layer_name, []))
-            return (
-                _span_is_in_partition(span=annotation, partition=partition)
-                and _span_is_in_partition(span=annotation, partition=tokenized_span)
-                and annotation.label not in excluded_names
-            )
-        elif isinstance(annotation, Span):
-            return _span_is_in_partition(
-                span=annotation, partition=partition
-            ) and _span_is_in_partition(span=annotation, partition=tokenized_span)
-        else:
-            raise Exception(f"annotation has unknown type: {annotation}")
+    def get_mapped_layer(self, document: Document, layer_name: str) -> AnnotationLayer:
+        if layer_name in self.annotation_field_mapping:
+            layer_name = self.annotation_field_mapping[layer_name]
+        return document[layer_name]
 
     def encode_target(self, task_encoding: TaskEncodingType) -> Optional[TargetEncodingType]:
         document = task_encoding.metadata["tokenized_document"]
 
-        # partitioning and windowing is already applied in tokenize_document
-        partition = None
-        tokenized_span = None
-        # this filters out annotations with excluded labels
-        valid_relations = [
-            rel
-            for rel in document["binary_relations"]
-            if self._is_valid_annotation(rel, partition=partition, tokenized_span=tokenized_span)
-        ]
-        valid_spans = [
-            span
-            for span in document["labeled_spans"]
-            if self._is_valid_annotation(span, partition=partition, tokenized_span=tokenized_span)
-        ]
-
+        layers = {
+            layer_name: self.get_mapped_layer(document, layer_name=layer_name)
+            for layer_name in self.annotation_encoder_decoder.layer_names
+        }
         tgt_tokens = self.annotation_encoder_decoder.encode(
-            layers={"span": valid_spans, "relation": valid_relations},
-            metadata=task_encoding.metadata,
+            layers=layers, metadata=task_encoding.metadata
         )
 
         if self.max_target_length is not None and len(tgt_tokens) > self.max_target_length:
@@ -593,17 +468,16 @@ class PointerNetworkForJointTaskModule(
 
         # Note: token_based_document_to_text_based() does not yet consider predictions, so we need to clear
         # the main annotations and attach the predictions to that
-        tokenized_document.labeled_spans.clear()
-        tokenized_document.binary_relations.clear()
-        tokenized_document.labeled_spans.extend(layers["span"])
-        tokenized_document.binary_relations.extend(layers["relation"])
+        for layer_name, annotations in layers.items():
+            layer = self.get_mapped_layer(tokenized_document, layer_name=layer_name)
+            layer.clear()
+            layer.extend(annotations)
 
         untokenized_document = token_based_document_to_text_based(
             tokenized_document, result_document_type=self.document_type
         )
 
-        for span in untokenized_document.labeled_spans:
-            yield self.span_layer_name, span.copy()
-
-        for rel in untokenized_document.binary_relations:
-            yield self.relation_layer_name, rel.copy()
+        for layer_name in layers:
+            annotations = self.get_mapped_layer(untokenized_document, layer_name=layer_name)
+            for annotation in annotations:
+                yield layer_name, annotation.copy()

@@ -61,53 +61,74 @@ def document():
 @pytest.fixture(scope="module")
 def taskmodule(document):
     taskmodule = PointerNetworkForJointTaskModule(
-        text_field_name="text",
-        span_layer_name="entities",
-        relation_layer_name="relations",
-        exclude_annotation_names={"relations": ["no_relation"]},
+        annotation_encoder_decoder_kwargs={
+            "span_layer_name": "entities",
+            "relation_layer_name": "relations",
+            "exclude_labels_per_layer": {"relations": ["no_relation"]},
+        },
+        annotation_field_mapping={
+            "entities": "labeled_spans",
+            "relations": "binary_relations",
+        },
     )
 
     taskmodule.prepare(documents=[document])
 
-    # arbitrary ids
-    assert taskmodule.bos_id == 0
-    assert taskmodule.eos_id == 1
-    assert taskmodule.relation_ids == [4]
-    assert taskmodule.none_ids == 3
-    assert taskmodule.span_ids == [6, 5, 2]
-    assert taskmodule.label_ids == [2, 3, 4, 5, 6]
-    # ids from tokenizer
-    assert taskmodule.target_token_ids == [0, 2, 50265, 50266, 50267, 50268, 50269]
+    # check the annotation_encoder_decoder
+    annotation_encoder_decoder = taskmodule.annotation_encoder_decoder
+    assert annotation_encoder_decoder.is_prepared
+    assert annotation_encoder_decoder.prepared_attributes == {
+        "labels_per_layer": {
+            "entities": ["content", "person", "topic"],
+            "relations": ["is_about"],
+        },
+        "bos_token": "<s>",
+        "eos_token": "</s>",
+    }
+    assert annotation_encoder_decoder.layer_names == ["entities", "relations"]
+    assert annotation_encoder_decoder.special_targets == ["<s>", "</s>"]
+    assert annotation_encoder_decoder.labels == ["none", "content", "person", "topic", "is_about"]
+    assert annotation_encoder_decoder.targets == [
+        "<s>",
+        "</s>",
+        "none",
+        "content",
+        "person",
+        "topic",
+        "is_about",
+    ]
+    assert annotation_encoder_decoder.bos_id == 0
+    assert annotation_encoder_decoder.eos_id == 1
+    assert annotation_encoder_decoder.none_id == 2
+    assert annotation_encoder_decoder.span_ids == [3, 4, 5]
+    assert annotation_encoder_decoder.relation_ids == [6]
+    assert annotation_encoder_decoder.label2id == {
+        "content": 3,
+        "is_about": 6,
+        "none": 2,
+        "person": 4,
+        "topic": 5,
+    }
+
+    # check taskmodule properties
+    assert taskmodule.prepared_attributes == {}
+    assert taskmodule.label_embedding_weight_mapping == {
+        50265: [45260],
+        50266: [39763],
+        50267: [354, 1215, 9006],
+        50268: [5970],
+        50269: [10166],
+    }
     assert taskmodule.target_tokens == [
         "<s>",
         "</s>",
-        "<<topic>>",
         "<<none>>",
-        "<<is_about>>",
-        "<<person>>",
         "<<content>>",
+        "<<person>>",
+        "<<topic>>",
+        "<<is_about>>",
     ]
-    assert taskmodule.tokenizer.pad_token_id == 1
-    assert taskmodule.target_token2id == {
-        "<s>": 0,
-        "</s>": 1,
-        "<<topic>>": 2,
-        "<<none>>": 3,
-        "<<is_about>>": 4,
-        "<<person>>": 5,
-        "<<content>>": 6,
-    }
-    assert taskmodule.id2label == {2: "topic", 3: "none", 4: "is_about", 5: "person", 6: "content"}
-    assert len(taskmodule.tokenizer) == 50270
-    assert taskmodule.embedding_weight_mapping == {
-        50267: [354, 1215, 9006],
-        50269: [10166],
-        50268: [5970],
-        50265: [45260],
-        50266: [39763],
-    }
-    assert taskmodule.label2id == {"topic": 2, "none": 3, "is_about": 4, "person": 5, "content": 6}
-
+    assert taskmodule.target_token_ids == [0, 2, 50266, 50269, 50268, 50265, 50267]
     return taskmodule
 
 
@@ -120,14 +141,10 @@ def model(taskmodule) -> PointerNetworkModel:
     torch.manual_seed(42)
     model = PointerNetworkModel(
         bart_model="facebook/bart-base",
-        label_ids=taskmodule.label_ids,
-        bos_id=taskmodule.bos_id,
-        eos_id=taskmodule.eos_id,
-        pad_id=taskmodule.pad_id,
         target_token_ids=taskmodule.target_token_ids,
         pad_token_id=taskmodule.tokenizer.pad_token_id,
         vocab_size=len(taskmodule.tokenizer),
-        embedding_weight_mapping=taskmodule.embedding_weight_mapping,
+        embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
         decoder_type="avg_score",
         copy_gate=False,
         use_encoder_mlp=True,
@@ -145,12 +162,8 @@ def model(taskmodule) -> PointerNetworkModel:
         biloss=True,
         lr=5e-5,
         max_target_positions=512,
-        annotation_encoder_decoder_kwargs=dict(
-            id2label=taskmodule.id2label,
-            span_ids=taskmodule.span_ids,
-            none_id=taskmodule.none_ids,
-            relation_ids=taskmodule.relation_ids,
-        ),
+        annotation_encoder_decoder_name=taskmodule.annotation_encoder_decoder_name,
+        annotation_encoder_decoder_kwargs=taskmodule.annotation_encoder_decoder_kwargs,
     )
     # set model to training mode, otherwise model.encoder.bart_encoder.training will be False!
     model.train()
@@ -187,7 +200,7 @@ def test_batch(batch):
     assert set(targets) == {"tgt_tokens", "tgt_seq_len", "CPM_tag"}
     torch.testing.assert_close(
         targets["tgt_tokens"],
-        torch.tensor([[0, 14, 14, 2, 11, 12, 6, 4, 17, 17, 5, 3, 3, 3, 3, 1]]),
+        torch.tensor([[0, 14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]]),
     )
     torch.testing.assert_close(
         targets["tgt_seq_len"],
@@ -199,20 +212,20 @@ def test_batch(batch):
             [
                 [
                     [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-                    [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
-                    [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                 ]
             ]
         ),
@@ -226,7 +239,7 @@ def test_training_step(model, batch):
     assert isinstance(loss, torch.Tensor)
     assert loss.requires_grad
     assert loss.dim() == 0
-    torch.testing.assert_close(loss, torch.tensor(17.09836769104004))
+    torch.testing.assert_close(loss, torch.tensor(17.0904483795166))
 
 
 def test_predict_step(model, batch):
@@ -246,14 +259,14 @@ def test_metric_val(model, batch):
     assert values is not None
     assert values == {
         "em": 0.0,
-        "span": {
-            "content": {"acc": 0, "recall": 0.0, "f1": 0.0},
+        "entities": {
             "person": {"acc": 0, "recall": 0.0, "f1": 0.0},
             "topic": {"acc": 0, "recall": 0.0, "f1": 0.0},
+            "content": {"acc": 0, "recall": 0.0, "f1": 0.0},
         },
-        "span/micro": {"acc": 0, "recall": 0.0, "f1": 0.0},
-        "relation": {"is_about": {"acc": 0, "recall": 0.0, "f1": 0.0}},
-        "relation/micro": {"acc": 0, "recall": 0.0, "f1": 0.0},
+        "entities/micro": {"acc": 0, "recall": 0.0, "f1": 0.0},
+        "relations": {"is_about": {"acc": 0, "recall": 0.0, "f1": 0.0}},
+        "relations/micro": {"acc": 0, "recall": 0.0, "f1": 0.0},
         "invalid/len": 0.0,
         "invalid/order": 0.0,
         "invalid/cross": 0.0,

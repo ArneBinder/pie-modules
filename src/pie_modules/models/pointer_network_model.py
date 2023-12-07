@@ -517,10 +517,6 @@ class PointerNetworkModel(PyTorchIEModel):
     def __init__(
         self,
         bart_model: str,
-        bos_id: int,
-        eos_id: int,
-        label_ids: List[int],
-        pad_id: int,
         target_token_ids: List[int],
         vocab_size: int,
         pad_token_id: int,
@@ -543,7 +539,7 @@ class PointerNetworkModel(PyTorchIEModel):
         restricter: Optional[Callable] = None,
         decode_mask: bool = True,
         metric_splits: List[str] = ["val", "test"],
-        annotation_encoder_decoder_name: str = "gmam",
+        annotation_encoder_decoder_name: str = "pointer_network_span_and_relation",
         annotation_encoder_decoder_kwargs: Optional[Dict[str, Any]] = None,
         # added for the loss
         biloss: int = True,
@@ -565,13 +561,24 @@ class PointerNetworkModel(PyTorchIEModel):
 
         self.save_hyperparameters()
 
+        if annotation_encoder_decoder_name == "pointer_network_span_and_relation":
+            self.annotation_encoder_decoder = PointerNetworkSpanAndRelationEncoderDecoder(
+                **(annotation_encoder_decoder_kwargs or {}),
+            )
+        else:
+            raise Exception(
+                f"Unsupported annotation encoder decoder: {annotation_encoder_decoder_name}"
+            )
+
         model = BartModel.from_pretrained(bart_model)
         num_tokens, _ = model.encoder.embed_tokens.weight.shape
         model.resize_token_embeddings(vocab_size)
         encoder = model.encoder
         decoder = model.decoder
 
-        label_token_ids = [target_token_ids[label_id] for label_id in label_ids]
+        label_token_ids = [
+            target_token_ids[label_id] for label_id in self.annotation_encoder_decoder.label_ids
+        ]
 
         if use_recur_pos:
             decoder.set_position_embedding(label_token_ids[0], tag_first)
@@ -590,57 +597,46 @@ class PointerNetworkModel(PyTorchIEModel):
             raise NotImplementedError
         elif decoder_type == "avg_score":
             self.decoder = CaGFBartDecoder(
-                decoder,
+                decoder=decoder,
                 encoder_embed_positions=model.encoder.embed_positions,
                 pad_token_id=pad_token_id,
                 target_token_ids=target_token_ids,
-                label_ids=label_ids,
-                eos_id=eos_id,
-                pad_id=pad_id,
+                label_ids=self.annotation_encoder_decoder.label_ids,
+                eos_id=self.annotation_encoder_decoder.eos_id,
+                pad_id=self.annotation_encoder_decoder.target_pad_id,
                 use_encoder_mlp=use_encoder_mlp,
                 position_type=position_type,
                 replace_pos=replace_pos,
                 max_target_positions=max_target_positions,
             )
+            self.decoder.relation_ids = self.annotation_encoder_decoder.relation_ids
+            self.decoder.span_ids = self.annotation_encoder_decoder.span_ids
+            self.decoder.none_ids = self.annotation_encoder_decoder.none_id
         else:
             raise RuntimeError("Unsupported feature.")
 
         self.generator = SequenceGenerator(
-            self.decoder,
+            decoder=self.decoder,
             max_length=max_length,
             max_len_a=max_len_a,
             num_beams=num_beams,
             do_sample=do_sample,
-            bos_token_id=bos_id,
-            eos_token_id=eos_id,
+            bos_token_id=self.annotation_encoder_decoder.bos_id,
+            eos_token_id=self.annotation_encoder_decoder.eos_id,
             repetition_penalty=repetition_penalty,
             length_penalty=length_penalty,
-            pad_token_id=pad_id,
+            pad_token_id=self.annotation_encoder_decoder.target_pad_id,
             restricter=restricter,
             decode_mask=decode_mask,
         )
 
         self.losses = {"train": {"seq2seq": Seq2SeqLoss(biloss=biloss)}}
 
-        # also allow "gmam_annotation_encoder_decoder" for backward compatibility
-        if annotation_encoder_decoder_name in ["gmam_annotation_encoder_decoder", "gmam"]:
-            annotation_encoder_decoder = PointerNetworkSpanAndRelationEncoderDecoder(
-                bos_id=bos_id,
-                eos_id=eos_id,
-                **(annotation_encoder_decoder_kwargs or {}),
-            )
-            self.decoder.relation_ids = annotation_encoder_decoder.relation_ids
-            self.decoder.span_ids = annotation_encoder_decoder.span_ids
-            self.decoder.none_ids = annotation_encoder_decoder.none_id
-        else:
-            raise Exception(
-                f"Unsupported annotation encoder decoder: {annotation_encoder_decoder_name}"
-            )
         # NOTE: This is not a ModuleDict, so this will not live on the torch device!
         self.metrics = {
             stage: AnnotationLayerMetric(
-                eos_id=eos_id,
-                annotation_encoder_decoder=annotation_encoder_decoder,
+                eos_id=self.annotation_encoder_decoder.eos_id,
+                annotation_encoder_decoder=self.annotation_encoder_decoder,
             )
             for stage in metric_splits
         }
