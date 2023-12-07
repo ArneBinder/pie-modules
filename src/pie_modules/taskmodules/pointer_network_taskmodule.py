@@ -41,6 +41,7 @@ from transformers import AutoTokenizer, PreTrainedTokenizer
 from typing_extensions import TypeAlias
 
 from ..document.processing import token_based_document_to_text_based, tokenize_document
+from ..utils import resolve_type
 from .components.seq2seq import (
     PointerNetworkSpanAndRelationEncoderDecoder,
     SpanEncoderDecoderWithOffset,
@@ -124,8 +125,15 @@ def _span_is_in_partition(span: Span, partition: Optional[Span] = None):
 # see https://github.com/Lightning-AI/lightning/pull/13640#issuecomment-1199032224
 
 
+DEFAULT_DOCUMENT_TYPE = (
+    "pytorch_ie.documents.TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions"
+)
+# TODO: move to pie_modules.documents when this is available
+DEFAULT_TOKENIZED_DOCUMENT_TYPE = "pie_modules.taskmodules.pointer_network_taskmodule.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions"
+
+
 @TaskModule.register()
-class PointerNetworkForJointTaskModule(
+class PointerNetworkTaskModule(
     TaskModule[
         DocumentType,
         InputEncoding,
@@ -138,6 +146,8 @@ class PointerNetworkForJointTaskModule(
     def __init__(
         self,
         # tokenization
+        document_type: str = DEFAULT_DOCUMENT_TYPE,
+        tokenized_document_type: str = DEFAULT_TOKENIZED_DOCUMENT_TYPE,
         tokenizer_name_or_path: str = "facebook/bart-base",
         tokenizer_init_kwargs: Optional[Dict[str, Any]] = None,
         tokenizer_kwargs: Optional[Dict[str, Any]] = None,
@@ -159,6 +169,12 @@ class PointerNetworkForJointTaskModule(
         self.save_hyperparameters()
 
         # tokenization
+        self._document_type: Type[TextBasedDocument] = resolve_type(
+            document_type, expected_super_type=TextBasedDocument
+        )
+        self._tokenized_document_type: Type[TokenBasedDocument] = resolve_type(
+            tokenized_document_type, expected_super_type=TokenBasedDocument
+        )
         self.tokenizer_name_or_path = tokenizer_name_or_path
         self.tokenizer_kwargs = tokenizer_kwargs or {}
         self.tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
@@ -207,17 +223,11 @@ class PointerNetworkForJointTaskModule(
 
     @property
     def document_type(self) -> Type[TextBasedDocument]:
-        if self.partition_layer_name is None:
-            return TextDocumentWithLabeledSpansAndBinaryRelations
-        else:
-            return TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
+        return self._document_type
 
     @property
     def tokenized_document_type(self) -> Type[TokenBasedDocument]:
-        if self.partition_layer_name is None:
-            return TokenDocumentWithLabeledSpansAndBinaryRelations
-        else:
-            return TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
+        return self._tokenized_document_type
 
     @property
     def is_prepared(self):

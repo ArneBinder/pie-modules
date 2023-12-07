@@ -8,7 +8,7 @@ from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.documents import TextBasedDocument
 
 from pie_modules.models import PointerNetworkModel
-from pie_modules.taskmodules import PointerNetworkForJointTaskModule
+from pie_modules.taskmodules import PointerNetworkTaskModule
 
 # from src.models.components.gmam.metrics import LabeledAnnotationScore, AnnotationLayerMetric
 from tests import FIXTURES_ROOT
@@ -60,7 +60,7 @@ def document():
 
 @pytest.fixture(scope="module")
 def taskmodule(document):
-    taskmodule = PointerNetworkForJointTaskModule(
+    taskmodule = PointerNetworkTaskModule(
         annotation_encoder_decoder_kwargs={
             "span_layer_name": "entities",
             "relation_layer_name": "relations",
