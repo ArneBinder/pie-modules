@@ -143,6 +143,11 @@ class PointerNetworkTaskModule(
         TaskOutput,
     ]
 ):
+    # Note that we overwrite self.is_prepared with self.annotation_encoder_decoder.is_prepared, so it is fine
+    # to initialize the taskmodule *with* a value for annotation_encoder_decoder_kwargs, but _prepare(documents)
+    # gets still called when the taskmodule is used in a pipeline.
+    PREPARED_ATTRIBUTES = ["annotation_encoder_decoder_kwargs"]
+
     def __init__(
         self,
         # tokenization
@@ -244,8 +249,9 @@ class PointerNetworkTaskModule(
 
     def _post_prepare(self):
         self.annotation_encoder_decoder._post_prepare()
-        # This is a bit hacky, but we need to update the kwargs of the encoder decoder.
-        # Note, that this also updates the content of self.hparams and thus the saved hyperparameters
+        # This is a bit hacky, but we need to update the kwargs of the annotation-encoder-decoder with its
+        # prepared attributes, because they are required when instantiating it from config, i.e. when
+        # taskmodule._prepare(documents) is *not* called.
         self.annotation_encoder_decoder_kwargs.update(
             self.annotation_encoder_decoder.prepared_attributes
         )

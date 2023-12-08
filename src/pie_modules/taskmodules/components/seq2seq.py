@@ -110,7 +110,7 @@ class PointerNetworkSpanAndRelationEncoderDecoder(
     PointerNetworkEncoderDecoder,
     PreparableMixin,
 ):
-    PREPARED_ATTRIBUTES = ["labels_per_layer", "bos_token", "eos_token"]
+    PREPARED_ATTRIBUTES = ["labels_per_layer"]
 
     def __init__(
         self,
