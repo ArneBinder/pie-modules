@@ -74,6 +74,10 @@ def taskmodule(document):
 
     taskmodule.prepare(documents=[document])
 
+    return taskmodule
+
+
+def test_taskmodule(taskmodule):
     # check the annotation_encoder_decoder
     annotation_encoder_decoder = taskmodule.annotation_encoder_decoder
     assert annotation_encoder_decoder.is_prepared
@@ -82,8 +86,6 @@ def taskmodule(document):
             "entities": ["content", "person", "topic"],
             "relations": ["is_about"],
         },
-        "bos_token": "<s>",
-        "eos_token": "</s>",
     }
     assert annotation_encoder_decoder.layer_names == ["entities", "relations"]
     assert annotation_encoder_decoder.special_targets == ["<s>", "</s>"]
@@ -111,7 +113,19 @@ def taskmodule(document):
     }
 
     # check taskmodule properties
-    assert taskmodule.prepared_attributes == {}
+    assert taskmodule.prepared_attributes == {
+        "annotation_encoder_decoder_kwargs": {
+            "span_layer_name": "entities",
+            "relation_layer_name": "relations",
+            "exclude_labels_per_layer": {"relations": ["no_relation"]},
+            "bos_token": "<s>",
+            "eos_token": "</s>",
+            "labels_per_layer": {
+                "entities": ["content", "person", "topic"],
+                "relations": ["is_about"],
+            },
+        }
+    }
     assert taskmodule.label_embedding_weight_mapping == {
         50265: [45260],
         50266: [39763],
@@ -129,11 +143,6 @@ def taskmodule(document):
         "<<is_about>>",
     ]
     assert taskmodule.target_token_ids == [0, 2, 50266, 50269, 50268, 50265, 50267]
-    return taskmodule
-
-
-def test_taskmodule(taskmodule):
-    assert taskmodule is not None
 
 
 @pytest.fixture(scope="module")

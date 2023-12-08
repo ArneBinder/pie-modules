@@ -117,14 +117,10 @@ def taskmodule(document, config):
 
 
 def test_taskmodule(taskmodule):
-    tm = taskmodule
-
     # check the annotation_encoder_decoder
-    annotation_encoder_decoder = tm.annotation_encoder_decoder
+    annotation_encoder_decoder = taskmodule.annotation_encoder_decoder
     assert annotation_encoder_decoder.is_prepared
     assert annotation_encoder_decoder.prepared_attributes == {
-        "bos_token": "<s>",
-        "eos_token": "</s>",
         "labels_per_layer": {
             "entities": ["content", "person", "topic"],
             "relations": ["is_about"],
@@ -156,15 +152,27 @@ def test_taskmodule(taskmodule):
     }
 
     # check taskmodule properties
-    assert tm.prepared_attributes == {}
-    assert tm.label_embedding_weight_mapping == {
+    assert taskmodule.prepared_attributes == {
+        "annotation_encoder_decoder_kwargs": {
+            "span_layer_name": "entities",
+            "relation_layer_name": "relations",
+            "exclude_labels_per_layer": {"relations": ["no_relation"]},
+            "bos_token": "<s>",
+            "eos_token": "</s>",
+            "labels_per_layer": {
+                "entities": ["content", "person", "topic"],
+                "relations": ["is_about"],
+            },
+        }
+    }
+    assert taskmodule.label_embedding_weight_mapping == {
         50265: [45260],
         50266: [39763],
         50267: [354, 1215, 9006],
         50268: [5970],
         50269: [10166],
     }
-    assert tm.target_tokens == [
+    assert taskmodule.target_tokens == [
         "<s>",
         "</s>",
         "<<none>>",
@@ -173,7 +181,72 @@ def test_taskmodule(taskmodule):
         "<<topic>>",
         "<<is_about>>",
     ]
-    assert tm.target_token_ids == [0, 2, 50266, 50269, 50268, 50265, 50267]
+    assert taskmodule.target_token_ids == [0, 2, 50266, 50269, 50268, 50265, 50267]
+
+
+def test_prepared_config(taskmodule, config):
+    if config == {}:
+        assert taskmodule._config() == {
+            "taskmodule_type": "PointerNetworkTaskModule",
+            "document_type": "pytorch_ie.documents.TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
+            "tokenized_document_type": "pie_modules.taskmodules.pointer_network_taskmodule.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
+            "tokenizer_name_or_path": "facebook/bart-base",
+            "tokenizer_init_kwargs": None,
+            "tokenizer_kwargs": None,
+            "partition_layer_name": None,
+            "annotation_field_mapping": {
+                "entities": "labeled_spans",
+                "relations": "binary_relations",
+            },
+            "annotation_encoder_decoder_name": "pointer_network_span_and_relation",
+            "annotation_encoder_decoder_kwargs": {
+                "span_layer_name": "entities",
+                "relation_layer_name": "relations",
+                "exclude_labels_per_layer": {"relations": ["no_relation"]},
+                "bos_token": "<s>",
+                "eos_token": "</s>",
+                "labels_per_layer": {
+                    "entities": ["content", "person", "topic"],
+                    "relations": ["is_about"],
+                },
+            },
+            "label_tokens": None,
+            "label_representations": None,
+            "max_target_length": None,
+            "create_constraints": True,
+            "log_first_n_examples": None,
+        }
+    elif config == {"partition_layer_name": "sentences"}:
+        assert taskmodule._config() == {
+            "taskmodule_type": "PointerNetworkTaskModule",
+            "document_type": "pytorch_ie.documents.TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
+            "tokenized_document_type": "pie_modules.taskmodules.pointer_network_taskmodule.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
+            "tokenizer_name_or_path": "facebook/bart-base",
+            "tokenizer_init_kwargs": None,
+            "tokenizer_kwargs": None,
+            "partition_layer_name": "sentences",
+            "annotation_field_mapping": {
+                "entities": "labeled_spans",
+                "relations": "binary_relations",
+            },
+            "annotation_encoder_decoder_name": "pointer_network_span_and_relation",
+            "annotation_encoder_decoder_kwargs": {
+                "span_layer_name": "entities",
+                "relation_layer_name": "relations",
+                "exclude_labels_per_layer": {"relations": ["no_relation"]},
+                "bos_token": "<s>",
+                "eos_token": "</s>",
+                "labels_per_layer": {
+                    "entities": ["content", "person", "topic"],
+                    "relations": ["is_about"],
+                },
+            },
+            "label_tokens": None,
+            "label_representations": None,
+            "max_target_length": None,
+            "create_constraints": True,
+            "log_first_n_examples": None,
+        }
 
 
 @pytest.fixture()
