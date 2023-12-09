@@ -3,6 +3,7 @@ import json
 import pytest
 import torch
 import transformers
+from pytorch_lightning import Trainer
 
 from pie_modules.annotations import ExtractiveAnswer, Question
 from pie_modules.documents import ExtractiveQADocument
@@ -216,3 +217,25 @@ def test_optim(model):
     assert optimizer is not None
     assert isinstance(optimizer, torch.optim.Adam)
     assert optimizer.defaults["lr"] == 1e-05
+
+
+def test_optim_with_warmup_proportion(monkeypatch, batch):
+    inputs, targets = batch
+    model = get_model(
+        monkeypatch=monkeypatch,
+        model_type="bert",
+        batch_size=inputs["input_ids"].shape[0],
+        seq_len=inputs["input_ids"].shape[1],
+        add_dummy_linear=True,
+        warmup_proportion=0.1,
+    )
+    model.trainer = Trainer(max_epochs=10)
+    optimizers_and_schedulars = model.configure_optimizers()
+    assert optimizers_and_schedulars is not None
+    assert isinstance(optimizers_and_schedulars, tuple) and len(optimizers_and_schedulars) == 2
+
+    optimizers, schedulers = optimizers_and_schedulars
+    assert isinstance(optimizers[0], torch.optim.Optimizer)
+    assert set(schedulers[0]) == {"scheduler", "interval"}
+    schedular = schedulers[0]["scheduler"]
+    assert isinstance(schedular, torch.optim.lr_scheduler.LRScheduler)
