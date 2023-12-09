@@ -1,5 +1,3 @@
-from collections import defaultdict
-
 import pytest
 import torch
 import transformers
@@ -16,66 +14,38 @@ from pie_modules.taskmodules.extractive_question_answering import (
 def document():
     document = ExtractiveQADocument(text="This is a test document", id="doc0")
     document.questions.append(Question(text="What is the first word?"))
-    document.answers.append(ExtractiveAnswer(question=document.questions[0], start=0, end=3))
+    document.answers.append(ExtractiveAnswer(question=document.questions[0], start=0, end=4))
+    assert str(document.answers[0]) == "This"
     return document
+
+
+@pytest.fixture()
+def document1():
+    document1 = ExtractiveQADocument(text="This is the second document", id="doc1")
+    document1.questions.append(Question(text="Which document is this?"))
+    document1.answers.append(ExtractiveAnswer(question=document1.questions[0], start=13, end=18))
+    assert str(document1.answers[0]) == "second"
+    return document1
 
 
 @pytest.fixture()
 def document_with_no_answer():
-    document = ExtractiveQADocument(text="This is a test document", id="doc0")
+    document = ExtractiveQADocument(text="This is a test document", id="document_with_no_answer")
     document.questions.append(Question(text="What is the first word?"))
     return document
 
 
 @pytest.fixture()
-def document_with_multuple_answers():
-    document = ExtractiveQADocument(text="This is a test document", id="doc0")
-    document.questions.append(Question(text="What is the first word?"))
-    document.answers.append(ExtractiveAnswer(question=document.questions[0], start=0, end=3))
-    document.answers.append(ExtractiveAnswer(question=document.questions[0], start=0, end=3))
-    return document
-
-
-@pytest.fixture()
-def document_batch():
-    document0 = ExtractiveQADocument(text="This is a test document", id="doc0")
-    document0.questions.append(Question(text="What is the first word?"))
-    document0.answers.append(ExtractiveAnswer(question=document0.questions[0], start=0, end=3))
-
-    document1 = ExtractiveQADocument(text="This is the second document", id="doc1")
-    document1.questions.append(Question(text="Which document is this?"))
-    document1.answers.append(ExtractiveAnswer(question=document1.questions[0], start=13, end=18))
-    return [document0, document1]
-
-
-@pytest.fixture()
-def model_outputs():
-    # create dummy model outputs
-    start_logits = [[0.05] * 30, [0.05] * 30]
-    end_logits = [[0.05] * 30, [0.05] * 30]
-    # set some values to 0.95 as a dummy value
-    start1 = 0
-    end1 = 3
-    start2 = 13
-    end2 = 18
-    start_logits[0][start1] = 0.95
-    end_logits[0][end1] = 0.95
-    start_logits[1][start2] = 0.95
-    end_logits[1][end2] = 0.95
-
-    # convert to torch tensors
-    start_logits = torch.FloatTensor(start_logits)
-    end_logits = torch.FloatTensor(end_logits)
-
-    # convert to logits
-    start_logits = torch.log(start_logits / (1 - start_logits))
-    end_logits = torch.log(end_logits / (1 - end_logits))
-
-    model_outputs = transformers.modeling_outputs.QuestionAnsweringModelOutput(
-        start_logits=start_logits,
-        end_logits=end_logits,
+def document_with_multiple_answers():
+    document = ExtractiveQADocument(
+        text="This is a test document", id="document_with_multiple_answers"
     )
-    return model_outputs
+    document.questions.append(Question(text="What is the first word?"))
+    document.answers.append(ExtractiveAnswer(question=document.questions[0], start=0, end=4))
+    assert str(document.answers[0]) == "This"
+    document.answers.append(ExtractiveAnswer(question=document.questions[0], start=0, end=7))
+    assert str(document.answers[1]) == "This is"
+    return document
 
 
 @pytest.fixture()
@@ -86,7 +56,7 @@ def taskmodule():
 
 
 def test_encode_input(
-    taskmodule, document, document_with_no_answer, document_with_multuple_answers
+    taskmodule, document, document_with_no_answer, document_with_multiple_answers
 ):
     inputs = taskmodule.encode_input(document)
     assert inputs is not None
@@ -114,7 +84,7 @@ def test_encode_input(
     assert len(inputs) == 1
     assert inputs[0].inputs == expected_inputs
 
-    inputs = taskmodule.encode_input(document_with_multuple_answers)
+    inputs = taskmodule.encode_input(document_with_multiple_answers)
     assert inputs is not None
     assert len(inputs) == 1
     assert inputs[0].inputs == expected_inputs
@@ -158,7 +128,7 @@ def test_get_answer_layer(taskmodule, document, document_with_no_answer):
     assert type(answer_layer[0]) is ExtractiveAnswer
     assert answer_layer[0].question.text == "What is the first word?"
     assert answer_layer[0].start == 0
-    assert answer_layer[0].end == 3
+    assert answer_layer[0].end == 4
 
     answer_layer = taskmodule.get_answer_layer(document_with_no_answer)
     assert answer_layer is not None
@@ -176,20 +146,42 @@ def test_get_context(taskmodule, document, document_with_no_answer):
     assert context == "This is a test document"
 
 
-def test_collate(taskmodule, document, document_with_no_answer):
-    task_encodings = taskmodule.encode([document, document_with_no_answer])
+@pytest.fixture()
+def documents(document, document_with_no_answer):
+    return [document, document_with_no_answer]
+
+
+@pytest.fixture()
+def batch_without_targets(taskmodule, documents):
+    task_encodings = taskmodule.encode(documents)
     batch_encoding = taskmodule.collate(task_encodings)
-    assert batch_encoding is not None
-    assert len(batch_encoding) == 2
-    inputs, targets = batch_encoding
+    return batch_encoding
+
+
+def test_collate_without_targets(batch_without_targets):
+    assert batch_without_targets is not None
+    assert len(batch_without_targets) == 2
+    inputs, targets = batch_without_targets
     assert inputs is not None
     assert targets is None
 
-    task_encodings = taskmodule.encode([document, document_with_no_answer], encode_target=True)
+
+@pytest.fixture()
+def task_encodings(taskmodule, documents):
+    task_encodings = taskmodule.encode(documents, encode_target=True)
+    return task_encodings
+
+
+@pytest.fixture()
+def batch(taskmodule, task_encodings):
     batch_encoding = taskmodule.collate(task_encodings)
-    assert batch_encoding is not None
-    assert len(batch_encoding) == 2
-    inputs, targets = batch_encoding
+    return batch_encoding
+
+
+def test_collate_with_targets(batch):
+    assert batch is not None
+    assert len(batch) == 2
+    inputs, targets = batch
     assert inputs is not None
     assert set(inputs.data) == {"input_ids", "token_type_ids", "attention_mask"}
     assert inputs.data["input_ids"].shape == (2, 14)
@@ -222,35 +214,58 @@ def test_collate(taskmodule, document, document_with_no_answer):
     assert targets["end_positions"].tolist() == expected_end_positions
 
 
-def test_unbatch_output(taskmodule, model_outputs):
-    unbatched_output = taskmodule.unbatch_output(model_outputs)
+@pytest.fixture()
+def model_outputs(batch):
+    # create probabilities that "perfectly" model the batch targets
+    inputs, targets = batch
+    start_probs = torch.zeros_like(inputs.input_ids, dtype=torch.float) + 0.05
+    end_probs = torch.zeros_like(inputs.input_ids, dtype=torch.float) + 0.05
+    # set target positions to 0.95 as a dummy value
+    for idx, (start_position, end_position) in enumerate(
+        zip(targets["start_positions"], targets["end_positions"])
+    ):
+        start_probs[idx, start_position] = 0.95
+        end_probs[idx, end_position] = 0.95
+
+    # convert probs to logits
+    start_logits = torch.log(start_probs / (1 - start_probs))
+    end_logits = torch.log(end_probs / (1 - end_probs))
+
+    model_outputs = transformers.modeling_outputs.QuestionAnsweringModelOutput(
+        start_logits=start_logits,
+        end_logits=end_logits,
+    )
+    return model_outputs
+
+
+@pytest.fixture()
+def unbatched_output(taskmodule, model_outputs):
+    return taskmodule.unbatch_output(model_outputs)
+
+
+def test_unbatch_output(unbatched_output):
     assert unbatched_output is not None
-
-    result = [
-        {
-            "start": output.start,
-            "end": output.end,
-            "start_probability": round(float(output.start_probability), 2),
-            "end_probability": round(float(output.end_probability), 2),
-        }
-        for output in unbatched_output
-    ]
-    expected_result = [
-        {"start": 0, "end": 3, "start_probability": 0.93, "end_probability": 0.93},
-        {"start": 13, "end": 18, "start_probability": 0.93, "end_probability": 0.93},
-    ]
-
-    assert result == expected_result
+    assert len(unbatched_output) == 2
+    # check first result
+    assert unbatched_output[0].start == 8
+    assert unbatched_output[0].end == 8
+    assert unbatched_output[0].start_probability == pytest.approx(0.9652407)
+    assert unbatched_output[0].end_probability == pytest.approx(0.9652407)
+    # check second result
+    assert unbatched_output[1].start == 0
+    assert unbatched_output[1].end == 0
+    assert unbatched_output[1].start_probability == pytest.approx(0.9652407)
+    assert unbatched_output[1].end_probability == pytest.approx(0.9652407)
 
 
-def test_create_annotations_from_output(taskmodule, document_batch, model_outputs):
-    task_encodings_for_batch = taskmodule.encode(document_batch, encode_target=True)
-    unbatched_outputs = taskmodule.unbatch_output(model_outputs)
-
-    named_annotations_per_document = defaultdict(list)
-    for task_encoding, task_output in zip(task_encodings_for_batch, unbatched_outputs):
-        annotations = taskmodule.create_annotations_from_output(task_encoding, task_output)
-        named_annotations_per_document[task_encoding.document.id].extend(list(annotations))
-
-    assert named_annotations_per_document is not None
-    assert len(named_annotations_per_document) == 2
+def test_create_annotations_from_output(taskmodule, task_encodings, unbatched_output, documents):
+    taskmodule.combine_outputs(task_encodings, unbatched_output)
+    assert len(documents) > 0
+    for doc in documents:
+        gold_annotations = doc.answers
+        predicted_annotations = doc.answers.predictions
+        assert len(predicted_annotations) == len(gold_annotations)
+        for predicted_annotation, gold_annotation in zip(predicted_annotations, gold_annotations):
+            # we did construct the predicted annotations from the gold annotations, so they should be equal
+            assert predicted_annotation == gold_annotation
+            assert predicted_annotation.score == pytest.approx(0.9316896200180054)

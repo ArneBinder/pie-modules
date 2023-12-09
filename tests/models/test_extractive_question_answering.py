@@ -12,9 +12,8 @@ from pie_modules.models.simple_extractive_question_answering import (
 from pie_modules.taskmodules.extractive_question_answering import (
     ExtractiveQuestionAnsweringTaskModule,
 )
-from tests import FIXTURES_ROOT
+from tests import DUMP_FIXTURE_DATA, FIXTURES_ROOT
 
-DUMP_FIXTURES = True
 FIXTURES_TASKMODULE_DATA_PATH = FIXTURES_ROOT / "taskmodules" / "extractive_question_answering"
 
 
@@ -41,7 +40,7 @@ def documents():
 
 
 @pytest.mark.skipif(
-    condition=not DUMP_FIXTURES,
+    condition=not DUMP_FIXTURE_DATA,
     reason="Only need to dump the data if taskmodule has changed",
 )
 def test_dump_fixtures(documents):
@@ -70,14 +69,14 @@ def test_dump_fixtures(documents):
 
 
 @pytest.fixture
-def batch(documents):
+def batch():
     filepath = FIXTURES_TASKMODULE_DATA_PATH / "batch_encoding_inputs.json"
     with open(filepath) as f:
         batch_encoding = json.load(f)
 
     inputs = {key: torch.LongTensor(tensor) for key, tensor in batch_encoding["inputs"].items()}
     targets = {key: torch.LongTensor(tensor) for key, tensor in batch_encoding["targets"].items()}
-    return (inputs, targets)
+    return inputs, targets
 
 
 def get_model(
