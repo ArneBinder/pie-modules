@@ -2,11 +2,17 @@ from typing import Any, Dict, MutableMapping, Optional, Tuple
 
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath
+from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch import Tensor
 from torch.nn import ModuleDict, functional
 from torch.optim import Adam
 from torchmetrics import F1Score
-from transformers import AutoConfig, AutoModelForQuestionAnswering, BatchEncoding
+from transformers import (
+    AutoConfig,
+    AutoModelForQuestionAnswering,
+    BatchEncoding,
+    get_linear_schedule_with_warmup,
+)
 from transformers.modeling_outputs import QuestionAnsweringModelOutput
 from typing_extensions import TypeAlias
 
@@ -52,12 +58,14 @@ class SimpleExtractiveQuestionAnsweringModel(
         model_name_or_path: str,
         max_input_length: int,
         learning_rate: float = 1e-5,
+        warmup_proportion: float = 0.0,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.save_hyperparameters()
 
         self.learning_rate = learning_rate
+        self.warmup_proportion = warmup_proportion
         self.max_input_length = max_input_length
 
         config = AutoConfig.from_pretrained(model_name_or_path)
@@ -144,5 +152,14 @@ class SimpleExtractiveQuestionAnsweringModel(
     def test_step(self, batch: StepBatchEncoding, batch_idx: int) -> Tensor:
         return self.step(stage=TEST, batch=batch)
 
-    def configure_optimizers(self) -> Adam:
-        return Adam(self.parameters(), lr=self.learning_rate)
+    def configure_optimizers(self) -> OptimizerLRScheduler:
+        optimizer = Adam(self.parameters(), lr=self.learning_rate)
+
+        if self.warmup_proportion > 0.0:
+            stepping_batches = self.trainer.estimated_stepping_batches
+            scheduler = get_linear_schedule_with_warmup(
+                optimizer, int(stepping_batches * self.warmup_proportion), stepping_batches
+            )
+            return [optimizer], [{"scheduler": scheduler, "interval": "step"}]
+        else:
+            return optimizer
