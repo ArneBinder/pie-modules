@@ -36,13 +36,14 @@ TEST = "test"
 class SimpleExtractiveQuestionAnsweringModel(
     PyTorchIEModel, RequiresModelNameOrPath, RequiresMaxInputLength
 ):
-    """A simple extractive question answering model that uses the Pytorch-Lightning transformers
-    library. This model wraps around the question answering model from the transformers library. It
-    uses the ExtractiveQuestionAnsweringTaskModule to create the input and target encodings.
+    """A PIE model for extractive question answering. It is a simple Pytorch-Lightning module that
+    wraps around a question answering model from the Huggingface transformers library. The
+    ExtractiveQuestionAnsweringTaskModule can be used create the input and target encodings as well
+    as to decode the model output.
 
     Args:
-        model_name_or_path: The name or path of the model to use.
-        max_input_length: The maximum length of the input sequence.
+        model_name_or_path: The name (Huggingface Hub model identifier) or local path of the model to use.
+        max_input_length: The maximum length of the input sequence. Required for metric calculation.
         learning_rate: The learning rate to use for training. Defaults to 1e-5.
     """
 
@@ -89,7 +90,8 @@ class SimpleExtractiveQuestionAnsweringModel(
         batch: StepBatchEncoding,
     ):
         inputs, targets = batch
-        assert targets is not None, "targets has to be available for training"
+        if targets is None:
+            raise ValueError("targets has to be available for training, but it is None")
 
         output = self({**inputs, **targets})
 

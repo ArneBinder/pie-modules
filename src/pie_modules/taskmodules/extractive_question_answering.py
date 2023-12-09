@@ -4,20 +4,16 @@ from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
-from pytorch_ie.core import Annotation, AnnotationList, TaskEncoding, TaskModule
+from pytorch_ie.core import Annotation, AnnotationLayer, TaskEncoding, TaskModule
 from pytorch_ie.documents import TextBasedDocument
 from tokenizers import Encoding
 from transformers import AutoTokenizer, BatchEncoding, PreTrainedTokenizer
 from transformers.modeling_outputs import QuestionAnsweringModelOutput
 from typing_extensions import TypeAlias
 
+from pie_modules.annotations import ExtractiveAnswer, Question
 from pie_modules.document.processing import tokenize_document
-from pie_modules.documents import (
-    ExtractiveAnswer,
-    ExtractiveQADocument,
-    Question,
-    TokenizedExtractiveQADocument,
-)
+from pie_modules.documents import ExtractiveQADocument, TokenizedExtractiveQADocument
 
 logger = logging.getLogger(__name__)
 
@@ -46,26 +42,26 @@ ModelBatchOutput: TypeAlias = QuestionAnsweringModelOutput
 class TaskOutput:
     start: int
     end: int
-    # the logits are not yet used
     start_probability: float
     end_probability: float
 
 
 @TaskModule.register()
 class ExtractiveQuestionAnsweringTaskModule(TaskModule):
-    """Task module for extractive question answering.
+    """PIE task module for extractive question answering.
 
-    This task module expects that the document contains an annotation layer for answers.
-    Each answer is expected to have a target layer for the question it answers.
+    This task module expects that the document is text based and contains an annotation layer for answers
+    and one for questions.
 
     The task module will create a task encoding for each question-answer pair.
     The input encoding will be the tokenized document with the question as the second sequence.
     The target encoding will be the start and end position of the answer in the context.
-    The task module will create a dummy target encoding if there is no answer for the question.
+    The task module will create a dummy target encoding where both start and end index are set to 0 (usually
+    the CLS token position), if there is no answer for the question.
 
     Args:
-        tokenizer_name_or_path: The name or path of the tokenizer to use.
-        max_length: The maximum length of the input sequence.
+        tokenizer_name_or_path: The name (Huggingface Hub identifier) or local path to a config of the tokenizer to use.
+        max_length: The maximum length of the input sequence in means of tokens.
         answer_annotation: The name of the annotation layer for answers. Defaults to "answers".
         question_annotation: The name of the annotation layer for questions. Defaults to "questions".
         tokenize_kwargs: Additional keyword arguments for the tokenizer. Defaults to None.
@@ -91,12 +87,12 @@ class ExtractiveQuestionAnsweringTaskModule(TaskModule):
         self.max_length = max_length
         self.tokenize_kwargs = tokenize_kwargs or {}
 
-    def get_answer_layer(self, document: DocumentType) -> AnnotationList[ExtractiveAnswer]:
+    def get_answer_layer(self, document: DocumentType) -> AnnotationLayer[ExtractiveAnswer]:
         # we expect that each document have an annotation layer for answers
         # where each entry is of type ExtractiveAnswer
         return document[self.answer_annotation]
 
-    def get_question_layer(self, document: DocumentType) -> AnnotationList[Question]:
+    def get_question_layer(self, document: DocumentType) -> AnnotationLayer[Question]:
         answers = self.get_answer_layer(document)
         # we expect that the answers annotation layer targets the questions annotation layer
         # where each entry is of type Question
