@@ -11,16 +11,15 @@ from pie_modules.models.token_classification_with_seq2seq_encoder_and_crf import
     HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE,
     TokenClassificationModelWithSeq2SeqEncoderAndCrf,
 )
-from tests import FIXTURES_ROOT
+from tests import DUMP_FIXTURE_DATA, FIXTURES_ROOT
 
-DUMP_FIXTURES = False
 FIXTURES_TASKMODULE_DATA_PATH = (
     FIXTURES_ROOT / "taskmodules" / "token_classification_with_seq2seq_encoder_and_crf"
 )
 
 
 @pytest.mark.skipif(
-    condition=not DUMP_FIXTURES, reason="Only need to dump the data if taskmodule has changed"
+    condition=not DUMP_FIXTURE_DATA, reason="Only need to dump the data if taskmodule has changed"
 )
 def test_dump_fixtures(documents):
     tokenizer_name_or_path = "bert-base-cased"

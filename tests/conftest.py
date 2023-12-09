@@ -7,7 +7,7 @@ from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 from pytorch_ie.core import AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument
 
-from tests import FIXTURES_ROOT
+from tests import DUMP_FIXTURE_DATA, FIXTURES_ROOT
 
 _TABULATE_AVAILABLE = "tabulate" in {pkg.key for pkg in pkg_resources.working_set}
 
@@ -61,3 +61,8 @@ def documents(document_dataset):
 def test_documents(documents):
     assert len(documents) == 8
     assert all(isinstance(doc, TestDocument) for doc in documents)
+
+
+def test_dont_dump_fixture_data():
+    # this test is here to make sure that we don't dump the fixture on CI
+    assert not DUMP_FIXTURE_DATA
