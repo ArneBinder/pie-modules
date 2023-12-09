@@ -88,7 +88,7 @@ class SimpleExtractiveQuestionAnsweringModel(
         self,
         stage: str,
         batch: StepBatchEncoding,
-    ):
+    ) -> Tensor:
         inputs, targets = batch
         if targets is None:
             raise ValueError("targets has to be available for training, but it is None")
@@ -135,14 +135,14 @@ class SimpleExtractiveQuestionAnsweringModel(
         self.log(f"{stage}/f1", f1_value, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
-    def training_step(self, batch: StepBatchEncoding, batch_idx: int):
+    def training_step(self, batch: StepBatchEncoding, batch_idx: int) -> Tensor:
         return self.step(stage=TRAINING, batch=batch)
 
-    def validation_step(self, batch: StepBatchEncoding, batch_idx: int):
+    def validation_step(self, batch: StepBatchEncoding, batch_idx: int) -> Tensor:
         return self.step(stage=VALIDATION, batch=batch)
 
-    def test_step(self, batch: StepBatchEncoding, batch_idx: int):
+    def test_step(self, batch: StepBatchEncoding, batch_idx: int) -> Tensor:
         return self.step(stage=TEST, batch=batch)
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> Adam:
         return Adam(self.parameters(), lr=self.learning_rate)
