@@ -1,4 +1,5 @@
 import dataclasses
+from collections import defaultdict
 
 import pytest
 from pytorch_ie.annotations import BinaryRelation, Label, LabeledSpan, Span
@@ -152,11 +153,16 @@ def test_find_token_offset_mapping(text_document, token_document):
 
 
 def test_text_based_document_to_token_based(text_document, token_document):
+    added_annotations = defaultdict(list)
     doc = text_based_document_to_token_based(
         text_document,
         tokens=list(token_document.tokens),
         result_document_type=TokenizedTestDocument,
+        added_annotations=added_annotations,
     )
+    for ann_field in text_document.annotation_fields():
+        layer_name = ann_field.name
+        assert added_annotations[layer_name] == list(text_document[layer_name])
     _test_token_document(doc)
 
 
@@ -310,11 +316,17 @@ def test_text_based_document_to_token_based_wrong_annotation_type():
 
 
 def test_token_based_document_to_text_based(token_document, text_document):
+    added_annotations = defaultdict(list)
     result = token_based_document_to_text_based(
         token_document,
         text=text_document.text,
         result_document_type=TestDocument,
+        added_annotations=added_annotations,
     )
+    for ann_field in token_document.annotation_fields():
+        layer_name = ann_field.name
+        assert added_annotations[layer_name] == list(token_document[layer_name])
+
     _test_text_document(result)
 
 

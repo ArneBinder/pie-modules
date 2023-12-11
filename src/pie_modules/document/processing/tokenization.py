@@ -63,7 +63,7 @@ def text_based_document_to_token_based(
     char_to_token: Optional[Callable[[int], Optional[int]]] = None,
     strict_span_conversion: bool = True,
     verbose: bool = True,
-    added_annotations: Optional[Dict[str, Set[Annotation]]] = None,
+    added_annotations: Optional[Dict[str, List[Annotation]]] = None,
 ) -> ToD:
     document_type = resolve_type(
         type_or_str=result_document_type, expected_super_type=TokenBasedDocument
@@ -165,7 +165,7 @@ def text_based_document_to_token_based(
                 token_span = char_span.copy(start=start_token_idx, end=end_token_idx_inclusive + 1)
                 override_annotations[text_targeting_layer_name][char_span._id] = token_span
                 if added_annotations is not None:
-                    added_annotations[text_targeting_layer_name].add(char_span)
+                    added_annotations[text_targeting_layer_name].append(char_span)
         valid_spans = set(override_annotations[text_targeting_layer_name].values())
         result[text_targeting_layer_name].extend(sorted(valid_spans, key=lambda span: span.start))
 
@@ -178,7 +178,7 @@ def text_based_document_to_token_based(
     )
     if added_annotations is not None:
         for layer_name, annotations in added_annotations_from_remaining_layers.items():
-            added_annotations[layer_name].update(annotations)
+            added_annotations[layer_name].extend(annotations)
 
     return result
 
@@ -191,7 +191,7 @@ def token_based_document_to_text_based(
     join_tokens_with: Optional[str] = None,
     strict_span_conversion: bool = True,
     verbose: bool = True,
-    added_annotations: Optional[Dict[str, Set[Annotation]]] = None,
+    added_annotations: Optional[Dict[str, List[Annotation]]] = None,
 ) -> TeD:
     document_type = resolve_type(
         type_or_str=result_document_type, expected_super_type=TextBasedDocument
@@ -267,7 +267,7 @@ def token_based_document_to_text_based(
             char_span = token_span.copy(start=start_char_idx, end=end_char_idx)
             override_annotations[token_targeting_layer_name][token_span._id] = char_span
             if added_annotations is not None:
-                added_annotations[token_targeting_layer_name].add(token_span)
+                added_annotations[token_targeting_layer_name].append(token_span)
         valid_spans = set(override_annotations[token_targeting_layer_name].values())
         result[token_targeting_layer_name].extend(sorted(valid_spans, key=lambda span: span.start))
 
@@ -280,7 +280,7 @@ def token_based_document_to_text_based(
     )
     if added_annotations is not None:
         for layer_name, annotations in added_annotations_from_remaining_layers.items():
-            added_annotations[layer_name].update(annotations)
+            added_annotations[layer_name].extend(annotations)
 
     return result
 
@@ -294,7 +294,7 @@ def tokenize_document(
     verbose: bool = True,
     **tokenize_kwargs,
 ) -> List[ToD]:
-    added_annotations: Dict[str, Set[Annotation]] = defaultdict(set)
+    added_annotations: Dict[str, List[Annotation]] = defaultdict(list)
     result = []
     partitions: Iterable[Span]
     if partition_layer is None:
