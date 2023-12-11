@@ -1,4 +1,5 @@
 import dataclasses
+from collections import defaultdict
 
 import pytest
 from pytorch_ie.annotations import BinaryRelation, Label, LabeledSpan, Span
@@ -152,11 +153,16 @@ def test_find_token_offset_mapping(text_document, token_document):
 
 
 def test_text_based_document_to_token_based(text_document, token_document):
+    added_annotations = defaultdict(list)
     doc = text_based_document_to_token_based(
         text_document,
         tokens=list(token_document.tokens),
         result_document_type=TokenizedTestDocument,
+        added_annotations=added_annotations,
     )
+    for ann_field in text_document.annotation_fields():
+        layer_name = ann_field.name
+        assert added_annotations[layer_name] == list(text_document[layer_name])
     _test_token_document(doc)
 
 
@@ -310,11 +316,17 @@ def test_text_based_document_to_token_based_wrong_annotation_type():
 
 
 def test_token_based_document_to_text_based(token_document, text_document):
+    added_annotations = defaultdict(list)
     result = token_based_document_to_text_based(
         token_document,
         text=text_document.text,
         result_document_type=TestDocument,
+        added_annotations=added_annotations,
     )
+    for ann_field in token_document.annotation_fields():
+        layer_name = ann_field.name
+        assert added_annotations[layer_name] == list(token_document[layer_name])
+
     _test_text_document(result)
 
 
@@ -440,14 +452,28 @@ def test_tokenize_document(text_document, tokenizer):
     ]
 
 
-def test_tokenize_document_max_length(text_document, tokenizer):
-    tokenized_docs = tokenize_document(
-        text_document,
-        tokenizer=tokenizer,
-        result_document_type=TokenizedTestDocument,
-        strict_span_conversion=False,
-        max_length=10,
-        return_overflowing_tokens=True,
+def test_tokenize_document_max_length(text_document, tokenizer, caplog):
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        tokenized_docs = tokenize_document(
+            text_document,
+            tokenizer=tokenizer,
+            result_document_type=TokenizedTestDocument,
+            # max_length is set to 10, so the document is split into two parts
+            strict_span_conversion=False,
+            max_length=10,
+            return_overflowing_tokens=True,
+        )
+    assert len(caplog.records) == 1
+    assert (
+        caplog.records[0].message
+        == "could not convert all annotations from document with id=None to token based documents, missed annotations "
+        "(disable this message with verbose=False):\n"
+        "{\n"
+        '  "relations": "{BinaryRelation(head=LabeledSpan(start=16, end=24, label=\'per\', score=1.0), '
+        "tail=LabeledSpan(start=34, end=35, label='org', score=1.0), label='per:employee_of', score=1.0)}\",\n"
+        '  "sentences": "{Span(start=16, end=36)}"\n'
+        "}"
     )
     assert len(tokenized_docs) == 2
     tokenized_doc = tokenized_docs[0]
@@ -515,12 +541,34 @@ def test_tokenize_document_max_length(text_document, tokenizer):
     assert relation_tuples == [("('it',)", "per:founder", "('O',)")]
 
 
+def test_tokenize_document_max_length_strict(text_document, tokenizer):
+    with pytest.raises(ValueError) as excinfo:
+        tokenize_document(
+            text_document,
+            tokenizer=tokenizer,
+            result_document_type=TokenizedTestDocument,
+            # max_length is set to 10, so the document is split into two parts
+            strict_span_conversion=True,
+            max_length=10,
+            return_overflowing_tokens=True,
+        )
+    assert (
+        str(excinfo.value)
+        == "could not convert all annotations from document with id=None to token based documents, "
+        "but strict_span_conversion is True, so raise an error, missed annotations:\n"
+        "{\n"
+        '  "relations": "{BinaryRelation(head=LabeledSpan(start=16, end=24, label=\'per\', score=1.0), '
+        "tail=LabeledSpan(start=34, end=35, label='org', score=1.0), label='per:employee_of', score=1.0)}\",\n"
+        '  "sentences": "{Span(start=16, end=36)}"\n'
+        "}"
+    )
+
+
 def test_tokenize_document_partition(text_document, tokenizer):
     tokenized_docs = tokenize_document(
         text_document,
         tokenizer=tokenizer,
         result_document_type=TokenizedTestDocument,
-        strict_span_conversion=False,
         partition_layer="sentences",
     )
     assert len(tokenized_docs) == 3
