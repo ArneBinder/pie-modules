@@ -541,6 +541,29 @@ def test_tokenize_document_max_length(text_document, tokenizer, caplog):
     assert relation_tuples == [("('it',)", "per:founder", "('O',)")]
 
 
+def test_tokenize_document_max_length_strict(text_document, tokenizer):
+    with pytest.raises(ValueError) as excinfo:
+        tokenize_document(
+            text_document,
+            tokenizer=tokenizer,
+            result_document_type=TokenizedTestDocument,
+            # max_length is set to 10, so the document is split into two parts
+            strict_span_conversion=True,
+            max_length=10,
+            return_overflowing_tokens=True,
+        )
+    assert (
+        str(excinfo.value)
+        == "could not convert all annotations from document with id=None to token based documents, "
+        "but strict_span_conversion is True, so raise an error, missed annotations:\n"
+        "{\n"
+        '  "relations": "{BinaryRelation(head=LabeledSpan(start=16, end=24, label=\'per\', score=1.0), '
+        "tail=LabeledSpan(start=34, end=35, label='org', score=1.0), label='per:employee_of', score=1.0)}\",\n"
+        '  "sentences": "{Span(start=16, end=36)}"\n'
+        "}"
+    )
+
+
 def test_tokenize_document_partition(text_document, tokenizer):
     tokenized_docs = tokenize_document(
         text_document,
