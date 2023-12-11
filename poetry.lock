@@ -1057,23 +1057,27 @@ files = [
 
 [[package]]
 name = "pytorch-ie"
-version = "0.29.2"
+version = "0.29.3"
 description = "State-of-the-art Information Extraction in PyTorch"
 optional = false
-python-versions = ">=3.9,<4.0"
-files = [
-    {file = "pytorch_ie-0.29.2-py3-none-any.whl", hash = "sha256:73908f8a6b43e9484a8a463ce601e50367fbdca9e7be44d83608b1f035502bb1"},
-    {file = "pytorch_ie-0.29.2.tar.gz", hash = "sha256:9c0b43b43307107c963e927336a0083a7f4fa4ca224b1447999848eedddde0d7"},
-]
+python-versions = "^3.9"
+files = []
+develop = false
 
 [package.dependencies]
-absl-py = ">=1.0.0,<2.0.0"
+absl-py = "^1.0.0"
 fsspec = "<2023.9.0"
-pandas = ">=2.0.0,<3.0.0"
-pytorch-lightning = ">=2,<3"
+pandas = "^2.0.0"
+pytorch-lightning = "^2"
 torch = ">=1.10"
-torchmetrics = ">=1,<2"
-transformers = ">=4.18,<5.0"
+torchmetrics = "^1"
+transformers = "^4.18"
+
+[package.source]
+type = "git"
+url = "https://github.com/ChristophAlt/pytorch-ie.git"
+reference = "add_all_annotations_from_other_returns_added"
+resolved_reference = "f3dc4c4f6a5cea134cfd987bfc9bb88c58f3bf07"
 
 [[package]]
 name = "pytorch-lightning"
@@ -1893,4 +1897,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "b5176d117ab53867c8ec43e915aabf693c744511ae207ef46cec1e04da85cd4b"
+content-hash = "3718668219a406000f5b345300354d7e260bb09f79a3aa47b6228fc01460c267"

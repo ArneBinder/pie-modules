@@ -24,7 +24,9 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.9"
-pytorch-ie = ">=0.29.2,<0.30.0"
+# pytorch-ie = ">=0.29.2,<0.30.0"
+# we require pytorch-ie from branch add_all_annotations_from_other_returns_added
+pytorch-ie = {git = "https://github.com/ChristophAlt/pytorch-ie.git", branch = "add_all_annotations_from_other_returns_added"}
 torchmetrics = "^1"
 pytorch-crf = ">=0.7.2"
 

@@ -1,4 +1,5 @@
 import functools
+import json
 import logging
 from collections import defaultdict
 from copy import copy, deepcopy
@@ -62,6 +63,7 @@ def text_based_document_to_token_based(
     char_to_token: Optional[Callable[[int], Optional[int]]] = None,
     strict_span_conversion: bool = True,
     verbose: bool = True,
+    added_annotations: Optional[Dict[str, Set[Annotation]]] = None,
 ) -> ToD:
     document_type = resolve_type(
         type_or_str=result_document_type, expected_super_type=TokenBasedDocument
@@ -162,16 +164,21 @@ def text_based_document_to_token_based(
             else:
                 token_span = char_span.copy(start=start_token_idx, end=end_token_idx_inclusive + 1)
                 override_annotations[text_targeting_layer_name][char_span._id] = token_span
+                if added_annotations is not None:
+                    added_annotations[text_targeting_layer_name].add(char_span)
         valid_spans = set(override_annotations[text_targeting_layer_name].values())
         result[text_targeting_layer_name].extend(sorted(valid_spans, key=lambda span: span.start))
 
-    result.add_all_annotations_from_other(
+    added_annotations_from_remaining_layers = result.add_all_annotations_from_other(
         doc,
         override_annotations=override_annotations,
         removed_annotations=removed_annotations,
         strict=strict_span_conversion,
         verbose=verbose,
     )
+    if added_annotations is not None:
+        for layer_name, annotations in added_annotations_from_remaining_layers.items():
+            added_annotations[layer_name].update(annotations)
 
     return result
 
@@ -184,6 +191,7 @@ def token_based_document_to_text_based(
     join_tokens_with: Optional[str] = None,
     strict_span_conversion: bool = True,
     verbose: bool = True,
+    added_annotations: Optional[Dict[str, Set[Annotation]]] = None,
 ) -> TeD:
     document_type = resolve_type(
         type_or_str=result_document_type, expected_super_type=TextBasedDocument
@@ -258,16 +266,21 @@ def token_based_document_to_text_based(
 
             char_span = token_span.copy(start=start_char_idx, end=end_char_idx)
             override_annotations[token_targeting_layer_name][token_span._id] = char_span
+            if added_annotations is not None:
+                added_annotations[token_targeting_layer_name].add(token_span)
         valid_spans = set(override_annotations[token_targeting_layer_name].values())
         result[token_targeting_layer_name].extend(sorted(valid_spans, key=lambda span: span.start))
 
-    result.add_all_annotations_from_other(
+    added_annotations_from_remaining_layers = result.add_all_annotations_from_other(
         doc,
         override_annotations=override_annotations,
         removed_annotations=removed_annotations,
         strict=strict_span_conversion,
         verbose=verbose,
     )
+    if added_annotations is not None:
+        for layer_name, annotations in added_annotations_from_remaining_layers.items():
+            added_annotations[layer_name].update(annotations)
 
     return result
 
@@ -281,6 +294,7 @@ def tokenize_document(
     verbose: bool = True,
     **tokenize_kwargs,
 ) -> List[ToD]:
+    added_annotations: Dict[str, Set[Annotation]] = defaultdict(set)
     result = []
     partitions: Iterable[Span]
     if partition_layer is None:
@@ -319,9 +333,36 @@ def tokenize_document(
                 result_document_type=result_document_type,
                 token_offset_mapping=token_offset_mapping,
                 char_to_token=char_to_token,
-                strict_span_conversion=strict_span_conversion,
-                verbose=verbose,
+                strict_span_conversion=False,
+                verbose=False,
+                added_annotations=added_annotations,
             )
             tokenized_document.metadata["tokenizer_encoding"] = batch_encoding
             result.append(tokenized_document)
+
+    missed_annotations = defaultdict(set)
+    if strict_span_conversion or verbose:
+        for annotation_field in doc.annotation_fields():
+            current_missed_annotations = set(doc[annotation_field.name]) - set(
+                added_annotations[annotation_field.name]
+            )
+            if len(current_missed_annotations) > 0:
+                missed_annotations[annotation_field.name] = current_missed_annotations
+
+    if len(missed_annotations) > 0:
+        missed_annotations_simplified = {k: str(v) for k, v in missed_annotations.items()}
+        if strict_span_conversion:
+            raise ValueError(
+                f"could not convert all annotations from document with id={doc.id} to token based documents, "
+                f"but strict_span_conversion is True, so raise an error, "
+                f"missed annotations:\n{json.dumps(missed_annotations_simplified, sort_keys=True, indent=2)}"
+            )
+        else:
+            if verbose:
+                logger.warning(
+                    f"could not convert all annotations from document with id={doc.id} to token based documents, "
+                    f"missed annotations (disable this message with verbose=False):\n"
+                    f"{json.dumps(missed_annotations_simplified, sort_keys=True, indent=2)}"
+                )
+
     return result

@@ -440,14 +440,28 @@ def test_tokenize_document(text_document, tokenizer):
     ]
 
 
-def test_tokenize_document_max_length(text_document, tokenizer):
-    tokenized_docs = tokenize_document(
-        text_document,
-        tokenizer=tokenizer,
-        result_document_type=TokenizedTestDocument,
-        strict_span_conversion=False,
-        max_length=10,
-        return_overflowing_tokens=True,
+def test_tokenize_document_max_length(text_document, tokenizer, caplog):
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        tokenized_docs = tokenize_document(
+            text_document,
+            tokenizer=tokenizer,
+            result_document_type=TokenizedTestDocument,
+            # max_length is set to 10, so the document is split into two parts
+            strict_span_conversion=False,
+            max_length=10,
+            return_overflowing_tokens=True,
+        )
+    assert len(caplog.records) == 1
+    assert (
+        caplog.records[0].message
+        == "could not convert all annotations from document with id=None to token based documents, missed annotations "
+        "(disable this message with verbose=False):\n"
+        "{\n"
+        '  "relations": "{BinaryRelation(head=LabeledSpan(start=16, end=24, label=\'per\', score=1.0), '
+        "tail=LabeledSpan(start=34, end=35, label='org', score=1.0), label='per:employee_of', score=1.0)}\",\n"
+        '  "sentences": "{Span(start=16, end=36)}"\n'
+        "}"
     )
     assert len(tokenized_docs) == 2
     tokenized_doc = tokenized_docs[0]
@@ -520,7 +534,6 @@ def test_tokenize_document_partition(text_document, tokenizer):
         text_document,
         tokenizer=tokenizer,
         result_document_type=TokenizedTestDocument,
-        strict_span_conversion=False,
         partition_layer="sentences",
     )
     assert len(tokenized_docs) == 3
