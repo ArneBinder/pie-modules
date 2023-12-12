@@ -37,6 +37,26 @@ def test_bart_generate():
     assert result == [" power lines in California have been shut down on Friday."]
 
 
+def test_bart_pointer_network_generate():
+    model_name_or_path = MODEL_NAME_OR_PATH
+    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+    model = BartAsPointerNetwork.from_pretrained(
+        model_name_or_path,
+        label_ids=[2, 3, 4, 5, 6],
+        target_token_ids=[0, 2, 50266, 50269, 50268, 50265, 50267],
+        eos_id=1,
+        pad_id=1,
+    )
+    input_text = ARTICLE_TO_SUMMARIZE
+    inputs = tokenizer([input_text], max_length=1024, return_tensors="pt")
+    summary_ids = model.generate(inputs["input_ids"], num_beams=3, min_length=5, max_length=20)
+    result = tokenizer.batch_decode(
+        summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    )
+
+    assert result == [" power lines in California have been shut down on Friday."]
+
+
 def test_bart_pointer_network_beam_search():
     # tokenizer = AutoTokenizer.from_pretrained("t5-base")
     # model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
