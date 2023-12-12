@@ -425,13 +425,6 @@ class CaGFBartDecoder(torch.nn.Module):
         if hasattr(self, "encoder_mlp"):
             src_outputs = self.encoder_mlp(src_outputs)
 
-        # if hasattr(self, "bi_encoder_mlp"):
-        bi_outputs = self.bi_encoder_mlp(src_outputs)
-        bi_label_scores = F.linear(
-            hidden_state,
-            self.bi_encoder_mlp(self.decoder.embed_tokens.weight[self.label_token_ids]),
-        )
-
         # mask = state.encoder_mask.eq(0)
         mask = encoder_pad_mask.eq(0)
         mask = mask.unsqueeze(1)
@@ -465,21 +458,28 @@ class CaGFBartDecoder(torch.nn.Module):
         logits[:, :, 2 : self.pointer_offset] = label_scores
         logits[:, :, self.pointer_offset :] = avg_word_scores
 
-        bi_logits = torch.einsum(
-            "blh,bnh->bln", hidden_state, bi_outputs
-        )  # bsz x max_len x max_word_len
-        constrain_logits = hidden_state.new_full(
-            (
-                hidden_state.size(0),
-                hidden_state.size(1),
-                self.pointer_offset + src_tokens.size(-1),
-            ),
-            fill_value=-1e24,
-        )
-        constrain_logits[:, :, 2 : self.pointer_offset] = bi_label_scores
-        constrain_logits[:, :, self.pointer_offset :] = bi_logits
+        constrain_logits = None
         constrain_tag = None
         if CPM_tag is not None:
+            # if hasattr(self, "bi_encoder_mlp"):
+            bi_outputs = self.bi_encoder_mlp(src_outputs)
+            bi_label_scores = F.linear(
+                hidden_state,
+                self.bi_encoder_mlp(self.decoder.embed_tokens.weight[self.label_token_ids]),
+            )
+            bi_logits = torch.einsum(
+                "blh,bnh->bln", hidden_state, bi_outputs
+            )  # bsz x max_len x max_word_len
+            constrain_logits = hidden_state.new_full(
+                (
+                    hidden_state.size(0),
+                    hidden_state.size(1),
+                    self.pointer_offset + src_tokens.size(-1),
+                ),
+                fill_value=-1e24,
+            )
+            constrain_logits[:, :, 2 : self.pointer_offset] = bi_label_scores
+            constrain_logits[:, :, self.pointer_offset :] = bi_logits
             constrain_tag = CPM_tag.float()[..., 2:]
             constrain_logits = constrain_logits[..., 2:]
 
