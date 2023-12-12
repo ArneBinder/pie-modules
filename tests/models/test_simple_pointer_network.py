@@ -1,4 +1,10 @@
+from dataclasses import dataclass
+
+import pytest
 import torch
+from pytorch_ie import AnnotationList, annotation_field
+from pytorch_ie.annotations import BinaryRelation, LabeledSpan
+from pytorch_ie.documents import TextBasedDocument
 from transformers import (
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
@@ -11,6 +17,7 @@ from transformers import (
 )
 
 from pie_modules.models.simple_pointer_network import BartAsPointerNetwork
+from pie_modules.taskmodules import PointerNetworkTaskModule
 
 ARTICLE_TO_SUMMARIZE = (
     "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
@@ -18,6 +25,61 @@ ARTICLE_TO_SUMMARIZE = (
     "scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."
 )
 MODEL_NAME_OR_PATH = "sshleifer/distilbart-xsum-12-1"
+
+
+@pytest.fixture(scope="module")
+def document():
+    @dataclass
+    class ExampleDocument(TextBasedDocument):
+        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
+        relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+        sentences: AnnotationList[LabeledSpan] = annotation_field(target="text")
+
+    doc = ExampleDocument(text="This is a dummy text about nothing. Trust me.")
+    span1 = LabeledSpan(start=10, end=20, label="content")
+    span2 = LabeledSpan(start=27, end=34, label="topic")
+    span3 = LabeledSpan(start=42, end=44, label="person")
+    doc.entities.extend([span1, span2, span3])
+    assert str(span1) == "dummy text"
+    assert str(span2) == "nothing"
+    assert str(span3) == "me"
+    rel = BinaryRelation(head=span1, tail=span2, label="is_about")
+    doc.relations.append(rel)
+    assert str(rel.label) == "is_about"
+    assert str(rel.head) == "dummy text"
+    assert str(rel.tail) == "nothing"
+
+    no_rel = BinaryRelation(head=span1, tail=span3, label="no_relation")
+    doc.relations.append(no_rel)
+    assert str(no_rel.label) == "no_relation"
+    assert str(no_rel.head) == "dummy text"
+    assert str(no_rel.tail) == "me"
+
+    sent1 = LabeledSpan(start=0, end=35, label="1")
+    sent2 = LabeledSpan(start=36, end=45, label="2")
+    doc.sentences.extend([sent1, sent2])
+    assert str(sent1) == "This is a dummy text about nothing."
+    assert str(sent2) == "Trust me."
+    return doc
+
+
+@pytest.fixture(scope="module")
+def taskmodule(document):
+    taskmodule = PointerNetworkTaskModule(
+        annotation_encoder_decoder_kwargs={
+            "span_layer_name": "entities",
+            "relation_layer_name": "relations",
+            "exclude_labels_per_layer": {"relations": ["no_relation"]},
+        },
+        annotation_field_mapping={
+            "entities": "labeled_spans",
+            "relations": "binary_relations",
+        },
+    )
+
+    taskmodule.prepare(documents=[document])
+
+    return taskmodule
 
 
 def test_bart_generate():
@@ -57,22 +119,22 @@ def test_bart_pointer_network_generate():
     assert result == [" power lines in California have been shut down on Friday."]
 
 
-def test_bart_pointer_network_beam_search():
-    # tokenizer = AutoTokenizer.from_pretrained("t5-base")
-    # model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
-
-    model_name_or_path = MODEL_NAME_OR_PATH  # "sshleifer/distilbart-xsum-12-1"
-    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+def test_bart_pointer_network_beam_search(taskmodule):
+    model_name_or_path = MODEL_NAME_OR_PATH
+    # tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+    tokenizer = taskmodule.tokenizer
     model = BartAsPointerNetwork.from_pretrained(
         model_name_or_path,
-        label_ids=[2, 3, 4, 5, 6],
-        target_token_ids=[0, 2, 50266, 50269, 50268, 50265, 50267],
-        eos_id=1,
-        pad_id=1,
+        target_token_ids=taskmodule.target_token_ids,
+        pad_id=taskmodule.annotation_encoder_decoder.target_pad_id,
+        pad_token_id=taskmodule.tokenizer.pad_token_id,
+        label_ids=taskmodule.annotation_encoder_decoder.label_ids,
+        eos_id=taskmodule.annotation_encoder_decoder.eos_id,
     )
+    model.resize_token_embeddings(len(taskmodule.tokenizer))
 
     encoder_input_str = ARTICLE_TO_SUMMARIZE  # "translate English to German: How old are you?"
-    encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
+    encoder_input_tokenized = tokenizer(encoder_input_str, return_tensors="pt")
 
     # lets run beam search using 3 beams
     num_beams = 3
@@ -82,10 +144,13 @@ def test_bart_pointer_network_beam_search():
 
     # add encoder_outputs to model keyword arguments
     encoder = model.get_encoder()
-    encoder_input = encoder_input_ids.repeat_interleave(num_beams, dim=0)
+    encoder_input_ids = encoder_input_tokenized.input_ids
     model_kwargs = {
-        "encoder_outputs": encoder(encoder_input, return_dict=True),
+        "encoder_outputs": encoder(
+            encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True
+        ),
         "encoder_input_ids": encoder_input_ids,
+        "encoder_attention_mask": encoder_input_tokenized.attention_mask,
     }
 
     # instantiate beam scorer

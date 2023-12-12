@@ -114,6 +114,10 @@ class PointerDecoder(torch.nn.Module):
         # return_dict: Optional[bool] = None,
         **decoder_kwargs,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+        if attention_mask is None:
+            # TODO: is this correct?
+            attention_mask = input_ids.ne(self.pad_token_id)
+
         # cumsum = input_ids.eq(self.pad_id).flip(dims=[1]).cumsum(dim=-1)
         # tgt_pad_mask = cumsum.flip(dims=[1]).ne(cumsum[:, -1:])
 
@@ -132,11 +136,14 @@ class PointerDecoder(torch.nn.Module):
         decoder_input_ids = torch.where(
             mapping_token_mask, tag_mapped_tokens, word_mapped_tokens
         )  # bsz x max_len
-        decoder_input_ids = decoder_input_ids.masked_fill(attention_mask, self.pad_token_id)
+        decoder_input_ids = decoder_input_ids.masked_fill(~attention_mask, self.pad_token_id)
         # pos_tokens = None
         # if not generate:
         # position_ids = None
-        decoder_input_ids = decoder_input_ids[:, :-1]
+
+        # TODO: why was this in the original code?
+        # decoder_input_ids = decoder_input_ids[:, :-1]
+
         # decoder_pad_mask = decoder_input_ids.eq(self.pad_token_id)  # decoder需要让pad位置为1
         # decoder_causal_mask = self.causal_masks[
         #    : decoder_input_ids.size(1), : decoder_input_ids.size(1)
@@ -160,6 +167,8 @@ class PointerDecoder(torch.nn.Module):
             # pos_emb=position_ids,
             **decoder_kwargs,
         )
+
+        # TODO: the following code should go into the main model
         hidden_state = decoder_output.last_hidden_state  # bsz x max_len x hidden_size
 
         # assemble the logits
@@ -242,7 +251,8 @@ class BartAsPointerConfig(BartConfig):
         target_token_ids: Optional[List[int]] = None,
         eos_id: Optional[int] = None,
         pad_id: Optional[int] = None,
-        use_encoder_mlp: bool = False,
+        pad_token_id: Optional[int] = None,
+        use_encoder_mlp: bool = True,
         max_target_positions: Optional[int] = None,
         **kwargs,
     ):
@@ -251,6 +261,7 @@ class BartAsPointerConfig(BartConfig):
         self.target_token_ids = target_token_ids
         self.eos_id = eos_id
         self.pad_id = pad_id
+        self.pad_token_id = pad_token_id
         self.use_encoder_mlp = use_encoder_mlp
         self.max_target_positions = max_target_positions
 
@@ -271,15 +282,17 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         self.register_buffer(
             "final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings))
         )
+        # TODO: remove
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
+        # TODO: add content to here
         self.pointer_decoder = PointerDecoder(
             decoder=self.model.decoder,
-            pad_token_id=self.model.config.pad_id,
+            pad_token_id=self.model.config.pad_token_id,
             target_token_ids=self.model.config.target_token_ids,
             label_ids=self.model.config.label_ids,
             eos_id=self.model.config.eos_id,
-            pad_id=self.model.config.pad_token_id,
+            pad_id=self.model.config.pad_id,
             use_encoder_mlp=self.model.config.use_encoder_mlp,
             max_target_positions=self.model.config.max_target_positions,
         )
@@ -383,9 +396,9 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             )
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
-        decoder_outputs = self.model.decoder(
+        decoder_outputs = self.pointer_decoder(
             input_ids=decoder_input_ids,
-            # encoder_input_ids=input_ids,
+            encoder_input_ids=input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
@@ -474,8 +487,9 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             return_dict=return_dict,
         )
 
-        lm_logits = self.lm_head(outputs[0])
-        lm_logits = lm_logits + self.final_logits_bias.to(lm_logits.device)
+        # lm_logits = self.lm_head(outputs[0])
+        # lm_logits = lm_logits + self.final_logits_bias.to(lm_logits.device)
+        lm_logits = outputs.last_hidden_state
 
         masked_lm_loss = None
         if labels is not None:
@@ -503,6 +517,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         self,
         decoder_input_ids,
         encoder_input_ids,
+        encoder_attention_mask,
         past_key_values=None,
         attention_mask=None,
         decoder_attention_mask=None,
@@ -526,10 +541,11 @@ class BartAsPointerNetwork(BartPreTrainedModel):
 
             decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
-        # TODO: this works only for beam search. I guess.
+        # TODO: this works only for beam search. I guess. Better do this outside?
         batch_size = encoder_input_ids.size(0)
         num_beams = decoder_input_ids.size(0) // batch_size
         input_ids = encoder_input_ids.repeat_interleave(num_beams, dim=0)
+        attention_mask = encoder_attention_mask.repeat_interleave(num_beams, dim=0)
         return {
             "input_ids": input_ids,
             "encoder_outputs": encoder_outputs,
