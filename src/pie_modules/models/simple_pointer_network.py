@@ -502,6 +502,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
+        encoder_input_ids,
         past_key_values=None,
         attention_mask=None,
         decoder_attention_mask=None,
@@ -525,8 +526,12 @@ class BartAsPointerNetwork(BartPreTrainedModel):
 
             decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
+        # TODO: this works only for beam search. I guess.
+        batch_size = encoder_input_ids.size(0)
+        num_beams = decoder_input_ids.size(0) // batch_size
+        input_ids = encoder_input_ids.repeat_interleave(num_beams, dim=0)
         return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
+            "input_ids": input_ids,
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
