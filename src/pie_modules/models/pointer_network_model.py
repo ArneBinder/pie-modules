@@ -189,7 +189,7 @@ class FBartEncoder(Seq2SeqEncoder):
         return encoder_outputs, mask, hidden_states
 
 
-class CaGFBartDecoder(Seq2SeqDecoder):
+class CaGFBartDecoder(torch.nn.Module):
     # Copy and generate,
     def __init__(
         self,
@@ -324,12 +324,15 @@ class CaGFBartDecoder(Seq2SeqDecoder):
     def forward(
         self,
         tokens,
-        state,
+        encoder_outputs,
+        encoder_pad_mask,
+        src_tokens,
         CPM_tag=None,
         generate=False,
+        past_key_values=None,
     ):
-        encoder_outputs = state.encoder_output
-        encoder_pad_mask = state.encoder_mask
+        # encoder_outputs = state.encoder_output
+        # encoder_pad_mask = state.encoder_mask
 
         cumsum = tokens.eq(self.pad_id).flip(dims=[1]).cumsum(dim=-1)
         tgt_pad_mask = cumsum.flip(dims=[1]).ne(cumsum[:, -1:])
@@ -340,7 +343,7 @@ class CaGFBartDecoder(Seq2SeqDecoder):
 
         src_tokens_index = tokens - self.pointer_offset  # bsz x num_src_token
         src_tokens_index = src_tokens_index.masked_fill(src_tokens_index.lt(0), 0)
-        src_tokens = state.src_tokens
+        # src_tokens = state.src_tokens
         assert src_tokens_index.max() < 1024
         word_mapped_tokens = src_tokens.gather(index=src_tokens_index, dim=1)
 
@@ -378,7 +381,8 @@ class CaGFBartDecoder(Seq2SeqDecoder):
         else:
             assert CPM_tag is None
             positions = pos_tokens
-            past_key_values = state.past_key_values
+            # past_key_values = state.past_key_values
+            past_key_values = past_key_values
             dict = self.decoder(
                 input_ids=tokens,
                 encoder_hidden_states=encoder_outputs,
@@ -392,7 +396,8 @@ class CaGFBartDecoder(Seq2SeqDecoder):
             )
         hidden_state = dict.last_hidden_state  # bsz x max_len x hidden_size
         if generate:
-            state.past_key_values = dict.past_key_values
+            # state.past_key_values = dict.past_key_values
+            past_key_values = dict.past_key_values
 
         # assemble the logits
         logits = hidden_state.new_full(
@@ -415,7 +420,8 @@ class CaGFBartDecoder(Seq2SeqDecoder):
 
         # the pointer depends on the src token embeddings, the encoder output and the decoder output
         # bsz x max_bpe_len x hidden_size
-        src_outputs = state.encoder_output
+        # src_outputs = state.encoder_output
+        src_outputs = encoder_outputs
         if hasattr(self, "encoder_mlp"):
             src_outputs = self.encoder_mlp(src_outputs)
 
@@ -426,7 +432,8 @@ class CaGFBartDecoder(Seq2SeqDecoder):
             self.bi_encoder_mlp(self.decoder.embed_tokens.weight[self.label_token_ids]),
         )
 
-        mask = state.encoder_mask.eq(0)
+        # mask = state.encoder_mask.eq(0)
+        mask = encoder_pad_mask.eq(0)
         mask = mask.unsqueeze(1)
         input_embed = self.decoder.embed_tokens(src_tokens)  # bsz x max_word_len x hidden_size
         bsz = src_tokens.size(0)
@@ -476,10 +483,18 @@ class CaGFBartDecoder(Seq2SeqDecoder):
             constrain_tag = CPM_tag.float()[..., 2:]
             constrain_logits = constrain_logits[..., 2:]
 
-        return (logits, (constrain_logits, constrain_tag), None)
+        return logits, (constrain_logits, constrain_tag), None, past_key_values
 
     def decode(self, tokens, state):
-        voc_logits, _, token_cls_scores = self(tokens, state, generate=True)
+        voc_logits, _, token_cls_scores, past_key_values = self(
+            tokens=tokens,
+            generate=True,
+            encoder_outputs=state.encoder_output,
+            encoder_pad_mask=state.encoder_mask,
+            src_tokens=state.src_tokens,
+            past_key_values=state.past_key_values,
+        )
+        state.past_key_values = past_key_values
         voc_logits = voc_logits[:, -1]
         return voc_logits, None, token_cls_scores
 
@@ -649,7 +664,12 @@ class PointerNetworkModel(PyTorchIEModel):
     def prepare_state(self, src_tokens, src_seq_len=None):
         encoder_outputs, encoder_mask, hidden_states = self.encoder(src_tokens, src_seq_len)
         src_embed_outputs = hidden_states[0]
-        state = BartState(encoder_outputs, encoder_mask, src_tokens, src_embed_outputs)
+        state = BartState(
+            encoder_output=encoder_outputs,
+            encoder_mask=encoder_mask,
+            src_tokens=src_tokens,
+            src_embed_outputs=src_embed_outputs,
+        )
         # setattr(state, 'tgt_seq_len', tgt_seq_len)
         return state
 
@@ -664,7 +684,14 @@ class PointerNetworkModel(PyTorchIEModel):
         :return: {'pred': torch.Tensor}, 其中pred的shape为bsz x max_len x vocab_size
         """
         state = self.prepare_state(src_tokens=src_tokens, src_seq_len=src_seq_len)
-        decoder_output = self.decoder(tokens=tgt_tokens, state=state, CPM_tag=CPM_tag)
+        decoder_output = self.decoder(
+            tokens=tgt_tokens,
+            CPM_tag=CPM_tag,
+            encoder_outputs=state.encoder_output,
+            encoder_pad_mask=state.encoder_mask,
+            src_tokens=state.src_tokens,
+            generate=False,
+        )
         if isinstance(decoder_output, torch.Tensor):
             return {"pred": decoder_output}
         elif isinstance(decoder_output, (tuple, list)):
