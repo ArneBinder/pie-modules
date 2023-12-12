@@ -181,11 +181,11 @@ class FBartEncoder(Seq2SeqEncoder):
 
     def forward(self, src_tokens, src_seq_len):
         mask = seq_len_to_mask(src_seq_len, max_len=src_tokens.size(1))
-        dict = self.bart_encoder(
+        encoder_output = self.bart_encoder(
             input_ids=src_tokens, attention_mask=mask, return_dict=True, output_hidden_states=True
         )
-        encoder_hidden_states = dict.last_hidden_state
-        hidden_states = dict.hidden_states
+        encoder_hidden_states = encoder_output.last_hidden_state
+        hidden_states = encoder_output.hidden_states
         return encoder_hidden_states, mask, hidden_states
 
 
@@ -361,42 +361,32 @@ class CaGFBartDecoder(torch.nn.Module):
             pos_tokens = None
         if not generate:
             if pos_tokens is not None:
-                positions = pos_tokens[:, :-1]
+                position_ids = pos_tokens[:, :-1]
             else:
-                positions = None
+                position_ids = None
             decoder_input_ids = decoder_input_ids[:, :-1]
             decoder_pad_mask = decoder_input_ids.eq(self.pad_token_id)  # decoder需要让pad位置为1
-            dict = self.decoder(
-                input_ids=decoder_input_ids,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_padding_mask=encoder_padding_mask,
-                decoder_padding_mask=decoder_pad_mask,
-                decoder_causal_mask=self.causal_masks[
-                    : decoder_input_ids.size(1), : decoder_input_ids.size(1)
-                ],
-                past_key_values=past_key_values,
-                return_dict=True,
-                pos_emb=positions,
-            )
+            decoder_causal_mask = self.causal_masks[
+                : decoder_input_ids.size(1), : decoder_input_ids.size(1)
+            ]
         else:
             assert CPM_tag is None
-            positions = pos_tokens
+            position_ids = pos_tokens
+            decoder_pad_mask = None
+            decoder_causal_mask = None
 
-            past_key_values = past_key_values
-            dict = self.decoder(
-                input_ids=decoder_input_ids,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_padding_mask=encoder_padding_mask,
-                decoder_padding_mask=None,
-                decoder_causal_mask=None,
-                past_key_values=past_key_values,
-                use_cache=True,
-                return_dict=True,
-                pos_emb=positions,
-            )
-        hidden_state = dict.last_hidden_state  # bsz x max_len x hidden_size
-        # if generate:
-        past_key_values = dict.past_key_values
+        decoder_output = self.decoder(
+            input_ids=decoder_input_ids,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_padding_mask=encoder_padding_mask,
+            decoder_padding_mask=decoder_pad_mask,
+            decoder_causal_mask=decoder_causal_mask,
+            past_key_values=past_key_values,
+            use_cache=past_key_values is not None,
+            return_dict=True,
+            pos_emb=position_ids,
+        )
+        hidden_state = decoder_output.last_hidden_state  # bsz x max_len x hidden_size
 
         # assemble the logits
         logits = hidden_state.new_full(
@@ -486,7 +476,7 @@ class CaGFBartDecoder(torch.nn.Module):
             constrain_tag = CPM_tag.float()[..., 2:]
             constrain_logits = constrain_logits[..., 2:]
 
-        return logits, (constrain_logits, constrain_tag), None, past_key_values
+        return logits, (constrain_logits, constrain_tag), None, decoder_output.past_key_values
 
     def decode(self, tokens, state):
         voc_logits, _, token_cls_scores, past_key_values = self(
