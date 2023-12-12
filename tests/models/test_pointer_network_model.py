@@ -11,15 +11,25 @@ from pie_modules.models import PointerNetworkModel
 from pie_modules.taskmodules import PointerNetworkTaskModule
 
 # from src.models.components.gmam.metrics import LabeledAnnotationScore, AnnotationLayerMetric
-from tests import FIXTURES_ROOT
+from tests import _config_to_str
 
 # from tests.taskmodules.test_gmam_taskmodule import FIXTURES_DIR as TASKMODULE_FIXTURE_DIR
 
+
+CONFIGS = [{}, {"biloss": False, "decode_mask": False, "replace_pos": False}]
+CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
+
 logger = logging.getLogger(__name__)
 
-# FIXTURES_DIR = FIXTURES_ROOT / "models" / "gmam_model"
 
-DUMP_FIXTURE_DATA = False
+@pytest.fixture(scope="module", params=CONFIG_DICT.keys())
+def config_str(request):
+    return request.param
+
+
+@pytest.fixture(scope="module")
+def config(config_str):
+    return CONFIG_DICT[config_str]
 
 
 @pytest.fixture(scope="module")
@@ -146,7 +156,7 @@ def test_taskmodule(taskmodule):
 
 
 @pytest.fixture(scope="module")
-def model(taskmodule) -> PointerNetworkModel:
+def model(taskmodule, config) -> PointerNetworkModel:
     torch.manual_seed(42)
     model = PointerNetworkModel(
         bart_model="facebook/bart-base",
@@ -158,7 +168,7 @@ def model(taskmodule) -> PointerNetworkModel:
         copy_gate=False,
         use_encoder_mlp=True,
         use_recur_pos=False,
-        replace_pos=True,
+        # replace_pos=True,
         position_type=0,
         max_length=10,
         max_len_a=0.5,
@@ -167,12 +177,13 @@ def model(taskmodule) -> PointerNetworkModel:
         repetition_penalty=1,
         length_penalty=1.0,
         restricter=None,
-        decode_mask=True,
-        biloss=True,
+        # decode_mask=True,
+        # biloss=True,
         lr=5e-5,
         max_target_positions=512,
         annotation_encoder_decoder_name=taskmodule.annotation_encoder_decoder_name,
         annotation_encoder_decoder_kwargs=taskmodule.annotation_encoder_decoder_kwargs,
+        **config,
     )
     # set model to training mode, otherwise model.encoder.bart_encoder.training will be False!
     model.train()
@@ -191,7 +202,7 @@ def batch(taskmodule, document):
     return batch
 
 
-def test_batch(batch):
+def test_batch(batch, config):
     assert batch is not None
     inputs, targets = batch
     assert inputs is not None
@@ -241,14 +252,19 @@ def test_batch(batch):
     )
 
 
-def test_training_step(model, batch):
+def test_training_step(model, batch, config):
     torch.manual_seed(42)
     loss = model.training_step(batch, 0)
     assert loss is not None
     assert isinstance(loss, torch.Tensor)
     assert loss.requires_grad
     assert loss.dim() == 0
-    torch.testing.assert_close(loss, torch.tensor(17.0904483795166))
+    if config == {}:
+        torch.testing.assert_close(loss, torch.tensor(17.0904483795166))
+    elif config == {"biloss": False, "decode_mask": False, "replace_pos": False}:
+        torch.testing.assert_close(loss, torch.tensor(9.206165313720703))
+    else:
+        raise ValueError(f"Unknown config: {config}")
 
 
 def test_predict_step(model, batch):
