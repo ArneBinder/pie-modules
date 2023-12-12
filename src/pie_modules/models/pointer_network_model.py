@@ -184,9 +184,9 @@ class FBartEncoder(Seq2SeqEncoder):
         dict = self.bart_encoder(
             input_ids=src_tokens, attention_mask=mask, return_dict=True, output_hidden_states=True
         )
-        encoder_outputs = dict.last_hidden_state
+        encoder_hidden_states = dict.last_hidden_state
         hidden_states = dict.hidden_states
-        return encoder_outputs, mask, hidden_states
+        return encoder_hidden_states, mask, hidden_states
 
 
 class CaGFBartDecoder(torch.nn.Module):
@@ -324,15 +324,17 @@ class CaGFBartDecoder(torch.nn.Module):
     def forward(
         self,
         tokens,
-        encoder_outputs,
-        encoder_pad_mask,
+        encoder_hidden_states,
+        encoder_padding_mask,
         src_tokens,
         CPM_tag=None,
         generate=False,
         past_key_values=None,
     ):
-        # encoder_outputs = state.encoder_output
-        # encoder_pad_mask = state.encoder_mask
+        # encoder_hidden_states = state.encoder_output
+        # encoder_padding_mask = state.encoder_mask
+        # encoder_hidden_states = encoder_hidden_states
+        # encoder_padding_mask = encoder_padding_mask
 
         cumsum = tokens.eq(self.pad_id).flip(dims=[1]).cumsum(dim=-1)
         tgt_pad_mask = cumsum.flip(dims=[1]).ne(cumsum[:, -1:])
@@ -371,10 +373,11 @@ class CaGFBartDecoder(torch.nn.Module):
             decoder_pad_mask = tokens.eq(self.pad_token_id)  # decoder需要让pad位置为1
             dict = self.decoder(
                 input_ids=tokens,
-                encoder_hidden_states=encoder_outputs,
-                encoder_padding_mask=encoder_pad_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_padding_mask=encoder_padding_mask,
                 decoder_padding_mask=decoder_pad_mask,
                 decoder_causal_mask=self.causal_masks[: tokens.size(1), : tokens.size(1)],
+                past_key_values=past_key_values,
                 return_dict=True,
                 pos_emb=positions,
             )
@@ -385,8 +388,8 @@ class CaGFBartDecoder(torch.nn.Module):
             past_key_values = past_key_values
             dict = self.decoder(
                 input_ids=tokens,
-                encoder_hidden_states=encoder_outputs,
-                encoder_padding_mask=encoder_pad_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_padding_mask=encoder_padding_mask,
                 decoder_padding_mask=None,
                 decoder_causal_mask=None,
                 past_key_values=past_key_values,
@@ -395,9 +398,9 @@ class CaGFBartDecoder(torch.nn.Module):
                 pos_emb=positions,
             )
         hidden_state = dict.last_hidden_state  # bsz x max_len x hidden_size
-        if generate:
-            # state.past_key_values = dict.past_key_values
-            past_key_values = dict.past_key_values
+        # if generate:
+        # state.past_key_values = dict.past_key_values
+        past_key_values = dict.past_key_values
 
         # assemble the logits
         logits = hidden_state.new_full(
@@ -421,12 +424,12 @@ class CaGFBartDecoder(torch.nn.Module):
         # the pointer depends on the src token embeddings, the encoder output and the decoder output
         # bsz x max_bpe_len x hidden_size
         # src_outputs = state.encoder_output
-        src_outputs = encoder_outputs
+        src_outputs = encoder_hidden_states
         if hasattr(self, "encoder_mlp"):
             src_outputs = self.encoder_mlp(src_outputs)
 
         # mask = state.encoder_mask.eq(0)
-        mask = encoder_pad_mask.eq(0)
+        mask = encoder_padding_mask.eq(0)
         mask = mask.unsqueeze(1)
         input_embed = self.decoder.embed_tokens(src_tokens)  # bsz x max_word_len x hidden_size
         bsz = src_tokens.size(0)
@@ -489,8 +492,8 @@ class CaGFBartDecoder(torch.nn.Module):
         voc_logits, _, token_cls_scores, past_key_values = self(
             tokens=tokens,
             generate=True,
-            encoder_outputs=state.encoder_output,
-            encoder_pad_mask=state.encoder_mask,
+            encoder_hidden_states=state.encoder_output,
+            encoder_padding_mask=state.encoder_mask,
             src_tokens=state.src_tokens,
             past_key_values=state.past_key_values,
         )
@@ -662,10 +665,10 @@ class PointerNetworkModel(PyTorchIEModel):
         self.warmup_proportion = warmup_proportion
 
     def prepare_state(self, src_tokens, src_seq_len=None):
-        encoder_outputs, encoder_mask, hidden_states = self.encoder(src_tokens, src_seq_len)
+        encoder_hidden_states, encoder_mask, hidden_states = self.encoder(src_tokens, src_seq_len)
         src_embed_outputs = hidden_states[0]
         state = BartState(
-            encoder_output=encoder_outputs,
+            encoder_output=encoder_hidden_states,
             encoder_mask=encoder_mask,
             src_tokens=src_tokens,
             src_embed_outputs=src_embed_outputs,
@@ -687,8 +690,8 @@ class PointerNetworkModel(PyTorchIEModel):
         decoder_output = self.decoder(
             tokens=tgt_tokens,
             CPM_tag=CPM_tag,
-            encoder_outputs=state.encoder_output,
-            encoder_pad_mask=state.encoder_mask,
+            encoder_hidden_states=state.encoder_output,
+            encoder_padding_mask=state.encoder_mask,
             src_tokens=state.src_tokens,
             generate=False,
         )
