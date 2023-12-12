@@ -323,60 +323,57 @@ class CaGFBartDecoder(torch.nn.Module):
 
     def forward(
         self,
-        tokens,
+        input_ids,
         encoder_hidden_states,
         encoder_padding_mask,
-        src_tokens,
+        encoder_input_ids,
         CPM_tag=None,
         generate=False,
         past_key_values=None,
     ):
-        # encoder_hidden_states = state.encoder_output
-        # encoder_padding_mask = state.encoder_mask
-        # encoder_hidden_states = encoder_hidden_states
-        # encoder_padding_mask = encoder_padding_mask
-
-        cumsum = tokens.eq(self.pad_id).flip(dims=[1]).cumsum(dim=-1)
+        cumsum = input_ids.eq(self.pad_id).flip(dims=[1]).cumsum(dim=-1)
         tgt_pad_mask = cumsum.flip(dims=[1]).ne(cumsum[:, -1:])
 
-        mapping_token_mask = tokens.lt(self.pointer_offset)
-        mapped_tokens = tokens.masked_fill(tokens.ge(self.pointer_offset), 0)
+        mapping_token_mask = input_ids.lt(self.pointer_offset)
+        mapped_tokens = input_ids.masked_fill(input_ids.ge(self.pointer_offset), 0)
         tag_mapped_tokens = self.target2token_id[mapped_tokens]
 
-        src_tokens_index = tokens - self.pointer_offset  # bsz x num_src_token
-        src_tokens_index = src_tokens_index.masked_fill(src_tokens_index.lt(0), 0)
-        # src_tokens = state.src_tokens
-        assert src_tokens_index.max() < 1024
-        word_mapped_tokens = src_tokens.gather(index=src_tokens_index, dim=1)
+        encoder_input_ids_index = input_ids - self.pointer_offset  # bsz x num_src_token
+        encoder_input_ids_index = encoder_input_ids_index.masked_fill(
+            encoder_input_ids_index.lt(0), 0
+        )
 
-        tokens = torch.where(
+        assert encoder_input_ids_index.max() < 1024
+        word_mapped_tokens = encoder_input_ids.gather(index=encoder_input_ids_index, dim=1)
+
+        decoder_input_ids = torch.where(
             mapping_token_mask, tag_mapped_tokens, word_mapped_tokens
         )  # bsz x max_len
-        tokens = tokens.masked_fill(tgt_pad_mask, self.pad_token_id)
+        decoder_input_ids = decoder_input_ids.masked_fill(tgt_pad_mask, self.pad_token_id)
         if self.replace_pos:
             pos_tokens = self.prepare_RPE(
-                tokens=tokens,
+                tokens=decoder_input_ids,
                 mapping_token_mask=mapping_token_mask,
                 tag_mapped_tokens=tag_mapped_tokens,
-                src_tokens_index=src_tokens_index,
+                src_tokens_index=encoder_input_ids_index,
             )
         else:
             pos_tokens = None
         if not generate:
-            # assert CPM_tag is not None
-            # bsz,input_d,_ = tokens.shape()
             if pos_tokens is not None:
                 positions = pos_tokens[:, :-1]
             else:
                 positions = None
-            tokens = tokens[:, :-1]
-            decoder_pad_mask = tokens.eq(self.pad_token_id)  # decoder需要让pad位置为1
+            decoder_input_ids = decoder_input_ids[:, :-1]
+            decoder_pad_mask = decoder_input_ids.eq(self.pad_token_id)  # decoder需要让pad位置为1
             dict = self.decoder(
-                input_ids=tokens,
+                input_ids=decoder_input_ids,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_padding_mask=encoder_padding_mask,
                 decoder_padding_mask=decoder_pad_mask,
-                decoder_causal_mask=self.causal_masks[: tokens.size(1), : tokens.size(1)],
+                decoder_causal_mask=self.causal_masks[
+                    : decoder_input_ids.size(1), : decoder_input_ids.size(1)
+                ],
                 past_key_values=past_key_values,
                 return_dict=True,
                 pos_emb=positions,
@@ -384,10 +381,10 @@ class CaGFBartDecoder(torch.nn.Module):
         else:
             assert CPM_tag is None
             positions = pos_tokens
-            # past_key_values = state.past_key_values
+
             past_key_values = past_key_values
             dict = self.decoder(
-                input_ids=tokens,
+                input_ids=decoder_input_ids,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_padding_mask=encoder_padding_mask,
                 decoder_padding_mask=None,
@@ -399,7 +396,6 @@ class CaGFBartDecoder(torch.nn.Module):
             )
         hidden_state = dict.last_hidden_state  # bsz x max_len x hidden_size
         # if generate:
-        # state.past_key_values = dict.past_key_values
         past_key_values = dict.past_key_values
 
         # assemble the logits
@@ -407,7 +403,7 @@ class CaGFBartDecoder(torch.nn.Module):
             (
                 hidden_state.size(0),
                 hidden_state.size(1),
-                self.pointer_offset + src_tokens.size(-1),
+                self.pointer_offset + encoder_input_ids.size(-1),
             ),
             fill_value=-1e24,
         )
@@ -431,9 +427,13 @@ class CaGFBartDecoder(torch.nn.Module):
         # mask = state.encoder_mask.eq(0)
         mask = encoder_padding_mask.eq(0)
         mask = mask.unsqueeze(1)
-        input_embed = self.decoder.embed_tokens(src_tokens)  # bsz x max_word_len x hidden_size
-        bsz = src_tokens.size(0)
-        position_embed = torch.stack([self.encoder_embed_positions(src_tokens)] * bsz, dim=0)
+        input_embed = self.decoder.embed_tokens(
+            encoder_input_ids
+        )  # bsz x max_word_len x hidden_size
+        bsz = encoder_input_ids.size(0)
+        position_embed = torch.stack(
+            [self.encoder_embed_positions(encoder_input_ids)] * bsz, dim=0
+        )
 
         word_scores = torch.einsum(
             "blh,bnh->bln", hidden_state, src_outputs
@@ -452,7 +452,7 @@ class CaGFBartDecoder(torch.nn.Module):
         else:
             avg_word_scores = (gen_scores + word_scores) / 2
         # TODO: what are 2 and 1?
-        mask = mask.__or__(src_tokens.eq(2).cumsum(dim=1).ge(1).unsqueeze(1))
+        mask = mask.__or__(encoder_input_ids.eq(2).cumsum(dim=1).ge(1).unsqueeze(1))
         avg_word_scores = avg_word_scores.masked_fill(mask, -1e32)
         word_scores = word_scores.masked_fill(mask, -1e32)
 
@@ -477,7 +477,7 @@ class CaGFBartDecoder(torch.nn.Module):
                 (
                     hidden_state.size(0),
                     hidden_state.size(1),
-                    self.pointer_offset + src_tokens.size(-1),
+                    self.pointer_offset + encoder_input_ids.size(-1),
                 ),
                 fill_value=-1e24,
             )
@@ -490,11 +490,11 @@ class CaGFBartDecoder(torch.nn.Module):
 
     def decode(self, tokens, state):
         voc_logits, _, token_cls_scores, past_key_values = self(
-            tokens=tokens,
+            input_ids=tokens,
             generate=True,
             encoder_hidden_states=state.encoder_output,
             encoder_padding_mask=state.encoder_mask,
-            src_tokens=state.src_tokens,
+            encoder_input_ids=state.src_tokens,
             past_key_values=state.past_key_values,
         )
         state.past_key_values = past_key_values
@@ -688,11 +688,11 @@ class PointerNetworkModel(PyTorchIEModel):
         """
         state = self.prepare_state(src_tokens=src_tokens, src_seq_len=src_seq_len)
         decoder_output = self.decoder(
-            tokens=tgt_tokens,
+            input_ids=tgt_tokens,
             CPM_tag=CPM_tag,
             encoder_hidden_states=state.encoder_output,
             encoder_padding_mask=state.encoder_mask,
-            src_tokens=state.src_tokens,
+            encoder_input_ids=state.src_tokens,
             generate=False,
         )
         if isinstance(decoder_output, torch.Tensor):
