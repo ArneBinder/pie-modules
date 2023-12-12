@@ -99,11 +99,11 @@ class PointerDecoder(torch.nn.Module):
     # ):
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_input_ids: Optional[torch.LongTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor,
+        attention_mask: torch.Tensor,
+        encoder_input_ids: torch.LongTensor,
+        encoder_hidden_states: torch.FloatTensor,
+        encoder_attention_mask: torch.LongTensor,
         # head_mask: Optional[torch.Tensor] = None,
         # cross_attn_head_mask: Optional[torch.Tensor] = None,
         # past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -238,10 +238,10 @@ class PointerDecoder(torch.nn.Module):
 class BartAsPointerConfig(BartConfig):
     def __init__(
         self,
-        label_ids: List[int] = None,
-        target_token_ids: List[int] = None,
-        eos_id: int = None,
-        pad_id: int = None,
+        label_ids: Optional[List[int]] = None,
+        target_token_ids: Optional[List[int]] = None,
+        eos_id: Optional[int] = None,
+        pad_id: Optional[int] = None,
         use_encoder_mlp: bool = False,
         max_target_positions: Optional[int] = None,
         **kwargs,
