@@ -292,6 +292,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
 
     def get_decoder(self):
         return self.model.get_decoder()
+        # TODO: return self.pointer_decoder?
         # return self.pointer_decoder
 
     def resize_token_embeddings(
@@ -384,6 +385,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.model.decoder(
             input_ids=decoder_input_ids,
+            # encoder_input_ids=input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
