@@ -81,10 +81,11 @@ def test_bart_pointer_network_beam_search():
     input_ids = input_ids * model.config.decoder_start_token_id
 
     # add encoder_outputs to model keyword arguments
+    encoder = model.get_encoder()
+    encoder_input = encoder_input_ids.repeat_interleave(num_beams, dim=0)
     model_kwargs = {
-        "encoder_outputs": model.get_encoder()(
-            encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True
-        )
+        "encoder_outputs": encoder(encoder_input, return_dict=True),
+        "encoder_input_ids": encoder_input_ids,
     }
 
     # instantiate beam scorer
