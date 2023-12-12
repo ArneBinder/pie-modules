@@ -237,61 +237,62 @@ class CaGFBartDecoder(Seq2SeqDecoder):
 
         self.position_type = position_type
         self.replace_pos = replace_pos
-        # TODO: move into prepare_RPE
-        if position_type == 0:
-            self.decoder.embed_positions_replace.weight = self.decoder.embed_positions.weight
-            repeat_pos = torch.tensor([2, 2, 3, 2, 2, 3, 3])  # pad 0 start 1
-        elif position_type == 1:
-            repeat_pos = torch.tensor([2, 3, 4, 2, 3, 4, 4])  # pad 0 start 1
-        elif position_type == 2:
-            repeat_pos = torch.tensor([2, 3, 4, 5, 6, 7, 8])  # pad 0 start 1
-        elif position_type == 3:
-            repeat_pos = torch.tensor([2, 3, 4, 2, 3, 4, 5])  # pad 0 start 1
-        elif position_type == 4:
-            repeat_pos = torch.tensor([2, 2, 2, 2, 2, 2, 2])
-        elif position_type == 5:
-            repeat_pos = torch.tensor([2, 2, 2, 2, 2, 2, 2])
-        elif position_type == 6:
-            repeat_pos = torch.tensor([2, 2, 3, 2, 2, 3, 4])
-        elif position_type == 7:
-            self.replace_pos = False
-            self.decoder.embed_positions.reset_parameters()
-            repeat_pos = torch.tensor([2, 2, 2, 2, 2, 2, 2])  # not used
-        elif position_type == 8:
-            self.decoder.embed_positions_replace.weight = self.decoder.embed_positions.weight
-            repeat_pos = torch.tensor([2, 2, 3, 2, 2, 3, 3])  # pad 0 start 1
-        elif position_type in [9, 10]:
-            orig_decoder_embed_positions_replace = self.decoder.embed_positions_replace
-            self.decoder.embed_positions_replace = LearnedPositionalEmbedding(
-                num_embeddings=(
-                    orig_decoder_embed_positions_replace.num_embeddings
-                    - orig_decoder_embed_positions_replace.padding_idx
+
+        if replace_pos:
+            if position_type == 0:
+                self.decoder.embed_positions_replace.weight = self.decoder.embed_positions.weight
+                repeat_pos = torch.tensor([2, 2, 3, 2, 2, 3, 3])  # pad 0 start 1
+            elif position_type == 1:
+                repeat_pos = torch.tensor([2, 3, 4, 2, 3, 4, 4])  # pad 0 start 1
+            elif position_type == 2:
+                repeat_pos = torch.tensor([2, 3, 4, 5, 6, 7, 8])  # pad 0 start 1
+            elif position_type == 3:
+                repeat_pos = torch.tensor([2, 3, 4, 2, 3, 4, 5])  # pad 0 start 1
+            elif position_type == 4:
+                repeat_pos = torch.tensor([2, 2, 2, 2, 2, 2, 2])
+            elif position_type == 5:
+                repeat_pos = torch.tensor([2, 2, 2, 2, 2, 2, 2])
+            elif position_type == 6:
+                repeat_pos = torch.tensor([2, 2, 3, 2, 2, 3, 4])
+            elif position_type == 7:
+                self.replace_pos = False
+                self.decoder.embed_positions.reset_parameters()
+                repeat_pos = torch.tensor([2, 2, 2, 2, 2, 2, 2])  # not used
+            elif position_type == 8:
+                self.decoder.embed_positions_replace.weight = self.decoder.embed_positions.weight
+                repeat_pos = torch.tensor([2, 2, 3, 2, 2, 3, 3])  # pad 0 start 1
+            elif position_type in [9, 10]:
+                orig_decoder_embed_positions_replace = self.decoder.embed_positions_replace
+                self.decoder.embed_positions_replace = LearnedPositionalEmbedding(
+                    num_embeddings=(
+                        orig_decoder_embed_positions_replace.num_embeddings
+                        - orig_decoder_embed_positions_replace.padding_idx
+                    )
+                    * 2,
+                    embedding_dim=orig_decoder_embed_positions_replace.embedding_dim,
+                    padding_idx=orig_decoder_embed_positions_replace.padding_idx,
                 )
-                * 2,
-                embedding_dim=orig_decoder_embed_positions_replace.embedding_dim,
-                padding_idx=orig_decoder_embed_positions_replace.padding_idx,
-            )
-            # TODO: will this be still connected to self.encoder_embed_positions and self.decoder.embed_positions?
-            self.decoder.embed_positions_replace.weight = torch.nn.Parameter(
-                torch.concat(
-                    [self.encoder_embed_positions.weight, self.decoder.embed_positions.weight],
-                    dim=0,
+                # TODO: will this be still connected to self.encoder_embed_positions and self.decoder.embed_positions?
+                self.decoder.embed_positions_replace.weight = torch.nn.Parameter(
+                    torch.concat(
+                        [self.encoder_embed_positions.weight, self.decoder.embed_positions.weight],
+                        dim=0,
+                    )
                 )
-            )
-            repeat_pos = None
-        else:
-            raise ValueError(f"position_type {position_type} not supported")
-        # 2 2 3 2 2 3 3
-        # 2 3 4 5 6 7 8
-        # 2 3 4 2 3 4 4
-        # 2 3 4 2 3 4 5
-        # 1 1 1 1 1 1 1 2 2 2 2 2 2 3 3 3 3 3 3
-        pad_pos = torch.tensor(0)
-        start_pos = torch.tensor(1)
-        if repeat_pos is not None:
-            self.register_buffer("repeat_pos", repeat_pos)
-        self.register_buffer("pad_pos", pad_pos)
-        self.register_buffer("start_pos", start_pos)
+                repeat_pos = None
+            else:
+                raise ValueError(f"position_type {position_type} not supported")
+            # 2 2 3 2 2 3 3
+            # 2 3 4 5 6 7 8
+            # 2 3 4 2 3 4 4
+            # 2 3 4 2 3 4 5
+            # 1 1 1 1 1 1 1 2 2 2 2 2 2 3 3 3 3 3 3
+            pad_pos = torch.tensor(0)
+            start_pos = torch.tensor(1)
+            if repeat_pos is not None:
+                self.register_buffer("repeat_pos", repeat_pos)
+            self.register_buffer("pad_pos", pad_pos)
+            self.register_buffer("start_pos", start_pos)
 
     def prepare_RPE(self, tokens, mapping_token_mask, src_tokens_index, tag_mapped_tokens=None):
         if self.position_type in [9, 10]:

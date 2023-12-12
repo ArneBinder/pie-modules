@@ -16,7 +16,10 @@ from tests import _config_to_str
 # from tests.taskmodules.test_gmam_taskmodule import FIXTURES_DIR as TASKMODULE_FIXTURE_DIR
 
 
-CONFIGS = [{}, {"biloss": False, "decode_mask": False, "replace_pos": False}]
+CONFIGS = [
+    {},
+    {"biloss": False, "decode_mask": False, "replace_pos": False},
+]
 CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
 
 logger = logging.getLogger(__name__)
