@@ -359,33 +359,41 @@ class CaGFBartDecoder(torch.nn.Module):
             )
         else:
             pos_tokens = None
+
         if not generate:
             if pos_tokens is not None:
-                position_ids = pos_tokens[:, :-1]
+                positions = pos_tokens[:, :-1]
             else:
-                position_ids = None
+                positions = None
             decoder_input_ids = decoder_input_ids[:, :-1]
             decoder_pad_mask = decoder_input_ids.eq(self.pad_token_id)  # decoder需要让pad位置为1
-            decoder_causal_mask = self.causal_masks[
-                : decoder_input_ids.size(1), : decoder_input_ids.size(1)
-            ]
+            decoder_output = self.decoder(
+                input_ids=decoder_input_ids,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_padding_mask=encoder_padding_mask,
+                decoder_padding_mask=decoder_pad_mask,
+                decoder_causal_mask=self.causal_masks[
+                    : decoder_input_ids.size(1), : decoder_input_ids.size(1)
+                ],
+                past_key_values=past_key_values,
+                return_dict=True,
+                pos_emb=positions,
+            )
         else:
             assert CPM_tag is None
-            position_ids = pos_tokens
-            decoder_pad_mask = None
-            decoder_causal_mask = None
+            positions = pos_tokens
 
-        decoder_output = self.decoder(
-            input_ids=decoder_input_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_padding_mask=encoder_padding_mask,
-            decoder_padding_mask=decoder_pad_mask,
-            decoder_causal_mask=decoder_causal_mask,
-            past_key_values=past_key_values,
-            use_cache=past_key_values is not None,
-            return_dict=True,
-            pos_emb=position_ids,
-        )
+            decoder_output = self.decoder(
+                input_ids=decoder_input_ids,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_padding_mask=encoder_padding_mask,
+                decoder_padding_mask=None,
+                decoder_causal_mask=None,
+                past_key_values=past_key_values,
+                use_cache=True,
+                return_dict=True,
+                pos_emb=positions,
+            )
         hidden_state = decoder_output.last_hidden_state  # bsz x max_len x hidden_size
 
         # assemble the logits
