@@ -369,6 +369,12 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             encoder_input_ids=input_ids,
         )
 
+        if not isinstance(encoder_outputs, (BaseModelOutput, tuple)):
+            raise ValueError(
+                f"Inconsistent encoder_outputs: either should be of type BaseModelOutput or tuple, but it is "
+                f"'{type(encoder_outputs)}'."
+            )
+
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.model.decoder(
             input_ids=modified_decoder_input_ids,
@@ -382,12 +388,22 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         if not return_dict:
             return decoder_outputs + encoder_outputs
 
+        if not isinstance(decoder_outputs, BaseModelOutputWithPastAndCrossAttentions):
+            raise ValueError(
+                "Inconsistent output: The output of the model decoder should be of type "
+                f"`Seq2SeqLMOutput`, but is of type `{type(decoder_outputs)}`."
+            )
+        if not isinstance(encoder_outputs, BaseModelOutputWithPastAndCrossAttentions):
+            raise ValueError(
+                "Inconsistent output: The output of the model encoder should be of type "
+                f"`BaseModelOutputWithPastAndCrossAttentions`, but is of type `{type(encoder_outputs)}`."
+            )
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
@@ -457,12 +473,17 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         # lm_logits = self.lm_head(outputs[0])
         # lm_logits = lm_logits + self.final_logits_bias.to(lm_logits.device)
         # lm_logits = outputs.last_hidden_state
+        if not isinstance(outputs, Seq2SeqModelOutput):
+            raise ValueError(
+                "Inconsistent output: The output of the model forward should be of type "
+                f"`Seq2SeqLMOutput`, but is of type `{type(outputs)}`."
+            )
         lm_logits, masked_lm_loss = self.pointer_head(
             last_hidden_state=outputs.last_hidden_state,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
