@@ -399,7 +399,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
                 "Inconsistent output: The output of the model decoder should be of type "
                 f"`Seq2SeqLMOutput`, but is of type `{type(decoder_outputs)}`."
             )
-        if not isinstance(encoder_outputs, BaseModelOutputWithPastAndCrossAttentions):
+        if not isinstance(encoder_outputs, BaseModelOutput):
             raise ValueError(
                 "Inconsistent output: The output of the model encoder should be of type "
                 f"`BaseModelOutputWithPastAndCrossAttentions`, but is of type `{type(encoder_outputs)}`."
