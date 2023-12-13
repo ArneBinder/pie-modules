@@ -201,8 +201,8 @@ class PointerHead(torch.nn.Module):
             # labels = labels.to(logits.device)
             loss_fct = CrossEntropyLoss()
             # TODO: any masking for the padding needed?
-            logits_resized = logits.view(-1, logits.size(-1))
-            labels_resized = labels.view(-1)
+            logits_resized = logits.reshape(-1, logits.size(-1))
+            labels_resized = labels.reshape(-1)
             loss = loss_fct(logits_resized, labels_resized)
 
         return logits, loss
