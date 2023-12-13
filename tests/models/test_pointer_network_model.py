@@ -209,10 +209,14 @@ def test_batch(batch, config):
     assert batch is not None
     inputs, targets = batch
     assert inputs is not None
-    assert set(inputs) == {"src_tokens", "src_seq_len"}
+    assert set(inputs) == {"src_tokens", "src_seq_len", "src_attention_mask"}
     torch.testing.assert_close(
         inputs["src_tokens"],
         torch.tensor([[0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 3101, 162, 4, 2]]),
+    )
+    torch.testing.assert_close(
+        inputs["src_attention_mask"],
+        torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]),
     )
     torch.testing.assert_close(
         inputs["src_seq_len"],

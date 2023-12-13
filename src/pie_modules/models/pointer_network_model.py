@@ -666,7 +666,9 @@ class PointerNetworkModel(PyTorchIEModel):
         # setattr(state, 'tgt_seq_len', tgt_seq_len)
         return state
 
-    def forward(self, src_tokens, tgt_tokens, CPM_tag=None, src_seq_len=None):
+    def forward(
+        self, src_tokens, tgt_tokens, src_attention_mask=None, CPM_tag=None, src_seq_len=None
+    ):
         """
 
         :param torch.LongTensor src_tokens: source的token

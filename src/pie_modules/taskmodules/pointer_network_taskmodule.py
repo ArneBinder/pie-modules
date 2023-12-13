@@ -56,6 +56,7 @@ DocumentType: TypeAlias = TextBasedDocument
 @dataclasses.dataclass
 class InputEncodingType:
     src_tokens: List[int]
+    src_attention_mask: List[int]
     src_seq_len: int
 
 
@@ -213,12 +214,14 @@ class PointerNetworkTaskModule(
         self.pad_values = {
             "tgt_tokens": self.annotation_encoder_decoder.target_pad_id,
             "src_tokens": self.tokenizer.pad_token_id,
+            "src_attention_mask": 0,
             "CPM_tag": -1,
         }
         self.dtypes = {
             "tgt_tokens": torch.int64,
             "src_seq_len": torch.int64,
             "src_tokens": torch.int64,
+            "src_attention_mask": torch.int64,
             "tgt_seq_len": torch.int64,
             "CPM_tag": torch.int64,
         }
@@ -369,6 +372,7 @@ class PointerNetworkTaskModule(
                     document=document,
                     inputs=InputEncodingType(
                         src_tokens=tokenizer_encoding.ids,
+                        src_attention_mask=tokenizer_encoding.attention_mask,
                         src_seq_len=len(tokenizer_encoding.ids),
                     ),
                     metadata={"tokenized_document": tokenized_doc},

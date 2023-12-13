@@ -265,11 +265,13 @@ def test_encoded_input(encoded_input, taskmodule):
     if taskmodule.partition_layer_name is None:
         assert asdict(encoded_input.inputs) == {
             "src_tokens": [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 3101, 162, 4, 2],
+            "src_attention_mask": [1] * 13,
             "src_seq_len": 13,
         }
     elif taskmodule.partition_layer_name == "sentences":
         assert asdict(encoded_input.inputs) == {
             "src_tokens": [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 2],
+            "src_attention_mask": [1] * 10,
             "src_seq_len": 10,
         }
     else:
@@ -347,6 +349,7 @@ def test_collate(batch, taskmodule):
         assert inputs_lists == {
             "src_seq_len": [13],
             "src_tokens": [[0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 3101, 162, 4, 2]],
+            "src_attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
         }
         assert targets_lists == {
             "CPM_tag": [
@@ -378,6 +381,7 @@ def test_collate(batch, taskmodule):
                 [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 2],
                 [0, 18823, 162, 4, 2, 1, 1, 1, 1, 1],
             ],
+            "src_attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 0, 0, 0, 0, 0]],
         }
         assert targets_lists == {
             "CPM_tag": [
