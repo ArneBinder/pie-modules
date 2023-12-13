@@ -99,25 +99,36 @@ def test_bart_generate():
     assert result == [" power lines in California have been shut down on Friday."]
 
 
-# NOTE: THIS OS CURRENTLY NOT WORKING
-def test_bart_pointer_network_generate():
+def test_bart_pointer_network_generate(taskmodule):
     model_name_or_path = MODEL_NAME_OR_PATH
-    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+    # tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+    tokenizer = taskmodule.tokenizer
+    torch.random.manual_seed(42)
     model = BartAsPointerNetwork.from_pretrained(
         model_name_or_path,
-        label_ids=[2, 3, 4, 5, 6],
-        target_token_ids=[0, 2, 50266, 50269, 50268, 50265, 50267],
-        eos_id=1,
-        pad_id=1,
+        target_token_ids=taskmodule.target_token_ids,
+        pad_id=taskmodule.annotation_encoder_decoder.target_pad_id,
+        pad_token_id=taskmodule.tokenizer.pad_token_id,
+        label_ids=taskmodule.annotation_encoder_decoder.label_ids,
+        eos_id=taskmodule.annotation_encoder_decoder.eos_id,
     )
-    input_text = ARTICLE_TO_SUMMARIZE
-    inputs = tokenizer([input_text], max_length=1024, return_tensors="pt")
-    summary_ids = model.generate(inputs["input_ids"], num_beams=3, min_length=5, max_length=20)
-    result = tokenizer.batch_decode(
-        summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    model.resize_token_embeddings(len(taskmodule.tokenizer))
+
+    encoder_input_str = ARTICLE_TO_SUMMARIZE  # "translate English to German: How old are you?"
+    inputs = tokenizer(encoder_input_str, max_length=1024, return_tensors="pt")
+
+    outputs = model.generate(inputs["input_ids"], num_beams=3, min_length=5, max_length=20)
+    torch.testing.assert_allclose(
+        outputs,
+        torch.tensor(
+            [[2, 8, 17, 14, 35, 14, 36, 17, 33, 35, 14, 35, 33, 36, 17, 14, 55, 35, 1, 2]]
+        ),
     )
 
-    assert result == [" power lines in California have been shut down on Friday."]
+    # result = tokenizer.batch_decode(
+    #    summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    # )
+    # assert result == [" power lines in California have been shut down on Friday."]
 
 
 def test_bart_pointer_network_beam_search(taskmodule):
