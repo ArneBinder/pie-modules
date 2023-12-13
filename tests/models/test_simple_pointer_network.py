@@ -99,6 +99,7 @@ def test_bart_generate():
     assert result == [" power lines in California have been shut down on Friday."]
 
 
+# NOTE: THIS OS CURRENTLY NOT WORKING
 def test_bart_pointer_network_generate():
     model_name_or_path = MODEL_NAME_OR_PATH
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
@@ -123,6 +124,7 @@ def test_bart_pointer_network_beam_search(taskmodule):
     model_name_or_path = MODEL_NAME_OR_PATH
     # tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
     tokenizer = taskmodule.tokenizer
+    torch.random.manual_seed(42)
     model = BartAsPointerNetwork.from_pretrained(
         model_name_or_path,
         target_token_ids=taskmodule.target_token_ids,
@@ -139,18 +141,22 @@ def test_bart_pointer_network_beam_search(taskmodule):
     # lets run beam search using 3 beams
     num_beams = 3
     # define decoder start token ids
-    input_ids = torch.ones((num_beams, 1), device=model.device, dtype=torch.long)
-    input_ids = input_ids * model.config.decoder_start_token_id
+    # bos_id = model.config.decoder_start_token_id
+    bos_id = taskmodule.annotation_encoder_decoder.bos_id
+    decoder_input_ids = torch.ones((num_beams, 1), device=model.device, dtype=torch.long)
+    decoder_input_ids = decoder_input_ids * bos_id
 
     # add encoder_outputs to model keyword arguments
     encoder = model.get_encoder()
-    encoder_input_ids = encoder_input_tokenized.input_ids
+    encoder_input_ids = encoder_input_tokenized.input_ids.repeat_interleave(num_beams, dim=0)
+    encoder_attention_mask = encoder_input_tokenized.attention_mask.repeat_interleave(
+        num_beams, dim=0
+    )
+    encoder_outputs = encoder(encoder_input_ids, return_dict=True)
     model_kwargs = {
-        "encoder_outputs": encoder(
-            encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True
-        ),
+        "encoder_outputs": encoder_outputs,
         "encoder_input_ids": encoder_input_ids,
-        "encoder_attention_mask": encoder_input_tokenized.attention_mask,
+        "encoder_attention_mask": encoder_attention_mask,
     }
 
     # instantiate beam scorer
@@ -161,17 +167,59 @@ def test_bart_pointer_network_beam_search(taskmodule):
     )
 
     # instantiate logits processors
+    # eos_id = model.config.eos_token_id
+    eos_id = taskmodule.annotation_encoder_decoder.eos_id
+    pad_token_id = taskmodule.tokenizer.pad_token_id
     logits_processor = LogitsProcessorList(
         [
-            MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),
+            MinLengthLogitsProcessor(5, eos_token_id=eos_id),
         ]
     )
 
     outputs = model.beam_search(
-        input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs
+        decoder_input_ids,
+        beam_scorer,
+        logits_processor=logits_processor,
+        pad_token_id=pad_token_id,
+        eos_token_id=eos_id,
+        **model_kwargs
     )
 
-    result = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-    assert result == [
-        " power lines in California have been shut down after a power provider said it was due to high winds."
-    ]
+    torch.testing.assert_allclose(
+        outputs,
+        torch.tensor(
+            [
+                [
+                    0,
+                    8,
+                    9,
+                    10,
+                    30,
+                    19,
+                    49,
+                    21,
+                    14,
+                    55,
+                    35,
+                    14,
+                    36,
+                    17,
+                    14,
+                    55,
+                    35,
+                    14,
+                    36,
+                    17,
+                    14,
+                    36,
+                    27,
+                    1,
+                ]
+            ]
+        ),
+    )
+
+    # result = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+    # assert result == [
+    #    " power lines in California have been shut down after a power provider said it was due to high winds."
+    # ]

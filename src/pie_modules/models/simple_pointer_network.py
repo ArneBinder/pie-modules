@@ -38,7 +38,7 @@ from transformers.utils import (
 logger = logging.get_logger(__name__)
 
 
-class PointerDecoder(torch.nn.Module):
+class PointerHead(torch.nn.Module):
     # Copy and generate,
     def __init__(
         self,
@@ -58,10 +58,10 @@ class PointerDecoder(torch.nn.Module):
         assert isinstance(decoder, BartDecoder)
         self.decoder = decoder
         # self.encoder_embed_positions = encoder_embed_positions
-        max_target_positions = max_target_positions or self.decoder.max_target_positions
-        causal_mask = torch.zeros(max_target_positions, max_target_positions).fill_(float("-inf"))
-        causal_mask = causal_mask.triu(diagonal=1)
-        self.register_buffer("causal_masks", causal_mask.float())
+        # self.max_target_positions = max_target_positions or self.decoder.max_target_positions
+        # causal_mask = torch.zeros(self.max_target_positions, self.max_target_positions).fill_(float("-inf"))
+        # causal_mask = causal_mask.triu(diagonal=1)
+        # self.register_buffer("causal_masks", causal_mask.float())
         self.pad_token_id = pad_token_id
         self.label_token_ids = [target_token_ids[label_id] for label_id in label_ids]
         target2token_id = torch.LongTensor(target_token_ids)
@@ -87,36 +87,18 @@ class PointerDecoder(torch.nn.Module):
         # self.position_type = position_type
         # self.replace_pos = replace_pos
 
-    # def forward(
-    #    self,
-    #    input_ids,
-    #    encoder_hidden_states,
-    #    encoder_padding_mask,
-    #    encoder_input_ids,
-    #    CPM_tag=None,
-    #    generate=False,
-    #    past_key_values=None,
-    # ):
-    def forward(
+    def output_size(self):
+        return len(self.target_token_ids)
+
+    def prepare_decoder_input_ids(
         self,
         input_ids: torch.LongTensor,
-        attention_mask: torch.Tensor,
+        # attention_mask: torch.Tensor,
         encoder_input_ids: torch.LongTensor,
-        encoder_hidden_states: torch.FloatTensor,
-        encoder_attention_mask: torch.LongTensor,
-        # head_mask: Optional[torch.Tensor] = None,
-        # cross_attn_head_mask: Optional[torch.Tensor] = None,
-        # past_key_values: Optional[List[torch.FloatTensor]] = None,
-        # inputs_embeds: Optional[torch.FloatTensor] = None,
-        # use_cache: Optional[bool] = None,
-        # output_attentions: Optional[bool] = None,
-        # output_hidden_states: Optional[bool] = None,
-        # return_dict: Optional[bool] = None,
-        **decoder_kwargs,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-        if attention_mask is None:
-            # TODO: is this correct?
-            attention_mask = input_ids.ne(self.pad_token_id)
+    ):
+        # if attention_mask is None:
+        #    # TODO: is this correct?
+        #    attention_mask = input_ids.ne(self.pad_token_id)
 
         # cumsum = input_ids.eq(self.pad_id).flip(dims=[1]).cumsum(dim=-1)
         # tgt_pad_mask = cumsum.flip(dims=[1]).ne(cumsum[:, -1:])
@@ -129,53 +111,36 @@ class PointerDecoder(torch.nn.Module):
         encoder_input_ids_index = encoder_input_ids_index.masked_fill(
             encoder_input_ids_index.lt(0), 0
         )
-
+        # TODO: parametrize this (use max input length)
         assert encoder_input_ids_index.max() < 1024
         word_mapped_tokens = encoder_input_ids.gather(index=encoder_input_ids_index, dim=1)
 
         decoder_input_ids = torch.where(
             mapping_token_mask, tag_mapped_tokens, word_mapped_tokens
         )  # bsz x max_len
-        decoder_input_ids = decoder_input_ids.masked_fill(~attention_mask, self.pad_token_id)
-        # pos_tokens = None
-        # if not generate:
-        # position_ids = None
+        # attention_mask = input_ids.ne(self.pad_token_id)  # inverted tgt_pad_mask?
+        cumsum = input_ids.eq(self.pad_id).flip(dims=[1]).cumsum(dim=-1)
+        tgt_pad_mask = cumsum.flip(dims=[1]).ne(cumsum[:, -1:])
+        decoder_input_ids = decoder_input_ids.masked_fill(tgt_pad_mask, self.pad_token_id)
 
         # TODO: why was this in the original code?
         # decoder_input_ids = decoder_input_ids[:, :-1]
 
-        # decoder_pad_mask = decoder_input_ids.eq(self.pad_token_id)  # decoder需要让pad位置为1
-        # decoder_causal_mask = self.causal_masks[
-        #    : decoder_input_ids.size(1), : decoder_input_ids.size(1)
-        # ]
-        # else:
-        #    assert CPM_tag is None
-        #    #position_ids = pos_tokens
-        #    decoder_pad_mask = None
-        #    decoder_causal_mask = None
+        return decoder_input_ids  # {"input_ids": decoder_input_ids, }  # "attention_mask": attention_mask}
 
-        decoder_output = self.decoder(
-            input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            # decoder_padding_mask=decoder_pad_mask,
-            # decoder_causal_mask=decoder_causal_mask,
-            # past_key_values=past_key_values,
-            # use_cache=past_key_values is not None,
-            # return_dict=True,
-            # pos_emb=position_ids,
-            **decoder_kwargs,
-        )
-
-        # TODO: the following code should go into the main model
-        hidden_state = decoder_output.last_hidden_state  # bsz x max_len x hidden_size
-
+    def forward(
+        self,
+        last_hidden_state,
+        encoder_last_hidden_state,
+        encoder_input_ids,
+        encoder_attention_mask,
+        labels: Optional[torch.LongTensor] = None,
+    ):
         # assemble the logits
-        logits = hidden_state.new_full(
+        logits = last_hidden_state.new_full(
             (
-                hidden_state.size(0),
-                hidden_state.size(1),
+                last_hidden_state.size(0),
+                last_hidden_state.size(1),
                 self.pointer_offset + encoder_input_ids.size(-1),
             ),
             fill_value=-1e24,
@@ -183,23 +148,21 @@ class PointerDecoder(torch.nn.Module):
 
         # eos and tag scores depend only on the decoder output
         eos_scores = F.linear(
-            hidden_state,
+            last_hidden_state,
             self.decoder.embed_tokens.weight[[self.eos_token_id]],
         )  # bsz x max_len x 1
         label_scores = F.linear(
-            hidden_state, self.decoder.embed_tokens.weight[self.label_token_ids]
+            last_hidden_state, self.decoder.embed_tokens.weight[self.label_token_ids]
         )  # bsz x max_len x num_class
 
         # the pointer depends on the src token embeddings, the encoder output and the decoder output
         # bsz x max_bpe_len x hidden_size
         # src_outputs = state.encoder_output
-        src_outputs = encoder_hidden_states
+        src_outputs = encoder_last_hidden_state
         if hasattr(self, "encoder_mlp"):
             src_outputs = self.encoder_mlp(src_outputs)
 
         # mask = state.encoder_mask.eq(0)
-        mask = encoder_attention_mask.eq(0)
-        mask = mask.unsqueeze(1)
         input_embed = self.decoder.embed_tokens(
             encoder_input_ids
         )  # bsz x max_word_len x hidden_size
@@ -209,10 +172,10 @@ class PointerDecoder(torch.nn.Module):
         # )
 
         word_scores = torch.einsum(
-            "blh,bnh->bln", hidden_state, src_outputs
+            "blh,bnh->bln", last_hidden_state, src_outputs
         )  # bsz x max_len x max_word_len
         gen_scores = torch.einsum(
-            "blh,bnh->bln", hidden_state, input_embed
+            "blh,bnh->bln", last_hidden_state, input_embed
         )  # bsz x max_len x max_word_len
         # positions_scores = torch.einsum(
         #    "blh,bnh->bln", hidden_state, position_embed
@@ -224,24 +187,29 @@ class PointerDecoder(torch.nn.Module):
         #    avg_word_scores = positions_scores
         # else:
         avg_word_scores = (gen_scores + word_scores) / 2
+        # TODO: what exactly does this mask?
+        mask = encoder_attention_mask.eq(0)
+        mask = mask.unsqueeze(1)
         # TODO: what are 2 and 1?
         mask = mask.__or__(encoder_input_ids.eq(2).cumsum(dim=1).ge(1).unsqueeze(1))
         avg_word_scores = avg_word_scores.masked_fill(mask, -1e32)
-        word_scores = word_scores.masked_fill(mask, -1e32)
+        # word_scores = word_scores.masked_fill(mask, -1e32)
 
         # Note: logits[:, :, 0] contains the score for the bos token which should be never generated!
         logits[:, :, 1:2] = eos_scores
         logits[:, :, 2 : self.pointer_offset] = label_scores
         logits[:, :, self.pointer_offset :] = avg_word_scores
 
-        # return logits, decoder_output.past_key_values
-        return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=logits,
-            past_key_values=decoder_output.past_key_values,
-            # hidden_states=all_hidden_states,
-            attentions=decoder_output.attentions,
-            cross_attentions=decoder_output.cross_attentions,
-        )
+        loss = None
+        if labels is not None:
+            labels = labels.to(logits.device)
+            loss_fct = CrossEntropyLoss()
+            # TODO: any masking for the padding needed?
+            logits_resized = logits.view(-1, logits.size(-1))
+            labels_resized = labels.view(-1)
+            loss = loss_fct(logits_resized, labels_resized)
+
+        return logits, loss
 
 
 class BartAsPointerConfig(BartConfig):
@@ -286,7 +254,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
         # TODO: add content to here
-        self.pointer_decoder = PointerDecoder(
+        self.pointer_head = PointerHead(
             decoder=self.model.decoder,
             pad_token_id=self.model.config.pad_token_id,
             target_token_ids=self.model.config.target_token_ids,
@@ -395,10 +363,15 @@ class BartAsPointerNetwork(BartPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
-        decoder_outputs = self.pointer_decoder(
+        # this contains the new input_ids
+        modified_decoder_input_ids = self.pointer_head.prepare_decoder_input_ids(
             input_ids=decoder_input_ids,
             encoder_input_ids=input_ids,
+        )
+
+        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
+        decoder_outputs = self.model.decoder(
+            input_ids=modified_decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
@@ -489,13 +462,14 @@ class BartAsPointerNetwork(BartPreTrainedModel):
 
         # lm_logits = self.lm_head(outputs[0])
         # lm_logits = lm_logits + self.final_logits_bias.to(lm_logits.device)
-        lm_logits = outputs.last_hidden_state
-
-        masked_lm_loss = None
-        if labels is not None:
-            labels = labels.to(lm_logits.device)
-            loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
+        # lm_logits = outputs.last_hidden_state
+        lm_logits, masked_lm_loss = self.pointer_head(
+            last_hidden_state=outputs.last_hidden_state,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_input_ids=input_ids,
+            encoder_attention_mask=attention_mask,
+            labels=labels,
+        )
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
@@ -542,16 +516,16 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
         # TODO: this works only for beam search. I guess. Better do this outside?
-        batch_size = encoder_input_ids.size(0)
-        num_beams = decoder_input_ids.size(0) // batch_size
-        input_ids = encoder_input_ids.repeat_interleave(num_beams, dim=0)
-        attention_mask = encoder_attention_mask.repeat_interleave(num_beams, dim=0)
+        # batch_size = encoder_input_ids.size(0)
+        # num_beams = decoder_input_ids.size(0) // batch_size
+        # input_ids = encoder_input_ids.repeat_interleave(num_beams, dim=0)
+        # attention_mask = encoder_attention_mask.repeat_interleave(num_beams, dim=0)
         return {
-            "input_ids": input_ids,
+            "input_ids": encoder_input_ids,
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
+            "attention_mask": encoder_attention_mask,
             "decoder_attention_mask": decoder_attention_mask,
             "head_mask": head_mask,
             "decoder_head_mask": decoder_head_mask,
