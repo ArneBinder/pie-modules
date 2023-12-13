@@ -109,7 +109,9 @@ class BartAsPointerNetwork(BartPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def overwrite_decoder_label_embeddings_with_mapping(self, mapping: Optional[Dict[int, List[int]]] = None):
+    def overwrite_decoder_label_embeddings_with_mapping(
+        self, mapping: Optional[Dict[int, List[int]]] = None
+    ):
         if mapping is None:
             mapping = self.config.embedding_weight_mapping
         if mapping is None:
