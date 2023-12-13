@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 import torch
 import torch.nn.functional as F
@@ -92,6 +92,28 @@ class PointerHead(torch.nn.Module):
         # decoder_input_ids = decoder_input_ids[:, :-1]
 
         return decoder_input_ids
+
+    def overwrite_decoder_label_embeddings_with_mapping(
+            self, label_embedding_mapping: Dict[int, List[int]], encoder_weights: torch.Tensor
+    ):
+        """
+        Overwrite the decoder label embeddings with embeddings from an encoder. This is useful if the label
+        vocabulary is a subset of the source vocabulary. In this case, the embeddings of the label tokens
+        will be initialized with the average of the embeddings of the source tokens.
+
+        :param label_embedding_mapping: a mapping from label token ids to source token ids
+        :param encoder_weights: the encoder weights
+        :return: None
+        """
+
+        if label_embedding_mapping is None:
+            raise ValueError("No label_embedding_mapping provided!")
+        for special_token_index, source_indices in label_embedding_mapping.items():
+            embed = encoder_weights.data[source_indices[0]]
+            for i in source_indices[1:]:
+                embed += self.decoder.embed_tokens.weight.data[i]
+            embed /= len(source_indices)
+            self.decoder.embed_tokens.weight.data[special_token_index] = embed
 
     def decoder_forward(self, input_ids, encoder_input_ids, **kwargs):
         modified_decoder_input_ids = self.prepare_decoder_input_ids(

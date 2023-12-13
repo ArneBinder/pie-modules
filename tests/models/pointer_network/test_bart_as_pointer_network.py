@@ -101,7 +101,7 @@ def test_bart_generate():
 @pytest.fixture(scope="module")
 def model(taskmodule) -> BartAsPointerNetwork:
     model_name_or_path = MODEL_NAME_OR_PATH
-    tokenizer = taskmodule.tokenizer
+
     torch.random.manual_seed(42)
     model = BartAsPointerNetwork.from_pretrained(
         model_name_or_path,
@@ -112,8 +112,11 @@ def model(taskmodule) -> BartAsPointerNetwork:
         label_ids=taskmodule.annotation_encoder_decoder.label_ids,
         # target token id space
         target_token_ids=taskmodule.target_token_ids,
+        # mapping to better initialize the label embedding weights
+        embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
     )
     model.resize_token_embeddings(len(taskmodule.tokenizer))
+    model.overwrite_decoder_label_embeddings_with_mapping()
     return model
 
 
@@ -237,4 +240,4 @@ def test_forward_with_labels(model, taskmodule, document):
     torch.manual_seed(42)
     outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
     loss = outputs.loss
-    torch.testing.assert_allclose(loss, torch.tensor(5.3125810623168945))
+    torch.testing.assert_allclose(loss, torch.tensor(4.754788398742676))
