@@ -1,8 +1,6 @@
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-import torch
 import torch.utils.checkpoint
-from torch import nn
 from transformers import BartConfig, BartModel, BartPreTrainedModel
 from transformers.modeling_outputs import (
     BaseModelOutput,
@@ -51,20 +49,14 @@ class BartAsPointerNetwork(BartPreTrainedModel):
     _tied_weights_keys = [
         "encoder.embed_tokens.weight",
         "decoder.embed_tokens.weight",
-        "lm_head.weight",
+        # "lm_head.weight",
+        # TODO: add pointer_head.weight?
     ]
-    _keys_to_ignore_on_load_missing = ["final_logits_bias"]
 
     def __init__(self, config: BartAsPointerNetworkConfig):
         super().__init__(config)
         self.model = BartModel(config)
-        self.register_buffer(
-            "final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings))
-        )
-        # TODO: remove and adjust get_output_embeddings()?
-        self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
-        # TODO: add content to here
         self.pointer_head = PointerHead(
             decoder=self.model.decoder,
             target_token_ids=self.model.config.target_token_ids,
@@ -84,30 +76,6 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         return self.model.get_decoder()
         # TODO: return self.pointer_decoder?
         # return self.pointer_decoder
-
-    def resize_token_embeddings(
-        self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None
-    ) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        self._resize_final_logits_bias(new_embeddings.weight.shape[0])
-        return new_embeddings
-
-    def _resize_final_logits_bias(self, new_num_tokens: int) -> None:
-        old_num_tokens = self.final_logits_bias.shape[-1]
-        if new_num_tokens <= old_num_tokens:
-            new_bias = self.final_logits_bias[:, :new_num_tokens]
-        else:
-            extra_bias = torch.zeros(
-                (1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device
-            )
-            new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
-        self.register_buffer("final_logits_bias", new_bias)
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def overwrite_decoder_label_embeddings_with_mapping(
         self, mapping: Optional[Dict[int, List[int]]] = None
