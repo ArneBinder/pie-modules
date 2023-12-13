@@ -308,8 +308,8 @@ class BartAsPointerNetwork(BartPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        encoder_input_ids,
-        encoder_attention_mask,
+        encoder_input_ids,  # added for pointer network
+        encoder_attention_mask,  # added for pointer network
         past_key_values=None,
         attention_mask=None,
         decoder_attention_mask=None,
