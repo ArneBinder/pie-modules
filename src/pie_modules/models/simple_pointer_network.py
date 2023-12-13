@@ -87,13 +87,6 @@ class PointerHead(torch.nn.Module):
                 nn.Linear(hidden_size, hidden_size),
             )
 
-        self.bi_encoder_mlp = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size),
-            nn.Dropout(0.3),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-        )
-
     def output_size(self):
         return len(self.target_token_ids)
 
@@ -102,18 +95,11 @@ class PointerHead(torch.nn.Module):
         input_ids: torch.LongTensor,
         encoder_input_ids: torch.LongTensor,
     ):
-        # if attention_mask is None:
-        #    # TODO: is this correct?
-        #    attention_mask = input_ids.ne(self.pad_token_id)
-
-        # cumsum = input_ids.eq(self.pad_id).flip(dims=[1]).cumsum(dim=-1)
-        # tgt_pad_mask = cumsum.flip(dims=[1]).ne(cumsum[:, -1:])
-
         mapping_token_mask = input_ids.lt(self.pointer_offset)
         mapped_tokens = input_ids.masked_fill(input_ids.ge(self.pointer_offset), 0)
         tag_mapped_tokens = self.target2token_id[mapped_tokens]
 
-        encoder_input_ids_index = input_ids - self.pointer_offset  # bsz x num_src_token
+        encoder_input_ids_index = input_ids - self.pointer_offset
         encoder_input_ids_index = encoder_input_ids_index.masked_fill(
             encoder_input_ids_index.lt(0), 0
         )
@@ -132,7 +118,7 @@ class PointerHead(torch.nn.Module):
         # TODO: why was this in the original code?
         # decoder_input_ids = decoder_input_ids[:, :-1]
 
-        return decoder_input_ids  # {"input_ids": decoder_input_ids, }  # "attention_mask": attention_mask}
+        return decoder_input_ids
 
     def forward(
         self,
