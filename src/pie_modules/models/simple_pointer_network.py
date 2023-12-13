@@ -95,7 +95,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             for stage in metric_splits
         }
 
-    def predict(self, inputs, num_beams=3, min_length=5, **kwargs) -> Dict[str, Any]:
+    def predict(self, inputs, num_beams=5, min_length=7, **kwargs) -> Dict[str, Any]:
         is_training = self.training
         self.eval()
 
