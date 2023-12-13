@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 
 import pytest
@@ -5,22 +6,26 @@ import torch
 from pytorch_ie import AnnotationList, annotation_field
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.documents import TextBasedDocument
-from transformers import (
-    AutoTokenizer,
-    BartForConditionalGeneration,
-    BeamSearchScorer,
-    LogitsProcessorList,
-    MinLengthLogitsProcessor,
-)
 
+from pie_modules.models import SimplePointerNetworkModel
 from pie_modules.taskmodules import PointerNetworkTaskModule
+from tests import _config_to_str
 
-ARTICLE_TO_SUMMARIZE = (
-    "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
-    "amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were "
-    "scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."
-)
-MODEL_NAME_OR_PATH = "sshleifer/distilbart-xsum-12-1"
+# just the default config for now
+CONFIGS = [{}]
+CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
+
+logger = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope="module", params=CONFIG_DICT.keys())
+def config_str(request):
+    return request.param
+
+
+@pytest.fixture(scope="module")
+def config(config_str):
+    return CONFIG_DICT[config_str]
 
 
 @pytest.fixture(scope="module")
@@ -78,5 +83,153 @@ def taskmodule(document):
     return taskmodule
 
 
-def test_dummy():
-    assert True
+def test_taskmodule(taskmodule):
+    # check the annotation_encoder_decoder
+    annotation_encoder_decoder = taskmodule.annotation_encoder_decoder
+    assert annotation_encoder_decoder.is_prepared
+    assert annotation_encoder_decoder.prepared_attributes == {
+        "labels_per_layer": {
+            "entities": ["content", "person", "topic"],
+            "relations": ["is_about"],
+        },
+    }
+    assert annotation_encoder_decoder.layer_names == ["entities", "relations"]
+    assert annotation_encoder_decoder.special_targets == ["<s>", "</s>"]
+    assert annotation_encoder_decoder.labels == ["none", "content", "person", "topic", "is_about"]
+    assert annotation_encoder_decoder.targets == [
+        "<s>",
+        "</s>",
+        "none",
+        "content",
+        "person",
+        "topic",
+        "is_about",
+    ]
+    assert annotation_encoder_decoder.bos_id == 0
+    assert annotation_encoder_decoder.eos_id == 1
+    assert annotation_encoder_decoder.none_id == 2
+    assert annotation_encoder_decoder.span_ids == [3, 4, 5]
+    assert annotation_encoder_decoder.relation_ids == [6]
+    assert annotation_encoder_decoder.label2id == {
+        "content": 3,
+        "is_about": 6,
+        "none": 2,
+        "person": 4,
+        "topic": 5,
+    }
+
+    # check taskmodule properties
+    assert taskmodule.prepared_attributes == {
+        "annotation_encoder_decoder_kwargs": {
+            "span_layer_name": "entities",
+            "relation_layer_name": "relations",
+            "exclude_labels_per_layer": {"relations": ["no_relation"]},
+            "bos_token": "<s>",
+            "eos_token": "</s>",
+            "labels_per_layer": {
+                "entities": ["content", "person", "topic"],
+                "relations": ["is_about"],
+            },
+        }
+    }
+    assert taskmodule.label_embedding_weight_mapping == {
+        50265: [45260],
+        50266: [39763],
+        50267: [354, 1215, 9006],
+        50268: [5970],
+        50269: [10166],
+    }
+    assert taskmodule.target_tokens == [
+        "<s>",
+        "</s>",
+        "<<none>>",
+        "<<content>>",
+        "<<person>>",
+        "<<topic>>",
+        "<<is_about>>",
+    ]
+    assert taskmodule.target_token_ids == [0, 2, 50266, 50269, 50268, 50265, 50267]
+
+
+@pytest.fixture(scope="module")
+def model(taskmodule, config) -> SimplePointerNetworkModel:
+    torch.manual_seed(42)
+    model = SimplePointerNetworkModel(
+        model_name_or_path="sshleifer/distilbart-xsum-12-1",
+        target_token_ids=taskmodule.target_token_ids,
+        vocab_size=len(taskmodule.tokenizer),
+        embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
+        annotation_encoder_decoder_name=taskmodule.annotation_encoder_decoder_name,
+        annotation_encoder_decoder_kwargs=taskmodule.annotation_encoder_decoder_kwargs,
+        **config,
+    )
+    # set model to training mode, otherwise model.encoder.bart_encoder.training will be False!
+    model.train()
+    return model
+
+
+def test_model(model):
+    assert model is not None
+
+
+# not used
+@pytest.fixture(scope="module")
+def batch(taskmodule, document):
+    task_encodings = taskmodule.encode(documents=[document], encode_target=True)
+    batch = taskmodule.collate(task_encodings)
+    return batch
+
+
+def test_batch(batch, config):
+    assert batch is not None
+    inputs, targets = batch
+    assert inputs is not None
+    assert set(inputs) == {"src_tokens", "src_seq_len", "src_attention_mask"}
+    torch.testing.assert_close(
+        inputs["src_tokens"],
+        torch.tensor([[0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 3101, 162, 4, 2]]),
+    )
+    torch.testing.assert_close(
+        inputs["src_attention_mask"],
+        torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]),
+    )
+    torch.testing.assert_close(
+        inputs["src_seq_len"],
+        torch.tensor([13]),
+    )
+
+    assert targets is not None
+    assert set(targets) == {"tgt_tokens", "tgt_seq_len", "CPM_tag"}
+    torch.testing.assert_close(
+        targets["tgt_tokens"],
+        torch.tensor([[0, 14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]]),
+    )
+    torch.testing.assert_close(
+        targets["tgt_seq_len"],
+        torch.tensor([16]),
+    )
+
+
+def test_forward_without_labels(model, batch):
+    inputs, targets = batch
+    with pytest.raises(ValueError) as excinfo:
+        model(inputs)
+    assert str(excinfo.value) == "decoder_input_ids has to be set!"
+
+
+def test_training_step(model, batch):
+    torch.manual_seed(42)
+    loss = model.training_step(batch, 0)
+    torch.testing.assert_close(loss, torch.tensor(5.422972202301025))
+
+
+def test_validation_step(model, batch):
+    torch.manual_seed(42)
+    loss = model.validation_step(batch, 0)
+    torch.testing.assert_close(loss, torch.tensor(5.422972202301025))
+
+
+def test_test_step(model, batch):
+    torch.manual_seed(42)
+    loss = model.test_step(batch, 0)
+    torch.testing.assert_close(loss, torch.tensor(5.422972202301025))
