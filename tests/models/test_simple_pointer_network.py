@@ -99,7 +99,8 @@ def test_bart_generate():
     assert result == [" power lines in California have been shut down on Friday."]
 
 
-def test_bart_pointer_network_generate(taskmodule):
+@pytest.fixture(scope="module")
+def model(taskmodule) -> BartAsPointerNetwork:
     model_name_or_path = MODEL_NAME_OR_PATH
     tokenizer = taskmodule.tokenizer
     torch.random.manual_seed(42)
@@ -114,9 +115,12 @@ def test_bart_pointer_network_generate(taskmodule):
         target_token_ids=taskmodule.target_token_ids,
     )
     model.resize_token_embeddings(len(taskmodule.tokenizer))
+    return model
 
+
+def test_bart_pointer_network_generate(model, taskmodule):
     encoder_input_str = ARTICLE_TO_SUMMARIZE  # "translate English to German: How old are you?"
-    inputs = tokenizer(encoder_input_str, max_length=1024, return_tensors="pt")
+    inputs = taskmodule.tokenizer(encoder_input_str, max_length=1024, return_tensors="pt")
 
     outputs = model.generate(inputs["input_ids"], num_beams=3, min_length=5, max_length=20)
     torch.testing.assert_allclose(
@@ -130,24 +134,9 @@ def test_bart_pointer_network_generate(taskmodule):
     # assert result == [" power lines in California have been shut down on Friday."]
 
 
-def test_bart_pointer_network_beam_search(taskmodule):
-    model_name_or_path = MODEL_NAME_OR_PATH
-    tokenizer = taskmodule.tokenizer
-    torch.random.manual_seed(42)
-    model = BartAsPointerNetwork.from_pretrained(
-        model_name_or_path,
-        # label id space
-        bos_token_id=taskmodule.annotation_encoder_decoder.bos_id,
-        eos_token_id=taskmodule.annotation_encoder_decoder.eos_id,
-        pad_token_id=taskmodule.annotation_encoder_decoder.eos_id,
-        label_ids=taskmodule.annotation_encoder_decoder.label_ids,
-        # target token id space
-        target_token_ids=taskmodule.target_token_ids,
-    )
-    model.resize_token_embeddings(len(taskmodule.tokenizer))
-
+def test_bart_pointer_network_beam_search(model, taskmodule):
     encoder_input_str = ARTICLE_TO_SUMMARIZE  # "translate English to German: How old are you?"
-    encoder_input_tokenized = tokenizer(encoder_input_str, return_tensors="pt")
+    encoder_input_tokenized = taskmodule.tokenizer(encoder_input_str, return_tensors="pt")
 
     # lets run beam search using 3 beams
     num_beams = 3
