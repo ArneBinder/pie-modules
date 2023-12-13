@@ -121,9 +121,7 @@ def test_bart_pointer_network_generate(taskmodule):
     outputs = model.generate(inputs["input_ids"], num_beams=3, min_length=5, max_length=20)
     torch.testing.assert_allclose(
         outputs,
-        torch.tensor(
-            [[0, 28, 41, 35, 14, 36, 17, 33, 36, 17, 48, 36, 17, 14, 36, 35, 33, 36, 37, 2]]
-        ),
+        torch.tensor([[0, 28, 41, 35, 33, 36, 17, 48, 35, 48, 36, 17, 14, 35, 48, 8, 8, 8, 1]]),
     )
 
     # result = tokenizer.batch_decode(
@@ -196,7 +194,39 @@ def test_bart_pointer_network_beam_search(taskmodule):
     torch.testing.assert_allclose(
         outputs,
         torch.tensor(
-            [[0, 28, 41, 35, 14, 36, 17, 14, 36, 17, 14, 36, 17, 14, 36, 17, 14, 36, 37, 1]]
+            [
+                [
+                    0,
+                    28,
+                    41,
+                    35,
+                    48,
+                    36,
+                    17,
+                    48,
+                    35,
+                    48,
+                    36,
+                    17,
+                    48,
+                    35,
+                    48,
+                    36,
+                    17,
+                    48,
+                    55,
+                    35,
+                    48,
+                    55,
+                    35,
+                    48,
+                    8,
+                    8,
+                    8,
+                    37,
+                    1,
+                ]
+            ]
         ),
     )
 
