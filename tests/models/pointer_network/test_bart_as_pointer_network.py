@@ -81,6 +81,7 @@ def taskmodule(document):
     return taskmodule
 
 
+@pytest.mark.skip("This is just a test to see how Bart works")
 def test_bart_generate():
     # model_name_or_path = "facebook/bart-large-cnn"
     model_name_or_path = MODEL_NAME_OR_PATH  # "sshleifer/distilbart-xsum-12-1"
@@ -118,22 +119,6 @@ def model(taskmodule) -> BartAsPointerNetwork:
     model.resize_token_embeddings(len(taskmodule.tokenizer))
     model.overwrite_decoder_label_embeddings_with_mapping()
     return model
-
-
-def test_bart_pointer_network_generate(model, taskmodule):
-    encoder_input_str = ARTICLE_TO_SUMMARIZE  # "translate English to German: How old are you?"
-    inputs = taskmodule.tokenizer(encoder_input_str, max_length=1024, return_tensors="pt")
-
-    outputs = model.generate(inputs["input_ids"], num_beams=3, min_length=5, max_length=20)
-    torch.testing.assert_allclose(
-        outputs,
-        torch.tensor([[0, 28, 41, 35, 33, 36, 17, 48, 35, 48, 36, 17, 14, 35, 48, 8, 8, 8, 1]]),
-    )
-
-    # result = tokenizer.batch_decode(
-    #    summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
-    # )
-    # assert result == [" power lines in California have been shut down on Friday."]
 
 
 def test_bart_pointer_network_beam_search(model, taskmodule):
@@ -225,6 +210,22 @@ def test_bart_pointer_network_beam_search(model, taskmodule):
     # assert result == [
     #    " power lines in California have been shut down after a power provider said it was due to high winds."
     # ]
+
+
+def test_bart_pointer_network_generate(model, taskmodule):
+    encoder_input_str = ARTICLE_TO_SUMMARIZE  # "translate English to German: How old are you?"
+    inputs = taskmodule.tokenizer(encoder_input_str, max_length=1024, return_tensors="pt")
+
+    outputs = model.generate(inputs["input_ids"], num_beams=3, min_length=5, max_length=20)
+    torch.testing.assert_allclose(
+        outputs,
+        torch.tensor([[0, 28, 41, 35, 33, 36, 17, 48, 35, 48, 36, 17, 14, 35, 48, 8, 8, 8, 1]]),
+    )
+
+    # result = tokenizer.batch_decode(
+    #    summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    # )
+    # assert result == [" power lines in California have been shut down on Friday."]
 
 
 def test_forward_with_labels(model, taskmodule, document):
