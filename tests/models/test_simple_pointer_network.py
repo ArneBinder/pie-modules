@@ -112,7 +112,6 @@ def test_bart_pointer_network_generate(taskmodule):
         label_ids=taskmodule.annotation_encoder_decoder.label_ids,
         # target token id space
         target_token_ids=taskmodule.target_token_ids,
-        target_pad_id=taskmodule.tokenizer.pad_token_id,
     )
     model.resize_token_embeddings(len(taskmodule.tokenizer))
 
@@ -122,7 +121,9 @@ def test_bart_pointer_network_generate(taskmodule):
     outputs = model.generate(inputs["input_ids"], num_beams=3, min_length=5, max_length=20)
     torch.testing.assert_allclose(
         outputs,
-        torch.tensor([[0, 8, 9, 10, 30, 19, 49, 21, 14, 55, 35, 14, 36, 17, 14, 36, 27, 1]]),
+        torch.tensor(
+            [[0, 28, 41, 35, 14, 36, 17, 33, 36, 17, 48, 36, 17, 14, 36, 35, 33, 36, 37, 2]]
+        ),
     )
 
     # result = tokenizer.batch_decode(
@@ -144,7 +145,6 @@ def test_bart_pointer_network_beam_search(taskmodule):
         label_ids=taskmodule.annotation_encoder_decoder.label_ids,
         # target token id space
         target_token_ids=taskmodule.target_token_ids,
-        target_pad_id=taskmodule.tokenizer.pad_token_id,
     )
     model.resize_token_embeddings(len(taskmodule.tokenizer))
 
@@ -196,34 +196,7 @@ def test_bart_pointer_network_beam_search(taskmodule):
     torch.testing.assert_allclose(
         outputs,
         torch.tensor(
-            [
-                [
-                    0,
-                    8,
-                    9,
-                    10,
-                    30,
-                    19,
-                    49,
-                    21,
-                    14,
-                    55,
-                    35,
-                    14,
-                    36,
-                    17,
-                    14,
-                    55,
-                    35,
-                    14,
-                    36,
-                    17,
-                    14,
-                    36,
-                    27,
-                    1,
-                ]
-            ]
+            [[0, 28, 41, 35, 14, 36, 17, 14, 36, 17, 14, 36, 17, 14, 36, 17, 14, 36, 37, 1]]
         ),
     )
 

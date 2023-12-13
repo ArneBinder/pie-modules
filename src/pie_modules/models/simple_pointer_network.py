@@ -43,34 +43,42 @@ class PointerHead(torch.nn.Module):
     def __init__(
         self,
         decoder,
-        # target token space
-        pad_token_id: int,
-        target_token_ids: List[int],
         # label space
         label_ids: List[int],
         eos_id: int,
         pad_id: int,
+        # target token space
+        target_token_ids: List[int],
         # other parameters
         use_encoder_mlp: bool = False,
     ):
         super().__init__()
+
         if not isinstance(decoder, BartDecoder):
             raise ValueError("PointerHead only works with BartDecoder!")
         self.decoder = decoder
-        self.pad_token_id = pad_token_id
-        self.label_token_ids = [target_token_ids[label_id] for label_id in label_ids]
-        target2token_id = torch.LongTensor(target_token_ids)
-        self.eos_token_id = target_token_ids[eos_id]
+
         self.pad_id = pad_id
+        self.eos_id = eos_id
+
+        target2token_id = torch.LongTensor(target_token_ids)
         self.register_buffer("target2token_id", target2token_id)
+        self.label_token_ids = [target_token_ids[label_id] for label_id in label_ids]
+
         self.pointer_offset = len(target2token_id)
+
+        if self.eos_id >= self.pointer_offset:
+            raise ValueError(
+                f"eos_id [{self.eos_id}] must be smaller than pointer_offset [{self.pointer_offset}]!"
+            )
+        self.eos_token_id = target_token_ids[self.eos_id]
+        if self.pad_id >= self.pointer_offset:
+            raise ValueError(
+                f"pad_id [{self.pad_id}] must be smaller than pointer_offset [{self.pointer_offset}]!"
+            )
+        self.pad_token_id = target_token_ids[self.pad_id]
+
         hidden_size = self.decoder.embed_tokens.weight.size(1)
-        self.bi_encoder_mlp = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size),
-            nn.Dropout(0.3),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-        )
         if use_encoder_mlp:
             self.encoder_mlp = nn.Sequential(
                 nn.Linear(hidden_size, hidden_size),
@@ -78,6 +86,13 @@ class PointerHead(torch.nn.Module):
                 nn.ReLU(),
                 nn.Linear(hidden_size, hidden_size),
             )
+
+        self.bi_encoder_mlp = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size),
+            nn.Dropout(0.3),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+        )
 
     def output_size(self):
         return len(self.target_token_ids)
@@ -206,11 +221,10 @@ class PointerHead(torch.nn.Module):
 class BartAsPointerConfig(BartConfig):
     def __init__(
         self,
-        # label space ids
+        # label space ids (note that all target ids are: [bos_id, eos_id] + label_ids)
         label_ids: Optional[List[int]] = None,
-        # token space ids
+        # mapping from label space ids to target token ids
         target_token_ids: Optional[List[int]] = None,
-        target_pad_id: Optional[int] = None,
         # other parameters
         use_encoder_mlp: bool = True,
         max_target_positions: Optional[int] = None,
@@ -222,7 +236,6 @@ class BartAsPointerConfig(BartConfig):
 
         self.label_ids = label_ids
         self.target_token_ids = target_token_ids
-        self.target_pad_id = target_pad_id
 
         self.use_encoder_mlp = use_encoder_mlp
         self.max_target_positions = max_target_positions
@@ -250,7 +263,6 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         # TODO: add content to here
         self.pointer_head = PointerHead(
             decoder=self.model.decoder,
-            pad_token_id=self.model.config.target_pad_id,
             target_token_ids=self.model.config.target_token_ids,
             label_ids=self.model.config.label_ids,
             eos_id=self.model.config.eos_token_id,
