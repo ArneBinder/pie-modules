@@ -6,11 +6,8 @@ from pytorch_ie import AnnotationList, annotation_field
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.documents import TextBasedDocument
 from transformers import (
-    AutoModelForSeq2SeqLM,
     AutoTokenizer,
-    BartForCausalLM,
     BartForConditionalGeneration,
-    BartTokenizer,
     BeamSearchScorer,
     LogitsProcessorList,
     MinLengthLogitsProcessor,
@@ -223,3 +220,19 @@ def test_bart_pointer_network_beam_search(model, taskmodule):
     # assert result == [
     #    " power lines in California have been shut down after a power provider said it was due to high winds."
     # ]
+
+
+def test_forward_with_labels(model, taskmodule, document):
+    task_encodings = taskmodule.encode([document], encode_target=True)
+    batch = taskmodule.collate(task_encodings)
+    inputs, targets = batch
+    input_ids = inputs["src_tokens"]
+    attention_mask = inputs["src_attention_mask"]
+    # Truncate the bos_id. The decoder input_ids will be created by the model
+    # by shifting the labels one position to the right and adding the bos_id
+    labels = targets["tgt_tokens"][:, 1:]
+
+    torch.manual_seed(42)
+    outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+    loss = outputs.loss
+    torch.testing.assert_allclose(loss, torch.tensor(5.3125810623168945))

@@ -194,7 +194,7 @@ class PointerHead(torch.nn.Module):
 
         loss = None
         if labels is not None:
-            labels = labels.to(logits.device)
+            # labels = labels.to(logits.device)
             loss_fct = CrossEntropyLoss()
             # TODO: any masking for the padding needed?
             logits_resized = logits.view(-1, logits.size(-1))
