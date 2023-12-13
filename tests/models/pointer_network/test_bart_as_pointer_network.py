@@ -12,6 +12,7 @@ from transformers import (
     LogitsProcessorList,
     MinLengthLogitsProcessor,
 )
+from transformers.generation import BeamSearchEncoderDecoderOutput
 
 from pie_modules.models.components.pointer_network.bart_as_pointer_network import (
     BartAsPointerNetwork,
@@ -212,13 +213,22 @@ def test_bart_pointer_network_beam_search(model, taskmodule):
     # ]
 
 
-def test_bart_pointer_network_generate(model, taskmodule):
+def test_bart_pointer_network_generate_with_scores(model, taskmodule):
     encoder_input_str = ARTICLE_TO_SUMMARIZE  # "translate English to German: How old are you?"
     inputs = taskmodule.tokenizer(encoder_input_str, max_length=1024, return_tensors="pt")
 
-    outputs = model.generate(inputs["input_ids"], num_beams=3, min_length=5, max_length=20)
+    outputs = model.generate(
+        inputs["input_ids"],
+        num_beams=3,
+        min_length=5,
+        max_length=20,
+        return_dict_in_generate=True,
+        output_scores=True,
+    )
+    assert isinstance(outputs, BeamSearchEncoderDecoderOutput)
+    torch.testing.assert_allclose(outputs.sequences_scores, torch.tensor([-7.7725]))
     torch.testing.assert_allclose(
-        outputs,
+        outputs.sequences,
         torch.tensor([[0, 28, 41, 35, 33, 36, 17, 48, 35, 48, 36, 17, 14, 35, 48, 8, 8, 8, 1]]),
     )
 
