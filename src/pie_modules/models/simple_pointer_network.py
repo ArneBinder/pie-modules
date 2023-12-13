@@ -1,33 +1,23 @@
 import logging
-from collections import Counter, defaultdict
 from collections.abc import MutableMapping
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import torch
-import torch.nn.functional as F
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
-from torch import nn
 from torch.nn import Parameter
 from transformers import get_linear_schedule_with_warmup
-from typing_extensions import TypeAlias
 
-from ..taskmodules.components.seq2seq import (
-    AnnotationEncoderDecoder,
-    PointerNetworkSpanAndRelationEncoderDecoder,
-)
+from ..taskmodules.components.seq2seq import PointerNetworkSpanAndRelationEncoderDecoder
 from .components.pointer_network.bart_as_pointer_network import BartAsPointerNetwork
-from .components.pointer_network.generator import SequenceGenerator
-from .components.pointer_network.interface import Seq2SeqDecoder, Seq2SeqEncoder, State
-from .components.pointer_network.losses import Seq2SeqLoss
-from .components.pointer_network.modeling_bart import (
-    BartDecoder,
-    BartEncoder,
-    BartModel,
-    LearnedPositionalEmbedding,
-)
+from .components.pointer_network.metrics import AnnotationLayerMetric
 
 logger = logging.getLogger(__name__)
+
+
+STAGE_TRAIN = "train"
+STAGE_VAL = "val"
+STAGE_TEST = "test"
 
 
 def _flatten_dict_gen(d, parent_key, sep):
@@ -51,26 +41,10 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         target_token_ids: List[int],
         vocab_size: int,
         embedding_weight_mapping: Optional[Dict[int, List[int]]] = None,
-        decoder_type=None,
-        copy_gate: bool = False,
         use_encoder_mlp: bool = False,
-        use_recur_pos: bool = False,
-        tag_first: int = False,
-        replace_pos: bool = True,
-        position_type: int = 0,
-        max_target_positions: Optional[int] = None,
-        # seq2seq_model: Seq2SeqModel END
-        max_length: int = 30,
-        max_len_a: float = 0.0,
-        num_beams: int = 1,
-        do_sample: bool = True,
-        repetition_penalty: float = 1,
-        length_penalty: float = 1.0,
-        restricter: Optional[Callable] = None,
-        decode_mask: bool = True,
-        metric_splits: List[str] = ["val", "test"],
         annotation_encoder_decoder_name: str = "pointer_network_span_and_relation",
         annotation_encoder_decoder_kwargs: Optional[Dict[str, Any]] = None,
+        metric_splits: List[str] = [STAGE_VAL, STAGE_TEST],
         # optimizer / scheduler
         lr: float = 5e-5,
         layernorm_decay: float = 0.001,
@@ -105,19 +79,21 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             target_token_ids=target_token_ids,
             # mapping to better initialize the label embedding weights
             embedding_weight_mapping=embedding_weight_mapping,
+            # other parameters
+            use_encoder_mlp=use_encoder_mlp,
         )
         if not self.is_from_pretrained:
             self.model.resize_token_embeddings(vocab_size)
             self.model.overwrite_decoder_label_embeddings_with_mapping()
 
         # NOTE: This is not a ModuleDict, so this will not live on the torch device!
-        # self.metrics = {
-        #    stage: AnnotationLayerMetric(
-        #        eos_id=self.annotation_encoder_decoder.eos_id,
-        #        annotation_encoder_decoder=self.annotation_encoder_decoder,
-        #    )
-        #    for stage in metric_splits
-        # }
+        self.metrics: Dict[str, AnnotationLayerMetric] = {
+            stage: AnnotationLayerMetric(
+                eos_id=self.annotation_encoder_decoder.eos_id,
+                annotation_encoder_decoder=self.annotation_encoder_decoder,
+            )
+            for stage in metric_splits
+        }
 
     def predict(self, inputs, num_beams=3, min_length=5, **kwargs) -> Dict[str, Any]:
         is_training = self.training
@@ -152,31 +128,43 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         labels = targets["tgt_tokens"][:, 1:]
 
         outputs = self(inputs=inputs, labels=labels)
-        return outputs.loss
+        loss = outputs.loss
 
-    def training_step(self, batch, batch_idx):
-        loss = self.step(batch, stage="train")
+        # show loss on each step only during training
+        self.log(
+            f"loss/{stage}", loss, on_step=(stage == STAGE_TRAIN), on_epoch=True, prog_bar=True
+        )
 
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        loss = self.step(batch, stage="val")
-
-        return loss
-
-    def test_step(self, batch, batch_idx):
-        loss = self.step(batch, stage="test")
+        stage_metrics = self.metrics.get(stage, None)
+        if stage_metrics is not None:
+            prediction = self.predict(inputs)
+            stage_metrics(prediction["pred"], targets["tgt_tokens"])
 
         return loss
 
-    def on_train_epoch_end(self):
-        self._on_epoch_end(stage="train")
+    def training_step(self, batch, batch_idx) -> torch.FloatTensor:
+        loss = self.step(batch, stage=STAGE_TRAIN)
 
-    def on_validation_epoch_end(self):
-        self._on_epoch_end(stage="val")
+        return loss
 
-    def on_test_epoch_end(self):
-        self._on_epoch_end(stage="test")
+    def validation_step(self, batch, batch_idx) -> torch.FloatTensor:
+        loss = self.step(batch, stage=STAGE_VAL)
+
+        return loss
+
+    def test_step(self, batch, batch_idx) -> torch.FloatTensor:
+        loss = self.step(batch, stage=STAGE_TEST)
+
+        return loss
+
+    def on_train_epoch_end(self) -> None:
+        self._on_epoch_end(stage=STAGE_TRAIN)
+
+    def on_validation_epoch_end(self) -> None:
+        self._on_epoch_end(stage=STAGE_VAL)
+
+    def on_test_epoch_end(self) -> None:
+        self._on_epoch_end(stage=STAGE_TEST)
 
     def _on_epoch_end(self, stage: str) -> None:
         metrics = self.metrics.get(stage, None)
