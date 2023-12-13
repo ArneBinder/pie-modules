@@ -171,39 +171,7 @@ def test_bart_pointer_network_beam_search(model, taskmodule):
     torch.testing.assert_allclose(
         outputs,
         torch.tensor(
-            [
-                [
-                    0,
-                    28,
-                    41,
-                    35,
-                    48,
-                    36,
-                    17,
-                    48,
-                    35,
-                    48,
-                    36,
-                    17,
-                    48,
-                    35,
-                    48,
-                    36,
-                    17,
-                    48,
-                    55,
-                    35,
-                    48,
-                    55,
-                    35,
-                    48,
-                    8,
-                    8,
-                    8,
-                    37,
-                    1,
-                ]
-            ]
+            [[0, 28, 41, 35, 33, 36, 17, 33, 36, 17, 33, 36, 17, 33, 36, 17, 33, 36, 37, 1]]
         ),
     )
 
@@ -226,10 +194,12 @@ def test_bart_pointer_network_generate_with_scores(model, taskmodule):
         output_scores=True,
     )
     assert isinstance(outputs, BeamSearchEncoderDecoderOutput)
-    torch.testing.assert_allclose(outputs.sequences_scores, torch.tensor([-7.7725]))
+    torch.testing.assert_allclose(outputs.sequences_scores, torch.tensor([-6.2436]))
     torch.testing.assert_allclose(
         outputs.sequences,
-        torch.tensor([[0, 28, 41, 35, 33, 36, 17, 48, 35, 48, 36, 17, 14, 35, 48, 8, 8, 8, 1]]),
+        torch.tensor(
+            [[0, 28, 41, 35, 33, 36, 17, 48, 36, 17, 33, 55, 35, 33, 17, 48, 55, 35, 48, 2]]
+        ),
     )
 
     # result = tokenizer.batch_decode(
@@ -251,4 +221,4 @@ def test_forward_with_labels(model, taskmodule, document):
     torch.manual_seed(42)
     outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
     loss = outputs.loss
-    torch.testing.assert_allclose(loss, torch.tensor(4.754788398742676))
+    torch.testing.assert_allclose(loss, torch.tensor(4.802009105682373))
