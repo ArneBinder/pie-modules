@@ -188,7 +188,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             "lr": self.lr,
             "weight_decay": 1e-2,
             "params": [
-                name
+                param
                 for name, param in self.named_parameters()
                 if name not in encoder_decoder_params
             ],

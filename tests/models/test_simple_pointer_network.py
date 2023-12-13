@@ -6,6 +6,8 @@ import torch
 from pytorch_ie import AnnotationList, annotation_field
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.documents import TextBasedDocument
+from pytorch_lightning import Trainer
+from torch.optim import AdamW
 
 from pie_modules.models import SimplePointerNetworkModel
 from pie_modules.taskmodules import PointerNetworkTaskModule
@@ -233,3 +235,51 @@ def test_test_step(model, batch):
     torch.manual_seed(42)
     loss = model.test_step(batch, 0)
     torch.testing.assert_close(loss, torch.tensor(5.422972202301025))
+
+
+def test_configure_optimizers(model):
+    optimizers = model.configure_optimizers()
+    assert isinstance(optimizers, AdamW)
+    assert len(optimizers.param_groups) == 3
+    assert all(param_group["lr"] == 5e-05 for param_group in optimizers.param_groups)
+    all_param_shapes = [
+        [p.shape for p in param_group["params"]] for param_group in optimizers.param_groups
+    ]
+
+    # not bart layer
+    assert optimizers.param_groups[0]["weight_decay"] == 0.01
+    assert all_param_shapes[0] == [torch.Size([50270, 1024])]
+
+    # layer_norm layers
+    assert optimizers.param_groups[1]["weight_decay"] == 0.01
+    assert len(all_param_shapes[1]) == 58
+
+    # remaining bart layer
+    assert optimizers.param_groups[2]["weight_decay"] == 0.001
+    assert len(all_param_shapes[2]) == 166
+
+
+def test_configure_optimizers_with_warmup_proportion(taskmodule, config):
+    torch.manual_seed(42)
+    model = SimplePointerNetworkModel(
+        model_name_or_path="sshleifer/distilbart-xsum-12-1",
+        target_token_ids=taskmodule.target_token_ids,
+        vocab_size=len(taskmodule.tokenizer),
+        embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
+        annotation_encoder_decoder_name=taskmodule.annotation_encoder_decoder_name,
+        annotation_encoder_decoder_kwargs=taskmodule.annotation_encoder_decoder_kwargs,
+        warmup_proportion=0.1,
+    )
+    # set model to training mode, otherwise model.encoder.bart_encoder.training will be False!
+    model.train()
+
+    model.trainer = Trainer(max_epochs=10)
+    optimizers_and_schedulars = model.configure_optimizers()
+    assert optimizers_and_schedulars is not None
+    assert isinstance(optimizers_and_schedulars, tuple) and len(optimizers_and_schedulars) == 2
+
+    optimizers, schedulers = optimizers_and_schedulars
+    assert isinstance(optimizers[0], torch.optim.Optimizer)
+    assert set(schedulers[0]) == {"scheduler", "interval"}
+    schedular = schedulers[0]["scheduler"]
+    assert isinstance(schedular, torch.optim.lr_scheduler.LRScheduler)
