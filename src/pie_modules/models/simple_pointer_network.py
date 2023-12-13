@@ -1,7 +1,7 @@
 import copy
 import math
 import warnings
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -572,3 +572,14 @@ class BartAsPointerNetwork(BartPreTrainedModel):
                 + layer_past[2:],
             )
         return reordered_past
+
+    def _prepare_encoder_decoder_kwargs_for_generation(
+        self, inputs_tensor: torch.Tensor, model_kwargs, model_input_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        result = super()._prepare_encoder_decoder_kwargs_for_generation(
+            inputs_tensor, model_kwargs, model_input_name
+        )
+        # add items that are needed for pointer network
+        result["encoder_input_ids"] = inputs_tensor
+        result["encoder_attention_mask"] = result["attention_mask"]
+        return result
