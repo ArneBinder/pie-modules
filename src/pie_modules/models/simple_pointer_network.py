@@ -106,7 +106,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
 
         if is_training:
             self.train()
-        return {"pred": outputs[0]}
+        return {"pred": outputs}
 
     def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> Any:
         inputs, _ = batch
