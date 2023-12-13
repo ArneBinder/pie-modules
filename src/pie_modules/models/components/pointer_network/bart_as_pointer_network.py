@@ -25,6 +25,8 @@ class BartAsPointerNetworkConfig(BartConfig):
         label_ids: Optional[List[int]] = None,
         # mapping from label space ids to target token ids
         target_token_ids: Optional[List[int]] = None,
+        # mapping to better initialize the label embedding weights
+        embedding_weight_mapping: Optional[Dict[int, List[int]]] = None,
         # other parameters
         use_encoder_mlp: bool = True,
         max_target_positions: Optional[int] = None,
@@ -36,6 +38,8 @@ class BartAsPointerNetworkConfig(BartConfig):
 
         self.label_ids = label_ids
         self.target_token_ids = target_token_ids
+
+        self.embedding_weight_mapping = embedding_weight_mapping
 
         self.use_encoder_mlp = use_encoder_mlp
         self.max_target_positions = max_target_positions
@@ -104,6 +108,16 @@ class BartAsPointerNetwork(BartPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def overwrite_decoder_label_embeddings_with_mapping(self, mapping: Optional[Dict[int, List[int]]] = None):
+        if mapping is None:
+            mapping = self.config.embedding_weight_mapping
+        if mapping is None:
+            logger.warning("No mapping provided to overwrite the decoder label embeddings!")
+            return
+        self.pointer_head.overwrite_decoder_label_embeddings_with_mapping(
+            mapping, encoder_weights=self.model.encoder.embed_tokens.weight
+        )
 
     def model_forward(
         self,
