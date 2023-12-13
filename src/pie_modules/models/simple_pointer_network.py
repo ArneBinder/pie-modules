@@ -43,33 +43,28 @@ class PointerHead(torch.nn.Module):
     def __init__(
         self,
         decoder,
-        pad_token_id,
-        target_token_ids,
-        label_ids,
-        eos_id,
-        pad_id,
-        # encoder_embed_positions,
-        use_encoder_mlp=False,
-        # position_type=0,
-        # replace_pos=True,
-        max_target_positions=None,
+        # target token space
+        pad_token_id: int,
+        target_token_ids: List[int],
+        # label space
+        label_ids: List[int],
+        eos_id: int,
+        pad_id: int,
+        # other parameters
+        use_encoder_mlp: bool = False,
     ):
         super().__init__()
-        assert isinstance(decoder, BartDecoder)
+        if not isinstance(decoder, BartDecoder):
+            raise ValueError("PointerHead only works with BartDecoder!")
         self.decoder = decoder
-        # self.encoder_embed_positions = encoder_embed_positions
-        # self.max_target_positions = max_target_positions or self.decoder.max_target_positions
-        # causal_mask = torch.zeros(self.max_target_positions, self.max_target_positions).fill_(float("-inf"))
-        # causal_mask = causal_mask.triu(diagonal=1)
-        # self.register_buffer("causal_masks", causal_mask.float())
         self.pad_token_id = pad_token_id
         self.label_token_ids = [target_token_ids[label_id] for label_id in label_ids]
         target2token_id = torch.LongTensor(target_token_ids)
         self.eos_token_id = target_token_ids[eos_id]
         self.pad_id = pad_id
         self.register_buffer("target2token_id", target2token_id)
-        self.pointer_offset = len(target2token_id)  # plus one (加上一个)
-        hidden_size = decoder.embed_tokens.weight.size(1)
+        self.pointer_offset = len(target2token_id)
+        hidden_size = self.decoder.embed_tokens.weight.size(1)
         self.bi_encoder_mlp = nn.Sequential(
             nn.Linear(hidden_size, hidden_size),
             nn.Dropout(0.3),
@@ -84,16 +79,12 @@ class PointerHead(torch.nn.Module):
                 nn.Linear(hidden_size, hidden_size),
             )
 
-        # self.position_type = position_type
-        # self.replace_pos = replace_pos
-
     def output_size(self):
         return len(self.target_token_ids)
 
     def prepare_decoder_input_ids(
         self,
         input_ids: torch.LongTensor,
-        # attention_mask: torch.Tensor,
         encoder_input_ids: torch.LongTensor,
     ):
         # if attention_mask is None:
@@ -215,21 +206,24 @@ class PointerHead(torch.nn.Module):
 class BartAsPointerConfig(BartConfig):
     def __init__(
         self,
+        # label space ids
         label_ids: Optional[List[int]] = None,
+        # token space ids
         target_token_ids: Optional[List[int]] = None,
-        eos_id: Optional[int] = None,
-        pad_id: Optional[int] = None,
-        pad_token_id: Optional[int] = None,
+        target_pad_id: Optional[int] = None,
+        # other parameters
         use_encoder_mlp: bool = True,
         max_target_positions: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        # we use the bos_id as the decoder_start_token_id
+        self.decoder_start_token_id = self.bos_token_id
+
         self.label_ids = label_ids
         self.target_token_ids = target_token_ids
-        self.eos_id = eos_id
-        self.pad_id = pad_id
-        self.pad_token_id = pad_token_id
+        self.target_pad_id = target_pad_id
+
         self.use_encoder_mlp = use_encoder_mlp
         self.max_target_positions = max_target_positions
 
@@ -250,19 +244,18 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         self.register_buffer(
             "final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings))
         )
-        # TODO: remove
+        # TODO: remove and adjust get_output_embeddings()?
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
         # TODO: add content to here
         self.pointer_head = PointerHead(
             decoder=self.model.decoder,
-            pad_token_id=self.model.config.pad_token_id,
+            pad_token_id=self.model.config.target_pad_id,
             target_token_ids=self.model.config.target_token_ids,
             label_ids=self.model.config.label_ids,
-            eos_id=self.model.config.eos_id,
-            pad_id=self.model.config.pad_id,
+            eos_id=self.model.config.eos_token_id,
+            pad_id=self.model.config.pad_token_id,
             use_encoder_mlp=self.model.config.use_encoder_mlp,
-            max_target_positions=self.model.config.max_target_positions,
         )
 
         # Initialize weights and apply final processing
@@ -476,9 +469,6 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             return_dict=True,
         )
 
-        # lm_logits = self.lm_head(outputs[0])
-        # lm_logits = lm_logits + self.final_logits_bias.to(lm_logits.device)
-        # lm_logits = outputs.last_hidden_state
         if not isinstance(outputs, Seq2SeqModelOutput):
             raise ValueError(
                 "Inconsistent output: The output of the model forward should be of type "
@@ -536,11 +526,6 @@ class BartAsPointerNetwork(BartPreTrainedModel):
 
             decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
-        # TODO: this works only for beam search. I guess. Better do this outside?
-        # batch_size = encoder_input_ids.size(0)
-        # num_beams = decoder_input_ids.size(0) // batch_size
-        # input_ids = encoder_input_ids.repeat_interleave(num_beams, dim=0)
-        # attention_mask = encoder_attention_mask.repeat_interleave(num_beams, dim=0)
         return {
             "input_ids": encoder_input_ids,
             "encoder_outputs": encoder_outputs,

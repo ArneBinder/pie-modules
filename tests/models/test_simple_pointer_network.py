@@ -101,16 +101,18 @@ def test_bart_generate():
 
 def test_bart_pointer_network_generate(taskmodule):
     model_name_or_path = MODEL_NAME_OR_PATH
-    # tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
     tokenizer = taskmodule.tokenizer
     torch.random.manual_seed(42)
     model = BartAsPointerNetwork.from_pretrained(
         model_name_or_path,
-        target_token_ids=taskmodule.target_token_ids,
-        pad_id=taskmodule.annotation_encoder_decoder.target_pad_id,
-        pad_token_id=taskmodule.tokenizer.pad_token_id,
+        # label id space
+        bos_token_id=taskmodule.annotation_encoder_decoder.bos_id,
+        eos_token_id=taskmodule.annotation_encoder_decoder.eos_id,
+        pad_token_id=taskmodule.annotation_encoder_decoder.eos_id,
         label_ids=taskmodule.annotation_encoder_decoder.label_ids,
-        eos_id=taskmodule.annotation_encoder_decoder.eos_id,
+        # target token id space
+        target_token_ids=taskmodule.target_token_ids,
+        target_pad_id=taskmodule.tokenizer.pad_token_id,
     )
     model.resize_token_embeddings(len(taskmodule.tokenizer))
 
@@ -120,9 +122,7 @@ def test_bart_pointer_network_generate(taskmodule):
     outputs = model.generate(inputs["input_ids"], num_beams=3, min_length=5, max_length=20)
     torch.testing.assert_allclose(
         outputs,
-        torch.tensor(
-            [[2, 8, 17, 14, 35, 14, 36, 17, 33, 35, 14, 35, 33, 36, 17, 14, 55, 35, 1, 2]]
-        ),
+        torch.tensor([[0, 8, 9, 10, 30, 19, 49, 21, 14, 55, 35, 14, 36, 17, 14, 36, 27, 1]]),
     )
 
     # result = tokenizer.batch_decode(
@@ -133,16 +133,18 @@ def test_bart_pointer_network_generate(taskmodule):
 
 def test_bart_pointer_network_beam_search(taskmodule):
     model_name_or_path = MODEL_NAME_OR_PATH
-    # tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
     tokenizer = taskmodule.tokenizer
     torch.random.manual_seed(42)
     model = BartAsPointerNetwork.from_pretrained(
         model_name_or_path,
-        target_token_ids=taskmodule.target_token_ids,
-        pad_id=taskmodule.annotation_encoder_decoder.target_pad_id,
-        pad_token_id=taskmodule.tokenizer.pad_token_id,
+        # label id space
+        bos_token_id=taskmodule.annotation_encoder_decoder.bos_id,
+        eos_token_id=taskmodule.annotation_encoder_decoder.eos_id,
+        pad_token_id=taskmodule.annotation_encoder_decoder.eos_id,
         label_ids=taskmodule.annotation_encoder_decoder.label_ids,
-        eos_id=taskmodule.annotation_encoder_decoder.eos_id,
+        # target token id space
+        target_token_ids=taskmodule.target_token_ids,
+        target_pad_id=taskmodule.tokenizer.pad_token_id,
     )
     model.resize_token_embeddings(len(taskmodule.tokenizer))
 
@@ -152,10 +154,8 @@ def test_bart_pointer_network_beam_search(taskmodule):
     # lets run beam search using 3 beams
     num_beams = 3
     # define decoder start token ids
-    # bos_id = model.config.decoder_start_token_id
-    bos_id = taskmodule.annotation_encoder_decoder.bos_id
     decoder_input_ids = torch.ones((num_beams, 1), device=model.device, dtype=torch.long)
-    decoder_input_ids = decoder_input_ids * bos_id
+    decoder_input_ids = decoder_input_ids * model.config.decoder_start_token_id
 
     # add encoder_outputs to model keyword arguments
     encoder = model.get_encoder()
@@ -178,12 +178,9 @@ def test_bart_pointer_network_beam_search(taskmodule):
     )
 
     # instantiate logits processors
-    # eos_id = model.config.eos_token_id
-    eos_id = taskmodule.annotation_encoder_decoder.eos_id
-    pad_token_id = taskmodule.tokenizer.pad_token_id
     logits_processor = LogitsProcessorList(
         [
-            MinLengthLogitsProcessor(5, eos_token_id=eos_id),
+            MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),
         ]
     )
 
@@ -191,8 +188,8 @@ def test_bart_pointer_network_beam_search(taskmodule):
         decoder_input_ids,
         beam_scorer,
         logits_processor=logits_processor,
-        pad_token_id=pad_token_id,
-        eos_token_id=eos_id,
+        pad_token_id=model.config.pad_token_id,
+        eos_token_id=model.config.eos_token_id,
         **model_kwargs
     )
 
