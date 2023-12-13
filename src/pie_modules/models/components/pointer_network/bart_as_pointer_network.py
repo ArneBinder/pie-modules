@@ -18,7 +18,7 @@ from .pointer_head import PointerHead
 logger = logging.get_logger(__name__)
 
 
-class BartAsPointerConfig(BartConfig):
+class BartAsPointerNetworkConfig(BartConfig):
     def __init__(
         self,
         # label space ids (note that all target ids are: [bos_id, eos_id] + label_ids)
@@ -42,7 +42,7 @@ class BartAsPointerConfig(BartConfig):
 
 
 class BartAsPointerNetwork(BartPreTrainedModel):
-    config_class = BartAsPointerConfig
+    config_class = BartAsPointerNetworkConfig
     base_model_prefix = "model"
     _tied_weights_keys = [
         "encoder.embed_tokens.weight",
@@ -51,7 +51,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
     ]
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
 
-    def __init__(self, config: BartAsPointerConfig):
+    def __init__(self, config: BartAsPointerNetworkConfig):
         super().__init__(config)
         self.model = BartModel(config)
         self.register_buffer(
