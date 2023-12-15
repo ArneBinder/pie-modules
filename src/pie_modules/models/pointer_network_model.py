@@ -647,7 +647,11 @@ class PointerNetworkModel(PyTorchIEModel):
             decode_mask=decode_mask,
         )
 
-        self.losses = {"train": {"seq2seq": Seq2SeqLoss(biloss=biloss)}}
+        self.losses = {
+            "train": Seq2SeqLoss(biloss=biloss),
+            "val": Seq2SeqLoss(biloss=biloss),
+            "test": Seq2SeqLoss(biloss=biloss),
+        }
 
         # NOTE: This is not a ModuleDict, so this will not live on the torch device!
         self.metrics = {
@@ -732,28 +736,27 @@ class PointerNetworkModel(PyTorchIEModel):
     def step(self, batch: GmamModelStepBatchEncoding, stage: str):
         inputs, targets = batch
         batch_size = inputs["src_tokens"].shape[0]
-        losses = self.losses.get(stage, {})
-        if len(losses) > 0:
+        stage_loss = self.losses.get(stage, None)
+        loss = None
+        if stage_loss is not None:
             output = self.forward(
                 tgt_tokens=targets["tgt_tokens"],
                 CPM_tag=targets.get("CPM_tag", None),
                 **inputs,
             )
-            loss_dict = {k: loss(output, targets).mean() for k, loss in losses.items()}
-            for k, v in loss_dict.items():
-                self.log(
-                    name=f"loss/{k}/{stage}",
-                    value=v,
-                    on_step=True,
-                    on_epoch=True,
-                    prog_bar=True,
-                    batch_size=batch_size,
-                )
-            loss = sum(loss_dict.values())
-        else:
-            loss = None
+            loss_value = stage_loss(output, targets).mean()
+            self.log(
+                name=f"loss/{stage}",
+                value=loss_value,
+                on_step=True,
+                on_epoch=True,
+                prog_bar=True,
+                batch_size=batch_size,
+            )
             if stage == "train":
-                raise Exception("loss is not allowed to be None for the training step")
+                loss = loss_value
+        if stage == "train" and loss is None:
+            raise Exception("loss is not allowed to be None for the training step")
 
         metrics = self.metrics.get(stage, None)
         if metrics is not None:
