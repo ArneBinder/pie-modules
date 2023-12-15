@@ -748,7 +748,7 @@ class PointerNetworkModel(PyTorchIEModel):
             self.log(
                 name=f"loss/{stage}",
                 value=loss_value,
-                on_step=True,
+                on_step=(stage == "train"),
                 on_epoch=True,
                 prog_bar=True,
                 batch_size=batch_size,
