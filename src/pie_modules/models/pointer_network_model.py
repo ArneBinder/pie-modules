@@ -736,25 +736,23 @@ class PointerNetworkModel(PyTorchIEModel):
     def step(self, batch: GmamModelStepBatchEncoding, stage: str):
         inputs, targets = batch
         batch_size = inputs["src_tokens"].shape[0]
-        stage_loss = self.losses.get(stage, None)
+        criterion = self.losses.get(stage, None)
         loss = None
-        if stage_loss is not None:
+        if criterion is not None:
             output = self.forward(
                 tgt_tokens=targets["tgt_tokens"],
                 CPM_tag=targets.get("CPM_tag", None),
                 **inputs,
             )
-            loss_value = stage_loss(output, targets).mean()
+            loss = criterion(output, targets).mean()
             self.log(
                 name=f"loss/{stage}",
-                value=loss_value,
+                value=loss,
                 on_step=(stage == "train"),
                 on_epoch=True,
                 prog_bar=True,
                 batch_size=batch_size,
             )
-            if stage == "train":
-                loss = loss_value
         if stage == "train" and loss is None:
             raise Exception("loss is not allowed to be None for the training step")
 
