@@ -201,10 +201,14 @@ def test_batch(batch, config):
     )
 
     assert targets is not None
-    assert set(targets) == {"tgt_tokens", "tgt_seq_len", "CPM_tag"}
+    assert set(targets) == {"tgt_tokens", "tgt_attention_mask", "tgt_seq_len", "CPM_tag"}
     torch.testing.assert_close(
         targets["tgt_tokens"],
         torch.tensor([[0, 14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]]),
+    )
+    torch.testing.assert_close(
+        targets["tgt_attention_mask"],
+        torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]),
     )
     torch.testing.assert_close(
         targets["tgt_seq_len"],

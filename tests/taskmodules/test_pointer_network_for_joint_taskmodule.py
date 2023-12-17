@@ -373,6 +373,7 @@ def test_collate(batch, taskmodule):
             ],
             "tgt_seq_len": [16],
             "tgt_tokens": [[0, 14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]],
+            "tgt_attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
         }
     elif taskmodule.partition_layer_name == "sentences":
         assert inputs_lists == {
@@ -408,6 +409,10 @@ def test_collate(batch, taskmodule):
             ],
             "tgt_seq_len": [9, 9],
             "tgt_tokens": [[0, 14, 14, 5, 11, 12, 3, 6, 1], [0, 9, 9, 4, 2, 2, 2, 2, 1]],
+            "tgt_attention_mask": [
+                [1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ],
         }
     else:
         raise Exception(f"unknown partition_layer_name: {taskmodule.partition_layer_name}")

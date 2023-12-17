@@ -63,6 +63,7 @@ class InputEncodingType:
 @dataclasses.dataclass
 class TargetEncodingType:
     tgt_tokens: List[int]
+    tgt_attention_mask: List[int]
     tgt_seq_len: int
     CPM_tag: Optional[List[List[int]]] = None
 
@@ -213,12 +214,14 @@ class PointerNetworkTaskModule(
         self.create_constraints = create_constraints
         self.pad_values = {
             "tgt_tokens": self.annotation_encoder_decoder.target_pad_id,
+            "tgt_attention_mask": 0,
             "src_tokens": self.tokenizer.pad_token_id,
             "src_attention_mask": 0,
             "CPM_tag": -1,
         }
         self.dtypes = {
             "tgt_tokens": torch.int64,
+            "tgt_attention_mask": torch.int64,
             "src_seq_len": torch.int64,
             "src_tokens": torch.int64,
             "src_attention_mask": torch.int64,
@@ -409,7 +412,10 @@ class PointerNetworkTaskModule(
                 tgt_tokens=tgt_tokens,
             )
         result = TargetEncodingType(
-            tgt_tokens=tgt_tokens, tgt_seq_len=len(tgt_tokens), CPM_tag=constraints
+            tgt_tokens=tgt_tokens,
+            tgt_attention_mask=[1] * len(tgt_tokens),
+            tgt_seq_len=len(tgt_tokens),
+            CPM_tag=constraints,
         )
         self.maybe_log_example(task_encoding=task_encoding, targets=result)
         return result
