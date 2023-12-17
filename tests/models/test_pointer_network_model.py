@@ -6,6 +6,7 @@ import torch
 from pytorch_ie import AnnotationList, annotation_field
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.documents import TextBasedDocument
+from transformers import AdamW
 
 from pie_modules.models import PointerNetworkModel
 from pie_modules.taskmodules import PointerNetworkTaskModule
@@ -17,8 +18,9 @@ from tests import _config_to_str
 
 
 CONFIGS = [
-    {},
-    {"biloss": False, "decode_mask": False, "replace_pos": False},
+    {"use_encoder_mlp": True},
+    {"biloss": False, "decode_mask": False, "replace_pos": False, "use_encoder_mlp": False},
+    {"biloss": False, "decode_mask": False, "replace_pos": False, "use_encoder_mlp": True},
 ]
 CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
 
@@ -162,14 +164,13 @@ def test_taskmodule(taskmodule):
 def model(taskmodule, config) -> PointerNetworkModel:
     torch.manual_seed(42)
     model = PointerNetworkModel(
-        bart_model="facebook/bart-base",
+        bart_model="sshleifer/distilbart-xsum-12-1",
         target_token_ids=taskmodule.target_token_ids,
         pad_token_id=taskmodule.tokenizer.pad_token_id,
         vocab_size=len(taskmodule.tokenizer),
         embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
         decoder_type="avg_score",
         copy_gate=False,
-        use_encoder_mlp=True,
         use_recur_pos=False,
         # replace_pos=True,
         position_type=0,
@@ -261,15 +262,56 @@ def test_batch(batch, config):
 
 def test_training_step(model, batch, config):
     torch.manual_seed(42)
+    assert model.training
     loss = model.training_step(batch, 0)
     assert loss is not None
     assert isinstance(loss, torch.Tensor)
     assert loss.requires_grad
     assert loss.dim() == 0
-    if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(17.0904483795166))
-    elif config == {"biloss": False, "decode_mask": False, "replace_pos": False}:
-        torch.testing.assert_close(loss, torch.tensor(9.206165313720703))
+    if config == {"use_encoder_mlp": True}:
+        torch.testing.assert_close(loss, torch.tensor(5.364923000335693))
+    elif config == {
+        "biloss": False,
+        "decode_mask": False,
+        "replace_pos": False,
+        "use_encoder_mlp": False,
+    }:
+        torch.testing.assert_close(loss, torch.tensor(5.140683650970459))
+    elif config == {
+        "biloss": False,
+        "decode_mask": False,
+        "replace_pos": False,
+        "use_encoder_mlp": True,
+    }:
+        torch.testing.assert_close(loss, torch.tensor(4.4815826416015625))
+    else:
+        raise ValueError(f"Unknown config: {config}")
+
+
+def test_validation_step(model, batch, config):
+    torch.manual_seed(42)
+    model.eval()
+    assert not model.training
+    loss = model.validation_step(batch, 0)
+    assert isinstance(loss, torch.Tensor)
+    assert loss.requires_grad
+    assert loss.dim() == 0
+    if config == {"use_encoder_mlp": True}:
+        torch.testing.assert_close(loss, torch.tensor(5.8239617347717285))
+    elif config == {
+        "biloss": False,
+        "decode_mask": False,
+        "replace_pos": False,
+        "use_encoder_mlp": False,
+    }:
+        torch.testing.assert_close(loss, torch.tensor(5.610896587371826))
+    elif config == {
+        "biloss": False,
+        "decode_mask": False,
+        "replace_pos": False,
+        "use_encoder_mlp": True,
+    }:
+        torch.testing.assert_close(loss, torch.tensor(4.803609371185303))
     else:
         raise ValueError(f"Unknown config: {config}")
 
