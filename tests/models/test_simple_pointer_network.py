@@ -279,7 +279,7 @@ def test_configure_optimizers(model, config):
     if config == {}:
         assert len(all_param_shapes[2]) == 166
     elif config == {"use_encoder_mlp": True}:
-        assert len(all_param_shapes[2]) == 177
+        assert len(all_param_shapes[2]) == 170
     else:
         raise ValueError(f"Unknown config: {config}")
 
