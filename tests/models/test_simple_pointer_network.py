@@ -267,25 +267,29 @@ def test_configure_optimizers(model, config):
     assert len(optimizers.param_groups) == 3
     assert all(param_group["lr"] == 5e-05 for param_group in optimizers.param_groups)
     all_param_shapes = [
-        [p.shape for p in param_group["params"]] for param_group in optimizers.param_groups
+        [tuple(p.shape) for p in param_group["params"]] for param_group in optimizers.param_groups
     ]
 
-    # not bart layer
+    # check that all parameters are covered
+    all_params = list(model.parameters())
+    assert sum(len(param_shapes) for param_shapes in all_param_shapes) == len(all_params)
+
+    # head parameters
     assert optimizers.param_groups[0]["weight_decay"] == 0.01
-    assert all_param_shapes[0] == [torch.Size([50270, 1024])]
-
-    # layer_norm layers
-    assert optimizers.param_groups[1]["weight_decay"] == 0.01
-    assert len(all_param_shapes[1]) == 58
-
-    # remaining bart layer
-    assert optimizers.param_groups[2]["weight_decay"] == 0.001
-    if config == {}:
-        assert len(all_param_shapes[2]) == 166
+    if config == {}:  # no encoder_mlp
+        assert len(all_param_shapes[0]) == 0
     elif config == {"use_encoder_mlp": True}:
-        assert len(all_param_shapes[2]) == 170
+        assert all_param_shapes[0] == [(1024, 1024), (1024,), (1024, 1024), (1024,)]
     else:
         raise ValueError(f"Unknown config: {config}")
+
+    # layer norm base model (bart) parameters
+    assert optimizers.param_groups[1]["weight_decay"] == 0.001
+    assert len(all_param_shapes[1]) == 58
+
+    # remaining base model (bart) parameters
+    assert optimizers.param_groups[2]["weight_decay"] == 0.01
+    assert len(all_param_shapes[2]) == 167
 
 
 def test_configure_optimizers_with_warmup_proportion(taskmodule, config):

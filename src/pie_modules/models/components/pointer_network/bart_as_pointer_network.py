@@ -1,6 +1,7 @@
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch.utils.checkpoint
+from torch.nn import Parameter
 from transformers import BartConfig, BartModel, BartPreTrainedModel
 from transformers.modeling_outputs import (
     BaseModelOutput,
@@ -68,6 +69,17 @@ class BartAsPointerNetwork(BartPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def base_model_named_params(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
+        yield from self.model.named_parameters(prefix=prefix + self.base_model_prefix)
+
+    def head_named_params(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
+        base_model_param_names = {
+            name for name, param in self.base_model_named_params(prefix=prefix)
+        }
+        for name, param in self.named_parameters(prefix=prefix):
+            if name not in base_model_param_names:
+                yield name, param
 
     def get_encoder(self):
         return self.model.get_encoder()
