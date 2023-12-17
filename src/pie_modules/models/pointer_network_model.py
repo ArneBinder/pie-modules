@@ -679,7 +679,13 @@ class PointerNetworkModel(PyTorchIEModel):
         return state
 
     def forward(
-        self, src_tokens, tgt_tokens, src_attention_mask=None, CPM_tag=None, src_seq_len=None
+        self,
+        src_tokens,
+        tgt_tokens,
+        src_attention_mask=None,
+        tgt_attention_mask=None,
+        CPM_tag=None,
+        src_seq_len=None,
     ):
         """
 
