@@ -14,7 +14,7 @@ from pie_modules.taskmodules import PointerNetworkTaskModule
 from tests import _config_to_str
 
 # just the default config for now
-CONFIGS = [{}]
+CONFIGS = [{}, {"use_encoder_mlp": True}]
 CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
 
 logger = logging.getLogger(__name__)
@@ -219,25 +219,45 @@ def test_forward_without_labels(model, batch):
     assert str(excinfo.value) == "decoder_input_ids has to be set!"
 
 
-def test_training_step(model, batch):
+def test_training_step(model, batch, config):
     torch.manual_seed(42)
+    assert model.training
     loss = model.training_step(batch, 0)
-    torch.testing.assert_close(loss, torch.tensor(5.422972202301025))
+    if config == {}:
+        torch.testing.assert_close(loss, torch.tensor(5.422972202301025))
+    elif config == {"use_encoder_mlp": True}:
+        torch.testing.assert_close(loss, torch.tensor(4.601412773132324))
+    else:
+        raise ValueError(f"Unknown config: {config}")
 
 
-def test_validation_step(model, batch):
+def test_validation_step(model, batch, config):
     torch.manual_seed(42)
+    model.eval()
+    assert not model.training
     loss = model.validation_step(batch, 0)
-    torch.testing.assert_close(loss, torch.tensor(5.422972202301025))
+    if config == {}:
+        torch.testing.assert_close(loss, torch.tensor(5.610896587371826))
+    elif config == {"use_encoder_mlp": True}:
+        torch.testing.assert_close(loss, torch.tensor(4.802009105682373))
+    else:
+        raise ValueError(f"Unknown config: {config}")
 
 
-def test_test_step(model, batch):
+def test_test_step(model, batch, config):
     torch.manual_seed(42)
+    model.eval()
+    assert not model.training
     loss = model.test_step(batch, 0)
-    torch.testing.assert_close(loss, torch.tensor(5.422972202301025))
+    if config == {}:
+        torch.testing.assert_close(loss, torch.tensor(5.610896587371826))
+    elif config == {"use_encoder_mlp": True}:
+        torch.testing.assert_close(loss, torch.tensor(4.802009105682373))
+    else:
+        raise ValueError(f"Unknown config: {config}")
 
 
-def test_configure_optimizers(model):
+def test_configure_optimizers(model, config):
     optimizers = model.configure_optimizers()
     assert isinstance(optimizers, AdamW)
     assert len(optimizers.param_groups) == 3
@@ -256,7 +276,12 @@ def test_configure_optimizers(model):
 
     # remaining bart layer
     assert optimizers.param_groups[2]["weight_decay"] == 0.001
-    assert len(all_param_shapes[2]) == 166
+    if config == {}:
+        assert len(all_param_shapes[2]) == 166
+    elif config == {"use_encoder_mlp": True}:
+        assert len(all_param_shapes[2]) == 177
+    else:
+        raise ValueError(f"Unknown config: {config}")
 
 
 def test_configure_optimizers_with_warmup_proportion(taskmodule, config):
