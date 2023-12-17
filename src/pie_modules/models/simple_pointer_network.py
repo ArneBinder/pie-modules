@@ -175,44 +175,37 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             for k, v in metric_dict_flat.items():
                 self.log(f"metric_{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
 
-    def encoder_decoder_params(self) -> Iterator[Tuple[str, Parameter]]:
-        for name, param in self.named_parameters():
-            if "encoder" in name or "decoder" in name:
-                yield name, param
-
     def configure_optimizers(self) -> OptimizerLRScheduler:
-        encoder_decoder_params = dict(self.encoder_decoder_params())
-
         # norm for not bart layer
         parameters = []
         params = {
             "lr": self.lr,
             "weight_decay": 1e-2,
-            "params": [
-                param
-                for name, param in self.named_parameters()
-                if name not in encoder_decoder_params
-            ],
+            "params": list(param for name, param in self.model.head_named_params()),
         }
         parameters.append(params)
 
-        params = {
-            "lr": self.lr,
-            "weight_decay": 1e-2,
-            "params": [
-                param
-                for name, param in encoder_decoder_params.items()
-                if "layernorm" in name or "layer_norm" in name
-            ],
-        }
-        parameters.append(params)
+        named_base_model_params = dict(self.model.base_model.named_parameters())
 
+        # base model (bart) layer norm parameters
         params = {
             "lr": self.lr,
             "weight_decay": self.layernorm_decay,
             "params": [
                 param
-                for name, param in encoder_decoder_params.items()
+                for name, param in named_base_model_params.items()
+                if "layernorm" in name or "layer_norm" in name
+            ],
+        }
+        parameters.append(params)
+
+        # base model (bart) other parameters
+        params = {
+            "lr": self.lr,
+            "weight_decay": 1e-2,
+            "params": [
+                param
+                for name, param in named_base_model_params.items()
                 if not ("layernorm" in name or "layer_norm" in name)
             ],
         }
