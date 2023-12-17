@@ -671,12 +671,40 @@ def test_configure_optimizers(model, config):
 
     # head parameters
     assert optimizers.param_groups[0]["weight_decay"] == 0.01
-    if config == {'use_encoder_mlp': True}:
-        assert all_param_shapes[0] == [(1024, 1024), (1024,), (1024, 1024), (1024,), (1024, 1024), (1024,), (1024, 1024), (1024,)]
-    elif config == {'biloss': False, 'decode_mask': False, 'replace_pos': False, 'use_encoder_mlp': False}:
+    if config == {"use_encoder_mlp": True}:
+        assert all_param_shapes[0] == [
+            (1024, 1024),
+            (1024,),
+            (1024, 1024),
+            (1024,),
+            (1024, 1024),
+            (1024,),
+            (1024, 1024),
+            (1024,),
+        ]
+    elif config == {
+        "biloss": False,
+        "decode_mask": False,
+        "replace_pos": False,
+        "use_encoder_mlp": False,
+    }:
         assert all_param_shapes[0] == [(1024, 1024), (1024,), (1024, 1024), (1024,)]
-    elif config == {'biloss': False, 'decode_mask': False, 'replace_pos': False, 'use_encoder_mlp': True}:
-        assert all_param_shapes[0] == [(1024, 1024), (1024,), (1024, 1024), (1024,), (1024, 1024), (1024,), (1024, 1024), (1024,)]
+    elif config == {
+        "biloss": False,
+        "decode_mask": False,
+        "replace_pos": False,
+        "use_encoder_mlp": True,
+    }:
+        assert all_param_shapes[0] == [
+            (1024, 1024),
+            (1024,),
+            (1024, 1024),
+            (1024,),
+            (1024, 1024),
+            (1024,),
+            (1024, 1024),
+            (1024,),
+        ]
     else:
         raise ValueError(f"Unknown config: {config}")
 
