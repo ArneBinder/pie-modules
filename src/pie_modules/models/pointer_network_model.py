@@ -806,7 +806,7 @@ class PointerNetworkModel(PyTorchIEModel):
         return {
             name: param
             for name, param in self.named_parameters()
-            if not ("bart_encoder" in name or "bart_decoder" in name)
+            if not ("bart_encoder" in name or "decoder.decoder" in name)
         }
 
     @property
@@ -814,7 +814,7 @@ class PointerNetworkModel(PyTorchIEModel):
         return {
             name: param
             for name, param in self.named_parameters()
-            if ("bart_encoder" in name or "bart_decoder" in name)
+            if ("bart_encoder" in name or "decoder.decoder" in name)
             and ("layernorm" in name or "layer_norm" in name)
         }
 
@@ -823,7 +823,7 @@ class PointerNetworkModel(PyTorchIEModel):
         return {
             name: param
             for name, param in self.named_parameters()
-            if ("bart_encoder" in name or "bart_decoder" in name)
+            if ("bart_encoder" in name or "decoder.decoder" in name)
             and not ("layernorm" in name or "layer_norm" in name)
         }
 
@@ -834,12 +834,12 @@ class PointerNetworkModel(PyTorchIEModel):
         params["params"] = list(self.head_parameters.values())
         parameters.append(params)
 
-        params = {"lr": self.lr, "weight_decay": 1e-2}
-        params["params"] = list(self.base_model_other_parameters.values())
-        parameters.append(params)
-
         params = {"lr": self.lr, "weight_decay": self.layernorm_decay}
         params["params"] = list(self.base_model_layernorm_parameters.values())
+        parameters.append(params)
+
+        params = {"lr": self.lr, "weight_decay": 1e-2}
+        params["params"] = list(self.base_model_other_parameters.values())
         parameters.append(params)
 
         optimizer = torch.optim.AdamW(parameters)
