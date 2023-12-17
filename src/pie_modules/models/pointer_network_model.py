@@ -795,33 +795,45 @@ class PointerNetworkModel(PyTorchIEModel):
             for k, v in metric_dict_flat.items():
                 self.log(f"metric_{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
 
+    @property
+    def head_parameters(self) -> Dict[str, Any]:
+        return {
+            name: param
+            for name, param in self.named_parameters()
+            if not ("bart_encoder" in name or "bart_decoder" in name)
+        }
+
+    @property
+    def base_model_layernorm_parameters(self) -> Dict[str, Any]:
+        return {
+            name: param
+            for name, param in self.named_parameters()
+            if ("bart_encoder" in name or "bart_decoder" in name)
+            and ("layernorm" in name or "layer_norm" in name)
+        }
+
+    @property
+    def base_model_other_parameters(self) -> Dict[str, Any]:
+        return {
+            name: param
+            for name, param in self.named_parameters()
+            if ("bart_encoder" in name or "bart_decoder" in name)
+            and not ("layernorm" in name or "layer_norm" in name)
+        }
+
     def configure_optimizers(self):
         # norm for not bart layer
         parameters = []
         params = {"lr": self.lr, "weight_decay": 1e-2}
-        params["params"] = [
-            param
-            for name, param in self.named_parameters()
-            if not ("bart_encoder" in name or "bart_decoder" in name)
-        ]
+        params["params"] = list(self.head_parameters.values())
         parameters.append(params)
 
         params = {"lr": self.lr, "weight_decay": 1e-2}
-        params["params"] = []
-        for name, param in self.named_parameters():
-            if ("bart_encoder" in name or "bart_decoder" in name) and not (
-                "layernorm" in name or "layer_norm" in name
-            ):
-                params["params"].append(param)
+        params["params"] = list(self.base_model_other_parameters.values())
         parameters.append(params)
 
         params = {"lr": self.lr, "weight_decay": self.layernorm_decay}
-        params["params"] = []
-        for name, param in self.named_parameters():
-            if ("bart_encoder" in name or "bart_decoder" in name) and (
-                "layernorm" in name or "layer_norm" in name
-            ):
-                params["params"].append(param)
+        params["params"] = list(self.base_model_layernorm_parameters.values())
         parameters.append(params)
 
         optimizer = torch.optim.AdamW(parameters)
