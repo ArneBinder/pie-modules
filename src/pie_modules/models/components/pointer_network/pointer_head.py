@@ -131,6 +131,7 @@ class PointerHead(torch.nn.Module):
         encoder_input_ids,
         encoder_attention_mask,
         labels: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
     ):
         # assemble the logits
         logits = last_hidden_state.new_full(
@@ -198,11 +199,15 @@ class PointerHead(torch.nn.Module):
 
         loss = None
         if labels is not None:
-            # labels = labels.to(logits.device)
             loss_fct = CrossEntropyLoss()
-            # TODO: any masking for the padding needed?
             logits_resized = logits.reshape(-1, logits.size(-1))
             labels_resized = labels.reshape(-1)
-            loss = loss_fct(logits_resized, labels_resized)
+            if decoder_attention_mask is None:
+                raise ValueError("decoder_attention_mask must be provided to compute the loss!")
+            mask_resized = decoder_attention_mask.reshape(-1)
+            labels_masked = labels_resized.masked_fill(
+                ~mask_resized.to(torch.bool), loss_fct.ignore_index
+            )
+            loss = loss_fct(logits_resized, labels_masked)
 
         return logits, loss

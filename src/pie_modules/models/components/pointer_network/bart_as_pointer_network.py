@@ -264,6 +264,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             encoder_input_ids=input_ids,
             encoder_attention_mask=attention_mask,
             labels=labels,
+            decoder_attention_mask=decoder_attention_mask,
         )
 
         if not return_dict:

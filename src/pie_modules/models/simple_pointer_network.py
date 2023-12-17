@@ -126,8 +126,9 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         # Truncate the bos_id. The decoder input_ids will be created by the model
         # by shifting the labels one position to the right and adding the bos_id
         labels = targets["tgt_tokens"][:, 1:]
+        decoder_attention_mask = targets["tgt_attention_mask"][:, 1:]
 
-        outputs = self(inputs=inputs, labels=labels)
+        outputs = self(inputs=inputs, labels=labels, decoder_attention_mask=decoder_attention_mask)
         loss = outputs.loss
 
         # show loss on each step only during training

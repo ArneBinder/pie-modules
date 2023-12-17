@@ -217,8 +217,14 @@ def test_forward_with_labels(model, taskmodule, document):
     # Truncate the bos_id. The decoder input_ids will be created by the model
     # by shifting the labels one position to the right and adding the bos_id
     labels = targets["tgt_tokens"][:, 1:]
+    decoder_attention_mask = targets["tgt_attention_mask"][:, 1:]
 
     torch.manual_seed(42)
-    outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+    outputs = model(
+        input_ids=input_ids,
+        attention_mask=attention_mask,
+        labels=labels,
+        decoder_attention_mask=decoder_attention_mask,
+    )
     loss = outputs.loss
     torch.testing.assert_allclose(loss, torch.tensor(4.802009105682373))
