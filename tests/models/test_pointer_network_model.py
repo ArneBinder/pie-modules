@@ -1,15 +1,13 @@
 import json
 import logging
+import pickle
 from dataclasses import dataclass
 
 import pytest
 import torch
-from pytorch_ie import AnnotationList, Document, annotation_field
+from pytorch_ie import AnnotationList, annotation_field
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
-from pytorch_ie.documents import (
-    TextBasedDocument,
-    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
-)
+from pytorch_ie.documents import TextBasedDocument
 from torch.optim import AdamW
 
 from pie_modules.models import PointerNetworkModel
@@ -769,28 +767,12 @@ def test_loaded_taskmodule(loaded_taskmodule):
 
 
 @pytest.fixture(scope="module")
-def sciarg_dataset(loaded_taskmodule):
-    from pie_datasets import DatasetDict
-
-    dataset = DatasetDict.load_dataset("pie/sciarg", name="merge_fragmented_spans")
-    dataset_converted = dataset.to_document_type(loaded_taskmodule.document_type)
-    return dataset_converted
-
-
-@pytest.fixture(scope="module")
-def sciarg_document(sciarg_dataset) -> Document:
-    return sciarg_dataset["train"][0]
-
-
-@pytest.mark.slow
-def test_sciarg_document(sciarg_document):
-    assert sciarg_document is not None
-
-
-@pytest.fixture(scope="module")
-def sciarg_batch(sciarg_document, loaded_taskmodule):
-    task_encodings = loaded_taskmodule.encode([sciarg_document])
-    batch = loaded_taskmodule.collate(task_encodings)
+def sciarg_batch():
+    with open(
+        FIXTURES_ROOT / "models" / "pointer_network" / "sciarg_batch_with_targets.pkl",
+        "rb",
+    ) as f:
+        batch = pickle.load(f)
     return batch
 
 

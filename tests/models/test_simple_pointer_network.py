@@ -1,4 +1,6 @@
+import json
 import logging
+import pickle
 from dataclasses import dataclass
 
 import pytest
@@ -11,7 +13,7 @@ from torch.optim import AdamW
 
 from pie_modules.models import SimplePointerNetworkModel
 from pie_modules.taskmodules import PointerNetworkTaskModule
-from tests import _config_to_str
+from tests import DUMP_FIXTURE_DATA, FIXTURES_ROOT, _config_to_str
 
 # just the default config for now
 CONFIGS = [{}, {"use_encoder_mlp": True}]
@@ -376,27 +378,39 @@ def test_sciarg_document(sciarg_document):
     assert sciarg_document is not None
 
 
-@pytest.fixture(scope="module")
-def sciarg_batch(sciarg_document, loaded_taskmodule):
-    task_encodings = loaded_taskmodule.encode([sciarg_document])
+@pytest.mark.skipif(not DUMP_FIXTURE_DATA, reason="don't dump fixture data")
+def test_dump_sciarg_batch(loaded_taskmodule):
+    from pie_datasets import DatasetDict
+
+    dataset = DatasetDict.load_dataset("pie/sciarg", name="merge_fragmented_spans")
+    dataset_converted = dataset.to_document_type(loaded_taskmodule.document_type)
+    sciarg_document = dataset_converted["train"][0]
+
+    task_encodings = loaded_taskmodule.encode([sciarg_document], encode_target=True)
     batch = loaded_taskmodule.collate(task_encodings)
+    path = FIXTURES_ROOT / "models" / "pointer_network_model" / "sciarg_batch_with_targets.pkl"
+    with open(path, "wb") as f:
+        pickle.dump(batch, f)
+
+
+@pytest.fixture(scope="module")
+def sciarg_batch():
+    with open(
+        FIXTURES_ROOT / "models" / "pointer_network" / "sciarg_batch_with_targets.pkl",
+        "rb",
+    ) as f:
+        batch = pickle.load(f)
     return batch
 
 
 @pytest.fixture(scope="module")
 def sciarg_batch_predictions():
-    return [
-        [0, 0, 12, 5, 2, 2, 2, 5, 3, 3, 7, 3, 3, 3, 6, 20, 29, 5, 2, 2],
-        [0, 0, 5, 87, 91, 5, 9, 87, 84, 5, 80, 318, 5, 6, 95, 1, 1, 1, 1, 1],
-        [0, 0, 55, 3, 57, 58, 4, 9, 44, 55, 3, 60, 60, 4, 9, 63, 82, 3, 2, 2],
-        [0, 0, 68, 5, 52, 54, 4, 9, 56, 68, 5, 71, 77, 5, 6, 71, 77, 3, 80, 2],
-        [0, 0, 183, 5, 153, 158, 5, 7, 163, 183, 5, 185, 190, 5, 7, 195, 210, 5, 192, 2],
-        [0, 0, 56, 5, 59, 73, 5, 9, 95, 108, 5, 5, 2, 2, 2, 162, 165, 5, 167, 2],
-        [0, 0, 61, 3, 65, 65, 4, 9, 55, 61, 3, 68, 68, 4, 9, 82, 95, 5, 97, 2],
-        [0, 0, 48, 5, 52, 85, 5, 6, 88, 98, 5, 100, 104, 4, 9, 106, 125, 5, 2, 2],
-        [0, 0, 9, 3, 3, 3, 7, 3, 3, 9, 3, 10, 53, 3, 9, 50, 53, 3, 2, 2],
-        [0, 0, 5, 374, 190, 4, 9, 952, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    ]
+    # TODO: why are there two leading zeros (bos_id)?
+    with open(
+        FIXTURES_ROOT / "models" / "simple_pointer_network" / "sciarg_batch_predictions.json"
+    ) as f:
+        data = json.load(f)
+    return data
 
 
 @pytest.mark.slow
