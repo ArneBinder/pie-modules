@@ -353,6 +353,20 @@ def test_metric_val(model, batch):
     }
 
 
+@pytest.fixture(scope="module")
+def trained_model():
+    # wandb run: https://wandb.ai/arne/dataset-sciarg-task-ner_re-training/runs/y00unkeq
+    model_path = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-15_03-04-43"
+    model = PointerNetworkModel.from_pretrained(model_path)
+    assert not model.training
+    return model
+
+
+@pytest.mark.slow
+def test_trained_model(trained_model):
+    assert trained_model is not None
+
+
 def test_head_parameters(model, config):
     parameter_shapes = {name: param.shape for name, param in model.head_parameters.items()}
 
