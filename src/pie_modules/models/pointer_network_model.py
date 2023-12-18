@@ -872,12 +872,19 @@ class PointerNetworkModel(PyTorchIEModel):
         }
         parameters.append(params)
 
-        # encoder only other parameters + shared parameters
+        # encoder only other parameters
         params = {
             "lr": self.lr,
             "weight_decay": 1e-2,
-            "params": list(get_non_layernorm_parameters(self.encoder_only_parameters).values())
-            + list(self.shared_encoder_decoder_parameters.values()),
+            "params": list(get_non_layernorm_parameters(self.encoder_only_parameters).values()),
+        }
+        parameters.append(params)
+
+        # shared parameters
+        params = {
+            "lr": self.lr,
+            "weight_decay": 1e-2,
+            "params": list(self.shared_encoder_decoder_parameters.values()),
         }
         parameters.append(params)
 

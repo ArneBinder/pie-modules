@@ -187,7 +187,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         }
         parameters.append(params)
 
-        # decoder parameters
+        # decoder only parameters
         params = {
             "lr": self.lr,
             "weight_decay": 1e-2,
@@ -195,30 +195,35 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         }
         parameters.append(params)
 
-        all_encoder_params = dict(self.model.encoder_only_named_params()) | dict(
-            self.model.encoder_decoder_shared_named_params()
-        )
-        # encoder layernorm parameters
+        # encoder only layernorm parameters
         params = {
             "lr": self.lr,
             "weight_decay": self.layernorm_decay,
             "params": [
                 param
-                for name, param in all_encoder_params.items()
+                for name, param in self.model.encoder_only_named_params()
                 if ("layernorm" in name or "layer_norm" in name)
             ],
         }
         parameters.append(params)
 
-        # encoder other parameters
+        # encoder only other parameters
         params = {
             "lr": self.lr,
             "weight_decay": 1e-2,
             "params": [
                 param
-                for name, param in all_encoder_params.items()
+                for name, param in self.model.encoder_only_named_params()
                 if not ("layernorm" in name or "layer_norm" in name)
             ],
+        }
+        parameters.append(params)
+
+        # encoder-decoder shared parameters
+        params = {
+            "lr": self.lr,
+            "weight_decay": 1e-2,
+            "params": dict(self.model.encoder_decoder_shared_named_params()).values(),
         }
         parameters.append(params)
 

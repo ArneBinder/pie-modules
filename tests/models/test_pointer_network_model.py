@@ -666,7 +666,7 @@ def test_shared_encoder_decoder_parameters(model):
 def test_configure_optimizers(model, config):
     optimizers = model.configure_optimizers()
     assert isinstance(optimizers, AdamW)
-    assert len(optimizers.param_groups) == 4
+    assert len(optimizers.param_groups) == 5
     assert all(param_group["lr"] == 5e-05 for param_group in optimizers.param_groups)
     all_param_shapes = [
         [tuple(p.shape) for p in param_group["params"]] for param_group in optimizers.param_groups
@@ -715,7 +715,7 @@ def test_configure_optimizers(model, config):
     else:
         raise ValueError(f"Unknown config: {config}")
 
-    # decoder parameters
+    # decoder only parameters
     assert optimizers.param_groups[1]["weight_decay"] == 0.01
     # this is a bit counter-intuitive, but if the "replace_pos" flag is set to True,
     # the "decoder.decoder.embed_positions_replace.weight" is used to overwrite the
@@ -727,13 +727,17 @@ def test_configure_optimizers(model, config):
     else:
         assert len(all_param_shapes[1]) == 30
 
-    # layer norm encoder parameters
+    # layer norm encoder only parameters
     assert optimizers.param_groups[2]["weight_decay"] == 0.001 == model.layernorm_decay
     assert len(all_param_shapes[2]) == 50
 
-    # remaining encoder parameters
+    # remaining encoder only parameters
     assert optimizers.param_groups[3]["weight_decay"] == 0.01
-    assert len(all_param_shapes[3]) == 146
+    assert len(all_param_shapes[3]) == 145
+
+    # encoder-decoder shared parameters
+    assert optimizers.param_groups[4]["weight_decay"] == 0.01
+    assert len(all_param_shapes[4]) == 1
 
 
 # wandb run: https://wandb.ai/arne/dataset-sciarg-task-ner_re-training/runs/y00unkeq
