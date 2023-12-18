@@ -810,36 +810,60 @@ class PointerNetworkModel(PyTorchIEModel):
         }
 
     @property
-    def base_model_layernorm_parameters(self) -> Dict[str, Any]:
+    def decoder_parameters(self) -> Dict[str, Any]:
         return {
-            name: param
-            for name, param in self.named_parameters()
-            if ("bart_encoder" in name or "decoder.decoder" in name)
-            and ("layernorm" in name or "layer_norm" in name)
+            name: param for name, param in self.named_parameters() if ("decoder.decoder" in name)
         }
 
     @property
-    def base_model_other_parameters(self) -> Dict[str, Any]:
+    def encoder_layernorm_parameters(self) -> Dict[str, Any]:
         return {
             name: param
             for name, param in self.named_parameters()
-            if ("bart_encoder" in name or "decoder.decoder" in name)
+            if ("bart_encoder" in name in name) and ("layernorm" in name or "layer_norm" in name)
+        }
+
+    @property
+    def encoder_other_parameters(self) -> Dict[str, Any]:
+        return {
+            name: param
+            for name, param in self.named_parameters()
+            if ("bart_encoder" in name in name)
             and not ("layernorm" in name or "layer_norm" in name)
         }
 
     def configure_optimizers(self):
-        # norm for not bart layer
+        # head parameters
         parameters = []
-        params = {"lr": self.lr, "weight_decay": 1e-2}
-        params["params"] = list(self.head_parameters.values())
+        params = {
+            "lr": self.lr,
+            "weight_decay": 1e-2,
+            "params": list(self.head_parameters.values()),
+        }
         parameters.append(params)
 
-        params = {"lr": self.lr, "weight_decay": self.layernorm_decay}
-        params["params"] = list(self.base_model_layernorm_parameters.values())
+        # decoder parameters
+        params = {
+            "lr": self.lr,
+            "weight_decay": 1e-2,
+            "params": list(self.decoder_parameters.values()),
+        }
         parameters.append(params)
 
-        params = {"lr": self.lr, "weight_decay": 1e-2}
-        params["params"] = list(self.base_model_other_parameters.values())
+        # encoder layernorm parameters
+        params = {
+            "lr": self.lr,
+            "weight_decay": self.layernorm_decay,
+            "params": list(self.encoder_layernorm_parameters.values()),
+        }
+        parameters.append(params)
+
+        # encoder other parameters
+        params = {
+            "lr": self.lr,
+            "weight_decay": 1e-2,
+            "params": list(self.encoder_other_parameters.values()),
+        }
         parameters.append(params)
 
         optimizer = torch.optim.AdamW(parameters)
