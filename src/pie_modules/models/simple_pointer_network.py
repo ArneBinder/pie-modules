@@ -113,7 +113,9 @@ class SimplePointerNetworkModel(PyTorchIEModel):
 
         if is_training:
             self.train()
-        return {"pred": outputs}
+
+        # truncate first entries (TODO: why? needs investigation)
+        return {"pred": outputs[:, 1:]}
 
     def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> Any:
         inputs, _ = batch
