@@ -359,25 +359,6 @@ def test_loaded_taskmodule(loaded_taskmodule):
     assert loaded_taskmodule is not None
 
 
-@pytest.fixture(scope="module")
-def sciarg_dataset(loaded_taskmodule):
-    from pie_datasets import DatasetDict
-
-    dataset = DatasetDict.load_dataset("pie/sciarg", name="merge_fragmented_spans")
-    dataset_converted = dataset.to_document_type(loaded_taskmodule.document_type)
-    return dataset_converted
-
-
-@pytest.fixture(scope="module")
-def sciarg_document(sciarg_dataset) -> Document:
-    return sciarg_dataset["train"][0]
-
-
-@pytest.mark.slow
-def test_sciarg_document(sciarg_document):
-    assert sciarg_document is not None
-
-
 @pytest.mark.skipif(not DUMP_FIXTURE_DATA, reason="don't dump fixture data")
 def test_dump_sciarg_batch(loaded_taskmodule):
     from pie_datasets import DatasetDict
