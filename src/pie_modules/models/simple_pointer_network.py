@@ -82,8 +82,10 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             # other parameters
             use_encoder_mlp=use_encoder_mlp,
         )
+
+        self.model.resize_token_embeddings(vocab_size)
+
         if not self.is_from_pretrained:
-            self.model.resize_token_embeddings(vocab_size)
             self.model.overwrite_decoder_label_embeddings_with_mapping()
 
         # NOTE: This is not a ModuleDict, so this will not live on the torch device!
