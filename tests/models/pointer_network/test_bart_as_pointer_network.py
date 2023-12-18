@@ -231,11 +231,7 @@ def test_forward_with_labels(model, taskmodule, document):
 
 
 def test_head_named_params(model):
-    parameter_shapes = {
-        name: tuple(param.shape)
-        for name, param in model.head_named_params()
-        if param.requires_grad
-    }
+    parameter_shapes = {name: tuple(param.shape) for name, param in model.head_named_params()}
     assert parameter_shapes == {
         "pointer_head.encoder_mlp.0.bias": (1024,),
         "pointer_head.encoder_mlp.0.weight": (1024, 1024),
@@ -244,14 +240,12 @@ def test_head_named_params(model):
     }
 
 
-def test_base_model_named_params(model):
+def test_encoder_only_named_params(model):
     parameter_shapes = {
-        name: tuple(param.shape)
-        for name, param in model.base_model_named_params()
-        if param.requires_grad
+        name: tuple(param.shape) for name, param in model.encoder_only_named_params()
     }
+    assert len(parameter_shapes) == 195
     assert parameter_shapes == {
-        "model.shared.weight": (50270, 1024),
         "model.encoder.embed_positions.weight": (1026, 1024),
         "model.encoder.layers.0.self_attn.k_proj.weight": (1024, 1024),
         "model.encoder.layers.0.self_attn.k_proj.bias": (1024,),
@@ -447,6 +441,15 @@ def test_base_model_named_params(model):
         "model.encoder.layers.11.final_layer_norm.bias": (1024,),
         "model.encoder.layernorm_embedding.weight": (1024,),
         "model.encoder.layernorm_embedding.bias": (1024,),
+    }
+
+
+def test_decoder_only_named_params(model):
+    parameter_shapes = {
+        name: tuple(param.shape) for name, param in model.decoder_only_named_params()
+    }
+    assert len(parameter_shapes) == 29
+    assert parameter_shapes == {
         "model.decoder.embed_positions.weight": (1026, 1024),
         "model.decoder.layers.0.self_attn.k_proj.weight": (1024, 1024),
         "model.decoder.layers.0.self_attn.k_proj.bias": (1024,),
@@ -477,3 +480,34 @@ def test_base_model_named_params(model):
         "model.decoder.layernorm_embedding.weight": (1024,),
         "model.decoder.layernorm_embedding.bias": (1024,),
     }
+
+
+def test_encoder_decoder_shared_named_params(model):
+    parameter_shapes = {
+        name: tuple(param.shape) for name, param in model.encoder_decoder_shared_named_params()
+    }
+    assert len(parameter_shapes) == 1
+    assert parameter_shapes == {"model.shared.weight": (50270, 1024)}
+
+
+def test_base_model_named_params(model):
+    parameter_shapes = {
+        name: tuple(param.shape) for name, param in model.base_model_named_params()
+    }
+    assert len(parameter_shapes) == 225
+    encoder_only_parameter_shapes = {
+        name: tuple(param.shape) for name, param in model.encoder_only_named_params()
+    }
+    decoder_only_parameter_shapes = {
+        name: tuple(param.shape) for name, param in model.decoder_only_named_params()
+    }
+    shared_parameter_shapes = {
+        name: tuple(param.shape) for name, param in model.encoder_decoder_shared_named_params()
+    }
+    expected_parameter_shapes = {
+        **encoder_only_parameter_shapes,
+        **decoder_only_parameter_shapes,
+        **shared_parameter_shapes,
+    }
+
+    assert parameter_shapes == expected_parameter_shapes
