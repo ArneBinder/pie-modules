@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import pytest
 import torch
-from pytorch_ie import AnnotationList, annotation_field
+from pytorch_ie import AnnotationList, Document, annotation_field
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.documents import TextBasedDocument
 from pytorch_lightning import Trainer
@@ -325,11 +325,13 @@ def test_configure_optimizers_with_warmup_proportion(taskmodule, config):
     assert isinstance(schedular, torch.optim.lr_scheduler.LRScheduler)
 
 
+# wandb run: https://wandb.ai/arne/dataset-sciarg-task-ner_re-training/runs/2xhakq93
+MODEL_PATH = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-14_00-25-37"
+
+
 @pytest.fixture(scope="module")
-def trained_model():
-    # wandb run: https://wandb.ai/arne/dataset-sciarg-task-ner_re-training/runs/2xhakq93
-    model_path = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-14_00-25-37"
-    model = SimplePointerNetworkModel.from_pretrained(model_path)
+def trained_model() -> SimplePointerNetworkModel:
+    model = SimplePointerNetworkModel.from_pretrained(MODEL_PATH)
     assert not model.training
     return model
 
@@ -337,3 +339,75 @@ def trained_model():
 @pytest.mark.slow
 def test_trained_model(trained_model):
     assert trained_model is not None
+
+
+@pytest.fixture(scope="module")
+def loaded_taskmodule():
+    taskmodule = PointerNetworkTaskModule.from_pretrained(MODEL_PATH)
+    assert taskmodule.is_prepared
+    return taskmodule
+
+
+@pytest.mark.slow
+def test_loaded_taskmodule(loaded_taskmodule):
+    assert loaded_taskmodule is not None
+
+
+@pytest.fixture(scope="module")
+def sciarg_dataset(loaded_taskmodule):
+    from pie_datasets import DatasetDict
+
+    dataset = DatasetDict.load_dataset("pie/sciarg", name="merge_fragmented_spans")
+    dataset_converted = dataset.to_document_type(loaded_taskmodule.document_type)
+    return dataset_converted
+
+
+@pytest.fixture(scope="module")
+def sciarg_document(sciarg_dataset) -> Document:
+    return sciarg_dataset["train"][0]
+
+
+@pytest.mark.slow
+def test_sciarg_document(sciarg_document):
+    assert sciarg_document is not None
+
+
+@pytest.fixture(scope="module")
+def sciarg_batch(sciarg_document, loaded_taskmodule):
+    task_encodings = loaded_taskmodule.encode([sciarg_document])
+    batch = loaded_taskmodule.collate(task_encodings)
+    return batch
+
+
+@pytest.fixture(scope="module")
+def sciarg_batch_predictions():
+    return [
+        [0, 0, 12, 5, 2, 2, 2, 5, 3, 3, 7, 3, 3, 3, 6, 20, 29, 5, 2, 2],
+        [0, 0, 5, 87, 91, 5, 9, 87, 84, 5, 80, 318, 5, 6, 95, 1, 1, 1, 1, 1],
+        [0, 0, 55, 3, 57, 58, 4, 9, 44, 55, 3, 60, 60, 4, 9, 63, 82, 3, 2, 2],
+        [0, 0, 68, 5, 52, 54, 4, 9, 56, 68, 5, 71, 77, 5, 6, 71, 77, 3, 80, 2],
+        [0, 0, 183, 5, 153, 158, 5, 7, 163, 183, 5, 185, 190, 5, 7, 195, 210, 5, 192, 2],
+        [0, 0, 56, 5, 59, 73, 5, 9, 95, 108, 5, 5, 2, 2, 2, 162, 165, 5, 167, 2],
+        [0, 0, 61, 3, 65, 65, 4, 9, 55, 61, 3, 68, 68, 4, 9, 82, 95, 5, 97, 2],
+        [0, 0, 48, 5, 52, 85, 5, 6, 88, 98, 5, 100, 104, 4, 9, 106, 125, 5, 2, 2],
+        [0, 0, 9, 3, 3, 3, 7, 3, 3, 9, 3, 10, 53, 3, 9, 50, 53, 3, 2, 2],
+        [0, 0, 5, 374, 190, 4, 9, 952, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    ]
+
+
+@pytest.mark.slow
+def test_sciarg_batch_predictions(sciarg_batch_predictions, loaded_taskmodule):
+    annotations, errors = loaded_taskmodule.annotation_encoder_decoder.decode(
+        sciarg_batch_predictions[2]
+    )
+    assert set(annotations) == {"labeled_spans", "binary_relations"}
+    assert len(annotations["labeled_spans"]) == 44
+    assert len(annotations["binary_relations"]) == 21
+
+
+@pytest.mark.slow
+def test_sciarg_predict_step(trained_model, sciarg_batch, sciarg_batch_predictions):
+    torch.manual_seed(42)
+    prediction = trained_model.predict_step(sciarg_batch, 0)
+    assert prediction is not None
+    assert prediction["pred"].tolist() == sciarg_batch_predictions
