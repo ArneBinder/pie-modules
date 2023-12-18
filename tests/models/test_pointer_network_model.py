@@ -1,18 +1,22 @@
+import json
 import logging
 from dataclasses import dataclass
 
 import pytest
 import torch
-from pytorch_ie import AnnotationList, annotation_field
+from pytorch_ie import AnnotationList, Document, annotation_field
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
-from pytorch_ie.documents import TextBasedDocument
+from pytorch_ie.documents import (
+    TextBasedDocument,
+    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
+)
 from torch.optim import AdamW
 
 from pie_modules.models import PointerNetworkModel
 from pie_modules.taskmodules import PointerNetworkTaskModule
 
 # from src.models.components.gmam.metrics import LabeledAnnotationScore, AnnotationLayerMetric
-from tests import _config_to_str
+from tests import FIXTURES_ROOT, _config_to_str
 
 # from tests.taskmodules.test_gmam_taskmodule import FIXTURES_DIR as TASKMODULE_FIXTURE_DIR
 
@@ -351,20 +355,6 @@ def test_metric_val(model, batch):
         "invalid/cover": 0.0,
         "invalid/all": 0.0,
     }
-
-
-@pytest.fixture(scope="module")
-def trained_model():
-    # wandb run: https://wandb.ai/arne/dataset-sciarg-task-ner_re-training/runs/y00unkeq
-    model_path = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-15_03-04-43"
-    model = PointerNetworkModel.from_pretrained(model_path)
-    assert not model.training
-    return model
-
-
-@pytest.mark.slow
-def test_trained_model(trained_model):
-    assert trained_model is not None
 
 
 def test_head_parameters(model, config):
@@ -744,3 +734,84 @@ def test_configure_optimizers(model, config):
     # remaining encoder parameters
     assert optimizers.param_groups[3]["weight_decay"] == 0.01
     assert len(all_param_shapes[3]) == 146
+
+
+# wandb run: https://wandb.ai/arne/dataset-sciarg-task-ner_re-training/runs/y00unkeq
+MODEL_PATH = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-15_03-04-43"
+
+
+@pytest.fixture(scope="module")
+def trained_model() -> PointerNetworkModel:
+    model = PointerNetworkModel.from_pretrained(MODEL_PATH)
+    assert not model.training
+    return model
+
+
+@pytest.mark.slow
+def test_trained_model(trained_model):
+    assert trained_model is not None
+
+
+@pytest.fixture(scope="module")
+def loaded_taskmodule():
+    taskmodule = PointerNetworkTaskModule.from_pretrained(MODEL_PATH)
+    assert taskmodule.is_prepared
+    return taskmodule
+
+
+@pytest.mark.slow
+def test_loaded_taskmodule(loaded_taskmodule):
+    assert loaded_taskmodule is not None
+
+
+@pytest.fixture(scope="module")
+def sciarg_dataset(loaded_taskmodule):
+    from pie_datasets import DatasetDict
+
+    dataset = DatasetDict.load_dataset("pie/sciarg", name="merge_fragmented_spans")
+    dataset_converted = dataset.to_document_type(loaded_taskmodule.document_type)
+    return dataset_converted
+
+
+@pytest.fixture(scope="module")
+def sciarg_document(sciarg_dataset) -> Document:
+    return sciarg_dataset["train"][0]
+
+
+@pytest.mark.slow
+def test_sciarg_document(sciarg_document):
+    assert sciarg_document is not None
+
+
+@pytest.fixture(scope="module")
+def sciarg_batch(sciarg_document, loaded_taskmodule):
+    task_encodings = loaded_taskmodule.encode([sciarg_document])
+    batch = loaded_taskmodule.collate(task_encodings)
+    return batch
+
+
+@pytest.fixture(scope="module")
+def sciarg_batch_predictions():
+    with open(
+        FIXTURES_ROOT / "models" / "pointer_network_model" / "sciarg_batch_predictions.json"
+    ) as f:
+        data = json.load(f)
+    return data
+
+
+@pytest.mark.slow
+def test_sciarg_batch_predictions(sciarg_batch_predictions, loaded_taskmodule):
+    annotations, errors = loaded_taskmodule.annotation_encoder_decoder.decode(
+        sciarg_batch_predictions[2]
+    )
+    assert set(annotations) == {"labeled_spans", "binary_relations"}
+    assert len(annotations["labeled_spans"]) == 44
+    assert len(annotations["binary_relations"]) == 21
+
+
+@pytest.mark.slow
+def test_sciarg_predict_step(trained_model, sciarg_batch, sciarg_batch_predictions):
+    torch.manual_seed(42)
+    prediction = trained_model.predict_step(sciarg_batch, 0)
+    assert prediction is not None
+    assert prediction["pred"].tolist() == sciarg_batch_predictions
