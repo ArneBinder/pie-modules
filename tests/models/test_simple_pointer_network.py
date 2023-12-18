@@ -1,6 +1,7 @@
 import json
 import logging
 import pickle
+from collections import defaultdict
 from dataclasses import dataclass
 
 import pytest
@@ -410,3 +411,88 @@ def test_sciarg_predict_step(trained_model, sciarg_batch, sciarg_batch_predictio
     prediction = trained_model.predict_step(sciarg_batch, 0)
     assert prediction is not None
     assert prediction["pred"].tolist() == sciarg_batch_predictions
+
+
+@pytest.mark.slow
+def test_sciarg_predict(trained_model, sciarg_batch, sciarg_batch_predictions, loaded_taskmodule):
+    torch.manual_seed(42)
+    inputs, targets = sciarg_batch
+    generation_kwargs = {"num_beams": 5, "max_length": 512}
+    prediction = trained_model.predict(inputs, **generation_kwargs)
+    assert prediction is not None
+    targets_list = targets["tgt_tokens"].tolist()
+    prediction_list = prediction["pred"].tolist()
+
+    tp = defaultdict(set)
+    for i in range(len(targets_list)):
+        current_targets = targets_list[i]
+        current_predictions = prediction_list[i]
+        annotations, errors = loaded_taskmodule.annotation_encoder_decoder.decode(
+            current_predictions
+        )
+        (
+            expected_annotations,
+            expected_errors,
+        ) = loaded_taskmodule.annotation_encoder_decoder.decode(current_targets)
+        for layer_name in expected_annotations:
+            tp[layer_name] |= set(annotations[layer_name]) & set(expected_annotations[layer_name])
+
+    assert dict(tp) == {
+        "labeled_spans": {
+            LabeledSpan(start=97, end=111, label="own_claim", score=1.0),
+            LabeledSpan(start=139, end=160, label="own_claim", score=1.0),
+            LabeledSpan(start=302, end=309, label="data", score=1.0),
+            LabeledSpan(start=326, end=350, label="background_claim", score=1.0),
+            LabeledSpan(start=343, end=347, label="data", score=1.0),
+            LabeledSpan(start=249, end=254, label="data", score=1.0),
+            LabeledSpan(start=230, end=247, label="own_claim", score=1.0),
+            LabeledSpan(start=757, end=778, label="own_claim", score=1.0),
+            LabeledSpan(start=505, end=509, label="background_claim", score=1.0),
+            LabeledSpan(start=682, end=691, label="own_claim", score=1.0),
+            LabeledSpan(start=90, end=95, label="data", score=1.0),
+            LabeledSpan(start=749, end=756, label="own_claim", score=1.0),
+            LabeledSpan(start=317, end=329, label="background_claim", score=1.0),
+            LabeledSpan(start=292, end=298, label="background_claim", score=1.0),
+            LabeledSpan(start=342, end=349, label="background_claim", score=1.0),
+            LabeledSpan(start=302, end=312, label="background_claim", score=1.0),
+            LabeledSpan(start=114, end=120, label="background_claim", score=1.0),
+            LabeledSpan(start=636, end=664, label="background_claim", score=1.0),
+            LabeledSpan(start=352, end=365, label="background_claim", score=1.0),
+            LabeledSpan(start=476, end=485, label="background_claim", score=1.0),
+            LabeledSpan(start=204, end=213, label="own_claim", score=1.0),
+            LabeledSpan(start=134, end=141, label="own_claim", score=1.0),
+            LabeledSpan(start=207, end=209, label="data", score=1.0),
+            LabeledSpan(start=290, end=305, label="background_claim", score=1.0),
+            LabeledSpan(start=530, end=542, label="own_claim", score=1.0),
+            LabeledSpan(start=78, end=89, label="own_claim", score=1.0),
+            LabeledSpan(start=491, end=498, label="background_claim", score=1.0),
+            LabeledSpan(start=255, end=261, label="own_claim", score=1.0),
+            LabeledSpan(start=212, end=213, label="data", score=1.0),
+        },
+        "binary_relations": {
+            BinaryRelation(
+                head=LabeledSpan(start=90, end=95, label="data", score=1.0),
+                tail=LabeledSpan(start=78, end=89, label="own_claim", score=1.0),
+                label="supports",
+                score=1.0,
+            ),
+            BinaryRelation(
+                head=LabeledSpan(start=302, end=312, label="background_claim", score=1.0),
+                tail=LabeledSpan(start=292, end=298, label="background_claim", score=1.0),
+                label="supports",
+                score=1.0,
+            ),
+            BinaryRelation(
+                head=LabeledSpan(start=326, end=350, label="background_claim", score=1.0),
+                tail=LabeledSpan(start=352, end=365, label="background_claim", score=1.0),
+                label="supports",
+                score=1.0,
+            ),
+            BinaryRelation(
+                head=LabeledSpan(start=249, end=254, label="data", score=1.0),
+                tail=LabeledSpan(start=255, end=261, label="own_claim", score=1.0),
+                label="supports",
+                score=1.0,
+            ),
+        },
+    }
