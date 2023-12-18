@@ -45,6 +45,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         annotation_encoder_decoder_name: str = "pointer_network_span_and_relation",
         annotation_encoder_decoder_kwargs: Optional[Dict[str, Any]] = None,
         metric_splits: List[str] = [STAGE_VAL, STAGE_TEST],
+        metric_intervals: Optional[Dict[str, int]] = None,
         # optimizer / scheduler
         lr: float = 5e-5,
         layernorm_decay: float = 0.001,
@@ -100,6 +101,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             )
             for stage in metric_splits
         }
+        self.metric_intervals = metric_intervals or {}
 
     def predict(self, inputs, **kwargs) -> Dict[str, Any]:
         is_training = self.training
@@ -127,7 +129,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         attention_mask = inputs["src_attention_mask"]
         return self.model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
-    def step(self, batch, stage: str) -> torch.FloatTensor:
+    def step(self, batch, stage: str, batch_idx: int) -> torch.FloatTensor:
         inputs, targets = batch
         if targets is None:
             raise ValueError("Targets must be provided for training or evaluation!")
@@ -146,24 +148,25 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         )
 
         stage_metrics = self.metrics.get(stage, None)
-        if stage_metrics is not None:
+        metric_interval = self.metric_intervals.get(stage, 1)
+        if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
             prediction = self.predict(inputs)
             stage_metrics(prediction["pred"], targets["tgt_tokens"])
 
         return loss
 
     def training_step(self, batch, batch_idx) -> torch.FloatTensor:
-        loss = self.step(batch, stage=STAGE_TRAIN)
+        loss = self.step(batch, stage=STAGE_TRAIN, batch_idx=batch_idx)
 
         return loss
 
     def validation_step(self, batch, batch_idx) -> torch.FloatTensor:
-        loss = self.step(batch, stage=STAGE_VAL)
+        loss = self.step(batch, stage=STAGE_VAL, batch_idx=batch_idx)
 
         return loss
 
     def test_step(self, batch, batch_idx) -> torch.FloatTensor:
-        loss = self.step(batch, stage=STAGE_TEST)
+        loss = self.step(batch, stage=STAGE_TEST, batch_idx=batch_idx)
 
         return loss
 
