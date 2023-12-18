@@ -323,3 +323,17 @@ def test_configure_optimizers_with_warmup_proportion(taskmodule, config):
     assert set(schedulers[0]) == {"scheduler", "interval"}
     schedular = schedulers[0]["scheduler"]
     assert isinstance(schedular, torch.optim.lr_scheduler.LRScheduler)
+
+
+@pytest.fixture(scope="module")
+def trained_model():
+    # wandb run: https://wandb.ai/arne/dataset-sciarg-task-ner_re-training/runs/2xhakq93
+    model_path = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-14_00-25-37"
+    model = SimplePointerNetworkModel.from_pretrained(model_path)
+    assert not model.training
+    return model
+
+
+@pytest.mark.slow
+def test_trained_model(trained_model):
+    assert trained_model is not None
