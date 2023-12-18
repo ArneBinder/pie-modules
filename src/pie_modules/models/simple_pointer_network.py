@@ -176,36 +176,45 @@ class SimplePointerNetworkModel(PyTorchIEModel):
                 self.log(f"metric_{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
-        # norm for not bart layer
         parameters = []
+        # head parameters
         params = {
             "lr": self.lr,
             "weight_decay": 1e-2,
-            "params": list(param for name, param in self.model.head_named_params()),
+            "params": dict(self.model.head_named_params()).values(),
         }
         parameters.append(params)
 
-        named_base_model_params = dict(self.model.base_model.named_parameters())
+        # decoder parameters
+        params = {
+            "lr": self.lr,
+            "weight_decay": 1e-2,
+            "params": dict(self.model.decoder_only_named_params()).values(),
+        }
+        parameters.append(params)
 
-        # base model (bart) layer norm parameters
+        all_encoder_params = dict(self.model.encoder_only_named_params()) | dict(
+            self.model.encoder_decoder_shared_named_params()
+        )
+        # encoder layernorm parameters
         params = {
             "lr": self.lr,
             "weight_decay": self.layernorm_decay,
             "params": [
                 param
-                for name, param in named_base_model_params.items()
-                if "layernorm" in name or "layer_norm" in name
+                for name, param in all_encoder_params.items()
+                if ("layernorm" in name or "layer_norm" in name)
             ],
         }
         parameters.append(params)
 
-        # base model (bart) other parameters
+        # encoder other parameters
         params = {
             "lr": self.lr,
             "weight_decay": 1e-2,
             "params": [
                 param
-                for name, param in named_base_model_params.items()
+                for name, param in all_encoder_params.items()
                 if not ("layernorm" in name or "layer_norm" in name)
             ],
         }

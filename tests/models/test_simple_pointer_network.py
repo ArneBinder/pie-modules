@@ -264,15 +264,18 @@ def test_test_step(model, batch, config):
 def test_configure_optimizers(model, config):
     optimizers = model.configure_optimizers()
     assert isinstance(optimizers, AdamW)
-    assert len(optimizers.param_groups) == 3
+    assert len(optimizers.param_groups) == 4
     assert all(param_group["lr"] == 5e-05 for param_group in optimizers.param_groups)
     all_param_shapes = [
         [tuple(p.shape) for p in param_group["params"]] for param_group in optimizers.param_groups
     ]
 
     # check that all parameters are covered
-    all_params = list(model.parameters())
-    assert sum(len(param_shapes) for param_shapes in all_param_shapes) == len(all_params)
+    all_params = set(model.parameters())
+    all_params_in_param_groups = set()
+    for param_group in optimizers.param_groups:
+        all_params_in_param_groups.update(param_group["params"])
+    assert all_params_in_param_groups == all_params
 
     # head parameters
     assert optimizers.param_groups[0]["weight_decay"] == 0.01
@@ -283,13 +286,17 @@ def test_configure_optimizers(model, config):
     else:
         raise ValueError(f"Unknown config: {config}")
 
-    # layer norm base model (bart) parameters
-    assert optimizers.param_groups[1]["weight_decay"] == 0.001
-    assert len(all_param_shapes[1]) == 58
+    # decoder parameters
+    assert optimizers.param_groups[1]["weight_decay"] == 0.01
+    assert len(all_param_shapes[1]) == 29
 
-    # remaining base model (bart) parameters
-    assert optimizers.param_groups[2]["weight_decay"] == 0.01
-    assert len(all_param_shapes[2]) == 167
+    # layer norm encoder only parameters
+    assert optimizers.param_groups[2]["weight_decay"] == 0.001 == model.layernorm_decay
+    assert len(all_param_shapes[2]) == 50
+
+    # remaining encoder only parameters + shared parameters (embed_tokens.weight)
+    assert optimizers.param_groups[3]["weight_decay"] == 0.01
+    assert len(all_param_shapes[3]) == 146
 
 
 def test_configure_optimizers_with_warmup_proportion(taskmodule, config):

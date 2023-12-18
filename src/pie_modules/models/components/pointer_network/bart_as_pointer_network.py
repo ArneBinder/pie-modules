@@ -81,6 +81,31 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             if name not in base_model_param_names:
                 yield name, param
 
+    def encoder_only_named_params(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
+        shared_params = set(dict(self.encoder_decoder_shared_named_params(prefix=prefix)).values())
+        for name, param in self.model.encoder.named_parameters(
+            prefix=prefix + self.base_model_prefix + ".encoder"
+        ):
+            if param not in shared_params:
+                yield name, param
+
+    def decoder_only_named_params(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
+        shared_params = set(dict(self.encoder_decoder_shared_named_params(prefix=prefix)).values())
+        for name, param in self.model.decoder.named_parameters(
+            prefix=prefix + self.base_model_prefix + ".decoder"
+        ):
+            if param not in shared_params:
+                yield name, param
+
+    def encoder_decoder_shared_named_params(
+        self, prefix: str = ""
+    ) -> Iterator[Tuple[str, Parameter]]:
+        encoder_params = set(self.model.encoder.parameters())
+        decoder_params = set(self.model.decoder.parameters())
+        for name, param in self.base_model_named_params(prefix=prefix):
+            if param in encoder_params and param in decoder_params:
+                yield name, param
+
     def get_encoder(self):
         return self.model.get_encoder()
 
