@@ -49,6 +49,8 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         lr: float = 5e-5,
         layernorm_decay: float = 0.001,
         warmup_proportion: float = 0.0,
+        # generation
+        generation_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -58,6 +60,8 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         self.lr = lr
         self.layernorm_decay = layernorm_decay
         self.warmup_proportion = warmup_proportion
+
+        self.generation_kwargs = generation_kwargs or {}
 
         if annotation_encoder_decoder_name == "pointer_network_span_and_relation":
             self.annotation_encoder_decoder = PointerNetworkSpanAndRelationEncoderDecoder(
@@ -97,14 +101,15 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             for stage in metric_splits
         }
 
-    def predict(self, inputs, num_beams=5, min_length=7, **kwargs) -> Dict[str, Any]:
+    def predict(self, inputs, **kwargs) -> Dict[str, Any]:
         is_training = self.training
         self.eval()
 
         # num_beams=3, min_length=5, max_length=20)
-        outputs = self.model.generate(
-            inputs["src_tokens"], num_beams=num_beams, min_length=min_length, **kwargs
-        )
+        # num_beams=5, min_length=7,
+        generation_kwargs = self.generation_kwargs.copy()
+        generation_kwargs.update(kwargs)
+        outputs = self.model.generate(inputs["src_tokens"], **generation_kwargs)
 
         if is_training:
             self.train()
