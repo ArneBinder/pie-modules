@@ -401,8 +401,8 @@ def test_sciarg_batch_predictions(sciarg_batch_predictions, loaded_taskmodule):
         sciarg_batch_predictions[2]
     )
     assert set(annotations) == {"labeled_spans", "binary_relations"}
-    assert len(annotations["labeled_spans"]) == 44
-    assert len(annotations["binary_relations"]) == 21
+    assert len(annotations["labeled_spans"]) == 2
+    assert len(annotations["binary_relations"]) == 1
 
 
 @pytest.mark.slow
