@@ -1,11 +1,12 @@
 from collections import Counter, defaultdict
 from collections.abc import MutableMapping
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
 from pytorch_ie.core import PyTorchIEModel
 from torch import nn
+from torch.nn import Parameter
 from transformers import get_linear_schedule_with_warmup
 from typing_extensions import TypeAlias
 
@@ -25,6 +26,22 @@ from .components.pointer_network.modeling_bart import (
 from .components.pointer_network.utils import seq_len_to_mask
 
 GmamModelStepBatchEncoding: TypeAlias = Tuple[Dict[str, Any], Dict[str, Any]]
+
+
+def get_layernorm_parameters(named_parameters: Dict[str, Parameter]) -> Dict[str, Parameter]:
+    return {
+        name: param
+        for name, param in named_parameters.items()
+        if "layernorm" in name or "layer_norm" in name
+    }
+
+
+def get_non_layernorm_parameters(named_parameters: Dict[str, Parameter]) -> Dict[str, Parameter]:
+    return {
+        name: param
+        for name, param in named_parameters.items()
+        if not ("layernorm" in name or "layer_norm" in name)
+    }
 
 
 class LabeledAnnotationScore:
@@ -810,27 +827,24 @@ class PointerNetworkModel(PyTorchIEModel):
         }
 
     @property
-    def decoder_parameters(self) -> Dict[str, Any]:
-        return {
-            name: param for name, param in self.named_parameters() if ("decoder.decoder" in name)
-        }
-
-    @property
-    def encoder_layernorm_parameters(self) -> Dict[str, Any]:
+    def decoder_only_parameters(self) -> Dict[str, Parameter]:
         return {
             name: param
             for name, param in self.named_parameters()
-            if ("bart_encoder" in name in name) and ("layernorm" in name or "layer_norm" in name)
+            if ("decoder.decoder" in name and "embed_tokens" not in name)
         }
 
     @property
-    def encoder_other_parameters(self) -> Dict[str, Any]:
+    def encoder_only_parameters(self) -> Dict[str, Parameter]:
         return {
             name: param
             for name, param in self.named_parameters()
-            if ("bart_encoder" in name in name)
-            and not ("layernorm" in name or "layer_norm" in name)
+            if ("bart_encoder" in name and "embed_tokens" not in name)
         }
+
+    @property
+    def shared_encoder_decoder_parameters(self) -> Dict[str, Parameter]:
+        return {name: param for name, param in self.named_parameters() if "embed_tokens" in name}
 
     def configure_optimizers(self):
         # head parameters
@@ -842,27 +856,28 @@ class PointerNetworkModel(PyTorchIEModel):
         }
         parameters.append(params)
 
-        # decoder parameters
+        # decoder only parameters
         params = {
             "lr": self.lr,
             "weight_decay": 1e-2,
-            "params": list(self.decoder_parameters.values()),
+            "params": list(self.decoder_only_parameters.values()),
         }
         parameters.append(params)
 
-        # encoder layernorm parameters
+        # encoder only layer norm parameters
         params = {
             "lr": self.lr,
             "weight_decay": self.layernorm_decay,
-            "params": list(self.encoder_layernorm_parameters.values()),
+            "params": list(get_layernorm_parameters(self.encoder_only_parameters).values()),
         }
         parameters.append(params)
 
-        # encoder other parameters
+        # encoder only other parameters + shared parameters
         params = {
             "lr": self.lr,
             "weight_decay": 1e-2,
-            "params": list(self.encoder_other_parameters.values()),
+            "params": list(get_non_layernorm_parameters(self.encoder_only_parameters).values())
+            + list(self.shared_encoder_decoder_parameters.values()),
         }
         parameters.append(params)
 
