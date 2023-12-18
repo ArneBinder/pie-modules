@@ -399,21 +399,63 @@ def test_head_parameters(model, config):
         raise ValueError(f"Unknown config: {config}")
 
 
-def test_bart_layernorm_parameters(model):
+def test_decoder_parameters(model):
     parameter_shapes = {
-        name: param.shape
-        for name, param in model.base_model_layernorm_parameters.items()
+        name: tuple(param.shape)
+        for name, param in model.decoder_parameters.items()
         if param.requires_grad
     }
+    expected_shapes = {
+        "decoder.decoder.embed_positions.weight": (1026, 1024),
+        "decoder.decoder.layers.0.self_attn.k_proj.weight": (1024, 1024),
+        "decoder.decoder.layers.0.self_attn.k_proj.bias": (1024,),
+        "decoder.decoder.layers.0.self_attn.v_proj.weight": (1024, 1024),
+        "decoder.decoder.layers.0.self_attn.v_proj.bias": (1024,),
+        "decoder.decoder.layers.0.self_attn.q_proj.weight": (1024, 1024),
+        "decoder.decoder.layers.0.self_attn.q_proj.bias": (1024,),
+        "decoder.decoder.layers.0.self_attn.out_proj.weight": (1024, 1024),
+        "decoder.decoder.layers.0.self_attn.out_proj.bias": (1024,),
+        "decoder.decoder.layers.0.self_attn_layer_norm.weight": (1024,),
+        "decoder.decoder.layers.0.self_attn_layer_norm.bias": (1024,),
+        "decoder.decoder.layers.0.encoder_attn.k_proj.weight": (1024, 1024),
+        "decoder.decoder.layers.0.encoder_attn.k_proj.bias": (1024,),
+        "decoder.decoder.layers.0.encoder_attn.v_proj.weight": (1024, 1024),
+        "decoder.decoder.layers.0.encoder_attn.v_proj.bias": (1024,),
+        "decoder.decoder.layers.0.encoder_attn.q_proj.weight": (1024, 1024),
+        "decoder.decoder.layers.0.encoder_attn.q_proj.bias": (1024,),
+        "decoder.decoder.layers.0.encoder_attn.out_proj.weight": (1024, 1024),
+        "decoder.decoder.layers.0.encoder_attn.out_proj.bias": (1024,),
+        "decoder.decoder.layers.0.encoder_attn_layer_norm.weight": (1024,),
+        "decoder.decoder.layers.0.encoder_attn_layer_norm.bias": (1024,),
+        "decoder.decoder.layers.0.fc1.weight": (4096, 1024),
+        "decoder.decoder.layers.0.fc1.bias": (4096,),
+        "decoder.decoder.layers.0.fc2.weight": (1024, 4096),
+        "decoder.decoder.layers.0.fc2.bias": (1024,),
+        "decoder.decoder.layers.0.final_layer_norm.weight": (1024,),
+        "decoder.decoder.layers.0.final_layer_norm.bias": (1024,),
+        "decoder.decoder.layernorm_embedding.weight": (1024,),
+        "decoder.decoder.layernorm_embedding.bias": (1024,),
+    }
+    assert len(expected_shapes) == 29
+    # this is a bit counter-intuitive, but if the "replace_pos" flag is set to True,
+    # the "decoder.decoder.embed_positions_replace.weight" is used to overwrite the
+    # "decoder.decoder.embed_positions.weight" parameter, so the former does not
+    # appear in the model parameters, because the latter is already there and holds
+    # the same values
+    if not model.decoder.replace_pos:
+        expected_shapes["decoder.decoder.embed_positions_replace.weight"] = (1026, 1024)
+
+    assert parameter_shapes == expected_shapes
+
+
+def test_encoder_layernorm_parameters(model):
+    parameter_shapes = {
+        name: param.shape
+        for name, param in model.encoder_layernorm_parameters.items()
+        if param.requires_grad
+    }
+    assert len(parameter_shapes) == 50
     assert parameter_shapes == {
-        "decoder.decoder.layernorm_embedding.bias": torch.Size([1024]),
-        "decoder.decoder.layernorm_embedding.weight": torch.Size([1024]),
-        "decoder.decoder.layers.0.encoder_attn_layer_norm.bias": torch.Size([1024]),
-        "decoder.decoder.layers.0.encoder_attn_layer_norm.weight": torch.Size([1024]),
-        "decoder.decoder.layers.0.final_layer_norm.bias": torch.Size([1024]),
-        "decoder.decoder.layers.0.final_layer_norm.weight": torch.Size([1024]),
-        "decoder.decoder.layers.0.self_attn_layer_norm.bias": torch.Size([1024]),
-        "decoder.decoder.layers.0.self_attn_layer_norm.weight": torch.Size([1024]),
         "encoder.bart_encoder.layernorm_embedding.bias": torch.Size([1024]),
         "encoder.bart_encoder.layernorm_embedding.weight": torch.Size([1024]),
         "encoder.bart_encoder.layers.0.final_layer_norm.bias": torch.Size([1024]),
@@ -467,34 +509,14 @@ def test_bart_layernorm_parameters(model):
     }
 
 
-def test_other_bart_parameters(model, config):
+def test_encoder_other_parameters(model, config):
     parameter_shapes = {
         name: param.shape
-        for name, param in model.base_model_other_parameters.items()
+        for name, param in model.encoder_other_parameters.items()
         if param.requires_grad
     }
-    expected_shapes = {
-        "decoder.decoder.embed_positions.weight": torch.Size([1026, 1024]),
-        "decoder.decoder.layers.0.encoder_attn.k_proj.bias": torch.Size([1024]),
-        "decoder.decoder.layers.0.encoder_attn.k_proj.weight": torch.Size([1024, 1024]),
-        "decoder.decoder.layers.0.encoder_attn.out_proj.bias": torch.Size([1024]),
-        "decoder.decoder.layers.0.encoder_attn.out_proj.weight": torch.Size([1024, 1024]),
-        "decoder.decoder.layers.0.encoder_attn.q_proj.bias": torch.Size([1024]),
-        "decoder.decoder.layers.0.encoder_attn.q_proj.weight": torch.Size([1024, 1024]),
-        "decoder.decoder.layers.0.encoder_attn.v_proj.bias": torch.Size([1024]),
-        "decoder.decoder.layers.0.encoder_attn.v_proj.weight": torch.Size([1024, 1024]),
-        "decoder.decoder.layers.0.fc1.bias": torch.Size([4096]),
-        "decoder.decoder.layers.0.fc1.weight": torch.Size([4096, 1024]),
-        "decoder.decoder.layers.0.fc2.bias": torch.Size([1024]),
-        "decoder.decoder.layers.0.fc2.weight": torch.Size([1024, 4096]),
-        "decoder.decoder.layers.0.self_attn.k_proj.bias": torch.Size([1024]),
-        "decoder.decoder.layers.0.self_attn.k_proj.weight": torch.Size([1024, 1024]),
-        "decoder.decoder.layers.0.self_attn.out_proj.bias": torch.Size([1024]),
-        "decoder.decoder.layers.0.self_attn.out_proj.weight": torch.Size([1024, 1024]),
-        "decoder.decoder.layers.0.self_attn.q_proj.bias": torch.Size([1024]),
-        "decoder.decoder.layers.0.self_attn.q_proj.weight": torch.Size([1024, 1024]),
-        "decoder.decoder.layers.0.self_attn.v_proj.bias": torch.Size([1024]),
-        "decoder.decoder.layers.0.self_attn.v_proj.weight": torch.Size([1024, 1024]),
+    assert len(parameter_shapes) == 146
+    assert parameter_shapes == {
         "encoder.bart_encoder.embed_positions.weight": torch.Size([1026, 1024]),
         "encoder.bart_encoder.embed_tokens.weight": torch.Size([50270, 1024]),
         "encoder.bart_encoder.layers.0.fc1.bias": torch.Size([4096]),
@@ -643,23 +665,11 @@ def test_other_bart_parameters(model, config):
         "encoder.bart_encoder.layers.9.self_attn.v_proj.weight": torch.Size([1024, 1024]),
     }
 
-    # this is a bit counter-intuitive, but if the "replace_pos" flag is set to True,
-    # the "decoder.decoder.embed_positions_replace.weight" is used to overwrite the
-    # "decoder.decoder.embed_positions.weight" parameter, so the former does not
-    # appear in the model parameters, because the latter is already there and holds
-    # the same values
-    if not model.decoder.replace_pos:
-        expected_shapes["decoder.decoder.embed_positions_replace.weight"] = torch.Size(
-            [1026, 1024]
-        )
-
-    assert parameter_shapes == expected_shapes
-
 
 def test_configure_optimizers(model, config):
     optimizers = model.configure_optimizers()
     assert isinstance(optimizers, AdamW)
-    assert len(optimizers.param_groups) == 3
+    assert len(optimizers.param_groups) == 4
     assert all(param_group["lr"] == 5e-05 for param_group in optimizers.param_groups)
     all_param_shapes = [
         [tuple(p.shape) for p in param_group["params"]] for param_group in optimizers.param_groups
@@ -708,18 +718,22 @@ def test_configure_optimizers(model, config):
     else:
         raise ValueError(f"Unknown config: {config}")
 
-    # layer norm base model (bart) parameters
-    assert optimizers.param_groups[1]["weight_decay"] == 0.001 == model.layernorm_decay
-    assert len(all_param_shapes[1]) == 58
-
-    # remaining base model (bart) parameters
-    assert optimizers.param_groups[2]["weight_decay"] == 0.01
+    # decoder parameters
+    assert optimizers.param_groups[1]["weight_decay"] == 0.01
     # this is a bit counter-intuitive, but if the "replace_pos" flag is set to True,
     # the "decoder.decoder.embed_positions_replace.weight" is used to overwrite the
     # "decoder.decoder.embed_positions.weight" parameter, so the former does not
     # appear in the model parameters, because the latter is already there and holds
     # the same values
-    if not model.decoder.replace_pos:
-        assert len(all_param_shapes[2]) == 168
+    if model.decoder.replace_pos:
+        assert len(all_param_shapes[1]) == 29
     else:
-        assert len(all_param_shapes[2]) == 167
+        assert len(all_param_shapes[1]) == 30
+
+    # layer norm encoder parameters
+    assert optimizers.param_groups[2]["weight_decay"] == 0.001 == model.layernorm_decay
+    assert len(all_param_shapes[2]) == 50
+
+    # remaining encoder parameters
+    assert optimizers.param_groups[3]["weight_decay"] == 0.01
+    assert len(all_param_shapes[3]) == 146
