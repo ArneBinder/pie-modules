@@ -1,16 +1,16 @@
+import copy
 import logging
 from collections.abc import MutableMapping
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import torch
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
-from torch.nn import Parameter
 from transformers import get_linear_schedule_with_warmup
 
-from ..taskmodules.components.seq2seq import PointerNetworkSpanAndRelationEncoderDecoder
 from .components.pointer_network.bart_as_pointer_network import BartAsPointerNetwork
 from .components.pointer_network.metrics import AnnotationLayerMetric
+from ..taskmodules.components.seq2seq import PointerNetworkSpanAndRelationEncoderDecoder
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,6 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             forced_eos_token_id=None,  # to disable ForcedEOSTokenLogitsProcessor
             max_length=max_length,
             num_beams=num_beams,
-            **self.annotation_encoder_decoder.generation_kwargs,
         )
 
         self.model.resize_token_embeddings(vocab_size)
@@ -121,7 +120,8 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         is_training = self.training
         self.eval()
 
-        generation_kwargs = self.override_generation_kwargs.copy()
+        generation_kwargs = copy.deepcopy(self.annotation_encoder_decoder.generation_kwargs)
+        generation_kwargs.update(self.override_generation_kwargs)
         generation_kwargs.update(kwargs)
         outputs = self.model.generate(inputs["src_tokens"], **generation_kwargs)
 
