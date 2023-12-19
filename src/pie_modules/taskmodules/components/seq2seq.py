@@ -164,7 +164,7 @@ class PointerNetworkSpanAndRelationEncoderDecoder(
         return {
             "no_repeat_ngram_size": 7,
             # TODO: add this when it looks really solid (currently strange behavior)
-            #"prefix_allowed_tokens_fn": self._prefix_allowed_tokens_fn,
+            # "prefix_allowed_tokens_fn": self._prefix_allowed_tokens_fn,
         }
 
     def get_min_pointer_idx_from_input_ids(
