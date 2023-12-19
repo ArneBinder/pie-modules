@@ -1,29 +1,21 @@
-import json
 import logging
 import pickle
 import re
 from collections import defaultdict
-from dataclasses import dataclass
 
 import pytest
 import torch
-from pytorch_ie import AnnotationList, Document, annotation_field
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
-from pytorch_ie.documents import TextBasedDocument
-from pytorch_lightning import Trainer
-from torch.optim import AdamW
 
 from pie_modules.models import PointerNetworkModel, SimplePointerNetworkModel
 from pie_modules.taskmodules import PointerNetworkTaskModule
-from tests import DUMP_FIXTURE_DATA, FIXTURES_ROOT, _config_to_str
+from tests import DUMP_FIXTURE_DATA, FIXTURES_ROOT
+from tests.models.test_pointer_network_model_predict import (
+    MODEL_PATH as OTHER_MODEL_PATH,
+)
+from tests.models.test_simple_pointer_network_predict import MODEL_PATH
 
 logger = logging.getLogger(__name__)
-
-
-# wandb run: https://wandb.ai/arne/dataset-sciarg-task-ner_re-training/runs/terkqzyn
-MODEL_PATH = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-18_22-15-53"
-# wandb run: https://wandb.ai/arne/dataset-sciarg-task-ner_re-training/runs/y00unkeq
-OTHER_MODEL_PATH = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-15_03-04-43"
 
 
 @pytest.fixture(scope="module")
@@ -75,33 +67,6 @@ def sciarg_batch():
     return batch
 
 
-@pytest.fixture(scope="module")
-def sciarg_batch_predictions():
-    with open(
-        FIXTURES_ROOT / "models" / "simple_pointer_network" / "sciarg_batch_predictions.json"
-    ) as f:
-        data = json.load(f)
-    return data
-
-
-@pytest.mark.slow
-def test_sciarg_batch_predictions(sciarg_batch_predictions, loaded_taskmodule):
-    annotations, errors = loaded_taskmodule.annotation_encoder_decoder.decode(
-        sciarg_batch_predictions[2]
-    )
-    assert set(annotations) == {"labeled_spans", "binary_relations"}
-    assert len(annotations["labeled_spans"]) == 2
-    assert len(annotations["binary_relations"]) == 1
-
-
-@pytest.mark.slow
-def test_sciarg_predict_step(trained_model, sciarg_batch, sciarg_batch_predictions):
-    torch.manual_seed(42)
-    prediction = trained_model.predict_step(sciarg_batch, 0)
-    assert prediction is not None
-    assert prediction["pred"].tolist() == sciarg_batch_predictions
-
-
 def convert_original_param_name(name: str) -> str:
     new_name = name.replace("encoder.bart_", "")
     new_name = new_name.replace("encoder.embed_tokens.", "shared.")
@@ -132,7 +97,7 @@ def replace_weights_with_other_model(model, other_model):
 
 @pytest.mark.slow
 def test_sciarg_predict_with_weights_from_other_model(
-    trained_model, sciarg_batch, sciarg_batch_predictions, loaded_taskmodule
+    trained_model, sciarg_batch, loaded_taskmodule
 ):
     replace_weights_with_other_model(
         trained_model, PointerNetworkModel.from_pretrained(OTHER_MODEL_PATH)
