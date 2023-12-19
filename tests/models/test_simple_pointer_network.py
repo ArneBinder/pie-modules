@@ -446,12 +446,10 @@ def test_sciarg_predict(trained_model, sciarg_batch, sciarg_batch_predictions, l
         "labeled_spans": 108,
         "binary_relations": 65,
     }
-
     assert {layer_name: len(anns) for layer_name, anns in fn.items()} == {
         "labeled_spans": 106,
         "binary_relations": 78,
     }
-
     assert {layer_name: len(anns) for layer_name, anns in tp.items()} == {
         "labeled_spans": 29,
         "binary_relations": 4,
