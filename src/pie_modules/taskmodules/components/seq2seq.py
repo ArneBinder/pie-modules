@@ -161,6 +161,10 @@ class PointerNetworkSpanAndRelationEncoderDecoder(
     def target_pad_id(self) -> int:
         return self.special_target2id[self.eos_token]
 
+    @property
+    def generation_kwargs(self) -> Dict[str, Any]:
+        return {"no_repeat_ngram_size": 7}
+
     def _prepare(self, documents: Sequence[Document]):
         span_labels: Set[str] = set()
         relation_labels: Set[str] = set()
