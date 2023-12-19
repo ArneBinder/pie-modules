@@ -1,16 +1,14 @@
 import abc
-import inspect
 import logging
 from collections import Counter, defaultdict
 from functools import cmp_to_key
-from itertools import chain
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
+import torch
 from pytorch_ie import Document, PreparableMixin
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 from pytorch_ie.core import Annotation
-from pytorch_lightning.core.mixins import HyperparametersMixin
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +161,94 @@ class PointerNetworkSpanAndRelationEncoderDecoder(
 
     @property
     def generation_kwargs(self) -> Dict[str, Any]:
-        return {"no_repeat_ngram_size": 7}
+        return {
+            "no_repeat_ngram_size": 7,
+            # TODO: add this when it looks really solid (currently strange behavior)
+            #"prefix_allowed_tokens_fn": self._prefix_allowed_tokens_fn,
+        }
+
+    def get_min_pointer_idx_from_input_ids(
+        self, input_ids: List[int], current_tuple_size: int
+    ) -> int:
+        if len(input_ids) == 0:
+            raise Exception(f"input_ids is empty: {input_ids}")
+
+        # only bos token
+        if len(input_ids) == 1:
+            return 0
+
+        # create a dummy value that is larger than any value in input_ids to get never selected
+        max_dummy_value = max(input_ids) + 1
+        padded_input_ids = input_ids + [max_dummy_value] * (7 - current_tuple_size)
+        last_tuple = padded_input_ids[-7:]
+        (
+            last_tail_start,
+            last_tail_end,
+            last_tail_label,
+            last_head_start,
+            last_head_end,
+            last_head_label,
+            last_rel_label,
+        ) = last_tuple
+        candidate_indices = [last_tail_start, last_head_start]
+        # we only consider the previous tuple if it is available and the start idx of the last head
+        # was not yet generated
+        if len(input_ids) > 7 and last_head_start == max_dummy_value:
+            previous_tuple = padded_input_ids[-14:-7]
+            (
+                previous_tail_start,
+                previous_tail_end,
+                previous_tail_label,
+                previous_head_start,
+                previous_head_end,
+                previous_head_label,
+                previous_rel_label,
+            ) = previous_tuple
+            candidate_indices += [previous_tail_start, previous_head_start]
+        return min(idx for idx in candidate_indices if idx != self.label2id[self.none_label])
+
+    def _prefix_allowed_tokens_fn(self, batch_id: int, input_ids: torch.Tensor) -> List[int]:
+        # if we get eos, we can only continue with eos (TODO: should be pad instead)
+        if input_ids[-1] == self.eos_id:
+            return [self.eos_id]
+
+        # this will be 0 to 6 (inclusive)
+        current_tuple_size = (input_ids.size(0) - 1) % 7
+
+        # TODO: use get_min_pointer_idx_from_input_ids(). but this decreases performance for now...
+        min_pointer_idx = self.pointer_offset
+        # min_pointer_idx = self.get_min_pointer_idx_from_input_ids(input_ids.tolist(), current_tuple_size)
+
+        # TODO: parameterize 1024 (should be max encoder input size!)
+        max_pointer_idx = 1024 + self.pointer_offset
+
+        none_id = self.label2id[self.none_label]
+        # if we got a tuple with a none label, we can only continue with a none label
+        current_tuple = input_ids[-current_tuple_size:].tolist()
+        if 3 < len(current_tuple) < 7 and current_tuple[3] == none_id:
+            return [none_id]
+
+        # next id should be a pointer index, eos or none
+        if current_tuple_size in [0, 1, 3, 4]:
+            allowed_ids = list(range(min_pointer_idx, max_pointer_idx))
+
+            # add eos to allow to terminate
+            if current_tuple_size == 0:
+                allowed_ids += [self.eos_id]
+            # add none to allow to continue with a none label
+            elif current_tuple_size == 3:
+                allowed_ids += [none_id]
+
+            return allowed_ids
+        # next id should be a span label index
+        elif current_tuple_size in [2, 5]:
+            return self.span_ids
+        # next id should be a relation label index
+        elif current_tuple_size == 6:
+            # TODO: why do we need to allow the span_ids here? removing them decreases performance for now...
+            return self.relation_ids + self.span_ids
+        else:
+            raise Exception(f"unexpected current_tuple_size: {current_tuple_size}")
 
     def _prepare(self, documents: Sequence[Document]):
         span_labels: Set[str] = set()
