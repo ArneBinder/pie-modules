@@ -228,8 +228,10 @@ def _beam_search_generate(
     else:
         _eos_token_id = eos_token_id
 
-    scores = decoder.decode(tokens=tokens, state=state)[0]  # 这里要传入的是整个句子的长度
-    # 这里需要考虑如果在第一个位置就结束的情况
+    scores = decoder.decode(tokens=tokens, state=state)[
+        0
+    ]  # 这里要传入的是整个句子的长度   # What is passed in here is the length of the entire sentence
+    # 这里需要考虑如果在第一个位置就结束的情况   # Here you need to consider what happens if it ends at the first position
     # if _eos_token_id!=-1:
     #     scores[:, _eos_token_id] = -1e12
     vocab_size = scores.size(1)
@@ -239,16 +241,16 @@ def _beam_search_generate(
 
     scores = F.log_softmax(scores, dim=-1)  # (batch_size, vocab_size)
     # 得到(batch_size, num_beams), (batch_size, num_beams)
-    # TODO 把限制写到这个位置, 加1是因为需要考虑输出就是eos的情况
+    # TODO 把限制写到这个位置, 加1是因为需要考虑输出就是eos的情况  Write the limit to this position and add 1 because you need to consider the situation where the output is eos.
     if restricter is not None:
         _next_scores, _next_tokens = restricter(state, tokens, scores, num_beams + 1)
     else:
-        # 是bsz x (num_beams+1)大小的东西
+        # 是bsz x (num_beams+1)大小的东西  # It is something with the size of bsz x (num_beams+1)
         _next_scores, _next_tokens = torch.topk(
             scores, num_beams + 1, dim=1, largest=True, sorted=True
         )
 
-    # 根据index来做顺序的调转
+    # 根据index来做顺序的调转  # Change the order according to index
     indices = torch.arange(batch_size, dtype=torch.long).to(device)
     indices = indices.repeat_interleave(num_beams)
     src_seq_len = src_seq_len.repeat_interleave(num_beams)
