@@ -19,7 +19,7 @@ MODEL_PATH = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/tas
 
 @pytest.fixture(scope="module")
 def trained_model() -> SimplePointerNetworkModel:
-    model = SimplePointerNetworkModel.from_pretrained(MODEL_PATH)
+    model = SimplePointerNetworkModel.from_pretrained(MODEL_PATH, generation_kwargs=None)
     assert not model.training
     return model
 
@@ -72,8 +72,8 @@ def test_sciarg_predict(trained_model, sciarg_batch, loaded_taskmodule):
     inputs, targets = sciarg_batch
     inputs_truncated = {k: v[:5] for k, v in inputs.items()}
     targets_truncated = {k: v[:5] for k, v in targets.items()}
-    generation_kwargs = {"num_beams": 4, "max_length": 512}
-    prediction = trained_model.predict(inputs_truncated, **generation_kwargs)
+
+    prediction = trained_model.predict(inputs_truncated)
     assert prediction is not None
     targets_list = targets_truncated["tgt_tokens"].tolist()
     prediction_list = prediction["pred"].tolist()

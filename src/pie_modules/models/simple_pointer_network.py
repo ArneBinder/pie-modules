@@ -51,18 +51,26 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         layernorm_decay: float = 0.001,
         warmup_proportion: float = 0.0,
         # generation
-        generation_kwargs: Optional[Dict[str, Any]] = None,
+        max_length: int = 512,
+        num_beams: int = 4,
+        override_generation_kwargs: Optional[Dict[str, Any]] = None,
+        generation_kwargs: Optional[Dict[str, Any]] = None,  # deprecated
         **kwargs,
     ):
         super().__init__(**kwargs)
-
-        self.save_hyperparameters()
+        if generation_kwargs is not None:
+            logger.warning(
+                "generation_kwargs is deprecated and will be removed in a future version. "
+                "Please use override_generation_kwargs instead."
+            )
+            override_generation_kwargs = generation_kwargs
+        self.save_hyperparameters(ignore=["generation_kwargs"])
 
         self.lr = lr
         self.layernorm_decay = layernorm_decay
         self.warmup_proportion = warmup_proportion
 
-        self.generation_kwargs = generation_kwargs or {}
+        self.override_generation_kwargs = override_generation_kwargs or {}
 
         if annotation_encoder_decoder_name == "pointer_network_span_and_relation":
             self.annotation_encoder_decoder = PointerNetworkSpanAndRelationEncoderDecoder(
@@ -75,7 +83,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
 
         self.model = BartAsPointerNetwork.from_pretrained(
             model_name_or_path,
-            # label id space
+            # label id space (bos/eos/pad_token_id are also used for generation)
             bos_token_id=self.annotation_encoder_decoder.bos_id,
             eos_token_id=self.annotation_encoder_decoder.eos_id,
             pad_token_id=self.annotation_encoder_decoder.eos_id,
@@ -87,9 +95,11 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             # other parameters
             use_encoder_mlp=use_encoder_mlp,
             # generation
-            no_repeat_ngram_size=7,  # TODO: parametrize / get from annotation_encoder_decoder!
             forced_bos_token_id=None,  # to disable ForcedBOSTokenLogitsProcessor
             forced_eos_token_id=None,  # to disable ForcedEOSTokenLogitsProcessor
+            max_length=max_length,
+            num_beams=num_beams,
+            **self.annotation_encoder_decoder.generation_kwargs,
         )
 
         self.model.resize_token_embeddings(vocab_size)
@@ -111,9 +121,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         is_training = self.training
         self.eval()
 
-        # num_beams=3, min_length=5, max_length=20)
-        # num_beams=5, min_length=7,
-        generation_kwargs = self.generation_kwargs.copy()
+        generation_kwargs = self.override_generation_kwargs.copy()
         generation_kwargs.update(kwargs)
         outputs = self.model.generate(inputs["src_tokens"], **generation_kwargs)
 
