@@ -169,12 +169,10 @@ def test_sciarg_predict_with_weights_from_other_model(
         "labeled_spans": 120,
         "binary_relations": 71,
     }
-
     assert {layer_name: len(anns) for layer_name, anns in fn.items()} == {
         "labeled_spans": 111,
         "binary_relations": 80,
     }
-
     assert {layer_name: len(anns) for layer_name, anns in tp.items()} == {
         "labeled_spans": 24,
         "binary_relations": 2,
