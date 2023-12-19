@@ -573,6 +573,7 @@ class PointerNetworkModel(PyTorchIEModel):
         restricter: Optional[Callable] = None,
         decode_mask: bool = True,
         metric_splits: List[str] = ["val", "test"],
+        metric_intervals: Optional[Dict[str, int]] = None,
         annotation_encoder_decoder_name: str = "pointer_network_span_and_relation",
         annotation_encoder_decoder_kwargs: Optional[Dict[str, Any]] = None,
         # added for the loss
@@ -678,6 +679,7 @@ class PointerNetworkModel(PyTorchIEModel):
             )
             for stage in metric_splits
         }
+        self.metric_intervals = metric_intervals or {}
 
         self.lr = lr
         self.layernorm_decay = layernorm_decay
@@ -756,7 +758,7 @@ class PointerNetworkModel(PyTorchIEModel):
         pred = self.predict(inputs=inputs)
         return pred
 
-    def step(self, batch: GmamModelStepBatchEncoding, stage: str):
+    def step(self, batch: GmamModelStepBatchEncoding, stage: str, batch_idx: int):
         inputs, targets = batch
         batch_size = inputs["src_tokens"].shape[0]
         criterion = self.losses.get(stage, None)
@@ -779,25 +781,26 @@ class PointerNetworkModel(PyTorchIEModel):
         if stage == "train" and loss is None:
             raise Exception("loss is not allowed to be None for the training step")
 
-        metrics = self.metrics.get(stage, None)
-        if metrics is not None:
+        stage_metrics = self.metrics.get(stage, None)
+        metric_interval = self.metric_intervals.get(stage, 1)
+        if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
             prediction = self.predict(inputs)
-            metrics(prediction["pred"], targets["tgt_tokens"])
+            stage_metrics(prediction["pred"], targets["tgt_tokens"])
 
         return loss
 
     def training_step(self, batch: GmamModelStepBatchEncoding, batch_idx):
-        loss = self.step(batch, stage="train")
+        loss = self.step(batch, stage="train", batch_idx=batch_idx)
 
         return loss
 
     def validation_step(self, batch: GmamModelStepBatchEncoding, batch_idx):
-        loss = self.step(batch, stage="val")
+        loss = self.step(batch, stage="val", batch_idx=batch_idx)
 
         return loss
 
     def test_step(self, batch: GmamModelStepBatchEncoding, batch_idx):
-        loss = self.step(batch, stage="test")
+        loss = self.step(batch, stage="test", batch_idx=batch_idx)
 
         return loss
 
