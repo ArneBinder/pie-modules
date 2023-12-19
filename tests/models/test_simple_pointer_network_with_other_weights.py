@@ -20,8 +20,8 @@ from tests import DUMP_FIXTURE_DATA, FIXTURES_ROOT, _config_to_str
 logger = logging.getLogger(__name__)
 
 
-# wandb run: https://wandb.ai/arne/dataset-sciarg-task-ner_re-training/runs/2xhakq93
-MODEL_PATH = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-14_00-25-37"
+# wandb run: https://wandb.ai/arne/dataset-sciarg-task-ner_re-training/runs/terkqzyn
+MODEL_PATH = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-18_22-15-53"
 # wandb run: https://wandb.ai/arne/dataset-sciarg-task-ner_re-training/runs/y00unkeq
 OTHER_MODEL_PATH = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-15_03-04-43"
 
