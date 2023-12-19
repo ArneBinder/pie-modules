@@ -86,6 +86,8 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             embedding_weight_mapping=embedding_weight_mapping,
             # other parameters
             use_encoder_mlp=use_encoder_mlp,
+            # generation
+            no_repeat_ngram_size=7,  # TODO: parametrize / get from annotation_encoder_decoder!
         )
 
         self.model.resize_token_embeddings(vocab_size)
