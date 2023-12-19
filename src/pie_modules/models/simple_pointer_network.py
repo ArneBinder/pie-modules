@@ -88,6 +88,8 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             use_encoder_mlp=use_encoder_mlp,
             # generation
             no_repeat_ngram_size=7,  # TODO: parametrize / get from annotation_encoder_decoder!
+            forced_bos_token_id=None,  # to disable ForcedBOSTokenLogitsProcessor
+            forced_eos_token_id=None,  # to disable ForcedEOSTokenLogitsProcessor
         )
 
         self.model.resize_token_embeddings(vocab_size)
@@ -118,8 +120,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         if is_training:
             self.train()
 
-        # truncate first entries (TODO: why? needs investigation)
-        return {"pred": outputs[:, 1:]}
+        return {"pred": outputs}
 
     def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> Any:
         inputs, _ = batch
