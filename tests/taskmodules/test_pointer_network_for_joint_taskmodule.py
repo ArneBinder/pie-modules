@@ -109,6 +109,7 @@ def taskmodule(document, config):
             "entities": "labeled_spans",
             "relations": "binary_relations",
         },
+        create_constraints=True,
         **config,
     )
 

@@ -160,7 +160,7 @@ class PointerNetworkTaskModule(
         label_representations: Optional[Dict[str, str]] = None,
         # target encoding
         max_target_length: Optional[int] = None,
-        create_constraints: bool = True,
+        create_constraints: bool = False,
         # logging
         log_first_n_examples: Optional[int] = None,
         **kwargs,
