@@ -291,6 +291,49 @@ def task_encoding(taskmodule, task_encodings):
     return task_encodings[0]
 
 
+def test_maybe_log_example(taskmodule, task_encoding, caplog, config):
+    original_log_first_n_examples = taskmodule.log_first_n_examples
+    taskmodule.log_first_n_examples = 1
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        taskmodule.maybe_log_example(task_encoding)
+    if config == {}:
+        assert caplog.messages == [
+            "*** Example ***",
+            "doc.id:        None-tokenized-1-of-1",
+            "src_token_ids: 0 713 16 10 34759 2788 59 1085 4 3101 162 4 2",
+            "src_tokens:    <s> This Ġis Ġa Ġdummy Ġtext Ġabout Ġnothing . ĠTrust Ġme . </s>",
+            "tgt_token_ids: 0 14 14 5 11 12 3 6 17 17 4 2 2 2 2 1",
+            "tgt_tokens:    <s> 14 {Ġnothing} 14 {Ġnothing} topic 11 {Ġdummy} 12 {Ġtext} content is_about 17 {Ġme} 17 {Ġme} person none none none none </s>",
+        ]
+    elif config == {"partition_layer_name": "sentences"}:
+        assert caplog.messages == [
+            "*** Example ***",
+            "doc.id:        None-tokenized-1-of-2",
+            "src_token_ids: 0 713 16 10 34759 2788 59 1085 4 2",
+            "src_tokens:    <s> This Ġis Ġa Ġdummy Ġtext Ġabout Ġnothing . </s>",
+            "tgt_token_ids: 0 14 14 5 11 12 3 6 1",
+            "tgt_tokens:    <s> 14 {Ġnothing} 14 {Ġnothing} topic 11 {Ġdummy} 12 {Ġtext} content is_about </s>",
+        ]
+    else:
+        raise Exception(f"unknown config: {config}")
+
+    # restore original value
+    taskmodule.log_first_n_examples = original_log_first_n_examples
+
+
+def test_maybe_log_example_disabled(taskmodule, task_encoding, caplog):
+    original_log_first_n_examples = taskmodule.log_first_n_examples
+    taskmodule.log_first_n_examples = None
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        taskmodule.maybe_log_example(task_encoding)
+    assert caplog.record_tuples == []
+
+    # restore original value
+    taskmodule.log_first_n_examples = original_log_first_n_examples
+
+
 def test_encode_target_with_dummy_relations(task_encoding, taskmodule):
     targets = asdict(task_encoding.targets)
     if taskmodule.partition_layer_name is None:
