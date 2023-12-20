@@ -32,19 +32,22 @@ class InputEncodingType(BatchableMixin):
     src_attention_mask: List[int]
 
     @property
-    def src_seq_len(self):
+    def src_seq_len(self) -> int:
         return len(self.src_tokens)
 
 
 @dataclasses.dataclass
 class TargetEncodingType(BatchableMixin):
     tgt_tokens: List[int]
-    tgt_attention_mask: List[int]
     CPM_tag: Optional[List[List[int]]] = None
 
     @property
-    def tgt_seq_len(self):
+    def tgt_seq_len(self) -> int:
         return len(self.tgt_tokens)
+
+    @property
+    def tgt_attention_mask(self) -> List[int]:
+        return [1] * len(self.tgt_tokens)
 
 
 TaskEncodingType: TypeAlias = TaskEncoding[
@@ -346,7 +349,6 @@ class PointerNetworkTaskModule(
             )
         result = TargetEncodingType(
             tgt_tokens=tgt_tokens,
-            tgt_attention_mask=[1] * len(tgt_tokens),
             CPM_tag=constraints,
         )
         self.maybe_log_example(task_encoding=task_encoding, targets=result)
