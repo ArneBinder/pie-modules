@@ -110,6 +110,7 @@ def taskmodule(document, config):
             "relations": "binary_relations",
         },
         create_constraints=True,
+        tokenizer_kwargs={"strict_span_conversion": False},
         **config,
     )
 
@@ -193,7 +194,7 @@ def test_prepared_config(taskmodule, config):
             "tokenized_document_type": "pie_modules.documents.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
             "tokenizer_name_or_path": "facebook/bart-base",
             "tokenizer_init_kwargs": None,
-            "tokenizer_kwargs": None,
+            "tokenizer_kwargs": {"strict_span_conversion": False},
             "partition_layer_name": None,
             "annotation_field_mapping": {
                 "entities": "labeled_spans",
@@ -224,7 +225,7 @@ def test_prepared_config(taskmodule, config):
             "tokenized_document_type": "pie_modules.documents.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
             "tokenizer_name_or_path": "facebook/bart-base",
             "tokenizer_init_kwargs": None,
-            "tokenizer_kwargs": None,
+            "tokenizer_kwargs": {"strict_span_conversion": False},
             "partition_layer_name": "sentences",
             "annotation_field_mapping": {
                 "entities": "labeled_spans",
@@ -248,6 +249,8 @@ def test_prepared_config(taskmodule, config):
             "create_constraints": True,
             "log_first_n_examples": None,
         }
+    else:
+        raise Exception(f"unknown config: {config}")
 
 
 @pytest.fixture()
