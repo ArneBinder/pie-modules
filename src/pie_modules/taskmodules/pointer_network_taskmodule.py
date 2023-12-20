@@ -348,9 +348,6 @@ class PointerNetworkTaskModule(
             tokenizer=self.tokenizer,
             result_document_type=self.tokenized_document_type,
             partition_layer=partition_layer,
-            # TODO: set both to True (will require changes in tokenize_document for windowing)
-            strict_span_conversion=False,
-            verbose=False,
             **self.tokenizer_kwargs,
         )
 
