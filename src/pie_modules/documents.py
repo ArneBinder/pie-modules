@@ -1,5 +1,6 @@
 import dataclasses
 
+from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.core import AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 
@@ -30,3 +31,32 @@ class TokenizedExtractiveQADocument(TokenBasedDocument):
     answers: AnnotationList[ExtractiveAnswer] = annotation_field(
         named_targets={"base": "tokens", "questions": "questions"}
     )
+
+
+@dataclasses.dataclass
+class TokenDocumentWithLabeledSpans(TokenBasedDocument):
+    labeled_spans: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
+
+
+@dataclasses.dataclass
+class TokenDocumentWithLabeledPartitions(TokenBasedDocument):
+    labeled_partitions: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
+
+
+@dataclasses.dataclass
+class TokenDocumentWithLabeledSpansAndLabeledPartitions(
+    TokenDocumentWithLabeledSpans, TokenDocumentWithLabeledPartitions
+):
+    pass
+
+
+@dataclasses.dataclass
+class TokenDocumentWithLabeledSpansAndBinaryRelations(TokenDocumentWithLabeledSpans):
+    binary_relations: AnnotationList[BinaryRelation] = annotation_field(target="labeled_spans")
+
+
+@dataclasses.dataclass
+class TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions(
+    TokenDocumentWithLabeledSpansAndBinaryRelations, TokenDocumentWithLabeledPartitions
+):
+    pass
