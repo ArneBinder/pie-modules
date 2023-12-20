@@ -8,7 +8,9 @@ from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from transformers import get_linear_schedule_with_warmup
 
-from ..taskmodules.components.seq2seq import PointerNetworkSpanAndRelationEncoderDecoder
+from ..taskmodules.components.pointer_network import (
+    PointerNetworkSpanAndRelationEncoderDecoder,
+)
 from .components.pointer_network.bart_as_pointer_network import BartAsPointerNetwork
 from .components.pointer_network.metrics import AnnotationLayerMetric
 
