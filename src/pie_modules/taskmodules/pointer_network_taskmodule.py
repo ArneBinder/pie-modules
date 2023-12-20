@@ -16,9 +16,14 @@ from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from transformers import AutoTokenizer, PreTrainedTokenizer
 from typing_extensions import TypeAlias
 
+# import for backwards compatibility
+from pie_modules.documents import (
+    TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
+)
+
 from ..document.processing import token_based_document_to_text_based, tokenize_document
 from ..utils import BatchableMixin, resolve_type
-from .components.seq2seq import PointerNetworkSpanAndRelationEncoderDecoder
+from .components.pointer_network import PointerNetworkSpanAndRelationEncoderDecoder
 
 logger = logging.getLogger(__name__)
 

@@ -3,7 +3,9 @@ from typing import Dict, Optional, Tuple
 
 import torch
 
-from pie_modules.taskmodules.components.seq2seq import AnnotationEncoderDecoder
+from pie_modules.taskmodules.components.pointer_network import (
+    AnnotationLayersEncoderDecoder,
+)
 
 
 class LabeledAnnotationScore:
@@ -57,7 +59,7 @@ class AnnotationLayerMetric:
     def __init__(
         self,
         eos_id: int,
-        annotation_encoder_decoder: AnnotationEncoderDecoder,
+        annotation_encoder_decoder: AnnotationLayersEncoderDecoder,
     ):
         super().__init__()
         self.annotation_encoder_decoder = annotation_encoder_decoder

@@ -1,8 +1,7 @@
-import abc
 import logging
 from collections import Counter, defaultdict
 from functools import cmp_to_key
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy as np
 import torch
@@ -10,51 +9,12 @@ from pytorch_ie import Document, PreparableMixin
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 from pytorch_ie.core import Annotation
 
+from pie_modules.taskmodules.components.common import (
+    AnnotationEncoderDecoder,
+    AnnotationLayersEncoderDecoder,
+)
+
 logger = logging.getLogger(__name__)
-
-# ====================  INTERFACE  ====================
-
-
-class SpanEncoderDecoder(abc.ABC):
-    @abc.abstractmethod
-    def encode(self, span: Span, metadata: Optional[Dict[str, Any]] = None) -> Optional[List[int]]:
-        pass
-
-    @abc.abstractmethod
-    def decode(self, targets: List[int], metadata: Optional[Dict[str, Any]] = None) -> Span:
-        pass
-
-
-class AnnotationEncoderDecoder(abc.ABC):
-    @property
-    @abc.abstractmethod
-    def layer_names(self) -> List[str]:
-        pass
-
-    @abc.abstractmethod
-    def encode(
-        self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None
-    ) -> List[int]:
-        pass
-
-    @abc.abstractmethod
-    def decode(
-        self, targets: List[int], metadata: Optional[Dict[str, Any]] = None
-    ) -> Tuple[Dict[str, List[Annotation]], Any]:
-        pass
-
-
-class PointerNetworkEncoderDecoder(AnnotationEncoderDecoder):
-    @abc.abstractmethod
-    def build_constraints(
-        self,
-        src_len: int,
-        tgt_tokens: List[int],
-    ) -> List[List[int]]:
-        pass
-
-
-# ====================  IMPLEMENTATIONS  ====================
 
 
 def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
@@ -65,47 +25,148 @@ def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
     return v1.head.start - v2.head.start  # v1[0]["from"] - v2[0]["from"]
 
 
-class SimpleSpanEncoderDecoder(SpanEncoderDecoder):
-    def encode(self, span: Span, metadata: Optional[Dict[str, Any]] = None) -> List[int]:
+class SimpleSpanEncoderDecoder(AnnotationEncoderDecoder[Span, List[int]]):
+    def encode(self, span: Span, metadata: Optional[Dict[str, Any]] = None) -> Optional[List[int]]:
         return [span.start, span.end]
 
-    def decode(self, targets: List[int], metadata: Optional[Dict[str, Any]] = None) -> Span:
-        if len(targets) != 2:
+    def decode(
+        self, encoding: List[int], metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[Span]:
+        if len(encoding) != 2:
             raise Exception(
-                f"two target values are required to decode as Span, but targets is: {targets}"
+                f"two values are required to decode as Span, but the encoding is: {encoding}"
             )
-        return Span(start=targets[0], end=targets[1])
+        return Span(start=encoding[0], end=encoding[1])
 
 
-class SpanEncoderDecoderWithOffset(SpanEncoderDecoder):
+class SpanEncoderDecoderWithOffset(AnnotationEncoderDecoder[Span, List[int]]):
     def __init__(self, offset: int, span_end_mode: str = "last_token"):
         self.span_end_mode = span_end_mode
         self.offset = offset
 
-    def encode(self, span: Span, metadata: Optional[Dict[str, Any]] = None) -> Optional[List[int]]:
+    def encode(
+        self, annotation: Span, metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[List[int]]:
         if self.span_end_mode == "first_token_of_last_word":
             raise NotImplementedError("span_end_mode=first_token_of_last_word not implemented")
         elif self.span_end_mode == "last_token":
-            return [span.start + self.offset, span.end + self.offset - 1]
+            return [annotation.start + self.offset, annotation.end + self.offset - 1]
         else:
             raise Exception(f"unknown span_end_mode: {self.span_end_mode}")
 
-    def decode(self, targets: List[int], metadata: Optional[Dict[str, Any]] = None) -> Span:
-        if len(targets) != 2:
+    def decode(
+        self, encoding: List[int], metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[Span]:
+        if len(encoding) != 2:
             raise Exception(
-                f"two target values are required to decode as Span, but targets is: {targets}"
+                f"two values are required to decode as Span, but encoding is: {encoding}"
             )
 
         if self.span_end_mode == "first_token_of_last_word":
             raise NotImplementedError("span_end_mode=first_token_of_last_word not implemented")
         elif self.span_end_mode == "last_token":
-            return Span(start=targets[0] - self.offset, end=targets[1] - self.offset + 1)
+            return Span(start=encoding[0] - self.offset, end=encoding[1] - self.offset + 1)
         else:
             raise Exception(f"unknown span_end_mode: {self.span_end_mode}")
 
 
+class LabeledSpanEncoderDecoder(AnnotationEncoderDecoder[LabeledSpan, List[int]]):
+    def __init__(
+        self,
+        span_encoder_decoder: AnnotationEncoderDecoder[Span, List[int]],
+        label2id: Dict[str, int],
+    ):
+        self.span_encoder_decoder = span_encoder_decoder
+        self.label2id = label2id
+        self.id2label = {idx: label for label, idx in self.label2id.items()}
+
+    def encode(
+        self, annotation: LabeledSpan, metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[List[int]]:
+        encoded_span = self.span_encoder_decoder.encode(annotation=annotation, metadata=metadata)
+        if encoded_span is None:
+            return None
+        return encoded_span + [self.label2id[annotation.label]]
+
+    def decode(
+        self, encoding: List[int], metadata: Optional[Dict[str, Any]] = None
+    ) -> LabeledSpan:
+        if len(encoding) != 3:
+            raise Exception(
+                f"three values are required to decode as LabeledSpan, but encoding is: {encoding}"
+            )
+        decoded_span = self.span_encoder_decoder.decode(encoding=encoding[:2], metadata=metadata)
+        if decoded_span is None:
+            raise Exception(f"failed to decode span from encoding: {encoding}")
+        result = LabeledSpan(
+            start=decoded_span.start,
+            end=decoded_span.end,
+            label=self.id2label[encoding[2]],
+        )
+        return result
+
+
+class BinaryRelationEncoderDecoder(AnnotationEncoderDecoder[BinaryRelation, List[int]]):
+    def __init__(
+        self,
+        head_encoder_decoder: AnnotationEncoderDecoder[Span, List[int]],
+        tail_encoder_decoder: AnnotationEncoderDecoder[Span, List[int]],
+        label2id: Dict[str, int],
+        loop_dummy_relation_name: Optional[str] = "loop",
+        none_label: str = "none",
+    ):
+        self.head_encoder_decoder = head_encoder_decoder
+        self.tail_encoder_decoder = tail_encoder_decoder
+        self.loop_dummy_relation_name = loop_dummy_relation_name
+        self.none_label = none_label
+        self.label2id = label2id
+        self.id2label = {idx: label for label, idx in self.label2id.items()}
+
+    def encode(
+        self, annotation: BinaryRelation, metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[List[int]]:
+        encoded_head = self.head_encoder_decoder.encode(annotation=annotation.head)
+        encoded_tail = self.tail_encoder_decoder.encode(annotation=annotation.tail)
+        if encoded_head is None or encoded_tail is None:
+            raise Exception(f"failed to encode head or tail from annotation: {annotation}")
+        if (
+            self.loop_dummy_relation_name is None
+            or annotation.label != self.loop_dummy_relation_name
+        ):
+            return encoded_tail + encoded_head + [self.label2id[annotation.label]]
+        else:
+            if encoded_head != encoded_tail:
+                raise Exception(
+                    f"expected encoded_head == encoded_tail for loop_dummy_relation, but got: {encoded_head}, "
+                    f"{encoded_tail}"
+                )
+            none_id = self.label2id[self.none_label]
+            return encoded_head + [none_id, none_id, none_id, none_id]
+
+    def decode(
+        self, encoding: List[int], metadata: Optional[Dict[str, Any]] = None
+    ) -> BinaryRelation:
+        if len(encoding) != 7:
+            raise Exception(
+                f"seven values are required to decode as BinaryRelation, but encoding is: {encoding}"
+            )
+
+        decoded_tail = self.tail_encoder_decoder.decode(encoding=encoding[:3], metadata=metadata)
+        label = self.id2label[encoding[6]]
+        if label == self.none_label:
+            decoded_head = decoded_tail
+        else:
+            decoded_head = self.head_encoder_decoder.decode(
+                encoding=encoding[3:6], metadata=metadata
+            )
+        if decoded_head is None or decoded_tail is None:
+            raise Exception(f"failed to decode head or tail from encoding: {encoding}")
+        rel = BinaryRelation(head=decoded_head, tail=decoded_tail, label=label)
+        return rel
+
+
 class PointerNetworkSpanAndRelationEncoderDecoder(
-    PointerNetworkEncoderDecoder,
+    AnnotationLayersEncoderDecoder[List[int]],
     PreparableMixin,
 ):
     PREPARED_ATTRIBUTES = ["labels_per_layer"]
@@ -132,7 +193,9 @@ class PointerNetworkSpanAndRelationEncoderDecoder(
         self.span_encoder_decoder_name = span_encoder_decoder_name
         self.span_encoder_decoder_kwargs = span_encoder_decoder_kwargs
 
-        self.span_encoder_decoder: SpanEncoderDecoder
+        # self.span_encoder_decoder: SpanEncoderDecoder
+        self.labeled_span_encoder_decoder: LabeledSpanEncoderDecoder
+        self.relation_encoder_decoder: BinaryRelationEncoderDecoder
 
         self.loop_dummy_relation_name = loop_dummy_relation_name
         self.bos_token = bos_token
@@ -298,6 +361,7 @@ class PointerNetworkSpanAndRelationEncoderDecoder(
         self.none_id: int = self.target2id[self.none_label]
 
         # span encoder decoder
+        self.span_encoder_decoder: Union[SimpleSpanEncoderDecoder, SpanEncoderDecoderWithOffset]
         if self.span_encoder_decoder_name == "span_encoder_decoder_with_offset":
             self.span_encoder_decoder = SpanEncoderDecoderWithOffset(
                 offset=self.pointer_offset, **(self.span_encoder_decoder_kwargs or {})
@@ -313,6 +377,18 @@ class PointerNetworkSpanAndRelationEncoderDecoder(
         self.label2id: Dict[str, int] = {label: self.target2id[label] for label in self.labels}
         self.id2label: Dict[int, str] = {idx: label for label, idx in self.label2id.items()}
         self.label_ids: List[int] = [self.label2id[label] for label in self.labels]
+
+        self.labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
+            span_encoder_decoder=self.span_encoder_decoder,
+            label2id=self.label2id,
+        )
+        self.relation_encoder_decoder = BinaryRelationEncoderDecoder(
+            head_encoder_decoder=self.labeled_span_encoder_decoder,
+            tail_encoder_decoder=self.labeled_span_encoder_decoder,
+            label2id=self.label2id,
+            loop_dummy_relation_name=self.loop_dummy_relation_name,
+            none_label=self.none_label,
+        )
 
     @property
     def pointer_offset(self) -> int:
@@ -402,83 +478,14 @@ class PointerNetworkSpanAndRelationEncoderDecoder(
         # ignore type because of tuple length
         return pairs, invalid  # type: ignore
 
-    def encode_labeled_span(
-        self, labeled_span: LabeledSpan, metadata: Optional[Dict[str, Any]] = None
-    ) -> Optional[List[int]]:
-        encoded_span = self.span_encoder_decoder.encode(span=labeled_span, metadata=metadata)
-        if encoded_span is None:
-            return None
-
-        return encoded_span + [self.label2id[labeled_span.label]]
-
-    def decode_labeled_span(
-        self, targets: List[int], metadata: Optional[Dict[str, Any]] = None
-    ) -> LabeledSpan:
-        if len(targets) != 3:
-            raise Exception(
-                f"three target values are required to decode as LabeledSpan, but targets is: {targets}"
-            )
-        decoded_span = self.span_encoder_decoder.decode(targets=targets[:2], metadata=metadata)
-        result = LabeledSpan(
-            start=decoded_span.start,
-            end=decoded_span.end,
-            label=self.id2label[targets[2]],
-        )
-        return result
-
-    def encode_relation(
-        self, rel: BinaryRelation, metadata: Optional[Dict[str, Any]] = None
-    ) -> Optional[List[int]]:
-        if self.labels_per_layer is None:
-            raise Exception("labels_per_layer is not defined. Call prepare() first or pass it in.")
-        if rel.label not in self.labels_per_layer[self.relation_layer_name] + [
-            self.loop_dummy_relation_name
-        ]:
-            return None
-
-        encoded_head = self.encode_labeled_span(labeled_span=rel.head, metadata=metadata)
-        encoded_tail = self.encode_labeled_span(labeled_span=rel.tail, metadata=metadata)
-
-        if encoded_head is None or encoded_tail is None:
-            if encoded_head:
-                logger.warning(f"encoded_head is None: {rel.head}")
-            if encoded_tail:
-                logger.warning(f"encoded_tail is None: {rel.tail}")
-            return None
-
-        if rel.label == self.loop_dummy_relation_name:
-            if encoded_head != encoded_tail:
-                raise Exception(
-                    f"expected encoded_head == encoded_tail for loop_dummy_relation, but got: {encoded_head}, "
-                    f"{encoded_tail}"
-                )
-            none_id = self.label2id[self.none_label]
-            target_span = encoded_head + [none_id, none_id, none_id, none_id]
-        else:
-            label_id = self.label2id[rel.label]
-            target_span = encoded_tail + encoded_head + [label_id]
-
-        return target_span
-
-    def decode_relation(
-        self, targets, metadata: Optional[Dict[str, Any]] = None
-    ) -> BinaryRelation:
-        # sent1 target
-        # sent2 src
-        rel_label = self.id2label[targets[6]]
-        decoded_tail = self.decode_labeled_span(targets=targets[0:3], metadata=metadata)
-        if rel_label == self.none_label:
-            decoded_head = decoded_tail
-        else:
-            decoded_head = self.decode_labeled_span(targets=targets[3:6], metadata=metadata)
-        rel = BinaryRelation(head=decoded_head, tail=decoded_tail, label=rel_label)
-        return rel
-
     def encode(
         self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None
     ) -> List[int]:
         if not set(layers.keys()) == set(self.layer_names):
             raise Exception(f"unexpected layers: {layers.keys()}. expected: {self.layer_names}")
+
+        if self.labels_per_layer is None:
+            raise Exception("labels_per_layer is not defined. Call prepare() first or pass it in.")
 
         # encode relations
         all_relation_arguments = set()
@@ -486,8 +493,12 @@ class PointerNetworkSpanAndRelationEncoderDecoder(
         for rel in layers[self.relation_layer_name]:
             if not isinstance(rel, BinaryRelation):
                 raise Exception(f"expected BinaryRelation, but got: {rel}")
-            encoded_relation = self.encode_relation(rel=rel, metadata=metadata)
-            if encoded_relation is not None:
+            if rel.label in self.labels_per_layer[self.relation_layer_name]:
+                encoded_relation = self.relation_encoder_decoder.encode(
+                    annotation=rel, metadata=metadata
+                )
+                if encoded_relation is None:
+                    raise Exception(f"failed to encode relation: {rel}")
                 relation_encodings[rel] = encoded_relation
                 all_relation_arguments.update([rel.head, rel.tail])
 
@@ -499,7 +510,9 @@ class PointerNetworkSpanAndRelationEncoderDecoder(
             dummy_relation = BinaryRelation(
                 head=span, tail=span, label=self.loop_dummy_relation_name
             )
-            encoded_relation = self.encode_relation(rel=dummy_relation, metadata=metadata)
+            encoded_relation = self.relation_encoder_decoder.encode(
+                annotation=dummy_relation, metadata=metadata
+            )
             if encoded_relation is not None:
                 relation_encodings[dummy_relation] = encoded_relation
 
@@ -529,7 +542,7 @@ class PointerNetworkSpanAndRelationEncoderDecoder(
         relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
         entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
         for tup in ps:
-            rel = self.decode_relation(targets=tup, metadata=metadata)
+            rel = self.relation_encoder_decoder.decode(encoding=list(tup), metadata=metadata)
             head_span = (rel.head.start, rel.head.end)
             entity_labels[head_span].append(rel.head.label)
 
