@@ -254,6 +254,7 @@ class PointerNetworkTaskModule(
         targets: Optional[TargetEncodingType] = None,
     ):
         if self.log_first_n_examples is not None and self.log_first_n_examples > 0:
+            tokenized_doc_id = task_encoding.metadata["tokenized_document"].id
             inputs = task_encoding.inputs
             targets = targets or task_encoding.targets
             src_token_ids = inputs.src_tokens
@@ -269,7 +270,7 @@ class PointerNetworkTaskModule(
                 for tgt_token_id in tgt_token_ids
             ]
             logger.info("*** Example ***")
-            # logger.info(f"doc id: {task_encoding.document.id}")
+            logger.info(f"doc.id:        {tokenized_doc_id}")
             logger.info(f"src_token_ids: {' '.join([str(i) for i in src_token_ids])}")
             logger.info(f"src_tokens:    {' '.join(src_tokens)}")
             logger.info(f"tgt_token_ids: {' '.join([str(i) for i in tgt_token_ids])}")
@@ -291,6 +292,8 @@ class PointerNetworkTaskModule(
             partition_layer=partition_layer,
             **self.tokenizer_kwargs,
         )
+        for idx, tokenized_doc in enumerate(tokenized_docs):
+            tokenized_doc.id = f"{document.id}-tokenized-{idx+1}-of-{len(tokenized_docs)}"
 
         return tokenized_docs
 
