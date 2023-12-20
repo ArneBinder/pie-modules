@@ -12,6 +12,7 @@ from typing_extensions import TypeAlias
 
 from ..taskmodules.components.pointer_network import (
     AnnotationLayersEncoderDecoder,
+    EncodingWithIdsAndOptionalCpmTag,
     PointerNetworkSpanAndRelationEncoderDecoder,
 )
 from .components.pointer_network.generator import SequenceGenerator
@@ -131,10 +132,10 @@ class AnnotationLayerMetric:
                 self.em += 1
 
             gold_annotations, gold_invalid = self.annotation_encoder_decoder.decode(
-                expected[i].tolist()
+                EncodingWithIdsAndOptionalCpmTag(expected[i].tolist())
             )
             predicted_annotations, invalid = self.annotation_encoder_decoder.decode(
-                prediction[i].tolist()
+                EncodingWithIdsAndOptionalCpmTag(prediction[i].tolist())
             )
             for k, v in invalid.items():
                 self.invalid[k] += v
