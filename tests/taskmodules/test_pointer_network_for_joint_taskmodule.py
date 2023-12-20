@@ -189,7 +189,7 @@ def test_prepared_config(taskmodule, config):
         assert taskmodule._config() == {
             "taskmodule_type": "PointerNetworkTaskModule",
             "document_type": "pytorch_ie.documents.TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
-            "tokenized_document_type": "pie_modules.taskmodules.pointer_network_taskmodule.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
+            "tokenized_document_type": "pie_modules.documents.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
             "tokenizer_name_or_path": "facebook/bart-base",
             "tokenizer_init_kwargs": None,
             "tokenizer_kwargs": None,
@@ -220,7 +220,7 @@ def test_prepared_config(taskmodule, config):
         assert taskmodule._config() == {
             "taskmodule_type": "PointerNetworkTaskModule",
             "document_type": "pytorch_ie.documents.TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
-            "tokenized_document_type": "pie_modules.taskmodules.pointer_network_taskmodule.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
+            "tokenized_document_type": "pie_modules.documents.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
             "tokenizer_name_or_path": "facebook/bart-base",
             "tokenizer_init_kwargs": None,
             "tokenizer_kwargs": None,

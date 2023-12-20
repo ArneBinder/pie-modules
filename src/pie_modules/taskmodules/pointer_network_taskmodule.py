@@ -127,13 +127,6 @@ def _span_is_in_partition(span: Span, partition: Optional[Span] = None):
 # see https://github.com/Lightning-AI/lightning/pull/13640#issuecomment-1199032224
 
 
-DEFAULT_DOCUMENT_TYPE = (
-    "pytorch_ie.documents.TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions"
-)
-# TODO: move to pie_modules.documents when this is available
-DEFAULT_TOKENIZED_DOCUMENT_TYPE = "pie_modules.taskmodules.pointer_network_taskmodule.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions"
-
-
 @TaskModule.register()
 class PointerNetworkTaskModule(
     TaskModule[
@@ -153,8 +146,8 @@ class PointerNetworkTaskModule(
     def __init__(
         self,
         # tokenization
-        document_type: str = DEFAULT_DOCUMENT_TYPE,
-        tokenized_document_type: str = DEFAULT_TOKENIZED_DOCUMENT_TYPE,
+        document_type: str = "pytorch_ie.documents.TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
+        tokenized_document_type: str = "pie_modules.documents.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
         tokenizer_name_or_path: str = "facebook/bart-base",
         tokenizer_init_kwargs: Optional[Dict[str, Any]] = None,
         tokenizer_kwargs: Optional[Dict[str, Any]] = None,
