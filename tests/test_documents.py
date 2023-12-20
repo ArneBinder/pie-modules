@@ -2,13 +2,13 @@ from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 
 from pie_modules.annotations import ExtractiveAnswer, Question
 from pie_modules.documents import (
-    ExtractiveQADocument,
+    TextDocumentWithQuestionsAndExtractiveAnswers,
     TokenDocumentWithLabeledPartitions,
     TokenDocumentWithLabeledSpans,
     TokenDocumentWithLabeledSpansAndBinaryRelations,
     TokenDocumentWithLabeledSpansAndLabeledPartitions,
     TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
-    TokenizedExtractiveQADocument,
+    TokenDocumentWithQuestionsAndExtractiveAnswers,
 )
 
 
@@ -167,7 +167,7 @@ def test_token_document_with_labeled_spans_binary_relations_and_labeled_partitio
 
 
 def test_extractive_qa_document():
-    doc = ExtractiveQADocument(
+    doc = TextDocumentWithQuestionsAndExtractiveAnswers(
         text="This is a sentence. And that is another sentence.", id="extractive_qa_document"
     )
     q1 = Question(text="What is this?")
@@ -191,7 +191,7 @@ def test_extractive_qa_document():
 
 
 def test_tokenized_extractive_qa_document():
-    doc = TokenizedExtractiveQADocument(
+    doc = TokenDocumentWithQuestionsAndExtractiveAnswers(
         tokens=(
             "This",
             "is",

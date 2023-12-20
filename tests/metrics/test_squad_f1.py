@@ -1,7 +1,7 @@
 import logging
 
 from pie_modules.annotations import ExtractiveAnswer, Question
-from pie_modules.documents import ExtractiveQADocument
+from pie_modules.documents import TextDocumentWithQuestionsAndExtractiveAnswers
 from pie_modules.metrics import SQuADF1
 
 
@@ -10,7 +10,7 @@ def test_squad_f1_exact_match(caplog):
 
     # create a test document
     # sample edit
-    doc = ExtractiveQADocument(text="This is a test document.")
+    doc = TextDocumentWithQuestionsAndExtractiveAnswers(text="This is a test document.")
     # add a question
     q1 = Question(text="What is this?")
     doc.questions.append(q1)
@@ -62,7 +62,7 @@ def test_squad_f1_exact_match_added_article():
     metric = SQuADF1()
 
     # create a test document
-    doc = ExtractiveQADocument(
+    doc = TextDocumentWithQuestionsAndExtractiveAnswers(
         text="This is a test document.", id="eqa_doc_with_exact_match_added_article"
     )
     # add a question
@@ -100,7 +100,7 @@ def test_squad_f1_partly_span_mismatch():
     metric = SQuADF1()
 
     # create a test document
-    doc = ExtractiveQADocument(
+    doc = TextDocumentWithQuestionsAndExtractiveAnswers(
         text="This is a test document.", id="eqa_doc_with_partly_span_mismatch"
     )
     # add a question
@@ -138,7 +138,7 @@ def test_squad_f1_full_span_mismatch():
     metric = SQuADF1()
 
     # create a test document
-    doc = ExtractiveQADocument(
+    doc = TextDocumentWithQuestionsAndExtractiveAnswers(
         text="This is a test document.", id="eqa_doc_with_full_span_mismatch"
     )
     # add a question
@@ -176,7 +176,7 @@ def test_squad_f1_no_predicted_answers():
     metric = SQuADF1()
 
     # create a test document
-    doc = ExtractiveQADocument(
+    doc = TextDocumentWithQuestionsAndExtractiveAnswers(
         text="This is a test document.", id="eqa_doc_without_predicted_answers"
     )
     # add a question
@@ -209,7 +209,9 @@ def test_squad_f1_no_gold_answers():
     metric = SQuADF1()
 
     # create a test document
-    doc = ExtractiveQADocument(text="This is a test document.", id="eqa_doc_without_gold_answers")
+    doc = TextDocumentWithQuestionsAndExtractiveAnswers(
+        text="This is a test document.", id="eqa_doc_without_gold_answers"
+    )
     # add a question
     q1 = Question(text="What is this?")
     doc.questions.append(q1)
@@ -240,7 +242,7 @@ def test_squad_f1_empty_document():
     metric = SQuADF1()
 
     # create a test document
-    doc = ExtractiveQADocument(text="", id="eqa_doc_with_empty_text")
+    doc = TextDocumentWithQuestionsAndExtractiveAnswers(text="", id="eqa_doc_with_empty_text")
     # add a question
     q1 = Question(text="What is this?")
     doc.questions.append(q1)

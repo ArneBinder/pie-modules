@@ -4,7 +4,7 @@ import transformers
 from pytorch_ie.core import AnnotationList
 
 from pie_modules.annotations import ExtractiveAnswer, Question
-from pie_modules.documents import ExtractiveQADocument
+from pie_modules.documents import TextDocumentWithQuestionsAndExtractiveAnswers
 from pie_modules.taskmodules.extractive_question_answering import (
     ExtractiveQuestionAnsweringTaskModule,
 )
@@ -12,7 +12,9 @@ from pie_modules.taskmodules.extractive_question_answering import (
 
 @pytest.fixture()
 def document():
-    document = ExtractiveQADocument(text="This is a test document", id="doc0")
+    document = TextDocumentWithQuestionsAndExtractiveAnswers(
+        text="This is a test document", id="doc0"
+    )
     document.questions.append(Question(text="What is the first word?"))
     document.answers.append(ExtractiveAnswer(question=document.questions[0], start=0, end=4))
     assert str(document.answers[0]) == "This"
@@ -21,7 +23,9 @@ def document():
 
 @pytest.fixture()
 def document1():
-    document1 = ExtractiveQADocument(text="This is the second document", id="doc1")
+    document1 = TextDocumentWithQuestionsAndExtractiveAnswers(
+        text="This is the second document", id="doc1"
+    )
     document1.questions.append(Question(text="Which document is this?"))
     document1.answers.append(ExtractiveAnswer(question=document1.questions[0], start=13, end=18))
     assert str(document1.answers[0]) == "second"
@@ -30,14 +34,16 @@ def document1():
 
 @pytest.fixture()
 def document_with_no_answer():
-    document = ExtractiveQADocument(text="This is a test document", id="document_with_no_answer")
+    document = TextDocumentWithQuestionsAndExtractiveAnswers(
+        text="This is a test document", id="document_with_no_answer"
+    )
     document.questions.append(Question(text="What is the first word?"))
     return document
 
 
 @pytest.fixture()
 def document_with_multiple_answers():
-    document = ExtractiveQADocument(
+    document = TextDocumentWithQuestionsAndExtractiveAnswers(
         text="This is a test document", id="document_with_multiple_answers"
     )
     document.questions.append(Question(text="What is the first word?"))

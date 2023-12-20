@@ -13,7 +13,10 @@ from typing_extensions import TypeAlias
 
 from pie_modules.annotations import ExtractiveAnswer, Question
 from pie_modules.document.processing import tokenize_document
-from pie_modules.documents import ExtractiveQADocument, TokenizedExtractiveQADocument
+from pie_modules.documents import (
+    TextDocumentWithQuestionsAndExtractiveAnswers,
+    TokenDocumentWithQuestionsAndExtractiveAnswers,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +32,7 @@ class TargetEncoding:
 
 
 TaskEncodingType: TypeAlias = TaskEncoding[
-    ExtractiveQADocument,
+    TextDocumentWithQuestionsAndExtractiveAnswers,
     InputEncoding,
     TargetEncoding,
 ]
@@ -67,7 +70,7 @@ class ExtractiveQuestionAnsweringTaskModule(TaskModule):
         tokenize_kwargs: Additional keyword arguments for the tokenizer. Defaults to None.
     """
 
-    DOCUMENT_TYPE = ExtractiveQADocument
+    DOCUMENT_TYPE = TextDocumentWithQuestionsAndExtractiveAnswers
 
     def __init__(
         self,
@@ -124,7 +127,7 @@ class ExtractiveQuestionAnsweringTaskModule(TaskModule):
                 truncation="only_second",
                 max_length=self.max_length,
                 return_overflowing_tokens=True,
-                result_document_type=TokenizedExtractiveQADocument,
+                result_document_type=TokenDocumentWithQuestionsAndExtractiveAnswers,
                 strict_span_conversion=False,
                 verbose=False,
                 **self.tokenize_kwargs,

@@ -8,7 +8,7 @@ from pie_modules.annotations import ExtractiveAnswer, Question
 
 
 @dataclasses.dataclass
-class ExtractiveQADocument(TextBasedDocument):
+class TextDocumentWithQuestionsAndExtractiveAnswers(TextBasedDocument):
     """A text based PIE document with annotations for extractive question answering."""
 
     questions: AnnotationList[Question] = annotation_field()
@@ -21,7 +21,7 @@ class ExtractiveQADocument(TextBasedDocument):
 
 
 @dataclasses.dataclass
-class TokenizedExtractiveQADocument(TokenBasedDocument):
+class TokenDocumentWithQuestionsAndExtractiveAnswers(TokenBasedDocument):
     """A tokenized PIE document with annotations for extractive question answering."""
 
     questions: AnnotationList[Question] = annotation_field()
@@ -31,6 +31,11 @@ class TokenizedExtractiveQADocument(TokenBasedDocument):
     answers: AnnotationList[ExtractiveAnswer] = annotation_field(
         named_targets={"base": "tokens", "questions": "questions"}
     )
+
+
+# backwards compatibility
+ExtractiveQADocument = TextDocumentWithQuestionsAndExtractiveAnswers
+TokenizedExtractiveQADocument = TokenDocumentWithQuestionsAndExtractiveAnswers
 
 
 @dataclasses.dataclass
