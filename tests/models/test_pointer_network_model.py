@@ -80,6 +80,7 @@ def taskmodule(document):
             "entities": "labeled_spans",
             "relations": "binary_relations",
         },
+        create_constraints=True,
     )
 
     taskmodule.prepare(documents=[document])
