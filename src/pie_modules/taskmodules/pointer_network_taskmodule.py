@@ -86,7 +86,7 @@ class TokenDocumentWithLabeledSpansAndBinaryRelations(TokenBasedDocument):
 class TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions(
     TokenDocumentWithLabeledSpansAndBinaryRelations
 ):
-    labeled_partitions: AnnotationList[Span] = annotation_field(target="labeled_spans")
+    labeled_partitions: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
 
 
 def _pad_tensor(tensor: torch.Tensor, target_shape: List[int], pad_value: float) -> torch.Tensor:
