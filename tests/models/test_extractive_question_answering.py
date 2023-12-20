@@ -6,7 +6,7 @@ import transformers
 from pytorch_lightning import Trainer
 
 from pie_modules.annotations import ExtractiveAnswer, Question
-from pie_modules.documents import ExtractiveQADocument
+from pie_modules.documents import TextDocumentWithQuestionsAndExtractiveAnswers
 from pie_modules.models.simple_extractive_question_answering import (
     SimpleExtractiveQuestionAnsweringModel,
 )
@@ -20,15 +20,19 @@ FIXTURES_TASKMODULE_DATA_PATH = FIXTURES_ROOT / "taskmodules" / "extractive_ques
 
 @pytest.fixture
 def documents():
-    document0 = ExtractiveQADocument(text="This is a test document", id="doc0")
+    document0 = TextDocumentWithQuestionsAndExtractiveAnswers(
+        text="This is a test document", id="doc0"
+    )
     document0.questions.append(Question(text="What is the first word?"))
     document0.answers.append(ExtractiveAnswer(question=document0.questions[0], start=0, end=3))
 
-    document1 = ExtractiveQADocument(text="Oranges are orange in color.", id="doc1")
+    document1 = TextDocumentWithQuestionsAndExtractiveAnswers(
+        text="Oranges are orange in color.", id="doc1"
+    )
     document1.questions.append(Question(text="What color are oranges?"))
     document1.answers.append(ExtractiveAnswer(question=document1.questions[0], start=23, end=27))
 
-    document2 = ExtractiveQADocument(
+    document2 = TextDocumentWithQuestionsAndExtractiveAnswers(
         text="This is a test document that has two questions attached to it.", id="doc2"
     )
     document2.questions.append(Question(text="What type of document is this?"))

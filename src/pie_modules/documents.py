@@ -1,5 +1,6 @@
 import dataclasses
 
+from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.core import AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 
@@ -7,7 +8,7 @@ from pie_modules.annotations import ExtractiveAnswer, Question
 
 
 @dataclasses.dataclass
-class ExtractiveQADocument(TextBasedDocument):
+class TextDocumentWithQuestionsAndExtractiveAnswers(TextBasedDocument):
     """A text based PIE document with annotations for extractive question answering."""
 
     questions: AnnotationList[Question] = annotation_field()
@@ -20,7 +21,7 @@ class ExtractiveQADocument(TextBasedDocument):
 
 
 @dataclasses.dataclass
-class TokenizedExtractiveQADocument(TokenBasedDocument):
+class TokenDocumentWithQuestionsAndExtractiveAnswers(TokenBasedDocument):
     """A tokenized PIE document with annotations for extractive question answering."""
 
     questions: AnnotationList[Question] = annotation_field()
@@ -30,3 +31,37 @@ class TokenizedExtractiveQADocument(TokenBasedDocument):
     answers: AnnotationList[ExtractiveAnswer] = annotation_field(
         named_targets={"base": "tokens", "questions": "questions"}
     )
+
+
+# backwards compatibility
+ExtractiveQADocument = TextDocumentWithQuestionsAndExtractiveAnswers
+TokenizedExtractiveQADocument = TokenDocumentWithQuestionsAndExtractiveAnswers
+
+
+@dataclasses.dataclass
+class TokenDocumentWithLabeledSpans(TokenBasedDocument):
+    labeled_spans: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
+
+
+@dataclasses.dataclass
+class TokenDocumentWithLabeledPartitions(TokenBasedDocument):
+    labeled_partitions: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
+
+
+@dataclasses.dataclass
+class TokenDocumentWithLabeledSpansAndLabeledPartitions(
+    TokenDocumentWithLabeledSpans, TokenDocumentWithLabeledPartitions
+):
+    pass
+
+
+@dataclasses.dataclass
+class TokenDocumentWithLabeledSpansAndBinaryRelations(TokenDocumentWithLabeledSpans):
+    binary_relations: AnnotationList[BinaryRelation] = annotation_field(target="labeled_spans")
+
+
+@dataclasses.dataclass
+class TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions(
+    TokenDocumentWithLabeledSpansAndBinaryRelations, TokenDocumentWithLabeledPartitions
+):
+    pass

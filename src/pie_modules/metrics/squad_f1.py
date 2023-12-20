@@ -8,7 +8,7 @@ from typing import Dict, List
 import pandas as pd
 from pytorch_ie.core import DocumentMetric
 
-from pie_modules.documents import ExtractiveQADocument
+from pie_modules.documents import TextDocumentWithQuestionsAndExtractiveAnswers
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class SQuADF1(DocumentMetric):
         self.has_answer_qids = []
         self.no_answer_qids = []
 
-    def _update(self, document: ExtractiveQADocument):
+    def _update(self, document: TextDocumentWithQuestionsAndExtractiveAnswers):
         gold_answers_for_questions = defaultdict(list)
         predicted_answers_for_questions = defaultdict(list)
         for ann in document.answers:
