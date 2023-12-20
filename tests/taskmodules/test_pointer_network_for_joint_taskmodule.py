@@ -13,8 +13,6 @@ from tests import FIXTURES_ROOT
 
 logger = logging.getLogger(__name__)
 
-# FIXTURES_DIR = FIXTURES_ROOT / "taskmodules" / "gmam_taskmodule"
-
 DUMP_FIXTURE_DATA = False
 
 
@@ -270,13 +268,11 @@ def test_encoded_input(encoded_input, taskmodule):
         assert asdict(encoded_input.inputs) == {
             "src_tokens": [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 3101, 162, 4, 2],
             "src_attention_mask": [1] * 13,
-            "src_seq_len": 13,
         }
     elif taskmodule.partition_layer_name == "sentences":
         assert asdict(encoded_input.inputs) == {
             "src_tokens": [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 2],
             "src_attention_mask": [1] * 10,
-            "src_seq_len": 10,
         }
     else:
         raise Exception(f"unknown partition_layer_name: {taskmodule.partition_layer_name}")
@@ -299,7 +295,6 @@ def test_encode_target_with_dummy_relations(task_encoding, taskmodule):
     targets = asdict(task_encoding.targets)
     if taskmodule.partition_layer_name is None:
         assert targets["tgt_tokens"] == [0, 14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]
-        assert targets["tgt_seq_len"] == 16
         assert targets["CPM_tag"] == [
             [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
@@ -319,7 +314,6 @@ def test_encode_target_with_dummy_relations(task_encoding, taskmodule):
         ]
     elif taskmodule.partition_layer_name == "sentences":
         assert targets["tgt_tokens"] == [0, 14, 14, 5, 11, 12, 3, 6, 1]
-        assert targets["tgt_seq_len"] == 9
         assert targets["CPM_tag"] == [
             [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],

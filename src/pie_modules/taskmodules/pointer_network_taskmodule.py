@@ -1,51 +1,24 @@
 import dataclasses
 import logging
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    Type,
-    Union,
-)
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Type, Union
 
 import torch
-import torch.nn.functional as F
 from pytorch_ie import AnnotationLayer, Document
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
-from pytorch_ie.core import (
-    Annotation,
-    AnnotationList,
-    TaskEncoding,
-    TaskModule,
-    annotation_field,
-)
+from pytorch_ie.annotations import Span
+from pytorch_ie.core import Annotation, TaskEncoding, TaskModule
 from pytorch_ie.core.taskmodule import (
     InputEncoding,
     ModelBatchOutput,
     TargetEncoding,
     TaskBatchEncoding,
 )
-from pytorch_ie.documents import (
-    TextBasedDocument,
-    TextDocumentWithLabeledSpansAndBinaryRelations,
-    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
-    TokenBasedDocument,
-)
+from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from transformers import AutoTokenizer, PreTrainedTokenizer
 from typing_extensions import TypeAlias
 
 from ..document.processing import token_based_document_to_text_based, tokenize_document
-from ..utils import resolve_type
-from .components.seq2seq import (
-    PointerNetworkSpanAndRelationEncoderDecoder,
-    SpanEncoderDecoderWithOffset,
-)
+from ..utils import BatchableMixin, resolve_type
+from .components.seq2seq import PointerNetworkSpanAndRelationEncoderDecoder
 
 logger = logging.getLogger(__name__)
 
@@ -54,18 +27,24 @@ DocumentType: TypeAlias = TextBasedDocument
 
 
 @dataclasses.dataclass
-class InputEncodingType:
+class InputEncodingType(BatchableMixin):
     src_tokens: List[int]
     src_attention_mask: List[int]
-    src_seq_len: int
+
+    @property
+    def src_seq_len(self):
+        return len(self.src_tokens)
 
 
 @dataclasses.dataclass
-class TargetEncodingType:
+class TargetEncodingType(BatchableMixin):
     tgt_tokens: List[int]
     tgt_attention_mask: List[int]
-    tgt_seq_len: int
     CPM_tag: Optional[List[List[int]]] = None
+
+    @property
+    def tgt_seq_len(self):
+        return len(self.tgt_tokens)
 
 
 TaskEncodingType: TypeAlias = TaskEncoding[
@@ -74,44 +53,6 @@ TaskEncodingType: TypeAlias = TaskEncoding[
     TargetEncodingType,
 ]
 TaskOutput: TypeAlias = torch.Tensor
-
-
-@dataclasses.dataclass
-class TokenDocumentWithLabeledSpansAndBinaryRelations(TokenBasedDocument):
-    labeled_spans: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
-    binary_relations: AnnotationList[BinaryRelation] = annotation_field(target="labeled_spans")
-
-
-@dataclasses.dataclass
-class TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions(
-    TokenDocumentWithLabeledSpansAndBinaryRelations
-):
-    labeled_partitions: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
-
-
-def _pad_tensor(tensor: torch.Tensor, target_shape: List[int], pad_value: float) -> torch.Tensor:
-    shape = tensor.shape
-    pad: List[int] = []
-    for i, s in enumerate(shape):
-        pad = [0, target_shape[i] - s] + pad
-    result = F.pad(tensor, pad=pad, value=pad_value)
-    assert list(result.shape) == target_shape
-    return result
-
-
-def ld2dl(
-    list_of_dicts: Union[List[Dict[str, Any]], Sequence[Dict[str, Any]]],
-    keys: Optional[str] = None,
-    getter: Optional[Callable] = None,
-) -> Dict[str, List[Any]]:
-    if getter is None:
-
-        def getter(x):
-            return x
-
-    keys = keys or getter(list_of_dicts[0]).keys()
-    v = {k: [getter(dic)[k] for dic in list_of_dicts] for k in keys}
-    return v
 
 
 def _span_is_in_partition(span: Span, partition: Optional[Span] = None):
@@ -366,7 +307,6 @@ class PointerNetworkTaskModule(
                     inputs=InputEncodingType(
                         src_tokens=tokenizer_encoding.ids,
                         src_attention_mask=tokenizer_encoding.attention_mask,
-                        src_seq_len=len(tokenizer_encoding.ids),
                     ),
                     metadata={"tokenized_document": tokenized_doc},
                 )
@@ -404,64 +344,27 @@ class PointerNetworkTaskModule(
         result = TargetEncodingType(
             tgt_tokens=tgt_tokens,
             tgt_attention_mask=[1] * len(tgt_tokens),
-            tgt_seq_len=len(tgt_tokens),
             CPM_tag=constraints,
         )
         self.maybe_log_example(task_encoding=task_encoding, targets=result)
         return result
 
-    def _pad_values(self, values: List[List], name: str, strategy: str = "longest"):
-        if name not in self.pad_values:
-            return values
-        if not isinstance(values, list):
-            return values
-        if strategy != "longest":
-            raise ValueError(f"unknown padding strategy: {strategy}")
-        pad_value = self.pad_values[name]
-        tensor_list = [torch.tensor(value_list) for value_list in values]
-        shape_lists = list(zip(*[t.shape for t in tensor_list]))
-        max_shape = [max(dims) for dims in shape_lists]
-        padded = [
-            _pad_tensor(tensor=t, target_shape=max_shape, pad_value=pad_value)
-            for i, t in enumerate(tensor_list)
-        ]
-        return torch.stack(padded)
-
-    def _to_tensor(
-        self, values: Union[List, torch.Tensor], name: str
-    ) -> Union[torch.Tensor, List]:
-        if name not in self.dtypes:
-            return values
-        if not isinstance(values, torch.Tensor):
-            tensor = torch.Tensor(values)
-        else:
-            tensor = values
-        tensor = tensor.to(dtype=self.dtypes[name])
-        return tensor
-
-    def _prepare_values(self, values: List, name: str) -> Union[torch.Tensor, List]:
-        maybe_padded = self._pad_values(values=values, name=name)
-        maybe_tensor = self._to_tensor(values=maybe_padded, name=name)
-        return maybe_tensor
-
     def collate(self, task_encodings: Sequence[TaskEncodingType]) -> TaskBatchEncoding:
         if len(task_encodings) == 0:
             raise ValueError("no task_encodings available")
-        inputs = {
-            k: self._prepare_values(values=v, name=k)
-            for k, v in ld2dl(
-                task_encodings, getter=lambda x: dataclasses.asdict(x.inputs)
-            ).items()
-        }
+        inputs = InputEncodingType.batch(
+            values=[x.inputs for x in task_encodings],
+            dtypes=self.dtypes,
+            pad_values=self.pad_values,
+        )
 
         targets = None
         if task_encodings[0].has_targets:
-            targets = {
-                k: self._prepare_values(values=v, name=k)
-                for k, v in ld2dl(
-                    task_encodings, getter=lambda x: dataclasses.asdict(x.targets)
-                ).items()
-            }
+            targets = TargetEncodingType.batch(
+                values=[x.targets for x in task_encodings],
+                dtypes=self.dtypes,
+                pad_values=self.pad_values,
+            )
 
         return inputs, targets
 
