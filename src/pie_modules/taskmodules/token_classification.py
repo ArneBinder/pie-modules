@@ -8,7 +8,6 @@ workflow:
 """
 
 import copy
-import dataclasses
 import logging
 from typing import (
     Any,
@@ -25,14 +24,13 @@ from typing import (
 
 import torch
 import torch.nn.functional as F
-from pytorch_ie import AnnotationLayer, annotation_field
+from pytorch_ie import AnnotationLayer
 from pytorch_ie.annotations import LabeledSpan
 from pytorch_ie.core import TaskEncoding, TaskModule
 from pytorch_ie.documents import (
     TextDocument,
     TextDocumentWithLabeledSpans,
     TextDocumentWithLabeledSpansAndLabeledPartitions,
-    TokenBasedDocument,
 )
 from pytorch_ie.models.transformer_token_classification import (
     ModelOutputType,
@@ -46,6 +44,10 @@ from typing_extensions import TypeAlias
 from pie_modules.document.processing import (
     token_based_document_to_text_based,
     tokenize_document,
+)
+from pie_modules.documents import (
+    TokenDocumentWithLabeledSpans,
+    TokenDocumentWithLabeledSpansAndLabeledPartitions,
 )
 
 DocumentType: TypeAlias = TextDocument
@@ -69,16 +71,6 @@ TaskModuleType: TypeAlias = TaskModule[
 ]
 
 logger = logging.getLogger(__name__)
-
-
-@dataclasses.dataclass
-class TokenDocumentWithLabeledSpans(TokenBasedDocument):
-    labeled_spans: AnnotationLayer[LabeledSpan] = annotation_field(target="tokens")
-
-
-@dataclasses.dataclass
-class TokenDocumentWithLabeledSpansAndLabeledPartitions(TokenDocumentWithLabeledSpans):
-    labeled_partitions: AnnotationLayer[LabeledSpan] = annotation_field(target="tokens")
 
 
 @TaskModule.register()
