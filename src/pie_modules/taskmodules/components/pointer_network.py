@@ -1,3 +1,4 @@
+import dataclasses
 import logging
 from collections import Counter, defaultdict
 from functools import cmp_to_key
@@ -12,6 +13,7 @@ from pytorch_ie.core import Annotation
 from pie_modules.taskmodules.components.common import (
     AnnotationEncoderDecoder,
     AnnotationLayersEncoderDecoder,
+    BatchableMixin,
 )
 
 logger = logging.getLogger(__name__)
@@ -165,8 +167,22 @@ class BinaryRelationEncoderDecoder(AnnotationEncoderDecoder[BinaryRelation, List
         return rel
 
 
+@dataclasses.dataclass
+class EncodingWithIdsAndOptionalCpmTag(BatchableMixin):
+    tgt_tokens: List[int]
+    CPM_tag: Optional[List[List[int]]] = None
+
+    @property
+    def tgt_seq_len(self) -> int:
+        return len(self.tgt_tokens)
+
+    @property
+    def tgt_attention_mask(self) -> List[int]:
+        return [1] * len(self.tgt_tokens)
+
+
 class PointerNetworkSpanAndRelationEncoderDecoder(
-    AnnotationLayersEncoderDecoder[List[int]],
+    AnnotationLayersEncoderDecoder[EncodingWithIdsAndOptionalCpmTag],
     PreparableMixin,
 ):
     PREPARED_ATTRIBUTES = ["labels_per_layer"]
@@ -184,6 +200,8 @@ class PointerNetworkSpanAndRelationEncoderDecoder(
         span_encoder_decoder_kwargs: Optional[Dict[str, Any]] = None,
         labels_per_layer: Optional[Dict[str, List[str]]] = None,
         exclude_labels_per_layer: Optional[Dict[str, List[str]]] = None,
+        create_constraints: bool = True,
+        max_length: Optional[int] = None,
     ):
         self.labels_per_layer = labels_per_layer
         self.exclude_labels_per_layer = exclude_labels_per_layer or {}
@@ -202,6 +220,9 @@ class PointerNetworkSpanAndRelationEncoderDecoder(
         self.eos_token = eos_token
 
         self.ignore_error_types = ignore_error_types or []
+
+        self.max_length = max_length
+        self.create_constraints = create_constraints
 
         if self.is_prepared:
             self._post_prepare()
@@ -480,7 +501,7 @@ class PointerNetworkSpanAndRelationEncoderDecoder(
 
     def encode(
         self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None
-    ) -> List[int]:
+    ) -> EncodingWithIdsAndOptionalCpmTag:
         if not set(layers.keys()) == set(self.layer_names):
             raise Exception(f"unexpected layers: {layers.keys()}. expected: {self.layer_names}")
 
@@ -529,16 +550,32 @@ class PointerNetworkSpanAndRelationEncoderDecoder(
         # sanity check
         _, invalid = self.sanitize_sequence(tag_seq=tgt_tokens[1:])
         if not all(v == 0 for k, v in invalid.items() if k not in self.ignore_error_types):
-            decoded, invalid = self.decode(tgt_tokens, metadata=metadata)
+            decoded, invalid = self.decode(
+                EncodingWithIdsAndOptionalCpmTag(tgt_tokens), metadata=metadata
+            )
             logger.warning(f"invalid: {invalid}, decoded: {decoded}")
 
-        return tgt_tokens
+        if self.max_length is not None and len(tgt_tokens) > self.max_length:
+            raise ValueError(
+                f"encoding length {len(tgt_tokens)} exceeds max_length {self.max_length}"
+            )
+
+        # build CPM tag
+        if self.create_constraints:
+            if metadata is None or "src_len" not in metadata:
+                raise Exception("metadata with 'src_len' is required to create constraints")
+            src_len = metadata["src_len"]
+            constraints = self.build_constraints(src_len=src_len, tgt_tokens=tgt_tokens)
+            cpm_tag = constraints
+        else:
+            cpm_tag = None
+        return EncodingWithIdsAndOptionalCpmTag(tgt_tokens=tgt_tokens, CPM_tag=cpm_tag)
 
     def decode(
-        self, targets: List[int], metadata: Optional[Dict[str, Any]] = None
+        self, encoding: EncodingWithIdsAndOptionalCpmTag, metadata: Optional[Dict[str, Any]] = None
     ) -> Tuple[Dict[str, List[Annotation]], Any]:
         # strip the bos token
-        ps, _errors = self.sanitize_sequence(tag_seq=targets[1:])
+        ps, _errors = self.sanitize_sequence(tag_seq=encoding.tgt_tokens[1:])
         relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
         entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
         for tup in ps:

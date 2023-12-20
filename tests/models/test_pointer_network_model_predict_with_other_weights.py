@@ -9,6 +9,9 @@ from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 
 from pie_modules.models import PointerNetworkModel, SimplePointerNetworkModel
 from pie_modules.taskmodules import PointerNetworkTaskModule
+from pie_modules.taskmodules.components.pointer_network import (
+    EncodingWithIdsAndOptionalCpmTag,
+)
 from tests import FIXTURES_ROOT
 from tests.models.test_pointer_network_model_predict import MODEL_PATH
 from tests.models.test_simple_pointer_network_predict import (
@@ -107,12 +110,14 @@ def test_sciarg_predict_with_weights_from_other_model(
         current_targets = targets_list[i]
         current_predictions = prediction_list[i]
         annotations, errors = loaded_taskmodule.annotation_encoder_decoder.decode(
-            current_predictions
+            EncodingWithIdsAndOptionalCpmTag(current_predictions)
         )
         (
             expected_annotations,
             expected_errors,
-        ) = loaded_taskmodule.annotation_encoder_decoder.decode(current_targets)
+        ) = loaded_taskmodule.annotation_encoder_decoder.decode(
+            EncodingWithIdsAndOptionalCpmTag(current_targets)
+        )
         for layer_name in expected_annotations:
             tp[layer_name] |= set(annotations[layer_name]) & set(expected_annotations[layer_name])
             fp[layer_name] |= set(annotations[layer_name]) - set(expected_annotations[layer_name])

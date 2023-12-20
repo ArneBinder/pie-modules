@@ -16,7 +16,7 @@ from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from transformers import AutoTokenizer, PreTrainedTokenizer
 from typing_extensions import TypeAlias
 
-# import for backwards compatibility
+# import for backwards compatibility (don't remove!)
 from pie_modules.documents import (
     TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
@@ -24,7 +24,10 @@ from pie_modules.documents import (
 from ..document.processing import token_based_document_to_text_based, tokenize_document
 from ..utils import resolve_type
 from .components.common import BatchableMixin
-from .components.pointer_network import PointerNetworkSpanAndRelationEncoderDecoder
+from .components.pointer_network import (
+    EncodingWithIdsAndOptionalCpmTag,
+    PointerNetworkSpanAndRelationEncoderDecoder,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,20 +45,7 @@ class InputEncodingType(BatchableMixin):
         return len(self.src_tokens)
 
 
-@dataclasses.dataclass
-class TargetEncodingType(BatchableMixin):
-    tgt_tokens: List[int]
-    CPM_tag: Optional[List[List[int]]] = None
-
-    @property
-    def tgt_seq_len(self) -> int:
-        return len(self.tgt_tokens)
-
-    @property
-    def tgt_attention_mask(self) -> List[int]:
-        return [1] * len(self.tgt_tokens)
-
-
+TargetEncodingType: TypeAlias = EncodingWithIdsAndOptionalCpmTag
 TaskEncodingType: TypeAlias = TaskEncoding[
     DocumentType,
     InputEncodingType,
@@ -143,7 +133,9 @@ class PointerNetworkTaskModule(
             self.annotation_encoder_decoder_kwargs["bos_token"] = self.tokenizer.bos_token
             self.annotation_encoder_decoder_kwargs["eos_token"] = self.tokenizer.eos_token
             self.annotation_encoder_decoder = PointerNetworkSpanAndRelationEncoderDecoder(
-                **self.annotation_encoder_decoder_kwargs
+                create_constraints=create_constraints,
+                max_length=max_target_length,
+                **self.annotation_encoder_decoder_kwargs,
             )
         else:
             raise Exception(
@@ -154,7 +146,6 @@ class PointerNetworkTaskModule(
 
         # target encoding
         self.max_target_length = max_target_length
-        self.create_constraints = create_constraints
         self.pad_values = {
             "tgt_tokens": self.annotation_encoder_decoder.target_pad_id,
             "tgt_attention_mask": 0,
@@ -338,25 +329,11 @@ class PointerNetworkTaskModule(
             layer_name: self.get_mapped_layer(document, layer_name=layer_name)
             for layer_name in self.annotation_encoder_decoder.layer_names
         }
-        tgt_tokens = self.annotation_encoder_decoder.encode(
-            layers=layers, metadata=task_encoding.metadata
+        result = self.annotation_encoder_decoder.encode(
+            layers=layers,
+            metadata={**task_encoding.metadata, "src_len": task_encoding.inputs.src_seq_len},
         )
 
-        if self.max_target_length is not None and len(tgt_tokens) > self.max_target_length:
-            raise ValueError(
-                f"target length {len(tgt_tokens)} exceeds max_target_length {self.max_target_length}"
-            )
-
-        constraints = None
-        if self.create_constraints:
-            constraints = self.annotation_encoder_decoder.build_constraints(
-                src_len=task_encoding.inputs.src_seq_len,
-                tgt_tokens=tgt_tokens,
-            )
-        result = TargetEncodingType(
-            tgt_tokens=tgt_tokens,
-            CPM_tag=constraints,
-        )
         self.maybe_log_example(task_encoding=task_encoding, targets=result)
         return result
 
@@ -392,7 +369,8 @@ class PointerNetworkTaskModule(
         task_output: TaskOutput,
     ) -> Iterator[Tuple[str, Annotation]]:
         layers, _errors = self.annotation_encoder_decoder.decode(
-            targets=task_output.tolist(), metadata=task_encoding.metadata
+            encoding=EncodingWithIdsAndOptionalCpmTag(task_output.tolist()),
+            metadata=task_encoding.metadata,
         )
         tokenized_document = task_encoding.metadata["tokenized_document"]
 
