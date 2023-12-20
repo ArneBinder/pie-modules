@@ -22,7 +22,8 @@ from pie_modules.documents import (
 )
 
 from ..document.processing import token_based_document_to_text_based, tokenize_document
-from ..utils import BatchableMixin, resolve_type
+from ..utils import resolve_type
+from .components.common import BatchableMixin
 from .components.pointer_network import PointerNetworkSpanAndRelationEncoderDecoder
 
 logger = logging.getLogger(__name__)
