@@ -1,12 +1,9 @@
-import abc
 import dataclasses
-from typing import Any, Dict, Generic, Iterable, List, Optional, Tuple, TypeVar
+from typing import Any, Dict, Iterable, List, Optional
 
 import torch
 import torch.nn.functional as F
-from pytorch_ie import Annotation
 from torch import Tensor
-from torchmetrics import Metric
 
 
 def _pad_tensor(tensor: Tensor, target_shape: List[int], pad_value: float) -> Tensor:
@@ -138,26 +135,3 @@ class BatchableMixin:
             )
             for k in attribute_names
         }
-
-
-# Annotation Collection Encoding type: encoding for a collection of annotations,
-# e.g. all relevant annotations for a document
-ACE = TypeVar("ACE")
-
-
-class HasBuildMetric(abc.ABC):
-    """Interface for modules that can build metrics."""
-
-    @abc.abstractmethod
-    def build_metric(self, stage: Optional[str] = None) -> Metric:
-        pass
-
-
-class HasDecodeAnnotations(abc.ABC, Generic[ACE]):
-    """Interface for modules that can decode annotations."""
-
-    @abc.abstractmethod
-    def decode_annotations(
-        self, encoding: ACE, metadata: Optional[Dict[str, Any]] = None
-    ) -> Tuple[Dict[str, List[Annotation]], Any]:
-        pass
