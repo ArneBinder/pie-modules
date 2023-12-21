@@ -51,7 +51,7 @@ TaskEncodingType: TypeAlias = TaskEncoding[
     InputEncodingType,
     TargetEncodingType,
 ]
-TaskOutput: TypeAlias = torch.Tensor
+TaskOutput: TypeAlias = EncodingWithIdsAndOptionalCpmTag
 
 
 def _span_is_in_partition(span: Span, partition: Optional[Span] = None):
@@ -360,7 +360,10 @@ class PointerNetworkTaskModule(
         # model_output just contains "pred"
         pred = model_output["pred"]
         batch_size = pred.size(0)
-        result = [pred[i].to(device="cpu") for i in range(batch_size)]
+        result = [
+            EncodingWithIdsAndOptionalCpmTag(pred[i].to(device="cpu").tolist())
+            for i in range(batch_size)
+        ]
         return result
 
     def create_annotations_from_output(
@@ -369,8 +372,7 @@ class PointerNetworkTaskModule(
         task_output: TaskOutput,
     ) -> Iterator[Tuple[str, Annotation]]:
         layers, _errors = self.annotation_encoder_decoder.decode(
-            encoding=EncodingWithIdsAndOptionalCpmTag(task_output.tolist()),
-            metadata=task_encoding.metadata,
+            encoding=task_output, metadata=task_encoding.metadata
         )
         tokenized_document = task_encoding.metadata["tokenized_document"]
 
