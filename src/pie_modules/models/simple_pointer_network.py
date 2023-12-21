@@ -11,6 +11,7 @@ from torchmetrics import Metric
 from transformers import get_linear_schedule_with_warmup
 
 from ..taskmodules import PointerNetworkTaskModule
+from ..taskmodules.common import HasBuildMetric
 from .components.pointer_network.bart_as_pointer_network import BartAsPointerNetwork
 
 logger = logging.getLogger(__name__)
@@ -101,6 +102,10 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             taskmodule_kwargs.pop(TaskModule.config_type_key)
             taskmodule = PointerNetworkTaskModule(**taskmodule_kwargs)
             taskmodule.post_prepare()
+            if not isinstance(taskmodule, HasBuildMetric):
+                raise Exception(
+                    f"taskmodule {taskmodule} does not implement HasBuildMetric interface"
+                )
             # NOTE: This is not a ModuleDict, so this will not live on the torch device!
             self.metrics = {stage: taskmodule.build_metric(stage) for stage in metric_splits}
         else:
