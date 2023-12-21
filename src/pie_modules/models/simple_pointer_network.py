@@ -6,13 +6,13 @@ from typing import Any, Dict, List, Optional
 import torch
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
+from torchmetrics import Metric
 from transformers import get_linear_schedule_with_warmup
 
 from ..taskmodules.components.pointer_network import (
     PointerNetworkSpanAndRelationEncoderDecoder,
 )
 from .components.pointer_network.bart_as_pointer_network import BartAsPointerNetwork
-from .components.pointer_network.metrics import AnnotationLayerMetric
 
 logger = logging.getLogger(__name__)
 
@@ -109,12 +109,8 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             self.model.overwrite_decoder_label_embeddings_with_mapping()
 
         # NOTE: This is not a ModuleDict, so this will not live on the torch device!
-        self.metrics: Dict[str, AnnotationLayerMetric] = {
-            stage: AnnotationLayerMetric(
-                eos_id=self.annotation_encoder_decoder.eos_id,
-                annotation_encoder_decoder=self.annotation_encoder_decoder,
-            )
-            for stage in metric_splits
+        self.metrics: Dict[str, Metric] = {
+            stage: self.annotation_encoder_decoder.get_metric() for stage in metric_splits
         }
         self.metric_intervals = metric_intervals or {}
 
@@ -164,7 +160,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         metric_interval = self.metric_intervals.get(stage, 1)
         if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
             prediction = self.predict(inputs)
-            stage_metrics(prediction["pred"], targets["tgt_tokens"])
+            stage_metrics.update(prediction["pred"], targets["tgt_tokens"])
 
         return loss
 
@@ -195,7 +191,8 @@ class SimplePointerNetworkModel(PyTorchIEModel):
     def _on_epoch_end(self, stage: str) -> None:
         metrics = self.metrics.get(stage, None)
         if metrics is not None:
-            metric_dict = metrics.get_metric(reset=True)
+            metric_dict = metrics.compute()
+            metrics.reset()
             metric_dict_flat = flatten_dict(d=metric_dict, sep="/")
             for k, v in metric_dict_flat.items():
                 self.log(f"metric_{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
