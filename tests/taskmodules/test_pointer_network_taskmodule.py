@@ -9,10 +9,9 @@ from pytorch_ie.core import AnnotationList, Document, annotation_field
 from pytorch_ie.documents import TextBasedDocument
 
 from pie_modules.taskmodules import PointerNetworkTaskModule
-from pie_modules.taskmodules.components.pointer_network import (
+from pie_modules.taskmodules.pointer_network_taskmodule import (
     EncodingWithIdsAndOptionalCpmTag,
 )
-from tests import FIXTURES_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -101,11 +100,9 @@ def test_document(document):
 @pytest.fixture(scope="module")
 def taskmodule(document, config):
     taskmodule = PointerNetworkTaskModule(
-        annotation_encoder_decoder_kwargs={
-            "span_layer_name": "entities",
-            "relation_layer_name": "relations",
-            "exclude_labels_per_layer": {"relations": ["no_relation"]},
-        },
+        span_layer_name="entities",
+        relation_layer_name="relations",
+        exclude_labels_per_layer={"relations": ["no_relation"]},
         annotation_field_mapping={
             "entities": "labeled_spans",
             "relations": "binary_relations",
@@ -120,19 +117,17 @@ def taskmodule(document, config):
 
 
 def test_taskmodule(taskmodule):
-    # check the annotation_encoder_decoder
-    annotation_encoder_decoder = taskmodule.annotation_encoder_decoder
-    assert annotation_encoder_decoder.is_prepared
-    assert annotation_encoder_decoder.prepared_attributes == {
+    assert taskmodule.is_prepared
+    assert taskmodule.prepared_attributes == {
         "labels_per_layer": {
             "entities": ["content", "person", "topic"],
             "relations": ["is_about"],
         },
     }
-    assert annotation_encoder_decoder.layer_names == ["entities", "relations"]
-    assert annotation_encoder_decoder.special_targets == ["<s>", "</s>"]
-    assert annotation_encoder_decoder.labels == ["none", "content", "person", "topic", "is_about"]
-    assert annotation_encoder_decoder.targets == [
+    assert taskmodule.layer_names == ["entities", "relations"]
+    assert taskmodule.special_targets == ["<s>", "</s>"]
+    assert taskmodule.labels == ["none", "content", "person", "topic", "is_about"]
+    assert taskmodule.targets == [
         "<s>",
         "</s>",
         "none",
@@ -141,32 +136,17 @@ def test_taskmodule(taskmodule):
         "topic",
         "is_about",
     ]
-    assert annotation_encoder_decoder.bos_id == 0
-    assert annotation_encoder_decoder.eos_id == 1
-    assert annotation_encoder_decoder.none_id == 2
-    assert annotation_encoder_decoder.span_ids == [3, 4, 5]
-    assert annotation_encoder_decoder.relation_ids == [6]
-    assert annotation_encoder_decoder.label2id == {
+    assert taskmodule.bos_id == 0
+    assert taskmodule.eos_id == 1
+    assert taskmodule.none_id == 2
+    assert taskmodule.span_ids == [3, 4, 5]
+    assert taskmodule.relation_ids == [6]
+    assert taskmodule.label2id == {
         "content": 3,
         "is_about": 6,
         "none": 2,
         "person": 4,
         "topic": 5,
-    }
-
-    # check taskmodule properties
-    assert taskmodule.prepared_attributes == {
-        "annotation_encoder_decoder_kwargs": {
-            "span_layer_name": "entities",
-            "relation_layer_name": "relations",
-            "exclude_labels_per_layer": {"relations": ["no_relation"]},
-            "bos_token": "<s>",
-            "eos_token": "</s>",
-            "labels_per_layer": {
-                "entities": ["content", "person", "topic"],
-                "relations": ["is_about"],
-            },
-        }
     }
     assert taskmodule.label_embedding_weight_mapping == {
         50265: [45260],
@@ -191,6 +171,18 @@ def test_prepared_config(taskmodule, config):
     if config == {}:
         assert taskmodule._config() == {
             "taskmodule_type": "PointerNetworkTaskModule",
+            "span_layer_name": "entities",
+            "relation_layer_name": "relations",
+            "none_label": "none",
+            "loop_dummy_relation_name": "loop",
+            "ignore_error_types": None,
+            "labels_per_layer": {
+                "entities": ["content", "person", "topic"],
+                "relations": ["is_about"],
+            },
+            "exclude_labels_per_layer": {"relations": ["no_relation"]},
+            "max_target_length": None,
+            "create_constraints": True,
             "document_type": "pytorch_ie.documents.TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
             "tokenized_document_type": "pie_modules.documents.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
             "tokenizer_name_or_path": "facebook/bart-base",
@@ -201,27 +193,25 @@ def test_prepared_config(taskmodule, config):
                 "entities": "labeled_spans",
                 "relations": "binary_relations",
             },
-            "annotation_encoder_decoder_name": "pointer_network_span_and_relation",
-            "annotation_encoder_decoder_kwargs": {
-                "span_layer_name": "entities",
-                "relation_layer_name": "relations",
-                "exclude_labels_per_layer": {"relations": ["no_relation"]},
-                "bos_token": "<s>",
-                "eos_token": "</s>",
-                "labels_per_layer": {
-                    "entities": ["content", "person", "topic"],
-                    "relations": ["is_about"],
-                },
-            },
             "label_tokens": None,
             "label_representations": None,
-            "max_target_length": None,
-            "create_constraints": True,
             "log_first_n_examples": None,
         }
     elif config == {"partition_layer_name": "sentences"}:
         assert taskmodule._config() == {
             "taskmodule_type": "PointerNetworkTaskModule",
+            "span_layer_name": "entities",
+            "relation_layer_name": "relations",
+            "none_label": "none",
+            "loop_dummy_relation_name": "loop",
+            "ignore_error_types": None,
+            "labels_per_layer": {
+                "entities": ["content", "person", "topic"],
+                "relations": ["is_about"],
+            },
+            "exclude_labels_per_layer": {"relations": ["no_relation"]},
+            "max_target_length": None,
+            "create_constraints": True,
             "document_type": "pytorch_ie.documents.TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
             "tokenized_document_type": "pie_modules.documents.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
             "tokenizer_name_or_path": "facebook/bart-base",
@@ -232,22 +222,8 @@ def test_prepared_config(taskmodule, config):
                 "entities": "labeled_spans",
                 "relations": "binary_relations",
             },
-            "annotation_encoder_decoder_name": "pointer_network_span_and_relation",
-            "annotation_encoder_decoder_kwargs": {
-                "span_layer_name": "entities",
-                "relation_layer_name": "relations",
-                "exclude_labels_per_layer": {"relations": ["no_relation"]},
-                "bos_token": "<s>",
-                "eos_token": "</s>",
-                "labels_per_layer": {
-                    "entities": ["content", "person", "topic"],
-                    "relations": ["is_about"],
-                },
-            },
             "label_tokens": None,
             "label_representations": None,
-            "max_target_length": None,
-            "create_constraints": True,
             "log_first_n_examples": None,
         }
     else:
@@ -520,12 +496,12 @@ def _test_annotations_from_output(task_encodings, task_outputs, taskmodule, laye
             layer = {
                 str(ann)
                 for ann in document[layer_name].predictions
-                if ann.label in taskmodule.annotation_encoder_decoder.labels_per_layer[layer_name]
+                if ann.label in taskmodule.labels_per_layer[layer_name]
             }
             layer_expected = {
                 str(ann)
                 for ann in document[layer_name]
-                if ann.label in taskmodule.annotation_encoder_decoder.labels_per_layer[layer_name]
+                if ann.label in taskmodule.labels_per_layer[layer_name]
             }
             assert layer == layer_expected
 

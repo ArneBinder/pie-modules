@@ -1,6 +1,5 @@
 import abc
 import dataclasses
-import logging
 from typing import Any, Dict, Generic, Iterable, List, Optional, Tuple, TypeVar
 
 import torch
@@ -8,52 +7,6 @@ import torch.nn.functional as F
 from pytorch_ie import Annotation
 from torch import Tensor
 from torchmetrics import Metric
-
-logger = logging.getLogger(__name__)
-
-
-AE = TypeVar("AE")
-A = TypeVar("A", bound=Annotation)
-ALE = TypeVar("ALE")
-
-
-class AnnotationEncoderDecoder(abc.ABC, Generic[A, AE]):
-    """Base class for annotation encoders and decoders."""
-
-    @abc.abstractmethod
-    def encode(self, annotation: A, metadata: Optional[Dict[str, Any]] = None) -> Optional[AE]:
-        pass
-
-    @abc.abstractmethod
-    def decode(self, encoding: AE, metadata: Optional[Dict[str, Any]] = None) -> Optional[A]:
-        pass
-
-
-class AnnotationLayersEncoderDecoder(abc.ABC, Generic[ALE]):
-    """Base class for annotation layer encoders and decoders."""
-
-    @property
-    @abc.abstractmethod
-    def layer_names(self) -> List[str]:
-        pass
-
-    @abc.abstractmethod
-    def encode(
-        self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None
-    ) -> Optional[ALE]:
-        pass
-
-    @abc.abstractmethod
-    def decode(
-        self, encoding: ALE, metadata: Optional[Dict[str, Any]] = None
-    ) -> Tuple[Dict[str, List[Annotation]], Any]:
-        pass
-
-    def get_metric(self, **kwargs) -> Metric:
-        raise NotImplementedError
-
-    def unbatch(self, prediction: Dict[str, Tensor]) -> List[ALE]:
-        raise NotImplementedError
 
 
 def _pad_tensor(tensor: Tensor, target_shape: List[int], pad_value: float) -> Tensor:
@@ -185,3 +138,26 @@ class BatchableMixin:
             )
             for k in attribute_names
         }
+
+
+# Annotation Collection Encoding type: encoding for a collection of annotations,
+# e.g. all relevant annotations for a document
+ACE = TypeVar("ACE")
+
+
+class HasBuildMetric(abc.ABC):
+    """Interface for modules that can build metrics."""
+
+    @abc.abstractmethod
+    def build_metric(self, stage: Optional[str] = None) -> Metric:
+        pass
+
+
+class HasDecodeAnnotations(abc.ABC, Generic[ACE]):
+    """Interface for modules that can decode annotations."""
+
+    @abc.abstractmethod
+    def decode_annotations(
+        self, encoding: ACE, metadata: Optional[Dict[str, Any]] = None
+    ) -> Tuple[Dict[str, List[Annotation]], Any]:
+        pass
