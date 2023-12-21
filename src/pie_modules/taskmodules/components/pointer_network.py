@@ -68,8 +68,7 @@ class LabeledAnnotationScore:
         self.correct.extend([pre_entity for pre_entity in predicted if pre_entity in gold])
 
 
-# TODO: make this a Metric
-class AnnotationLayerMetric:
+class AnnotationLayerMetric(Metric):
     def __init__(
         self,
         eos_id: int,
@@ -86,9 +85,13 @@ class AnnotationLayerMetric:
         self.reset()
 
     def update(self, prediction, expected):
+        # TODO: call annotation_encoder_decoder.unbatch() on prediction and expected
+        # TODO: call annotation_encoder_decoder.decode() on all entries in prediction and expected
+
         bsz = prediction.size(0)
         self.total += bsz
 
+        # TODO: is this to get the first eos index? Note that we use eos also for padding...
         pred_eos_index = prediction.flip(dims=[1]).eq(self.eos_id).cumsum(dim=1).long()
         expected_eos_index = expected.flip(dims=[1]).eq(self.eos_id).cumsum(dim=1).long()
 
