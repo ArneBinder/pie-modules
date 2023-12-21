@@ -357,14 +357,7 @@ class PointerNetworkTaskModule(
         return inputs, targets
 
     def unbatch_output(self, model_output: ModelBatchOutput) -> Sequence[TaskOutput]:
-        # model_output just contains "pred"
-        pred = model_output["pred"]
-        batch_size = pred.size(0)
-        result = [
-            EncodingWithIdsAndOptionalCpmTag(pred[i].to(device="cpu").tolist())
-            for i in range(batch_size)
-        ]
-        return result
+        return self.annotation_encoder_decoder.unbatch(prediction=model_output)
 
     def create_annotations_from_output(
         self,

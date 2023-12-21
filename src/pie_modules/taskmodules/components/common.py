@@ -52,6 +52,9 @@ class AnnotationLayersEncoderDecoder(abc.ABC, Generic[ALE]):
     def get_metric(self, **kwargs) -> Metric:
         raise NotImplementedError
 
+    def unbatch(self, prediction: Dict[str, Tensor]) -> List[ALE]:
+        raise NotImplementedError
+
 
 def _pad_tensor(tensor: Tensor, target_shape: List[int], pad_value: float) -> Tensor:
     """Pad a tensor to a target shape.
