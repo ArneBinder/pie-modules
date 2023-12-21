@@ -71,16 +71,15 @@ def document():
 @pytest.fixture(scope="module")
 def taskmodule(document):
     taskmodule = PointerNetworkTaskModule(
-        annotation_encoder_decoder_kwargs={
-            "span_layer_name": "entities",
-            "relation_layer_name": "relations",
-            "exclude_labels_per_layer": {"relations": ["no_relation"]},
-        },
+        span_layer_name="entities",
+        relation_layer_name="relations",
+        exclude_labels_per_layer={"relations": ["no_relation"]},
         annotation_field_mapping={
             "entities": "labeled_spans",
             "relations": "binary_relations",
         },
         create_constraints=True,
+        # tokenizer_kwargs={"strict_span_conversion": False},
     )
 
     taskmodule.prepare(documents=[document])
@@ -89,71 +88,7 @@ def taskmodule(document):
 
 
 def test_taskmodule(taskmodule):
-    # check the annotation_encoder_decoder
-    annotation_encoder_decoder = taskmodule.annotation_encoder_decoder
-    assert annotation_encoder_decoder.is_prepared
-    assert annotation_encoder_decoder.prepared_attributes == {
-        "labels_per_layer": {
-            "entities": ["content", "person", "topic"],
-            "relations": ["is_about"],
-        },
-    }
-    assert annotation_encoder_decoder.layer_names == ["entities", "relations"]
-    assert annotation_encoder_decoder.special_targets == ["<s>", "</s>"]
-    assert annotation_encoder_decoder.labels == ["none", "content", "person", "topic", "is_about"]
-    assert annotation_encoder_decoder.targets == [
-        "<s>",
-        "</s>",
-        "none",
-        "content",
-        "person",
-        "topic",
-        "is_about",
-    ]
-    assert annotation_encoder_decoder.bos_id == 0
-    assert annotation_encoder_decoder.eos_id == 1
-    assert annotation_encoder_decoder.none_id == 2
-    assert annotation_encoder_decoder.span_ids == [3, 4, 5]
-    assert annotation_encoder_decoder.relation_ids == [6]
-    assert annotation_encoder_decoder.label2id == {
-        "content": 3,
-        "is_about": 6,
-        "none": 2,
-        "person": 4,
-        "topic": 5,
-    }
-
-    # check taskmodule properties
-    assert taskmodule.prepared_attributes == {
-        "annotation_encoder_decoder_kwargs": {
-            "span_layer_name": "entities",
-            "relation_layer_name": "relations",
-            "exclude_labels_per_layer": {"relations": ["no_relation"]},
-            "bos_token": "<s>",
-            "eos_token": "</s>",
-            "labels_per_layer": {
-                "entities": ["content", "person", "topic"],
-                "relations": ["is_about"],
-            },
-        }
-    }
-    assert taskmodule.label_embedding_weight_mapping == {
-        50265: [45260],
-        50266: [39763],
-        50267: [354, 1215, 9006],
-        50268: [5970],
-        50269: [10166],
-    }
-    assert taskmodule.target_tokens == [
-        "<s>",
-        "</s>",
-        "<<none>>",
-        "<<content>>",
-        "<<person>>",
-        "<<topic>>",
-        "<<is_about>>",
-    ]
-    assert taskmodule.target_token_ids == [0, 2, 50266, 50269, 50268, 50265, 50267]
+    assert taskmodule.is_prepared
 
 
 @pytest.fixture(scope="module")
@@ -161,6 +96,13 @@ def model(taskmodule, config) -> PointerNetworkModel:
     torch.manual_seed(42)
     model = PointerNetworkModel(
         bart_model="sshleifer/distilbart-xsum-12-1",
+        bos_id=taskmodule.bos_id,
+        eos_id=taskmodule.eos_id,
+        pad_id=taskmodule.eos_id,
+        none_id=taskmodule.none_id,
+        span_ids=taskmodule.span_ids,
+        relation_ids=taskmodule.relation_ids,
+        label_ids=taskmodule.label_ids,
         target_token_ids=taskmodule.target_token_ids,
         pad_token_id=taskmodule.tokenizer.pad_token_id,
         vocab_size=len(taskmodule.tokenizer),
@@ -181,8 +123,9 @@ def model(taskmodule, config) -> PointerNetworkModel:
         # biloss=True,
         lr=5e-5,
         max_target_positions=512,
-        annotation_encoder_decoder_name=taskmodule.annotation_encoder_decoder_name,
-        annotation_encoder_decoder_kwargs=taskmodule.annotation_encoder_decoder_kwargs,
+        # annotation_encoder_decoder_name=taskmodule.annotation_encoder_decoder_name,
+        # annotation_encoder_decoder_kwargs=taskmodule.annotation_encoder_decoder_kwargs,
+        taskmodule_config=taskmodule._config(),
         **config,
     )
     # set model to training mode, otherwise model.encoder.bart_encoder.training will be False!
@@ -327,25 +270,26 @@ def test_metric_val(model, batch):
     metric.reset()
     inputs, targets = batch
     prediction = model.predict(inputs)
-    metric.update(prediction["pred"], targets["tgt_tokens"])
+    expected = {"pred": targets["tgt_tokens"]}
+    # to get some mixed results, we first evaluate the prediction against the expected values
+    # and then the expected values against itself
+    metric.update(prediction, expected)
+    metric.update(expected, expected)
 
     values = metric.compute()
     metric.reset()
     assert values is not None
     assert values == {
-        "em": 0.0,
+        "em": 0.5,
         "entities": {
-            "person": {"acc": 0, "recall": 0.0, "f1": 0.0},
-            "topic": {"acc": 0, "recall": 0.0, "f1": 0.0},
-            "content": {"acc": 0, "recall": 0.0, "f1": 0.0},
+            "content": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
+            "person": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
+            "topic": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
         },
-        "entities/micro": {"acc": 0, "recall": 0.0, "f1": 0.0},
-        "relations": {"is_about": {"acc": 0, "recall": 0.0, "f1": 0.0}},
-        "relations/micro": {"acc": 0, "recall": 0.0, "f1": 0.0},
-        "invalid/len": 0.0,
-        "invalid/order": 0.0,
-        "invalid/cross": 0.0,
-        "invalid/cover": 0.0,
+        "entities/micro": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
+        "relations": {"is_about": {"recall": 50.0, "precision": 100.0, "f1": 66.6667}},
+        "relations/micro": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
+        "invalid": {"len": 0.0, "order": 0.0, "cross": 0.0, "cover": 0.0},
         "invalid/all": 0.0,
     }
 

@@ -9,9 +9,6 @@ from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 
 from pie_modules.models import PointerNetworkModel, SimplePointerNetworkModel
 from pie_modules.taskmodules import PointerNetworkTaskModule
-from pie_modules.taskmodules.components.pointer_network import (
-    EncodingWithIdsAndOptionalCpmTag,
-)
 from tests import FIXTURES_ROOT
 from tests.models.test_pointer_network_model_predict import MODEL_PATH
 from tests.models.test_simple_pointer_network_predict import (
@@ -100,28 +97,18 @@ def test_sciarg_predict_with_weights_from_other_model(
     targets_truncated = {k: v[:5] for k, v in targets.items()}
     prediction = trained_model.predict(inputs_truncated)
     assert prediction is not None
-    targets_list = targets_truncated["tgt_tokens"].tolist()
-    prediction_list = prediction["pred"].tolist()
+    metric = loaded_taskmodule.build_metric()
+    metric.update(prediction, {"pred": targets_truncated["tgt_tokens"]})
+
+    values = metric.compute()
 
     tp = defaultdict(set)
     fp = defaultdict(set)
     fn = defaultdict(set)
-    for i in range(len(targets_list)):
-        current_targets = targets_list[i]
-        current_predictions = prediction_list[i]
-        annotations, errors = loaded_taskmodule.annotation_encoder_decoder.decode(
-            EncodingWithIdsAndOptionalCpmTag(current_predictions)
-        )
-        (
-            expected_annotations,
-            expected_errors,
-        ) = loaded_taskmodule.annotation_encoder_decoder.decode(
-            EncodingWithIdsAndOptionalCpmTag(current_targets)
-        )
-        for layer_name in expected_annotations:
-            tp[layer_name] |= set(annotations[layer_name]) & set(expected_annotations[layer_name])
-            fp[layer_name] |= set(annotations[layer_name]) - set(expected_annotations[layer_name])
-            fn[layer_name] |= set(expected_annotations[layer_name]) - set(annotations[layer_name])
+    for layer_name, anns_dict in metric.layer_metrics.items():
+        tp[layer_name].update(anns_dict.correct)
+        fp[layer_name].update(set(anns_dict.predicted) - set(anns_dict.correct))
+        fn[layer_name].update(set(anns_dict.gold) - set(anns_dict.correct))
 
     # check the numbers
     assert {layer_name: len(anns) for layer_name, anns in fp.items()} == {

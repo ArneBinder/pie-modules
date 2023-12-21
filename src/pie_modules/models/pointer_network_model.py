@@ -1,8 +1,10 @@
+import copy
 from collections.abc import MutableMapping
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
+from pytorch_ie import TaskModule
 from pytorch_ie.core import PyTorchIEModel
 from torch import nn
 from torch.nn import Parameter
@@ -10,10 +12,7 @@ from torchmetrics import Metric
 from transformers import get_linear_schedule_with_warmup
 from typing_extensions import TypeAlias
 
-from ..taskmodules.components.pointer_network import (
-    AnnotationLayersEncoderDecoder,
-    PointerNetworkSpanAndRelationEncoderDecoder,
-)
+from ..taskmodules import PointerNetworkTaskModule
 from .components.pointer_network.generator import SequenceGenerator
 from .components.pointer_network.interface import Seq2SeqEncoder, State
 from .components.pointer_network.losses import Seq2SeqLoss
@@ -418,6 +417,13 @@ class PointerNetworkModel(PyTorchIEModel):
     def __init__(
         self,
         bart_model: str,
+        bos_id: int,
+        eos_id: int,
+        pad_id: int,
+        none_id: int,
+        span_ids: List[int],
+        relation_ids: List[int],
+        label_ids: List[int],
         target_token_ids: List[int],
         vocab_size: int,
         pad_token_id: int,
@@ -430,7 +436,6 @@ class PointerNetworkModel(PyTorchIEModel):
         replace_pos: bool = True,
         position_type: int = 0,
         max_target_positions: Optional[int] = None,
-        # seq2seq_model: Seq2SeqModel END
         max_length: int = 30,
         max_len_a: float = 0.0,
         num_beams: int = 1,
@@ -441,8 +446,7 @@ class PointerNetworkModel(PyTorchIEModel):
         decode_mask: bool = True,
         metric_splits: List[str] = ["val", "test"],
         metric_intervals: Optional[Dict[str, int]] = None,
-        annotation_encoder_decoder_name: str = "pointer_network_span_and_relation",
-        annotation_encoder_decoder_kwargs: Optional[Dict[str, Any]] = None,
+        taskmodule_config: Optional[Dict[str, Any]] = None,
         # added for the loss
         biloss: int = True,
         # added for the optimizer / scheduler
@@ -461,17 +465,8 @@ class PointerNetworkModel(PyTorchIEModel):
         当某句话生成结束之后，之后生成的内容用pad_token_id补充."""
         super().__init__(**kwargs)
 
-        self.save_hyperparameters()
-
-        self.annotation_encoder_decoder: AnnotationLayersEncoderDecoder
-        if annotation_encoder_decoder_name == "pointer_network_span_and_relation":
-            self.annotation_encoder_decoder = PointerNetworkSpanAndRelationEncoderDecoder(
-                **(annotation_encoder_decoder_kwargs or {}),
-            )
-        else:
-            raise Exception(
-                f"Unsupported annotation encoder decoder: {annotation_encoder_decoder_name}"
-            )
+        # we ignore the taskmodule_config here, because we do not need it for the model
+        self.save_hyperparameters(ignore=["taskmodule_config"])
 
         model = BartModel.from_pretrained(bart_model)
         num_tokens, _ = model.encoder.embed_tokens.weight.shape
@@ -479,9 +474,7 @@ class PointerNetworkModel(PyTorchIEModel):
         encoder = model.encoder
         decoder = model.decoder
 
-        label_token_ids = [
-            target_token_ids[label_id] for label_id in self.annotation_encoder_decoder.label_ids
-        ]
+        label_token_ids = [target_token_ids[label_id] for label_id in label_ids]
 
         if use_recur_pos:
             decoder.set_position_embedding(label_token_ids[0], tag_first)
@@ -504,17 +497,17 @@ class PointerNetworkModel(PyTorchIEModel):
                 encoder_embed_positions=model.encoder.embed_positions,
                 pad_token_id=pad_token_id,
                 target_token_ids=target_token_ids,
-                label_ids=self.annotation_encoder_decoder.label_ids,
-                eos_id=self.annotation_encoder_decoder.eos_id,
-                pad_id=self.annotation_encoder_decoder.target_pad_id,
+                label_ids=label_ids,
+                eos_id=eos_id,
+                pad_id=pad_id,
                 use_encoder_mlp=use_encoder_mlp,
                 position_type=position_type,
                 replace_pos=replace_pos,
                 max_target_positions=max_target_positions,
             )
-            self.decoder.relation_ids = self.annotation_encoder_decoder.relation_ids
-            self.decoder.span_ids = self.annotation_encoder_decoder.span_ids
-            self.decoder.none_ids = self.annotation_encoder_decoder.none_id
+            self.decoder.relation_ids = relation_ids
+            self.decoder.span_ids = span_ids
+            self.decoder.none_ids = none_id
         else:
             raise RuntimeError("Unsupported feature.")
 
@@ -524,11 +517,11 @@ class PointerNetworkModel(PyTorchIEModel):
             max_len_a=max_len_a,
             num_beams=num_beams,
             do_sample=do_sample,
-            bos_token_id=self.annotation_encoder_decoder.bos_id,
-            eos_token_id=self.annotation_encoder_decoder.eos_id,
+            bos_token_id=bos_id,
+            eos_token_id=eos_id,
             repetition_penalty=repetition_penalty,
             length_penalty=length_penalty,
-            pad_token_id=self.annotation_encoder_decoder.target_pad_id,
+            pad_token_id=pad_id,
             restricter=restricter,
             decode_mask=decode_mask,
         )
@@ -538,11 +531,16 @@ class PointerNetworkModel(PyTorchIEModel):
             "val": Seq2SeqLoss(biloss=biloss),
             "test": Seq2SeqLoss(biloss=biloss),
         }
-
-        # NOTE: This is not a ModuleDict, so this will not live on the torch device!
-        self.metrics: Dict[str, Metric] = {
-            stage: self.annotation_encoder_decoder.get_metric() for stage in metric_splits
-        }
+        self.metrics: Optional[Dict[str, Metric]] = None
+        if taskmodule_config is not None:
+            taskmodule_kwargs = copy.copy(taskmodule_config)
+            taskmodule_kwargs.pop(TaskModule.config_type_key)
+            taskmodule = PointerNetworkTaskModule(**taskmodule_kwargs)
+            taskmodule.post_prepare()
+            # NOTE: This is not a ModuleDict, so this will not live on the torch device!
+            self.metrics = {stage: taskmodule.build_metric(stage) for stage in metric_splits}
+        else:
+            self.metrics = None
         self.metric_intervals = metric_intervals or {}
 
         self.lr = lr
@@ -645,11 +643,13 @@ class PointerNetworkModel(PyTorchIEModel):
         if stage == "train" and loss is None:
             raise Exception("loss is not allowed to be None for the training step")
 
-        stage_metrics = self.metrics.get(stage, None)
-        metric_interval = self.metric_intervals.get(stage, 1)
-        if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
-            prediction = self.predict(inputs)
-            stage_metrics.update(prediction["pred"], targets["tgt_tokens"])
+        if self.metrics is not None:
+            stage_metrics = self.metrics.get(stage, None)
+            metric_interval = self.metric_intervals.get(stage, 1)
+            if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
+                prediction = self.predict(inputs)
+                # the format of expected needs to be the same as the format of prediction
+                stage_metrics.update(prediction, {"pred": targets["tgt_tokens"]})
 
         return loss
 
@@ -678,13 +678,14 @@ class PointerNetworkModel(PyTorchIEModel):
         self._on_epoch_end(stage="test")
 
     def _on_epoch_end(self, stage: str):
-        metrics = self.metrics.get(stage, None)
-        if metrics is not None:
-            metric_dict = metrics.compute()
-            metrics.reset()
-            metric_dict_flat = flatten_dict(d=metric_dict, sep="/")
-            for k, v in metric_dict_flat.items():
-                self.log(f"metric_{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
+        if self.metrics is not None:
+            metrics = self.metrics.get(stage, None)
+            if metrics is not None:
+                metric_dict = metrics.compute()
+                metrics.reset()
+                metric_dict_flat = flatten_dict(d=metric_dict, sep="/")
+                for k, v in metric_dict_flat.items():
+                    self.log(f"metric_{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
 
     @property
     def head_parameters(self) -> Dict[str, Any]:

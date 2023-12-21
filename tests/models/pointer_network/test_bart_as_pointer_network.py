@@ -66,15 +66,15 @@ def document():
 @pytest.fixture(scope="module")
 def taskmodule(document):
     taskmodule = PointerNetworkTaskModule(
-        annotation_encoder_decoder_kwargs={
-            "span_layer_name": "entities",
-            "relation_layer_name": "relations",
-            "exclude_labels_per_layer": {"relations": ["no_relation"]},
-        },
+        span_layer_name="entities",
+        relation_layer_name="relations",
+        exclude_labels_per_layer={"relations": ["no_relation"]},
         annotation_field_mapping={
             "entities": "labeled_spans",
             "relations": "binary_relations",
         },
+        create_constraints=False,
+        # tokenizer_kwargs={"strict_span_conversion": False},
     )
 
     taskmodule.prepare(documents=[document])
@@ -108,10 +108,10 @@ def model(taskmodule) -> BartAsPointerNetwork:
     model = BartAsPointerNetwork.from_pretrained(
         model_name_or_path,
         # label id space
-        bos_token_id=taskmodule.annotation_encoder_decoder.bos_id,
-        eos_token_id=taskmodule.annotation_encoder_decoder.eos_id,
-        pad_token_id=taskmodule.annotation_encoder_decoder.eos_id,
-        label_ids=taskmodule.annotation_encoder_decoder.label_ids,
+        bos_token_id=taskmodule.bos_id,
+        eos_token_id=taskmodule.eos_id,
+        pad_token_id=taskmodule.eos_id,
+        label_ids=taskmodule.label_ids,
         # target token id space
         target_token_ids=taskmodule.target_token_ids,
         # mapping to better initialize the label embedding weights

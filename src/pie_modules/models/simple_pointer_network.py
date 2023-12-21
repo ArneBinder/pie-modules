@@ -4,14 +4,13 @@ from collections.abc import MutableMapping
 from typing import Any, Dict, List, Optional
 
 import torch
+from pytorch_ie import TaskModule
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torchmetrics import Metric
 from transformers import get_linear_schedule_with_warmup
 
-from ..taskmodules.components.pointer_network import (
-    PointerNetworkSpanAndRelationEncoderDecoder,
-)
+from ..taskmodules import PointerNetworkTaskModule
 from .components.pointer_network.bart_as_pointer_network import BartAsPointerNetwork
 
 logger = logging.getLogger(__name__)
@@ -40,12 +39,15 @@ class SimplePointerNetworkModel(PyTorchIEModel):
     def __init__(
         self,
         model_name_or_path: str,
+        bos_id: int,
+        eos_id: int,
+        pad_id: int,
+        label_ids: List[int],
         target_token_ids: List[int],
         vocab_size: int,
         embedding_weight_mapping: Optional[Dict[int, List[int]]] = None,
         use_encoder_mlp: bool = False,
-        annotation_encoder_decoder_name: str = "pointer_network_span_and_relation",
-        annotation_encoder_decoder_kwargs: Optional[Dict[str, Any]] = None,
+        taskmodule_config: Optional[Dict[str, Any]] = None,
         metric_splits: List[str] = [STAGE_VAL, STAGE_TEST],
         metric_intervals: Optional[Dict[str, int]] = None,
         # optimizer / scheduler
@@ -55,41 +57,26 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         # generation
         max_length: int = 512,
         num_beams: int = 4,
-        override_generation_kwargs: Optional[Dict[str, Any]] = None,
-        generation_kwargs: Optional[Dict[str, Any]] = None,  # deprecated
+        generation_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        if generation_kwargs is not None:
-            logger.warning(
-                "generation_kwargs is deprecated and will be removed in a future version. "
-                "Please use override_generation_kwargs instead."
-            )
-            override_generation_kwargs = generation_kwargs
-        self.save_hyperparameters(ignore=["generation_kwargs"])
+        # we also ignore the taskmodule_config, because it is saved elsewhere
+        self.save_hyperparameters(ignore=["taskmodule_config"])
 
         self.lr = lr
         self.layernorm_decay = layernorm_decay
         self.warmup_proportion = warmup_proportion
 
-        self.override_generation_kwargs = override_generation_kwargs or {}
-
-        if annotation_encoder_decoder_name == "pointer_network_span_and_relation":
-            self.annotation_encoder_decoder = PointerNetworkSpanAndRelationEncoderDecoder(
-                **(annotation_encoder_decoder_kwargs or {}),
-            )
-        else:
-            raise Exception(
-                f"Unsupported annotation encoder decoder: {annotation_encoder_decoder_name}"
-            )
+        self.generation_kwargs = generation_kwargs or {}
 
         self.model = BartAsPointerNetwork.from_pretrained(
             model_name_or_path,
             # label id space (bos/eos/pad_token_id are also used for generation)
-            bos_token_id=self.annotation_encoder_decoder.bos_id,
-            eos_token_id=self.annotation_encoder_decoder.eos_id,
-            pad_token_id=self.annotation_encoder_decoder.eos_id,
-            label_ids=self.annotation_encoder_decoder.label_ids,
+            bos_token_id=bos_id,
+            eos_token_id=eos_id,
+            pad_token_id=pad_id,
+            label_ids=label_ids,
             # target token id space
             target_token_ids=target_token_ids,
             # mapping to better initialize the label embedding weights
@@ -108,18 +95,23 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         if not self.is_from_pretrained:
             self.model.overwrite_decoder_label_embeddings_with_mapping()
 
-        # NOTE: This is not a ModuleDict, so this will not live on the torch device!
-        self.metrics: Dict[str, Metric] = {
-            stage: self.annotation_encoder_decoder.get_metric() for stage in metric_splits
-        }
+        self.metrics: Optional[Dict[str, Metric]]
+        if taskmodule_config is not None:
+            taskmodule_kwargs = copy.copy(taskmodule_config)
+            taskmodule_kwargs.pop(TaskModule.config_type_key)
+            taskmodule = PointerNetworkTaskModule(**taskmodule_kwargs)
+            taskmodule.post_prepare()
+            # NOTE: This is not a ModuleDict, so this will not live on the torch device!
+            self.metrics = {stage: taskmodule.build_metric(stage) for stage in metric_splits}
+        else:
+            self.metrics = None
         self.metric_intervals = metric_intervals or {}
 
     def predict(self, inputs, **kwargs) -> Dict[str, Any]:
         is_training = self.training
         self.eval()
 
-        generation_kwargs = copy.deepcopy(self.annotation_encoder_decoder.generation_kwargs)
-        generation_kwargs.update(self.override_generation_kwargs)
+        generation_kwargs = copy.deepcopy(self.generation_kwargs)
         generation_kwargs.update(kwargs)
         outputs = self.model.generate(inputs["src_tokens"], **generation_kwargs)
 
@@ -156,11 +148,13 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             f"loss/{stage}", loss, on_step=(stage == STAGE_TRAIN), on_epoch=True, prog_bar=True
         )
 
-        stage_metrics = self.metrics.get(stage, None)
-        metric_interval = self.metric_intervals.get(stage, 1)
-        if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
-            prediction = self.predict(inputs)
-            stage_metrics.update(prediction["pred"], targets["tgt_tokens"])
+        if self.metrics is not None:
+            stage_metrics = self.metrics.get(stage, None)
+            metric_interval = self.metric_intervals.get(stage, 1)
+            if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
+                prediction = self.predict(inputs)
+                # the format of expected needs to be the same as the format of prediction
+                stage_metrics.update(prediction, {"pred": targets["tgt_tokens"]})
 
         return loss
 
@@ -189,13 +183,14 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         self._on_epoch_end(stage=STAGE_TEST)
 
     def _on_epoch_end(self, stage: str) -> None:
-        metrics = self.metrics.get(stage, None)
-        if metrics is not None:
-            metric_dict = metrics.compute()
-            metrics.reset()
-            metric_dict_flat = flatten_dict(d=metric_dict, sep="/")
-            for k, v in metric_dict_flat.items():
-                self.log(f"metric_{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
+        if self.metrics is not None:
+            metrics = self.metrics.get(stage, None)
+            if metrics is not None:
+                metric_dict = metrics.compute()
+                metrics.reset()
+                metric_dict_flat = flatten_dict(d=metric_dict, sep="/")
+                for k, v in metric_dict_flat.items():
+                    self.log(f"metric_{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
         parameters = []
