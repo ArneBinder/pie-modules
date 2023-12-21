@@ -9,6 +9,7 @@ import torch
 from pytorch_ie import Document, PreparableMixin
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 from pytorch_ie.core import Annotation
+from torch import Tensor
 from torchmetrics import Metric
 
 from pie_modules.taskmodules.components.common import (
@@ -316,6 +317,7 @@ class EncodingWithIdsAndOptionalCpmTag(BatchableMixin):
         return [1] * len(self.tgt_tokens)
 
 
+# TODO: integrate back into taskmodule
 class PointerNetworkSpanAndRelationEncoderDecoder(
     AnnotationLayersEncoderDecoder[EncodingWithIdsAndOptionalCpmTag],
     PreparableMixin,
@@ -804,4 +806,15 @@ class PointerNetworkSpanAndRelationEncoderDecoder(
         last_end[target[-1]] = 1
         CMP_tag[-1] = last_end
         result = [i.tolist() for i in CMP_tag]
+        return result
+
+    # TODO: integrate into BatchableMixin?
+    def unbatch(self, prediction: Dict[str, Tensor]) -> List[EncodingWithIdsAndOptionalCpmTag]:
+        # model_output just contains "pred"
+        pred = prediction["pred"]
+        batch_size = pred.size(0)
+        result = [
+            EncodingWithIdsAndOptionalCpmTag(pred[i].to(device="cpu").tolist())
+            for i in range(batch_size)
+        ]
         return result
