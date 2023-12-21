@@ -38,7 +38,7 @@ from pie_modules.documents import (
 
 from ..document.processing import token_based_document_to_text_based, tokenize_document
 from ..utils import resolve_type
-from .common.mixins import BatchableMixin, HasBuildMetric, HasDecodeAnnotations
+from .common import BatchableMixin, HasBuildMetric, HasDecodeAnnotations
 from .pointer_network.annotation_encoder_decoder import (
     BinaryRelationEncoderDecoder,
     LabeledSpanEncoderDecoder,

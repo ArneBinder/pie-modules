@@ -3,9 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 
-from pie_modules.taskmodules.common.annotation_encoder_decoder import (
-    AnnotationEncoderDecoder,
-)
+from pie_modules.taskmodules.common import AnnotationEncoderDecoder
 
 logger = logging.getLogger(__name__)
 
