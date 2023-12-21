@@ -9,6 +9,9 @@ from pytorch_ie.core import AnnotationList, Document, annotation_field
 from pytorch_ie.documents import TextBasedDocument
 
 from pie_modules.taskmodules import PointerNetworkTaskModule
+from pie_modules.taskmodules.components.pointer_network import (
+    EncodingWithIdsAndOptionalCpmTag,
+)
 from tests import FIXTURES_ROOT
 
 logger = logging.getLogger(__name__)
@@ -473,12 +476,12 @@ def task_outputs(unbatched_output):
 
 
 @pytest.fixture()
-def task_output(task_outputs):
+def task_output(task_outputs) -> EncodingWithIdsAndOptionalCpmTag:
     return task_outputs[0]
 
 
 def test_task_output(task_output, taskmodule):
-    output_list = task_output.tolist()
+    output_list = task_output.tgt_tokens
     if taskmodule.partition_layer_name is None:
         assert output_list == [0, 14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]
     elif taskmodule.partition_layer_name == "sentences":
