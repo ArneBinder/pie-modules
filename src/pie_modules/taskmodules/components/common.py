@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F
 from pytorch_ie import Annotation
 from torch import Tensor
+from torchmetrics import Metric
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,9 @@ class AnnotationLayersEncoderDecoder(abc.ABC, Generic[ALE]):
         self, encoding: ALE, metadata: Optional[Dict[str, Any]] = None
     ) -> Tuple[Dict[str, List[Annotation]], Any]:
         pass
+
+    def get_metric(self, **kwargs) -> Metric:
+        raise NotImplementedError
 
 
 def _pad_tensor(tensor: Tensor, target_shape: List[int], pad_value: float) -> Tensor:

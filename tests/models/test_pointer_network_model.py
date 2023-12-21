@@ -327,9 +327,10 @@ def test_metric_val(model, batch):
     metric.reset()
     inputs, targets = batch
     prediction = model.predict(inputs)
-    metric(prediction["pred"], targets["tgt_tokens"])
+    metric.update(prediction["pred"], targets["tgt_tokens"])
 
-    values = metric.get_metric(reset=True)
+    values = metric.compute()
+    metric.reset()
     assert values is not None
     assert values == {
         "em": 0.0,
