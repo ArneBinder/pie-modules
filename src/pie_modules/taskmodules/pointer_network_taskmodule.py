@@ -298,10 +298,13 @@ class PointerNetworkTaskModule(
         self.label_ids: List[int] = [self.label2id[label] for label in self.labels]
 
         # annotation-encoder-decoders
-        span_encoder_decoder = SpanEncoderDecoderWithOffset(offset=self.pointer_offset)
+        span_encoder_decoder = SpanEncoderDecoderWithOffset(
+            offset=self.pointer_offset, exclusive_end=False
+        )
         labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
             span_encoder_decoder=span_encoder_decoder,
             label2id=self.label2id,
+            mode="indices_label",
         )
         self.relation_encoder_decoder = BinaryRelationEncoderDecoder(
             head_encoder_decoder=labeled_span_encoder_decoder,
@@ -309,6 +312,7 @@ class PointerNetworkTaskModule(
             label2id=self.label2id,
             loop_dummy_relation_name=self.loop_dummy_relation_name,
             none_label=self.none_label,
+            mode="tail_head_label",
         )
 
         label2token = {label: self.construct_label_token(label=label) for label in self.labels}
@@ -540,7 +544,7 @@ class PointerNetworkTaskModule(
             head_span = (rel.head.start, rel.head.end)
             entity_labels[head_span].append(rel.head.label)
 
-            if rel.label != self.none_label:
+            if rel.label != self.loop_dummy_relation_name:
                 tail_span = (rel.tail.start, rel.tail.end)
                 entity_labels[tail_span].append(rel.tail.label)
                 relation_tuples.append((head_span, tail_span, rel.label))

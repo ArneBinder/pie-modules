@@ -17,11 +17,11 @@ class AnnotationEncoderDecoder(abc.ABC, Generic[A, AE]):
     """Base class for annotation encoders and decoders."""
 
     @abc.abstractmethod
-    def encode(self, annotation: A, metadata: Optional[Dict[str, Any]] = None) -> Optional[AE]:
+    def encode(self, annotation: A, metadata: Optional[Dict[str, Any]] = None) -> AE:
         pass
 
     @abc.abstractmethod
-    def decode(self, encoding: AE, metadata: Optional[Dict[str, Any]] = None) -> Optional[A]:
+    def decode(self, encoding: AE, metadata: Optional[Dict[str, Any]] = None) -> A:
         pass
 
 
