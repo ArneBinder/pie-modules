@@ -343,11 +343,14 @@ def tokenize_document(
     missed_annotations = defaultdict(set)
     if strict_span_conversion or verbose:
         for annotation_field in doc.annotation_fields():
-            current_missed_annotations = set(doc[annotation_field.name]) - set(
-                added_annotations[annotation_field.name]
-            )
-            if len(current_missed_annotations) > 0:
-                missed_annotations[annotation_field.name] = current_missed_annotations
+            # do not check the partition layer because the partitions are not required later on
+            # and entries get quite probably removed when windowing is applied, so this just pollutes the logs
+            if annotation_field.name != partition_layer:
+                current_missed_annotations = set(doc[annotation_field.name]) - set(
+                    added_annotations[annotation_field.name]
+                )
+                if len(current_missed_annotations) > 0:
+                    missed_annotations[annotation_field.name] = current_missed_annotations
 
     if len(missed_annotations) > 0:
         missed_annotations_simplified = {k: str(v) for k, v in missed_annotations.items()}
