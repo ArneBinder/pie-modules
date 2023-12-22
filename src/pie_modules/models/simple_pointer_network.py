@@ -91,9 +91,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
                 "layernorm_decay is deprecated, please use encoder_layernorm_decay instead!"
             )
             encoder_layer_norm_decay = layernorm_decay
-
-        # we also ignore the taskmodule_config, because it is saved elsewhere
-        self.save_hyperparameters(ignore=["taskmodule_config", "layernorm_decay"])
+        self.save_hyperparameters(ignore=["layernorm_decay"])
 
         # optimizer / scheduler
         self.lr = lr
