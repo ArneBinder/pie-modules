@@ -204,7 +204,7 @@ def test_test_step(model, batch, config):
 def test_configure_optimizers(model, config):
     optimizers = model.configure_optimizers()
     assert isinstance(optimizers, AdamW)
-    assert len(optimizers.param_groups) == 5
+    assert len(optimizers.param_groups) == 6
     assert all(param_group["lr"] == 5e-05 for param_group in optimizers.param_groups)
     all_param_shapes = [
         [tuple(p.shape) for p in param_group["params"]] for param_group in optimizers.param_groups
@@ -226,21 +226,25 @@ def test_configure_optimizers(model, config):
     else:
         raise ValueError(f"Unknown config: {config}")
 
-    # decoder parameters
-    assert optimizers.param_groups[1]["weight_decay"] == 0.01
-    assert len(all_param_shapes[1]) == 29
+    # decoder layer norm only parameters
+    assert optimizers.param_groups[1]["weight_decay"] == 0.01 == model.decoder_layer_norm_decay
+    assert len(all_param_shapes[1]) == 8
+
+    # decoder only other parameters
+    assert optimizers.param_groups[2]["weight_decay"] == 0.01 == model.weight_decay
+    assert len(all_param_shapes[2]) == 21
 
     # layer norm encoder only parameters
-    assert optimizers.param_groups[2]["weight_decay"] == 0.001 == model.layernorm_decay
-    assert len(all_param_shapes[2]) == 50
+    assert optimizers.param_groups[3]["weight_decay"] == 0.001 == model.encoder_layer_norm_decay
+    assert len(all_param_shapes[3]) == 50
 
     # remaining encoder only parameters
-    assert optimizers.param_groups[3]["weight_decay"] == 0.01
-    assert len(all_param_shapes[3]) == 145
+    assert optimizers.param_groups[4]["weight_decay"] == 0.01 == model.weight_decay
+    assert len(all_param_shapes[4]) == 145
 
     # encoder-decoder shared parameters (embed_tokens.weight)
-    assert optimizers.param_groups[4]["weight_decay"] == 0.01
-    assert len(all_param_shapes[4]) == 1
+    assert optimizers.param_groups[5]["weight_decay"] == 0.01 == model.shared_decay
+    assert len(all_param_shapes[5]) == 1
 
 
 def test_configure_optimizers_with_warmup_proportion(taskmodule, config):
