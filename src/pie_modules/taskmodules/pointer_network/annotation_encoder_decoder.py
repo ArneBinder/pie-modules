@@ -158,7 +158,7 @@ class BinaryRelationEncoderDecoder(AnnotationEncoderDecoder[BinaryRelation, List
     ) -> BinaryRelation:
         if len(encoding) != 7:
             raise ValueError(
-                f"seven values are required to decode as BinaryRelation, but encoding is: {encoding}"
+                f"seven values are required to decode as BinaryRelation, but the encoding is: {encoding}"
             )
         if self.mode.endswith("_label"):
             label = self.id2label[encoding[6]]
