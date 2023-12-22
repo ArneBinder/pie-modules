@@ -77,7 +77,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         shared_decay: Optional[float] = None,
         encoder_layer_norm_decay: Optional[float] = 0.001,
         decoder_layer_norm_decay: Optional[float] = None,
-        layer_norm_decay: Optional[float] = 0.001,  # deprecated
+        layernorm_decay: Optional[float] = 0.001,  # deprecated
         warmup_proportion: float = 0.0,
         # generation
         max_length: int = 512,
@@ -86,11 +86,11 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        if layer_norm_decay is not None:
+        if layernorm_decay is not None:
             logger.warning(
                 "layernorm_decay is deprecated, please use encoder_layernorm_decay instead!"
             )
-            encoder_layer_norm_decay = layer_norm_decay
+            encoder_layer_norm_decay = layernorm_decay
 
         # we also ignore the taskmodule_config, because it is saved elsewhere
         self.save_hyperparameters(ignore=["taskmodule_config", "layernorm_decay"])
