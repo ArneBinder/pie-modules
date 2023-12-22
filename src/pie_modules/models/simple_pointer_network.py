@@ -1,12 +1,13 @@
 import copy
 import logging
 from collections.abc import MutableMapping
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import torch
 from pytorch_ie import TaskModule
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
+from torch.nn import Parameter
 from torchmetrics import Metric
 from transformers import get_linear_schedule_with_warmup
 
@@ -35,6 +36,24 @@ def flatten_dict(d: MutableMapping, parent_key: str = "", sep: str = "."):
     return dict(_flatten_dict_gen(d, parent_key, sep))
 
 
+def get_layer_norm_parameters(
+    named_parameters: Iterator[Tuple[str, Parameter]]
+) -> Iterator[Parameter]:
+    return (
+        param for name, param in named_parameters if "layernorm" in name or "layer_norm" in name
+    )
+
+
+def get_non_layer_norm_parameters(
+    named_parameters: Iterator[Tuple[str, Parameter]]
+) -> Iterator[Parameter]:
+    return (
+        param
+        for name, param in named_parameters
+        if not ("layernorm" in name or "layer_norm" in name)
+    )
+
+
 @PyTorchIEModel.register()
 class SimplePointerNetworkModel(PyTorchIEModel):
     def __init__(
@@ -53,7 +72,12 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         metric_intervals: Optional[Dict[str, int]] = None,
         # optimizer / scheduler
         lr: float = 5e-5,
-        layernorm_decay: float = 0.001,
+        weight_decay: float = 1e-2,
+        head_decay: Optional[float] = None,
+        shared_decay: Optional[float] = None,
+        encoder_layer_norm_decay: Optional[float] = 0.001,
+        decoder_layer_norm_decay: Optional[float] = None,
+        layer_norm_decay: Optional[float] = 0.001,  # deprecated
         warmup_proportion: float = 0.0,
         # generation
         max_length: int = 512,
@@ -62,13 +86,30 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        # we also ignore the taskmodule_config, because it is saved elsewhere
-        self.save_hyperparameters(ignore=["taskmodule_config"])
+        if layer_norm_decay is not None:
+            logger.warning(
+                "layernorm_decay is deprecated, please use encoder_layernorm_decay instead!"
+            )
+            encoder_layer_norm_decay = layer_norm_decay
 
+        # we also ignore the taskmodule_config, because it is saved elsewhere
+        self.save_hyperparameters(ignore=["taskmodule_config", "layernorm_decay"])
+
+        # optimizer / scheduler
         self.lr = lr
-        self.layernorm_decay = layernorm_decay
+        self.weight_decay = weight_decay
+        self.head_decay = head_decay if head_decay is not None else self.weight_decay
+        self.shared_decay = shared_decay if shared_decay is not None else self.weight_decay
+        self.encoder_layer_norm_decay = (
+            encoder_layer_norm_decay if encoder_layer_norm_decay is not None else self.weight_decay
+        )
+        self.decoder_layer_norm_decay = (
+            decoder_layer_norm_decay if decoder_layer_norm_decay is not None else self.weight_decay
+        )
         self.warmup_proportion = warmup_proportion
 
+        # can be used to override the generation kwargs from the generation config that gets constructed from the
+        # BartAsPointerNetwork config
         self.generation_kwargs = generation_kwargs or {}
 
         self.model = BartAsPointerNetwork.from_pretrained(
@@ -199,50 +240,51 @@ class SimplePointerNetworkModel(PyTorchIEModel):
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
         parameters = []
+
         # head parameters
         params = {
             "lr": self.lr,
-            "weight_decay": 1e-2,
+            "weight_decay": self.head_decay,
             "params": dict(self.model.head_named_params()).values(),
         }
         parameters.append(params)
 
-        # decoder only parameters
+        # decoder only layer norm parameters
         params = {
             "lr": self.lr,
-            "weight_decay": 1e-2,
-            "params": dict(self.model.decoder_only_named_params()).values(),
+            "weight_decay": self.decoder_layer_norm_decay,
+            "params": get_layer_norm_parameters(self.model.decoder_only_named_params()),
         }
         parameters.append(params)
 
-        # encoder only layernorm parameters
+        # decoder only other parameters
         params = {
             "lr": self.lr,
-            "weight_decay": self.layernorm_decay,
-            "params": [
-                param
-                for name, param in self.model.encoder_only_named_params()
-                if ("layernorm" in name or "layer_norm" in name)
-            ],
+            "weight_decay": self.weight_decay,
+            "params": get_non_layer_norm_parameters(self.model.decoder_only_named_params()),
+        }
+        parameters.append(params)
+
+        # encoder only layer norm parameters
+        params = {
+            "lr": self.lr,
+            "weight_decay": self.encoder_layer_norm_decay,
+            "params": get_layer_norm_parameters(self.model.encoder_only_named_params()),
         }
         parameters.append(params)
 
         # encoder only other parameters
         params = {
             "lr": self.lr,
-            "weight_decay": 1e-2,
-            "params": [
-                param
-                for name, param in self.model.encoder_only_named_params()
-                if not ("layernorm" in name or "layer_norm" in name)
-            ],
+            "weight_decay": self.weight_decay,
+            "params": get_non_layer_norm_parameters(self.model.encoder_only_named_params()),
         }
         parameters.append(params)
 
         # encoder-decoder shared parameters
         params = {
             "lr": self.lr,
-            "weight_decay": 1e-2,
+            "weight_decay": self.shared_decay,
             "params": dict(self.model.encoder_decoder_shared_named_params()).values(),
         }
         parameters.append(params)
