@@ -466,8 +466,7 @@ class PointerNetworkModel(PyTorchIEModel):
         当某句话生成结束之后，之后生成的内容用pad_token_id补充."""
         super().__init__(**kwargs)
 
-        # we ignore the taskmodule_config here, because we do not need it for the model
-        self.save_hyperparameters(ignore=["taskmodule_config"])
+        self.save_hyperparameters()
 
         model = BartModel.from_pretrained(bart_model)
         num_tokens, _ = model.encoder.embed_tokens.weight.shape
