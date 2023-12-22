@@ -88,7 +88,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         super().__init__(**kwargs)
         if layernorm_decay is not None:
             logger.warning(
-                "layernorm_decay is deprecated, please use encoder_layernorm_decay instead!"
+                "layernorm_decay is deprecated, please use encoder_layer_norm_decay instead!"
             )
             encoder_layer_norm_decay = layernorm_decay
         self.save_hyperparameters(ignore=["layernorm_decay"])
