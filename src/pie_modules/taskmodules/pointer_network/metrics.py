@@ -28,8 +28,8 @@ class LabeledAnnotationScores(Metric):
     def get_precision_recall_f1(
         self, n_gold: int, n_predicted: int, n_correct: int
     ) -> Dict[str, float]:
-        recall = 0 if n_gold == 0 else (n_correct / n_gold)
-        precision = 0 if n_predicted == 0 else (n_correct / n_predicted)
+        recall = 0.0 if n_gold == 0 else (n_correct / n_gold)
+        precision = 0.0 if n_predicted == 0 else (n_correct / n_predicted)
         f1 = 0.0 if recall + precision == 0 else (2 * precision * recall) / (precision + recall)
 
         recall *= 100
