@@ -303,10 +303,14 @@ def test_binary_relation_encoder_decoder_only_loop_or_none_label_provided(
         raise ValueError("unknown setting")
 
 
-def test_binary_relation_encoder_decoder_unknown_mode():
+@pytest.mark.parametrize(
+    "loop_dummy_relation_name,none_label",
+    [(None, None), ("L", "N")],
+)
+def test_binary_relation_encoder_decoder_unknown_mode(loop_dummy_relation_name, none_label):
     """Test the BinaryRelationEncoderDecoder class."""
 
-    label2id = {"A": 0, "B": 1, "C": 2}
+    label2id = {"A": 0, "B": 1, "N": 2, "L": 3}
     labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
         span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
         label2id=label2id,
@@ -317,19 +321,21 @@ def test_binary_relation_encoder_decoder_unknown_mode():
         tail_encoder_decoder=labeled_span_encoder_decoder,
         label2id=label2id,
         mode="unknown",
+        loop_dummy_relation_name=loop_dummy_relation_name,
+        none_label=none_label,
     )
     with pytest.raises(ValueError) as excinfo:
         encoder_decoder.encode(
             BinaryRelation(
                 head=LabeledSpan(start=1, end=2, label="A"),
-                tail=LabeledSpan(start=3, end=4, label="B"),
-                label="C",
+                tail=LabeledSpan(start=1, end=2, label="A"),
+                label="L",
             )
         )
     assert str(excinfo.value) == "unknown mode: unknown"
 
     with pytest.raises(ValueError) as excinfo:
-        encoder_decoder.decode([0, 0, 0, 0, 0, 0, 0])
+        encoder_decoder.decode([2, 2, 2, 2, 2, 2, 2])
     assert str(excinfo.value) == "unknown mode: unknown"
 
 
