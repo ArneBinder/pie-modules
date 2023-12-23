@@ -379,85 +379,110 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             decode_annotations_func=self.decode_annotations,
         )
 
+    def get_valid_relation_encoding(
+        self, pair: List[int]
+    ) -> Tuple[Optional[Tuple[int, int, int, int, int, int, int]], Optional[str]]:
+        valid_encoding: Optional[Tuple[int, int, int, int, int, int, int]] = None
+        skip = False
+        error_type = None
+
+        # if we got a relation id too early, we skip the tuple
+        if len(pair) != 7:
+            skip = True
+            error_type = "len"
+
+        # we got a span-only tuple ...
+        elif self.none_id in pair:
+            # TODO: assert that pair[2] in self.span_ids
+            #  and pair[4..6] is self.none_id
+            if not (
+                pair[2] in self.target_ids
+                and pair[5] in self.target_ids
+                and pair[6] in self.target_ids
+            ):
+                # TODO: set error_type = "cross"? or return another error
+                skip = True
+            else:
+                skip = False
+            # TODO: check start end indices (as for "order" below)
+
+        # we got a relation tuple ...
+        else:
+            # check the offsets
+            # TODO: check that at positions 0, 1, 3, and 4, we have offsets
+            # if any end index is smaller than the start index, skip the tuple
+            if pair[0] > pair[1] or pair[3] > pair[4]:
+                skip = True
+                error_type = "order"
+            # if the spans overlap, skip the tuple
+            elif not (pair[1] < pair[3] or pair[0] > pair[4]):
+                skip = True
+                error_type = "cover"
+
+            # check the labels
+
+            # if the label ids got mixed up (span vs. relation ids), skip the tuple
+            if (
+                pair[2] in self.relation_ids
+                or pair[5] in self.relation_ids
+                or pair[6] in self.span_ids
+            ):
+                # Consider making an additional layer of restrictions to prevent misalignment
+                # of the relationship and span tags (可以考虑做多一层限制，防止relation 和 span标签错位)
+                skip = True
+                error_type = "cross"
+            # TODO: move above previous check and make the other a elif case to not count cross errors twice
+            # if at the label positions we have no label ids, skip the tuple
+            span_and_relation_ids = self.relation_ids + self.span_ids
+            if (
+                pair[2] not in span_and_relation_ids
+                or pair[5] not in span_and_relation_ids
+                or pair[6] not in span_and_relation_ids
+            ):
+                # if not tag.issubset(self.relation_idx+self.span_idx):
+                skip = True
+                error_type = "cross"
+
+        if not skip:
+            # ignore type because of tuple length (already checked above)
+            valid_encoding = tuple(pair)  # type: ignore
+        return valid_encoding, error_type
+
     def sanitize_sequence(
         self,
         tag_seq: List[int],
     ) -> Tuple[List[Tuple[int, int, int, int, int, int, int]], Dict[str, int], List[int]]:
-        # TODO: count total amounts instead of returning bool values.
-        #  This requires to also count "total" (maybe also "skipped" and "correct").
-        invalid = {
+        errors = {
             "len": 0,
             "order": 0,
             "cross": 0,
             "cover": 0,
-        }  # , "total": 0 , "skipped": 0, "correct": 0}
-        skip = False
-        pairs = []
-        cur_pair: List[int] = []
+            # , "correct": 0 ,
+        }
+
+        encodings = []
+        current_encoding: List[int] = []
         if len(tag_seq):
             for i in tag_seq:
                 # a tuple will be terminated when the next id is a relation id
                 # or when this is a none_id and the tuple has 6 entries (i.e. it will be completed with the next id)
-                if i in self.relation_ids or (i == self.none_id and len(cur_pair) == 6):
-                    cur_pair.append(i)
-                    if len(cur_pair) != 7:
-                        skip = True
-                        invalid["len"] = 1
-                    elif self.none_id in cur_pair:
-                        # tag = set([cur_pair[2], cur_pair[5], cur_pair[6]])
-                        if not (
-                            cur_pair[2] in self.target_ids
-                            and cur_pair[5] in self.target_ids
-                            and cur_pair[6] in self.target_ids
-                        ):
-                            # if not tag.issubset(add_token):
-                            skip = True
-                        else:
-                            skip = False
-                    else:  # The decoding length is correct (解码长度正确)
-                        # Check for correct position (检查位置是否正确) <s1,e1,t1,s2,e2,t2,t3>
-                        if cur_pair[0] > cur_pair[1] or cur_pair[3] > cur_pair[4]:
-                            skip = True
-                            invalid["order"] = 1
-                        elif not (cur_pair[1] < cur_pair[3] or cur_pair[0] > cur_pair[4]):
-                            skip = True
-                            invalid["cover"] = 1
-                        if (
-                            cur_pair[2] in self.relation_ids
-                            or cur_pair[5] in self.relation_ids
-                            or cur_pair[6] in self.span_ids
-                        ):
-                            # Consider making an additional layer of restrictions to prevent misalignment
-                            # of the relationship and span tags (可以考虑做多一层限制，防止relation 和 span标签错位)
-                            skip = True
-                            invalid["cross"] = 1
-                        # tag = set([cur_pair[2], cur_pair[5], cur_pair[6]])
-                        RC_idx = self.relation_ids + self.span_ids
-                        if not (
-                            cur_pair[2] in RC_idx
-                            and cur_pair[5] in RC_idx
-                            and cur_pair[6] in RC_idx
-                        ):
-                            # if not tag.issubset(self.relation_idx+self.span_idx):
-                            skip = True
-                            invalid["cross"] = 1
+                if i in self.relation_ids or (i == self.none_id and len(current_encoding) == 6):
+                    current_encoding.append(i)
 
-                    if skip:
-                        skip = False
-                        # invalid["skipped"] += 1
-                    else:
-                        if len(cur_pair) != 7:
-                            raise Exception(f"expected 7 entries, but got: {cur_pair}")
-                        pairs.append(tuple(cur_pair))
-                        # invalid["correct"] += 1
-                    cur_pair = []
+                    # check if the current_encoding is valid
+                    valid_encoding, error_type = self.get_valid_relation_encoding(current_encoding)
+                    if error_type is not None:
+                        # TODO: count total amounts instead of returning bool values.
+                        #  This requires to also count "correct".
+                        errors[error_type] = 1
+
+                    if valid_encoding is not None:
+                        encodings.append(valid_encoding)
+                    current_encoding = []
                 else:
-                    cur_pair.append(i)
+                    current_encoding.append(i)
 
-        # invalid["total"] = invalid["correct"] + invalid["skipped"]
-
-        # ignore type because of tuple length
-        return pairs, invalid, cur_pair  # type: ignore
+        return encodings, errors, current_encoding
 
     def encode_annotations(
         self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None
@@ -509,7 +534,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
         # sanity check
         _, invalid, remaining = self.sanitize_sequence(tag_seq=tgt_tokens[1:])
-        if not all(v == 0 for k, v in invalid.items() if k != "total") or len(remaining) > 0:
+        if not all(v == 0 for k, v in invalid.items() if k != "correct") or len(remaining) > 0:
             decoded, invalid = self.decode_annotations(
                 EncodingWithIdsAndOptionalCpmTag(tgt_tokens), metadata=metadata
             )
@@ -556,8 +581,10 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         )
         relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
         entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
-        for tup in relation_encodings:
-            rel = self.relation_encoder_decoder.decode(encoding=list(tup), metadata=metadata)
+        for relation_encoding in relation_encodings:
+            rel = self.relation_encoder_decoder.decode(
+                encoding=list(relation_encoding), metadata=metadata
+            )
             head_span = (rel.head.start, rel.head.end)
             entity_labels[head_span].append(rel.head.label)
 
