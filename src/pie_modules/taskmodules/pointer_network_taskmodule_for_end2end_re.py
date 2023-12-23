@@ -135,7 +135,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         labels_per_layer: Optional[Dict[str, List[str]]] = None,
         exclude_labels_per_layer: Optional[Dict[str, List[str]]] = None,
         # target encoding
-        max_target_length: Optional[int] = None,
         create_constraints: bool = False,
         # tokenization
         document_type: str = "pytorch_ie.documents.TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
@@ -187,7 +186,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         self.label_representations = label_representations or dict()
 
         # target encoding
-        self.max_target_length = max_target_length
         self.create_constraints = create_constraints
         self.pad_values = {
             "tgt_tokens": self.target_pad_id,
@@ -555,11 +553,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                 )
             elif len(remaining) > 0:
                 logger.warning(f" encoding errors: {invalid}, remaining encoding ids: {remaining}")
-
-        if self.max_target_length is not None and len(tgt_tokens) > self.max_target_length:
-            raise ValueError(
-                f"encoding length {len(tgt_tokens)} exceeds max_length {self.max_target_length}"
-            )
 
         # build CPM tag
         if self.create_constraints:
