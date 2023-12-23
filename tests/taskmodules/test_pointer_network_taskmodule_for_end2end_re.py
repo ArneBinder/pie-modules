@@ -175,7 +175,6 @@ def test_prepared_config(taskmodule, config):
             "relation_layer_name": "relations",
             "none_label": "none",
             "loop_dummy_relation_name": "loop",
-            "ignore_error_types": None,
             "labels_per_layer": {
                 "entities": ["content", "person", "topic"],
                 "relations": ["is_about"],
@@ -204,7 +203,6 @@ def test_prepared_config(taskmodule, config):
             "relation_layer_name": "relations",
             "none_label": "none",
             "loop_dummy_relation_name": "loop",
-            "ignore_error_types": None,
             "labels_per_layer": {
                 "entities": ["content", "person", "topic"],
                 "relations": ["is_about"],
