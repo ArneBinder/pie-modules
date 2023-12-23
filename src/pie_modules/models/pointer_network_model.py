@@ -12,7 +12,7 @@ from torchmetrics import Metric
 from transformers import get_linear_schedule_with_warmup
 from typing_extensions import TypeAlias
 
-from ..taskmodules import PointerNetworkTaskModule
+from ..taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 from ..taskmodules.common import HasBuildMetric
 from .components.pointer_network.generator import SequenceGenerator
 from .components.pointer_network.interface import Seq2SeqEncoder, State
@@ -535,7 +535,7 @@ class PointerNetworkModel(PyTorchIEModel):
         if taskmodule_config is not None:
             taskmodule_kwargs = copy.copy(taskmodule_config)
             taskmodule_kwargs.pop(TaskModule.config_type_key)
-            taskmodule = PointerNetworkTaskModule(**taskmodule_kwargs)
+            taskmodule = PointerNetworkTaskModuleForEnd2EndRE(**taskmodule_kwargs)
             taskmodule.post_prepare()
             if not isinstance(taskmodule, HasBuildMetric):
                 raise Exception(

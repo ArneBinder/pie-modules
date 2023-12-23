@@ -10,7 +10,7 @@ from pytorch_lightning import Trainer
 from torch.optim import AdamW
 
 from pie_modules.models import SimplePointerNetworkModel
-from pie_modules.taskmodules import PointerNetworkTaskModule
+from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 from tests import _config_to_str
 
 # just the default config for now
@@ -68,7 +68,7 @@ def document():
 
 @pytest.fixture(scope="module")
 def taskmodule(document):
-    taskmodule = PointerNetworkTaskModule(
+    taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
         span_layer_name="entities",
         relation_layer_name="relations",
         exclude_labels_per_layer={"relations": ["no_relation"]},

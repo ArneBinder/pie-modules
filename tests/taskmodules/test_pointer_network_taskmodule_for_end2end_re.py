@@ -8,8 +8,8 @@ from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.core import AnnotationList, Document, annotation_field
 from pytorch_ie.documents import TextBasedDocument
 
-from pie_modules.taskmodules import PointerNetworkTaskModule
-from pie_modules.taskmodules.pointer_network_taskmodule import (
+from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
+from pie_modules.taskmodules.pointer_network_taskmodule_for_end2end_re import (
     EncodingWithIdsAndOptionalCpmTag,
 )
 
@@ -99,7 +99,7 @@ def test_document(document):
 
 @pytest.fixture(scope="module")
 def taskmodule(document, config):
-    taskmodule = PointerNetworkTaskModule(
+    taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
         span_layer_name="entities",
         relation_layer_name="relations",
         exclude_labels_per_layer={"relations": ["no_relation"]},
@@ -170,7 +170,7 @@ def test_taskmodule(taskmodule):
 def test_prepared_config(taskmodule, config):
     if config == {}:
         assert taskmodule._config() == {
-            "taskmodule_type": "PointerNetworkTaskModule",
+            "taskmodule_type": "PointerNetworkTaskModuleForEnd2EndRE",
             "span_layer_name": "entities",
             "relation_layer_name": "relations",
             "none_label": "none",
@@ -199,7 +199,7 @@ def test_prepared_config(taskmodule, config):
         }
     elif config == {"partition_layer_name": "sentences"}:
         assert taskmodule._config() == {
-            "taskmodule_type": "PointerNetworkTaskModule",
+            "taskmodule_type": "PointerNetworkTaskModuleForEnd2EndRE",
             "span_layer_name": "entities",
             "relation_layer_name": "relations",
             "none_label": "none",

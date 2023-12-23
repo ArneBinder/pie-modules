@@ -10,7 +10,7 @@ from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torchmetrics import Metric
 from transformers import get_linear_schedule_with_warmup
 
-from ..taskmodules import PointerNetworkTaskModule
+from ..taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 from ..taskmodules.common import HasBuildMetric
 from .components.pointer_network.bart_as_pointer_network import BartAsPointerNetwork
 
@@ -82,7 +82,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         if taskmodule_config is not None:
             taskmodule_kwargs = copy.copy(taskmodule_config)
             taskmodule_kwargs.pop(TaskModule.config_type_key)
-            taskmodule = PointerNetworkTaskModule(**taskmodule_kwargs)
+            taskmodule = PointerNetworkTaskModuleForEnd2EndRE(**taskmodule_kwargs)
             taskmodule.post_prepare()
             if not isinstance(taskmodule, HasBuildMetric):
                 raise Exception(

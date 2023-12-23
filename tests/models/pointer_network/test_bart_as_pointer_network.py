@@ -17,7 +17,7 @@ from transformers.generation import BeamSearchEncoderDecoderOutput
 from pie_modules.models.components.pointer_network.bart_as_pointer_network import (
     BartAsPointerNetwork,
 )
-from pie_modules.taskmodules import PointerNetworkTaskModule
+from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 
 ARTICLE_TO_SUMMARIZE = (
     "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
@@ -65,7 +65,7 @@ def document():
 
 @pytest.fixture(scope="module")
 def taskmodule(document):
-    taskmodule = PointerNetworkTaskModule(
+    taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
         span_layer_name="entities",
         relation_layer_name="relations",
         exclude_labels_per_layer={"relations": ["no_relation"]},
