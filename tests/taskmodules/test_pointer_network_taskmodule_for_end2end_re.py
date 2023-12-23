@@ -227,25 +227,22 @@ def test_prepared_config(taskmodule, config):
 
 
 @pytest.fixture()
-def encoded_inputs(taskmodule, document):
-    return taskmodule.encode_input(document)
+def task_encoding_without_target(taskmodule, document):
+    return taskmodule.encode_input(document)[0]
 
 
-@pytest.fixture()
-def encoded_input(encoded_inputs):
-    return encoded_inputs[0]
-
-
-def test_encoded_input(encoded_input, taskmodule):
-    assert encoded_input is not None
-    tokens = taskmodule.tokenizer.convert_ids_to_tokens(encoded_input.inputs.src_tokens)
+def test_input_encoding(task_encoding_without_target, taskmodule):
+    assert task_encoding_without_target is not None
+    tokens = taskmodule.tokenizer.convert_ids_to_tokens(
+        task_encoding_without_target.inputs.src_tokens
+    )
     if taskmodule.partition_layer_name is None:
-        assert asdict(encoded_input.inputs) == {
+        assert asdict(task_encoding_without_target.inputs) == {
             "src_tokens": [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 3101, 162, 4, 2],
             "src_attention_mask": [1] * 13,
         }
     elif taskmodule.partition_layer_name == "sentences":
-        assert asdict(encoded_input.inputs) == {
+        assert asdict(task_encoding_without_target.inputs) == {
             "src_tokens": [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 2],
             "src_attention_mask": [1] * 10,
         }
@@ -254,16 +251,55 @@ def test_encoded_input(encoded_input, taskmodule):
 
 
 @pytest.fixture()
-def task_encodings(taskmodule, encoded_inputs):
-    for encoded_input in encoded_inputs:
-        targets = taskmodule.encode_target(encoded_input)
-        encoded_input.targets = targets
-    return encoded_inputs
+def target_encoding(taskmodule, task_encoding_without_target):
+    return taskmodule.encode_target(task_encoding_without_target)
+
+
+def test_target_encoding(target_encoding, taskmodule):
+    assert target_encoding is not None
+    if taskmodule.partition_layer_name is None:
+        assert asdict(target_encoding) == {
+            "tgt_tokens": [0, 14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1],
+            "CPM_tag": [
+                [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+                [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+                [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+                [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+                [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            ],
+        }
+    elif taskmodule.partition_layer_name == "sentences":
+        assert asdict(target_encoding) == {
+            "tgt_tokens": [0, 14, 14, 5, 11, 12, 3, 6, 1],
+            "CPM_tag": [
+                [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+                [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0],
+                [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            ],
+        }
+    else:
+        raise Exception(f"unknown partition_layer_name: {taskmodule.partition_layer_name}")
 
 
 @pytest.fixture()
-def task_encoding(taskmodule, task_encodings):
-    return task_encodings[0]
+def task_encoding(task_encoding_without_target, target_encoding):
+    task_encoding_without_target.targets = target_encoding
+    return task_encoding_without_target
 
 
 def test_maybe_log_example(taskmodule, task_encoding, caplog, config):
@@ -309,41 +345,9 @@ def test_maybe_log_example_disabled(taskmodule, task_encoding, caplog):
     taskmodule.log_first_n_examples = original_log_first_n_examples
 
 
-def test_encode_target_with_dummy_relations(task_encoding, taskmodule):
-    targets = asdict(task_encoding.targets)
-    if taskmodule.partition_layer_name is None:
-        assert targets["tgt_tokens"] == [0, 14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]
-        assert targets["CPM_tag"] == [
-            [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
-            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
-            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        ]
-    elif taskmodule.partition_layer_name == "sentences":
-        assert targets["tgt_tokens"] == [0, 14, 14, 5, 11, 12, 3, 6, 1]
-        assert targets["CPM_tag"] == [
-            [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0],
-            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        ]
-    else:
-        raise Exception(f"unknown partition_layer_name: {taskmodule.partition_layer_name}")
+@pytest.fixture()
+def task_encodings(taskmodule, document):
+    return taskmodule.encode(documents=[document], encode_target=True)
 
 
 @pytest.fixture()
