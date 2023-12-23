@@ -8,7 +8,7 @@ import torch
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 
 from pie_modules.models import PointerNetworkModel, SimplePointerNetworkModel
-from pie_modules.taskmodules import PointerNetworkTaskModule
+from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 from tests import FIXTURES_ROOT
 from tests.models.test_pointer_network_model_predict import MODEL_PATH
 from tests.models.test_simple_pointer_network_predict import (
@@ -32,7 +32,7 @@ def test_trained_model(trained_model):
 
 @pytest.fixture(scope="module")
 def loaded_taskmodule():
-    taskmodule = PointerNetworkTaskModule.from_pretrained(MODEL_PATH)
+    taskmodule = PointerNetworkTaskModuleForEnd2EndRE.from_pretrained(MODEL_PATH)
     assert taskmodule.is_prepared
     return taskmodule
 

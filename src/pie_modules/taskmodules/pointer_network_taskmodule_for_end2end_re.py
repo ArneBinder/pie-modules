@@ -107,7 +107,7 @@ def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
 
 
 @TaskModule.register()
-class PointerNetworkTaskModule(
+class PointerNetworkTaskModuleForEnd2EndRE(
     HasBuildMetric,
     HasDecodeAnnotations[TaskOutputType],
     TaskModule[
