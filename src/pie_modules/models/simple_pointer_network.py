@@ -70,6 +70,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         taskmodule_config: Optional[Dict[str, Any]] = None,
         metric_splits: List[str] = [STAGE_VAL, STAGE_TEST],
         metric_intervals: Optional[Dict[str, int]] = None,
+        use_prediction_for_metrics: bool = True,
         # optimizer / scheduler
         lr: float = 5e-5,
         weight_decay: float = 1e-2,
@@ -150,6 +151,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         else:
             self.metrics = None
         self.metric_intervals = metric_intervals or {}
+        self.use_prediction_for_metrics = use_prediction_for_metrics
 
     def predict(self, inputs, **kwargs) -> Dict[str, Any]:
         is_training = self.training
@@ -196,7 +198,16 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             stage_metrics = self.metrics.get(stage, None)
             metric_interval = self.metric_intervals.get(stage, 1)
             if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
-                prediction = self.predict(inputs)
+                if self.use_prediction_for_metrics:
+                    prediction = self.predict(inputs)
+                else:
+                    # construct prediction from the model output
+                    logits = outputs.logits
+                    # get the indices (these are without the initial bos_ids, see above)
+                    indices = torch.argmax(logits, dim=-1)
+                    # re-add the bos_ids
+                    prediction_ids = torch.cat([targets["tgt_tokens"][:, :1], indices], dim=-1)
+                    prediction = {"pred": prediction_ids}
                 # the format of expected needs to be the same as the format of prediction
                 stage_metrics.update(prediction, {"pred": targets["tgt_tokens"]})
 
