@@ -548,11 +548,11 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                     not_encoded[layer_name] = list(filtered)
             if len(not_encoded) > 0:
                 logger.warning(
-                    f" encoding errors: {invalid}, skipped annotations:\n"
+                    f"encoding errors: {invalid}, skipped annotations:\n"
                     f"{json.dumps(not_encoded, sort_keys=True, indent=2)}"
                 )
-            elif len(remaining) > 0:
-                logger.warning(f" encoding errors: {invalid}, remaining encoding ids: {remaining}")
+            elif len([tag for tag in remaining if tag != self.eos_id]) > 0:
+                logger.warning(f"encoding errors: {invalid}, remaining encoding ids: {remaining}")
 
         # build CPM tag
         if self.create_constraints:
