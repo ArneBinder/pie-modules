@@ -39,8 +39,7 @@ def flatten_dict(d: MutableMapping, parent_key: str = "", sep: str = "."):
 class SimplePointerNetworkModel(PyTorchIEModel):
     def __init__(
         self,
-        base_model_name_or_path: str,
-        base_model_kwargs: Dict[str, Any],
+        base_model_config: Dict[str, Any],
         taskmodule_config: Optional[Dict[str, Any]] = None,
         generation_kwargs: Optional[Dict[str, Any]] = None,
         # metrics
@@ -57,7 +56,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             logger.warning(
                 "layernorm_decay is deprecated, please use base_model_kwargs.encoder_layer_norm_decay instead!"
             )
-            base_model_kwargs["encoder_layer_norm_decay"] = layernorm_decay
+            base_model_config["encoder_layer_norm_decay"] = layernorm_decay
         self.save_hyperparameters(ignore=["layernorm_decay"])
 
         # optimizer / scheduler
@@ -69,17 +68,17 @@ class SimplePointerNetworkModel(PyTorchIEModel):
 
         # TODO: Use AutoModelAsPointerNetwork when it is available
         self.model = BartAsPointerNetwork.from_pretrained(
-            base_model_name_or_path,
             # generation
             forced_bos_token_id=None,  # to disable ForcedBOSTokenLogitsProcessor
             forced_eos_token_id=None,  # to disable ForcedEOSTokenLogitsProcessor
-            **base_model_kwargs,
+            **base_model_config,
         )
 
         self.model.adjust_original_model()
 
         self.metrics: Optional[Dict[str, Metric]]
         if taskmodule_config is not None:
+            # TODO: use AutoTaskModule.from_config() when it is available
             taskmodule_kwargs = copy.copy(taskmodule_config)
             taskmodule_kwargs.pop(TaskModule.config_type_key)
             taskmodule = PointerNetworkTaskModuleForEnd2EndRE(**taskmodule_kwargs)
