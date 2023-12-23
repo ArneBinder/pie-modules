@@ -1,4 +1,5 @@
 import dataclasses
+import json
 import logging
 from collections import Counter, defaultdict
 from functools import cmp_to_key
@@ -514,7 +515,19 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             decoded, invalid = self.decode_annotations(
                 EncodingWithIdsAndOptionalCpmTag(tgt_tokens), metadata=metadata
             )
-            logger.warning(f"invalid: {invalid}, decoded: {decoded}")
+            not_encoded = defaultdict(set)
+            for layer_name in layers:
+                # convert to dicts to make them comparable (original annotations are attached which breaks comparison)
+                decoded_dicts = [ann.asdict() for ann in decoded[layer_name]]
+                # filter annotations and convert to str to make them json serializable
+                filtered = {
+                    str(ann) for ann in layers[layer_name] if ann.asdict() not in decoded_dicts
+                }
+                not_encoded[layer_name].update(filtered)
+            logger.warning(
+                f" encoding errors: {invalid}, skipped annotations:\n"
+                f"{json.dumps(not_encoded, sort_keys=True, indent=2)}"
+            )
 
         if self.max_target_length is not None and len(tgt_tokens) > self.max_target_length:
             raise ValueError(
