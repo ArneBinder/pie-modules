@@ -295,7 +295,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
                 "Inconsistent output: The output of the model forward should be of type "
                 f"`Seq2SeqLMOutput`, but is of type `{type(outputs)}`."
             )
-        lm_logits, masked_lm_loss = self.pointer_head(
+        logits, loss = self.pointer_head(
             last_hidden_state=outputs.last_hidden_state,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_input_ids=input_ids,
@@ -305,12 +305,12 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         )
 
         if not return_dict:
-            output = (lm_logits,) + outputs[1:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
-            loss=masked_lm_loss,
-            logits=lm_logits,
+            loss=loss,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
