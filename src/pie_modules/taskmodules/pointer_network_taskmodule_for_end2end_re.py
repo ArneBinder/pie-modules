@@ -515,7 +515,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             decoded, invalid = self.decode_annotations(
                 EncodingWithIdsAndOptionalCpmTag(tgt_tokens), metadata=metadata
             )
-            not_encoded = defaultdict(set)
+            not_encoded = {}
             for layer_name in layers:
                 # convert to dicts to make them comparable (original annotations are attached which breaks comparison)
                 decoded_dicts = [ann.asdict() for ann in decoded[layer_name]]
@@ -523,7 +523,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                 filtered = {
                     str(ann) for ann in layers[layer_name] if ann.asdict() not in decoded_dicts
                 }
-                not_encoded[layer_name].update(filtered)
+                not_encoded[layer_name] = list(filtered)
             logger.warning(
                 f" encoding errors: {invalid}, skipped annotations:\n"
                 f"{json.dumps(not_encoded, sort_keys=True, indent=2)}"
