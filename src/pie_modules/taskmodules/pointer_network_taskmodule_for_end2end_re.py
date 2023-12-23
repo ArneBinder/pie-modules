@@ -129,7 +129,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         relation_layer_name: str = "binary_relations",
         none_label: str = "none",
         loop_dummy_relation_name: str = "loop",
-        ignore_error_types: Optional[List[str]] = None,
         # generic pointer network
         label_tokens: Optional[Dict[str, str]] = None,
         label_representations: Optional[Dict[str, str]] = None,
@@ -174,7 +173,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         self.relation_layer_name = relation_layer_name
         self.none_label = none_label
         self.loop_dummy_relation_name = loop_dummy_relation_name
-        self.ignore_error_types = ignore_error_types or []
         # will be set in _post_prepare()
         self.relation_encoder_decoder: BinaryRelationEncoderDecoder
 
@@ -384,7 +382,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     def sanitize_sequence(
         self,
         tag_seq: List[int],
-    ) -> Tuple[List[Tuple[int, int, int, int, int, int, int]], Dict[str, int]]:
+    ) -> Tuple[List[Tuple[int, int, int, int, int, int, int]], Dict[str, int], List[int]]:
         # TODO: count total amounts instead of returning bool values.
         #  This requires to also count "total" (maybe also "skipped" and "correct").
         invalid = {
@@ -398,6 +396,8 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         cur_pair: List[int] = []
         if len(tag_seq):
             for i in tag_seq:
+                # a tuple will be terminated when the next id is a relation id
+                # or when this is a none_id and the tuple has 6 entries (i.e. it will be completed with the next id)
                 if i in self.relation_ids or (i == self.none_id and len(cur_pair) == 6):
                     cur_pair.append(i)
                     if len(cur_pair) != 7:
@@ -417,8 +417,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                     else:  # The decoding length is correct (解码长度正确)
                         # Check for correct position (检查位置是否正确) <s1,e1,t1,s2,e2,t2,t3>
                         if cur_pair[0] > cur_pair[1] or cur_pair[3] > cur_pair[4]:
-                            if "cover" not in self.ignore_error_types:
-                                skip = True
+                            skip = True
                             invalid["order"] = 1
                         elif not (cur_pair[1] < cur_pair[3] or cur_pair[0] > cur_pair[4]):
                             skip = True
@@ -430,8 +429,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                         ):
                             # Consider making an additional layer of restrictions to prevent misalignment
                             # of the relationship and span tags (可以考虑做多一层限制，防止relation 和 span标签错位)
-                            if "cross" not in self.ignore_error_types:
-                                skip = True
+                            skip = True
                             invalid["cross"] = 1
                         # tag = set([cur_pair[2], cur_pair[5], cur_pair[6]])
                         RC_idx = self.relation_ids + self.span_ids
@@ -459,7 +457,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         # invalid["total"] = invalid["correct"] + invalid["skipped"]
 
         # ignore type because of tuple length
-        return pairs, invalid  # type: ignore
+        return pairs, invalid, cur_pair  # type: ignore
 
     def encode_annotations(
         self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None
@@ -510,8 +508,8 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         tgt_tokens.append(self.eos_id)
 
         # sanity check
-        _, invalid = self.sanitize_sequence(tag_seq=tgt_tokens[1:])
-        if not all(v == 0 for k, v in invalid.items() if k not in self.ignore_error_types):
+        _, invalid, remaining = self.sanitize_sequence(tag_seq=tgt_tokens[1:])
+        if not all(v == 0 for k, v in invalid.items() if k != "total") or len(remaining) > 0:
             decoded, invalid = self.decode_annotations(
                 EncodingWithIdsAndOptionalCpmTag(tgt_tokens), metadata=metadata
             )
@@ -523,11 +521,15 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                 filtered = {
                     str(ann) for ann in layers[layer_name] if ann.asdict() not in decoded_dicts
                 }
-                not_encoded[layer_name] = list(filtered)
-            logger.warning(
-                f" encoding errors: {invalid}, skipped annotations:\n"
-                f"{json.dumps(not_encoded, sort_keys=True, indent=2)}"
-            )
+                if len(filtered) > 0:
+                    not_encoded[layer_name] = list(filtered)
+            if len(not_encoded) > 0:
+                logger.warning(
+                    f" encoding errors: {invalid}, skipped annotations:\n"
+                    f"{json.dumps(not_encoded, sort_keys=True, indent=2)}"
+                )
+            elif len(remaining) > 0:
+                logger.warning(f" encoding errors: {invalid}, remaining encoding ids: {remaining}")
 
         if self.max_target_length is not None and len(tgt_tokens) > self.max_target_length:
             raise ValueError(
@@ -549,7 +551,9 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         self, encoding: TaskOutputType, metadata: Optional[Dict[str, Any]] = None
     ) -> Tuple[Dict[str, List[Annotation]], Any]:
         # strip the bos token
-        relation_encodings, _errors = self.sanitize_sequence(tag_seq=encoding.tgt_tokens[1:])
+        relation_encodings, errors, remaining = self.sanitize_sequence(
+            tag_seq=encoding.tgt_tokens[1:]
+        )
         relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
         entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
         for tup in relation_encodings:
@@ -581,7 +585,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         return {
             self.span_layer_name: entity_layer,
             self.relation_layer_name: relation_layer,
-        }, _errors
+        }, errors
 
     # TODO: use torch instead of numpy?
     def _pointer_tag(
@@ -767,7 +771,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         task_encoding: TaskEncodingType,
         task_output: TaskOutputType,
     ) -> Iterator[Tuple[str, Annotation]]:
-        layers, _errors = self.decode_annotations(
+        layers, errors = self.decode_annotations(
             encoding=task_output, metadata=task_encoding.metadata
         )
         tokenized_document = task_encoding.metadata["tokenized_document"]
