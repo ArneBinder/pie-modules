@@ -188,8 +188,13 @@ class AnnotationLayerMetric(Metric, Generic[T]):
             res[layer_name] = layer_info
             res[layer_name + "/micro"] = overall_layer_info
 
-        # if invalid contains a "total" key, use that to normalize, otherwise use the number of training examples
-        invalid_total = self.invalid.pop("total", self.total)
+        # if invalid contains a "correct" key, use that to normalize, otherwise use the number of training examples
+        if "correct" in self.invalid:
+            invalid_total = sum(self.invalid.values())
+            # remove the "correct" entry to get the correct value for invalid/all below
+            self.invalid.pop("correct")
+        else:
+            invalid_total = self.total
         res["invalid"] = {k: v / invalid_total for k, v in self.invalid.items()}
         res["invalid/all"] = sum(self.invalid.values()) / invalid_total
 
