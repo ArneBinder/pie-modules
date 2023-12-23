@@ -36,7 +36,11 @@ class BartAsPointerNetworkConfig(BartConfig):
         self.decoder_start_token_id = self.bos_token_id
 
         self.label_ids = label_ids
+        if self.label_ids is None:
+            raise ValueError("label_ids must be provided for BartAsPointerNetworkConfig!")
         self.target_token_ids = target_token_ids
+        if self.target_token_ids is None:
+            raise ValueError("target_token_ids must be provided for BartAsPointerNetworkConfig!")
 
         self.embedding_weight_mapping = embedding_weight_mapping
 
