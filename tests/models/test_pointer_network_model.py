@@ -281,6 +281,7 @@ def test_metric_val(model, batch):
     assert values is not None
     assert values == {
         "em": 0.5,
+        "em_original": 0.5,
         "entities": {
             "content": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
             "person": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
