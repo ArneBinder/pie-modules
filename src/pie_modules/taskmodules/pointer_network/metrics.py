@@ -128,9 +128,11 @@ class AnnotationLayerMetric(Metric, Generic[T]):
         self.total += bsz
 
         for i in range(bsz):
-            gold_annotations, gold_errors = self.decode_annotations_func(expected_list[i])
+            expected_encoding = expected_list[i]
+            prediction_encoding = prediction_list[i]
+            gold_annotations, gold_errors = self.decode_annotations_func(expected_encoding)
             predicted_annotations, predicted_errors = self.decode_annotations_func(
-                prediction_list[i]
+                prediction_encoding
             )
             for k, v in predicted_errors.items():
                 self.invalid[k] += v
@@ -141,7 +143,10 @@ class AnnotationLayerMetric(Metric, Generic[T]):
                 pred_layer = set(predicted_annotations[layer_name])
                 metric.update(gold_layer, pred_layer)
 
-        self.em += self.get_exact_matches(prediction, expected)
+            if expected_encoding == prediction_encoding:
+                self.em += 1
+
+        self.em_original += self.get_exact_matches(prediction, expected)
 
     def reset(self):
         super().reset()
@@ -155,6 +160,7 @@ class AnnotationLayerMetric(Metric, Generic[T]):
         self.invalid = defaultdict(int)
         # this contains the number of examples where the full target sequence was predicted correctly (exact matches)
         self.em = 0
+        self.em_original = 0
 
     def _nested_round(self, d: Dict[str, Any]) -> Dict[str, Any]:
         if self.round_precision is None:
@@ -174,6 +180,8 @@ class AnnotationLayerMetric(Metric, Generic[T]):
         res = {}
 
         res["em"] = self.em / self.total
+        # TODO: remove if em (above) is correct
+        res["em_original"] = self.em_original / self.total
 
         for layer_name, metric in self.layer_metrics.items():
             overall_layer_info, layer_info = metric.compute()
