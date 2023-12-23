@@ -93,8 +93,8 @@ def test_taskmodule(taskmodule):
 def model(taskmodule, config) -> SimplePointerNetworkModel:
     torch.manual_seed(42)
     model = SimplePointerNetworkModel(
-        base_model_name_or_path="sshleifer/distilbart-xsum-12-1",
-        base_model_kwargs=dict(
+        base_model_config=dict(
+            pretrained_model_name_or_path="sshleifer/distilbart-xsum-12-1",
             bos_token_id=taskmodule.bos_id,
             eos_token_id=taskmodule.eos_id,
             pad_token_id=taskmodule.eos_id,
@@ -238,8 +238,8 @@ def test_configure_optimizers(model, config):
 def test_configure_optimizers_with_warmup_proportion(taskmodule, config):
     torch.manual_seed(42)
     model = SimplePointerNetworkModel(
-        base_model_name_or_path="sshleifer/distilbart-xsum-12-1",
-        base_model_kwargs=dict(
+        base_model_config=dict(
+            pretrained_model_name_or_path="sshleifer/distilbart-xsum-12-1",
             bos_token_id=taskmodule.bos_id,
             eos_token_id=taskmodule.eos_id,
             pad_token_id=taskmodule.eos_id,
