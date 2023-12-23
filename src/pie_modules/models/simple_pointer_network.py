@@ -1,13 +1,12 @@
 import copy
 import logging
 from collections.abc import MutableMapping
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import torch
 from pytorch_ie import TaskModule
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
-from torch.nn import Parameter
 from torchmetrics import Metric
 from transformers import get_linear_schedule_with_warmup
 
@@ -36,105 +35,48 @@ def flatten_dict(d: MutableMapping, parent_key: str = "", sep: str = "."):
     return dict(_flatten_dict_gen(d, parent_key, sep))
 
 
-def get_layer_norm_parameters(
-    named_parameters: Iterator[Tuple[str, Parameter]]
-) -> Iterator[Parameter]:
-    return (
-        param for name, param in named_parameters if "layernorm" in name or "layer_norm" in name
-    )
-
-
-def get_non_layer_norm_parameters(
-    named_parameters: Iterator[Tuple[str, Parameter]]
-) -> Iterator[Parameter]:
-    return (
-        param
-        for name, param in named_parameters
-        if not ("layernorm" in name or "layer_norm" in name)
-    )
-
-
 @PyTorchIEModel.register()
 class SimplePointerNetworkModel(PyTorchIEModel):
     def __init__(
         self,
-        model_name_or_path: str,
-        bos_id: int,
-        eos_id: int,
-        pad_id: int,
-        label_ids: List[int],
-        target_token_ids: List[int],
-        vocab_size: int,
-        embedding_weight_mapping: Optional[Dict[int, List[int]]] = None,
-        use_encoder_mlp: bool = False,
+        base_model_name_or_path: str,
+        base_model_kwargs: Dict[str, Any],
         taskmodule_config: Optional[Dict[str, Any]] = None,
+        generation_kwargs: Optional[Dict[str, Any]] = None,
+        # metrics
         metric_splits: List[str] = [STAGE_VAL, STAGE_TEST],
         metric_intervals: Optional[Dict[str, int]] = None,
         use_prediction_for_metrics: bool = True,
         # optimizer / scheduler
-        lr: float = 5e-5,
-        weight_decay: float = 1e-2,
-        head_decay: Optional[float] = None,
-        shared_decay: Optional[float] = None,
-        encoder_layer_norm_decay: Optional[float] = 0.001,
-        decoder_layer_norm_decay: Optional[float] = None,
         layernorm_decay: Optional[float] = 0.001,  # deprecated
         warmup_proportion: float = 0.0,
-        # generation
-        max_length: int = 512,
-        num_beams: int = 4,
-        generation_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         if layernorm_decay is not None:
             logger.warning(
-                "layernorm_decay is deprecated, please use encoder_layer_norm_decay instead!"
+                "layernorm_decay is deprecated, please use base_model_kwargs.encoder_layer_norm_decay instead!"
             )
-            encoder_layer_norm_decay = layernorm_decay
+            base_model_kwargs["encoder_layer_norm_decay"] = layernorm_decay
         self.save_hyperparameters(ignore=["layernorm_decay"])
 
         # optimizer / scheduler
-        self.lr = lr
-        self.weight_decay = weight_decay
-        self.head_decay = head_decay if head_decay is not None else self.weight_decay
-        self.shared_decay = shared_decay if shared_decay is not None else self.weight_decay
-        self.encoder_layer_norm_decay = (
-            encoder_layer_norm_decay if encoder_layer_norm_decay is not None else self.weight_decay
-        )
-        self.decoder_layer_norm_decay = (
-            decoder_layer_norm_decay if decoder_layer_norm_decay is not None else self.weight_decay
-        )
         self.warmup_proportion = warmup_proportion
 
         # can be used to override the generation kwargs from the generation config that gets constructed from the
         # BartAsPointerNetwork config
         self.generation_kwargs = generation_kwargs or {}
 
+        # TODO: Use AutoModelAsPointerNetwork when it is available
         self.model = BartAsPointerNetwork.from_pretrained(
-            model_name_or_path,
-            # label id space (bos/eos/pad_token_id are also used for generation)
-            bos_token_id=bos_id,
-            eos_token_id=eos_id,
-            pad_token_id=pad_id,
-            label_ids=label_ids,
-            # target token id space
-            target_token_ids=target_token_ids,
-            # mapping to better initialize the label embedding weights
-            embedding_weight_mapping=embedding_weight_mapping,
-            # other parameters
-            use_encoder_mlp=use_encoder_mlp,
+            base_model_name_or_path,
             # generation
             forced_bos_token_id=None,  # to disable ForcedBOSTokenLogitsProcessor
             forced_eos_token_id=None,  # to disable ForcedEOSTokenLogitsProcessor
-            max_length=max_length,
-            num_beams=num_beams,
+            **base_model_kwargs,
         )
 
-        self.model.resize_token_embeddings(vocab_size)
-
-        if not self.is_from_pretrained:
-            self.model.overwrite_decoder_label_embeddings_with_mapping()
+        self.model.adjust_original_model()
 
         self.metrics: Optional[Dict[str, Metric]]
         if taskmodule_config is not None:
@@ -248,57 +190,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
                     self.log(f"metric_{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
-        parameters = []
-
-        # head parameters
-        params = {
-            "lr": self.lr,
-            "weight_decay": self.head_decay,
-            "params": dict(self.model.head_named_params()).values(),
-        }
-        parameters.append(params)
-
-        # decoder only layer norm parameters
-        params = {
-            "lr": self.lr,
-            "weight_decay": self.decoder_layer_norm_decay,
-            "params": get_layer_norm_parameters(self.model.decoder_only_named_params()),
-        }
-        parameters.append(params)
-
-        # decoder only other parameters
-        params = {
-            "lr": self.lr,
-            "weight_decay": self.weight_decay,
-            "params": get_non_layer_norm_parameters(self.model.decoder_only_named_params()),
-        }
-        parameters.append(params)
-
-        # encoder only layer norm parameters
-        params = {
-            "lr": self.lr,
-            "weight_decay": self.encoder_layer_norm_decay,
-            "params": get_layer_norm_parameters(self.model.encoder_only_named_params()),
-        }
-        parameters.append(params)
-
-        # encoder only other parameters
-        params = {
-            "lr": self.lr,
-            "weight_decay": self.weight_decay,
-            "params": get_non_layer_norm_parameters(self.model.encoder_only_named_params()),
-        }
-        parameters.append(params)
-
-        # encoder-decoder shared parameters
-        params = {
-            "lr": self.lr,
-            "weight_decay": self.shared_decay,
-            "params": dict(self.model.encoder_decoder_shared_named_params()).values(),
-        }
-        parameters.append(params)
-
-        optimizer = torch.optim.AdamW(parameters)
+        optimizer = self.model.configure_optimizer()
 
         if self.warmup_proportion > 0.0:
             stepping_batches = self.trainer.estimated_stepping_batches

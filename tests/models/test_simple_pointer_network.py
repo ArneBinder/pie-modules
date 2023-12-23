@@ -14,7 +14,7 @@ from pie_modules.taskmodules import PointerNetworkTaskModule
 from tests import _config_to_str
 
 # just the default config for now
-CONFIGS = [{}, {"use_encoder_mlp": True}]
+CONFIGS = [{}]
 CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
 
 logger = logging.getLogger(__name__)
@@ -93,14 +93,17 @@ def test_taskmodule(taskmodule):
 def model(taskmodule, config) -> SimplePointerNetworkModel:
     torch.manual_seed(42)
     model = SimplePointerNetworkModel(
-        model_name_or_path="sshleifer/distilbart-xsum-12-1",
-        bos_id=taskmodule.bos_id,
-        eos_id=taskmodule.eos_id,
-        pad_id=taskmodule.eos_id,
-        label_ids=taskmodule.label_ids,
-        target_token_ids=taskmodule.target_token_ids,
-        vocab_size=len(taskmodule.tokenizer),
-        embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
+        base_model_name_or_path="sshleifer/distilbart-xsum-12-1",
+        base_model_kwargs=dict(
+            bos_token_id=taskmodule.bos_id,
+            eos_token_id=taskmodule.eos_id,
+            pad_token_id=taskmodule.eos_id,
+            label_ids=taskmodule.label_ids,
+            target_token_ids=taskmodule.target_token_ids,
+            embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
+            max_length=512,
+            num_beams=4,
+        ),
         generation_kwargs=taskmodule.generation_kwargs,
         taskmodule_config=taskmodule._config(),
         **config,
@@ -167,12 +170,7 @@ def test_training_step(model, batch, config):
     torch.manual_seed(42)
     assert model.training
     loss = model.training_step(batch, 0)
-    if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(5.422972202301025))
-    elif config == {"use_encoder_mlp": True}:
-        torch.testing.assert_close(loss, torch.tensor(4.601412773132324))
-    else:
-        raise ValueError(f"Unknown config: {config}")
+    torch.testing.assert_close(loss, torch.tensor(4.601412773132324))
 
 
 def test_validation_step(model, batch, config):
@@ -180,12 +178,7 @@ def test_validation_step(model, batch, config):
     model.eval()
     assert not model.training
     loss = model.validation_step(batch, 0)
-    if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(5.610896587371826))
-    elif config == {"use_encoder_mlp": True}:
-        torch.testing.assert_close(loss, torch.tensor(4.802009105682373))
-    else:
-        raise ValueError(f"Unknown config: {config}")
+    torch.testing.assert_close(loss, torch.tensor(4.802009105682373))
 
 
 def test_test_step(model, batch, config):
@@ -193,12 +186,7 @@ def test_test_step(model, batch, config):
     model.eval()
     assert not model.training
     loss = model.test_step(batch, 0)
-    if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(5.610896587371826))
-    elif config == {"use_encoder_mlp": True}:
-        torch.testing.assert_close(loss, torch.tensor(4.802009105682373))
-    else:
-        raise ValueError(f"Unknown config: {config}")
+    torch.testing.assert_close(loss, torch.tensor(4.802009105682373))
 
 
 def test_configure_optimizers(model, config):
@@ -219,47 +207,48 @@ def test_configure_optimizers(model, config):
 
     # head parameters
     assert optimizers.param_groups[0]["weight_decay"] == 0.01
-    if config == {}:  # no encoder_mlp
-        assert len(all_param_shapes[0]) == 0
-    elif config == {"use_encoder_mlp": True}:
-        assert all_param_shapes[0] == [(1024, 1024), (1024,), (1024, 1024), (1024,)]
-    else:
-        raise ValueError(f"Unknown config: {config}")
+    # per default, it is with encoder_mlp
+    assert all_param_shapes[0] == [(1024, 1024), (1024,), (1024, 1024), (1024,)]
 
     # decoder layer norm only parameters
-    assert optimizers.param_groups[1]["weight_decay"] == 0.01 == model.decoder_layer_norm_decay
+    assert optimizers.param_groups[1]["weight_decay"] == 0.01 == model.model.config.weight_decay
     assert len(all_param_shapes[1]) == 8
 
     # decoder only other parameters
-    assert optimizers.param_groups[2]["weight_decay"] == 0.01 == model.weight_decay
+    assert optimizers.param_groups[2]["weight_decay"] == 0.01 == model.model.config.weight_decay
     assert len(all_param_shapes[2]) == 21
 
     # layer norm encoder only parameters
-    assert optimizers.param_groups[3]["weight_decay"] == 0.001 == model.encoder_layer_norm_decay
+    assert (
+        optimizers.param_groups[3]["weight_decay"]
+        == 0.001
+        == model.model.config.encoder_layer_norm_decay
+    )
     assert len(all_param_shapes[3]) == 50
 
     # remaining encoder only parameters
-    assert optimizers.param_groups[4]["weight_decay"] == 0.01 == model.weight_decay
+    assert optimizers.param_groups[4]["weight_decay"] == 0.01 == model.model.config.weight_decay
     assert len(all_param_shapes[4]) == 145
 
     # encoder-decoder shared parameters (embed_tokens.weight)
-    assert optimizers.param_groups[5]["weight_decay"] == 0.01 == model.shared_decay
+    assert optimizers.param_groups[5]["weight_decay"] == 0.01 == model.model.config.weight_decay
     assert len(all_param_shapes[5]) == 1
 
 
 def test_configure_optimizers_with_warmup_proportion(taskmodule, config):
     torch.manual_seed(42)
     model = SimplePointerNetworkModel(
-        model_name_or_path="sshleifer/distilbart-xsum-12-1",
-        bos_id=taskmodule.bos_id,
-        eos_id=taskmodule.eos_id,
-        pad_id=taskmodule.eos_id,
-        label_ids=taskmodule.label_ids,
-        target_token_ids=taskmodule.target_token_ids,
-        vocab_size=len(taskmodule.tokenizer),
-        embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
-        # annotation_encoder_decoder_name=taskmodule.annotation_encoder_decoder_name,
-        # annotation_encoder_decoder_kwargs=taskmodule.annotation_encoder_decoder_kwargs,
+        base_model_name_or_path="sshleifer/distilbart-xsum-12-1",
+        base_model_kwargs=dict(
+            bos_token_id=taskmodule.bos_id,
+            eos_token_id=taskmodule.eos_id,
+            pad_token_id=taskmodule.eos_id,
+            label_ids=taskmodule.label_ids,
+            target_token_ids=taskmodule.target_token_ids,
+            embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
+            max_length=512,
+            num_beams=4,
+        ),
         taskmodule_config=taskmodule._config(),
         warmup_proportion=0.1,
     )

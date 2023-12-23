@@ -2,6 +2,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch.utils.checkpoint
 from torch.nn import Parameter
+from torch.optim import Optimizer
 from transformers import BartConfig, BartModel, BartPreTrainedModel
 from transformers.modeling_outputs import (
     BaseModelOutput,
@@ -17,6 +18,24 @@ from .pointer_head import PointerHead
 logger = logging.get_logger(__name__)
 
 
+def get_layer_norm_parameters(
+    named_parameters: Iterator[Tuple[str, Parameter]]
+) -> Iterator[Parameter]:
+    return (
+        param for name, param in named_parameters if "layernorm" in name or "layer_norm" in name
+    )
+
+
+def get_non_layer_norm_parameters(
+    named_parameters: Iterator[Tuple[str, Parameter]]
+) -> Iterator[Parameter]:
+    return (
+        param
+        for name, param in named_parameters
+        if not ("layernorm" in name or "layer_norm" in name)
+    )
+
+
 class BartAsPointerNetworkConfig(BartConfig):
     def __init__(
         self,
@@ -24,15 +43,25 @@ class BartAsPointerNetworkConfig(BartConfig):
         label_ids: Optional[List[int]] = None,
         # mapping from label space ids to target token ids
         target_token_ids: Optional[List[int]] = None,
-        # mapping to better initialize the label embedding weights
-        embedding_weight_mapping: Optional[Dict[int, List[int]]] = None,
+        # token id mapping to better initialize the label embedding weights
+        embedding_weight_mapping: Optional[Dict[Union[int, str], List[int]]] = None,
         # other parameters
         use_encoder_mlp: bool = True,
         max_target_positions: Optional[int] = None,
+        # optimizer
+        lr: float = 5e-5,
+        weight_decay: float = 1e-2,
+        head_decay: Optional[float] = None,
+        shared_decay: Optional[float] = None,
+        encoder_layer_norm_decay: Optional[float] = 0.001,
+        decoder_layer_norm_decay: Optional[float] = None,
+        # other BartConfig parameters
         **kwargs,
     ):
         super().__init__(**kwargs)
         # we use the bos_id as the decoder_start_token_id
+        # TODO: does this still work if we pass another bos_token_id to BartAsPointerNetwork.from_pretrained()?
+        #  i.e. or will this be still the original bos_token_id?
         self.decoder_start_token_id = self.bos_token_id
 
         self.label_ids = label_ids
@@ -42,6 +71,13 @@ class BartAsPointerNetworkConfig(BartConfig):
 
         self.use_encoder_mlp = use_encoder_mlp
         self.max_target_positions = max_target_positions
+
+        self.lr = lr
+        self.weight_decay = weight_decay
+        self.head_decay = head_decay
+        self.shared_decay = shared_decay
+        self.encoder_layer_norm_decay = encoder_layer_norm_decay
+        self.decoder_layer_norm_decay = decoder_layer_norm_decay
 
 
 class BartAsPointerNetwork(BartPreTrainedModel):
@@ -69,6 +105,13 @@ class BartAsPointerNetwork(BartPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def adjust_original_model(self):
+        # target_token_ids contains all new target tokens for the labels
+        vocab_size = max(self.config.target_token_ids) + 1
+        self.resize_token_embeddings(vocab_size)
+        # use mapping to better initialize the label embedding weights
+        self.overwrite_decoder_label_embeddings_with_mapping()
 
     def base_model_named_params(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
         yield from self.model.named_parameters(prefix=prefix + self.base_model_prefix)
@@ -115,15 +158,16 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         # return self.pointer_decoder
 
     def overwrite_decoder_label_embeddings_with_mapping(
-        self, mapping: Optional[Dict[int, List[int]]] = None
+        self, mapping: Optional[Dict[Union[int, str], List[int]]] = None
     ):
         if mapping is None:
             mapping = self.config.embedding_weight_mapping
         if mapping is None:
-            logger.warning("No mapping provided to overwrite the decoder label embeddings!")
-            return
+            raise ValueError("No mapping provided to overwrite the decoder label embeddings!")
+        # Because of serialization, the keys may be strings. Convert them back to ints.
+        mapping_converted = {int(k): v for k, v in mapping.items()}
         self.pointer_head.overwrite_decoder_label_embeddings_with_mapping(
-            mapping, encoder_weights=self.model.encoder.embed_tokens.weight
+            mapping_converted, encoder_weights=self.model.encoder.embed_tokens.weight
         )
 
     def model_forward(
@@ -390,3 +434,76 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         result["encoder_input_ids"] = inputs_tensor
         result["encoder_attention_mask"] = result["attention_mask"]
         return result
+
+    def configure_optimizer(self) -> Optimizer:
+        parameters = []
+
+        # head parameters
+        head_decay = (
+            self.config.head_decay
+            if self.config.head_decay is not None
+            else self.config.weight_decay
+        )
+        params = {
+            "lr": self.config.lr,
+            "weight_decay": head_decay,
+            "params": dict(self.head_named_params()).values(),
+        }
+        parameters.append(params)
+
+        # decoder only layer norm parameters
+        decoder_layer_norm_decay = (
+            self.config.decoder_layer_norm_decay
+            if self.config.decoder_layer_norm_decay is not None
+            else self.config.weight_decay
+        )
+        params = {
+            "lr": self.config.lr,
+            "weight_decay": decoder_layer_norm_decay,
+            "params": get_layer_norm_parameters(self.decoder_only_named_params()),
+        }
+        parameters.append(params)
+
+        # decoder only other parameters
+        params = {
+            "lr": self.config.lr,
+            "weight_decay": self.config.weight_decay,
+            "params": get_non_layer_norm_parameters(self.decoder_only_named_params()),
+        }
+        parameters.append(params)
+
+        # encoder only layer norm parameters
+        encoder_layer_norm_decay = (
+            self.config.encoder_layer_norm_decay
+            if self.config.encoder_layer_norm_decay is not None
+            else self.config.weight_decay
+        )
+        params = {
+            "lr": self.config.lr,
+            "weight_decay": encoder_layer_norm_decay,
+            "params": get_layer_norm_parameters(self.encoder_only_named_params()),
+        }
+        parameters.append(params)
+
+        # encoder only other parameters
+        params = {
+            "lr": self.config.lr,
+            "weight_decay": self.config.weight_decay,
+            "params": get_non_layer_norm_parameters(self.encoder_only_named_params()),
+        }
+        parameters.append(params)
+
+        # encoder-decoder shared parameters
+        shared_decay = (
+            self.config.shared_decay
+            if self.config.shared_decay is not None
+            else self.config.weight_decay
+        )
+        params = {
+            "lr": self.config.lr,
+            "weight_decay": shared_decay,
+            "params": dict(self.encoder_decoder_shared_named_params()).values(),
+        }
+        parameters.append(params)
+
+        return torch.optim.AdamW(parameters)
