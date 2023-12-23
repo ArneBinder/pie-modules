@@ -536,10 +536,10 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         self, encoding: TaskOutputType, metadata: Optional[Dict[str, Any]] = None
     ) -> Tuple[Dict[str, List[Annotation]], Any]:
         # strip the bos token
-        ps, _errors = self.sanitize_sequence(tag_seq=encoding.tgt_tokens[1:])
+        relation_encodings, _errors = self.sanitize_sequence(tag_seq=encoding.tgt_tokens[1:])
         relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
         entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
-        for tup in ps:
+        for tup in relation_encodings:
             rel = self.relation_encoder_decoder.decode(encoding=list(tup), metadata=metadata)
             head_span = (rel.head.start, rel.head.end)
             entity_labels[head_span].append(rel.head.label)
