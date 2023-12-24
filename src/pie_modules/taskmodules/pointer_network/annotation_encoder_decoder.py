@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 
@@ -28,6 +28,16 @@ class SpanEncoderDecoder(AnnotationEncoderDecoder[Span, List[int]]):
             end_idx += 1
         return Span(start=encoding[0], end=end_idx)
 
+    def validate_encoding(self, encoding: List[int]) -> Set[str]:
+        if len(encoding) != 2:
+            return {"len"}
+        end_idx = encoding[1]
+        if not self.exclusive_end:
+            end_idx += 1
+        if not encoding[0] < end_idx:
+            return {"order"}
+        return set()
+
 
 class SpanEncoderDecoderWithOffset(SpanEncoderDecoder):
     def __init__(self, offset: int, **kwargs):
@@ -41,6 +51,14 @@ class SpanEncoderDecoderWithOffset(SpanEncoderDecoder):
     def decode(self, encoding: List[int], metadata: Optional[Dict[str, Any]] = None) -> Span:
         encoding = [x - self.offset for x in encoding]
         return super().decode(encoding=encoding, metadata=metadata)
+
+    def validate_encoding(self, encoding: List[int]) -> Set[str]:
+        if any(idx < self.offset for idx in encoding):
+            result = {"offset"}
+            if len(encoding) != 2:
+                result.add("len")
+            return result
+        return super().validate_encoding(encoding=encoding)
 
 
 class LabeledSpanEncoderDecoder(AnnotationEncoderDecoder[LabeledSpan, List[int]]):
@@ -85,6 +103,21 @@ class LabeledSpanEncoderDecoder(AnnotationEncoderDecoder[LabeledSpan, List[int]]
             end=decoded_span.end,
             label=self.id2label[encoded_label],
         )
+        return result
+
+    def validate_encoding(self, encoding: List[int]) -> Set[str]:
+        # we first strip the label encoding and then validate the span encoding and the label encoding
+        if self.mode == "label_indices":
+            encoded_label = encoding[0]
+            encoded_span = encoding[1:]
+        elif self.mode == "indices_label":
+            encoded_label = encoding[-1]
+            encoded_span = encoding[:-1]
+        else:
+            raise ValueError(f"unknown mode: {self.mode}")
+        result = self.span_encoder_decoder.validate_encoding(encoding=encoded_span)
+        if encoded_label not in self.id2label:
+            result.add("label")
         return result
 
 
@@ -199,3 +232,54 @@ class BinaryRelationEncoderDecoder(AnnotationEncoderDecoder[BinaryRelation, List
             rel = BinaryRelation(head=head, tail=tail, label=label)
 
         return rel
+
+    def validate_encoding(self, encoding: List[int]) -> Set[str]:
+        if len(encoding) != 7:
+            return {"len"}
+        result = set()
+        if self.mode.endswith("_label"):
+            encoded_label = encoding[6]
+            encoded_arguments = encoding[:6]
+            argument_mode = self.mode[: -len("_label")]
+        elif self.mode.startswith("label_"):
+            encoded_label = encoding[0]
+            encoded_arguments = encoding[1:]
+            argument_mode = self.mode[len("label_") :]
+        else:
+            raise ValueError(f"unknown mode: {self.mode}")
+        if encoded_label not in self.id2label:
+            is_single_span = False
+        else:
+            is_single_span = self.is_single_span_label(label=self.id2label[encoded_label])
+        if is_single_span:
+            if argument_mode == "head_tail":
+                span_encoder = self.head_encoder_decoder
+            elif argument_mode == "tail_head":
+                span_encoder = self.tail_encoder_decoder
+            else:
+                raise ValueError(f"unknown argument mode: {argument_mode}")
+            encoded_span = encoded_arguments[:3]
+            result.update(span_encoder.validate_encoding(encoding=encoded_span))
+        else:
+            if argument_mode == "head_tail":
+                encoded_head = encoded_arguments[:3]
+                encoded_tail = encoded_arguments[3:]
+            elif argument_mode == "tail_head":
+                encoded_tail = encoded_arguments[:3]
+                encoded_head = encoded_arguments[3:]
+            else:
+                raise ValueError(f"unknown argument mode: {argument_mode}")
+            result.update(self.head_encoder_decoder.validate_encoding(encoding=encoded_head))
+            result.update(self.tail_encoder_decoder.validate_encoding(encoding=encoded_tail))
+
+            # check if head and tail have an overlap
+            if len(result) == 0:
+                head = self.head_encoder_decoder.decode(encoding=encoded_head)
+                tail = self.tail_encoder_decoder.decode(encoding=encoded_tail)
+                if head.start <= tail.start < head.end or tail.start <= head.start < tail.end:
+                    result.add("overlap")
+
+        if encoded_label not in self.id2label:
+            result.add("label")
+
+        return result
