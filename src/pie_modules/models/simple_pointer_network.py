@@ -76,6 +76,8 @@ class SimplePointerNetworkModel(PyTorchIEModel):
 
         self.model.adjust_original_model()
 
+        self.use_prediction_for_metrics = use_prediction_for_metrics
+        self.metric_intervals = metric_intervals or {}
         self.metrics: Dict[str, Metric] = {}
         if taskmodule_config is not None:
             # TODO: use AutoTaskModule.from_config() when it is available
@@ -89,13 +91,6 @@ class SimplePointerNetworkModel(PyTorchIEModel):
                 )
             # NOTE: This is not a ModuleDict, so this will not live on the torch device!
             self.metrics = {stage: taskmodule.build_metric(stage) for stage in metric_splits}
-        self.metric_intervals = metric_intervals or {}
-        self.use_prediction_for_metrics = use_prediction_for_metrics
-
-        # to make the metrics work with the lightning logging
-        self.metrics_train = self.metrics.get(STAGE_TRAIN, None)
-        self.metrics_val = self.metrics.get(STAGE_VAL, None)
-        self.metrics_test = self.metrics.get(STAGE_TEST, None)
 
     def predict(self, inputs, **kwargs) -> Dict[str, Any]:
         is_training = self.training
@@ -153,7 +148,6 @@ class SimplePointerNetworkModel(PyTorchIEModel):
                 prediction = {"pred": prediction_ids}
             # the format of expected needs to be the same as the format of prediction
             stage_metrics.update(prediction, {"pred": targets["tgt_tokens"]})
-            self.log(f"metric/{stage}", stage_metrics, prog_bar=False)
 
         return loss
 
@@ -171,6 +165,25 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         loss = self.step(batch, stage=STAGE_TEST, batch_idx=batch_idx)
 
         return loss
+
+    def on_train_epoch_end(self) -> None:
+        self._on_epoch_end(stage=STAGE_TRAIN)
+
+    def on_validation_epoch_end(self) -> None:
+        self._on_epoch_end(stage=STAGE_VAL)
+
+    def on_test_epoch_end(self) -> None:
+        self._on_epoch_end(stage=STAGE_TEST)
+
+    def _on_epoch_end(self, stage: str) -> None:
+        if self.metrics is not None:
+            metrics = self.metrics.get(stage, None)
+            if metrics is not None:
+                metric_dict = metrics.compute()
+                metrics.reset()
+                metric_dict_flat = flatten_dict(d=metric_dict, sep="/")
+                for k, v in metric_dict_flat.items():
+                    self.log(f"metric_{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
         optimizer = self.model.configure_optimizer()
