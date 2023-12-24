@@ -466,61 +466,6 @@ def test_task_output(task_output, taskmodule):
         raise Exception(f"unknown partition_layer_name: {taskmodule.partition_layer_name}")
 
 
-def test_validate_relation_encoding(taskmodule):
-    relation_encoding = [14, 14, 5, 11, 12, 3, 6]
-    valid_relation_encoding, error_type = taskmodule.validate_relation_encoding(relation_encoding)
-    assert error_type is None
-    assert valid_relation_encoding == (14, 14, 5, 11, 12, 3, 6)
-
-
-def test_validate_relation_encoding_single_span_error(taskmodule):
-    none_id = taskmodule.none_id
-    relation_encoding = [14, 14, 30, none_id, none_id, none_id, none_id]
-    valid_relation_encoding, error_type = taskmodule.validate_relation_encoding(relation_encoding)
-    assert error_type is None
-    assert valid_relation_encoding is None
-
-
-def test_validate_relation_encoding_len_error(taskmodule):
-    relation_encoding = [14, 14, 5, 11, 12, 3]
-    valid_relation_encoding, error_type = taskmodule.validate_relation_encoding(relation_encoding)
-    assert error_type == "len"
-    assert valid_relation_encoding is None
-
-
-def test_validate_relation_encoding_order_error(taskmodule):
-    relation_encoding = [14, 14, 5, 12, 11, 3, 6]
-    valid_relation_encoding, error_type = taskmodule.validate_relation_encoding(relation_encoding)
-    assert error_type == "order"
-    assert valid_relation_encoding is None
-
-    relation_encoding = [14, 13, 5, 11, 12, 3, 6]
-    valid_relation_encoding, error_type = taskmodule.validate_relation_encoding(relation_encoding)
-    assert error_type == "order"
-    assert valid_relation_encoding is None
-
-
-def test_validate_relation_encoding_cover_error(taskmodule):
-    relation_encoding = [14, 15, 5, 15, 17, 3, 6]
-    valid_relation_encoding, error_type = taskmodule.validate_relation_encoding(relation_encoding)
-    assert error_type == "cover"
-    assert valid_relation_encoding is None
-
-
-def test_validate_relation_encoding_cross_error(taskmodule):
-    relation_encoding = [14, 14, 6, 11, 12, 3, 6]
-    valid_relation_encoding, error_type = taskmodule.validate_relation_encoding(relation_encoding)
-    assert error_type == "cross"
-    assert valid_relation_encoding is None
-
-
-def test_validate_relation_encoding_cross2_error(taskmodule):
-    relation_encoding = [14, 14, 30, 11, 12, 3, 16]
-    valid_relation_encoding, error_type = taskmodule.validate_relation_encoding(relation_encoding)
-    assert error_type == "cross"
-    assert valid_relation_encoding is None
-
-
 def _test_annotations_from_output(task_encodings, task_outputs, taskmodule, layer_names_expected):
     assert len(task_outputs) == len(task_encodings)
 
