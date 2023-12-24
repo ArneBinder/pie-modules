@@ -185,8 +185,65 @@ def test_test_step(model, batch, config):
     torch.manual_seed(42)
     model.eval()
     assert not model.training
+    model.metrics["test"].reset()
     loss = model.test_step(batch, 0)
     torch.testing.assert_close(loss, torch.tensor(4.802009105682373))
+    values = model.metrics["test"].compute()
+    assert values == {
+        "em": 0.0,
+        "em_original": 0.0,
+        "entities": {
+            "topic": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "person": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "content": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        },
+        "entities/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        "relations": {"is_about": {"recall": 0.0, "precision": 0.0, "f1": 0.0}},
+        "relations/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        "invalid": {},
+        "invalid/all": 0.0,
+    }
+
+
+def test_test_step_without_use_prediction_for_metrics(taskmodule, batch):
+    torch.manual_seed(42)
+    model = SimplePointerNetworkModel(
+        base_model_config=dict(
+            pretrained_model_name_or_path="sshleifer/distilbart-xsum-12-1",
+            bos_token_id=taskmodule.bos_id,
+            eos_token_id=taskmodule.eos_id,
+            pad_token_id=taskmodule.eos_id,
+            label_ids=taskmodule.label_ids,
+            target_token_ids=taskmodule.target_token_ids,
+            embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
+            max_length=512,
+            num_beams=4,
+        ),
+        taskmodule_config=taskmodule._config(),
+        warmup_proportion=0.1,
+        use_prediction_for_metrics=False,
+    )
+    torch.manual_seed(42)
+    model.eval()
+    assert not model.training
+    model.metrics["test"].reset()
+    loss = model.test_step(batch, 0)
+    torch.testing.assert_close(loss, torch.tensor(4.802009105682373))
+    values = model.metrics["test"].compute()
+    assert values == {
+        "em": 0.0,
+        "em_original": 0.0,
+        "entities": {
+            "topic": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "person": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "content": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        },
+        "entities/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        "relations": {"is_about": {"recall": 0.0, "precision": 0.0, "f1": 0.0}},
+        "relations/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        "invalid": {},
+        "invalid/all": 0.0,
+    }
 
 
 def test_configure_optimizers(model, config):
