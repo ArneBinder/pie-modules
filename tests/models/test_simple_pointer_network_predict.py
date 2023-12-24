@@ -88,7 +88,11 @@ def test_sciarg_predict(trained_model, sciarg_batch, loaded_taskmodule):
         fp[layer_name].update(set(anns_dict.predicted) - set(anns_dict.correct))
         fn[layer_name].update(set(anns_dict.gold) - set(anns_dict.correct))
 
-    # check the numbers
+    # check the numbers: tp, fp, fn
+    assert {layer_name: len(anns) for layer_name, anns in tp.items()} == {
+        "labeled_spans": 34,
+        "binary_relations": 5,
+    }
     assert {layer_name: len(anns) for layer_name, anns in fp.items()} == {
         "labeled_spans": 78,
         "binary_relations": 59,
@@ -96,10 +100,6 @@ def test_sciarg_predict(trained_model, sciarg_batch, loaded_taskmodule):
     assert {layer_name: len(anns) for layer_name, anns in fn.items()} == {
         "labeled_spans": 59,
         "binary_relations": 57,
-    }
-    assert {layer_name: len(anns) for layer_name, anns in tp.items()} == {
-        "labeled_spans": 34,
-        "binary_relations": 5,
     }
 
     # check the actual annotations

@@ -298,15 +298,24 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         span_encoder_decoder = SpanEncoderDecoderWithOffset(
             offset=self.pointer_offset, exclusive_end=False
         )
+        span_labels = self.labels_per_layer[self.span_layer_name]
         labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
             span_encoder_decoder=span_encoder_decoder,
-            label2id=self.label2id,
+            # restrict label2id to get better error messages
+            label2id={label: idx for label, idx in self.label2id.items() if label in span_labels},
             mode="indices_label",
         )
+        relation_labels = self.labels_per_layer[self.relation_layer_name] + [
+            self.loop_dummy_relation_name,
+            self.none_label,
+        ]
         self.relation_encoder_decoder = BinaryRelationEncoderDecoder(
             head_encoder_decoder=labeled_span_encoder_decoder,
             tail_encoder_decoder=labeled_span_encoder_decoder,
-            label2id=self.label2id,
+            # restrict label2id to get better error messages
+            label2id={
+                label: idx for label, idx in self.label2id.items() if label in relation_labels
+            },
             loop_dummy_relation_name=self.loop_dummy_relation_name,
             none_label=self.none_label,
             mode="tail_head_label",
@@ -377,75 +386,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             decode_annotations_func=self.decode_annotations,
         )
 
-    def validate_relation_encoding(
-        self, encoding: List[int]
-    ) -> Tuple[Optional[Tuple[int, int, int, int, int, int, int]], Optional[str]]:
-        valid_encoding: Optional[Tuple[int, int, int, int, int, int, int]] = None
-        skip = False
-        error_type = None
-
-        # if we got a relation id too early, we skip the tuple
-        if len(encoding) != 7:
-            skip = True
-            error_type = "len"
-
-        # we got a span-only tuple ...
-        elif self.none_id in encoding:
-            # TODO: assert that pair[2] in self.span_ids
-            #  and pair[4..6] is self.none_id
-            if not (
-                encoding[2] in self.target_ids
-                and encoding[5] in self.target_ids
-                and encoding[6] in self.target_ids
-            ):
-                # TODO: set error_type = "cross"? or return another error
-                skip = True
-            else:
-                skip = False
-            # TODO: check start end indices (as for "order" below)
-
-        # we got a relation tuple ...
-        else:
-            # check the offsets
-            # TODO: check that at positions 0, 1, 3, and 4, we have offsets
-            # if any end index is smaller than the start index, skip the tuple
-            if encoding[0] > encoding[1] or encoding[3] > encoding[4]:
-                skip = True
-                error_type = "order"
-            # if the spans overlap, skip the tuple
-            elif not (encoding[1] < encoding[3] or encoding[0] > encoding[4]):
-                skip = True
-                error_type = "cover"
-
-            # check the labels
-
-            # if the label ids got mixed up (span vs. relation ids), skip the tuple
-            if (
-                encoding[2] in self.relation_ids
-                or encoding[5] in self.relation_ids
-                or encoding[6] in self.span_ids
-            ):
-                # Consider making an additional layer of restrictions to prevent misalignment
-                # of the relationship and span tags (可以考虑做多一层限制，防止relation 和 span标签错位)
-                skip = True
-                error_type = "cross"
-            # TODO: move above previous check and make the other a elif case to not count cross errors twice
-            # if at the label positions we have no label ids, skip the tuple
-            span_and_relation_ids = self.relation_ids + self.span_ids
-            if (
-                encoding[2] not in span_and_relation_ids
-                or encoding[5] not in span_and_relation_ids
-                or encoding[6] not in span_and_relation_ids
-            ):
-                # if not tag.issubset(self.relation_idx+self.span_idx):
-                skip = True
-                error_type = "cross"
-
-        if not skip:
-            # ignore type because of tuple length (already checked above)
-            valid_encoding = tuple(encoding)  # type: ignore
-        return valid_encoding, error_type
-
     def get_valid_relation_encodings(
         self,
         tag_seq: List[int],
@@ -460,6 +400,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
         encodings = []
         current_encoding: List[int] = []
+        valid_encoding: Tuple[int, int, int, int, int, int, int]
         if len(tag_seq):
             for i in tag_seq:
                 # a tuple will be terminated when the next id is a relation id
@@ -468,13 +409,16 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                     current_encoding.append(i)
 
                     # check if the current_encoding is valid
-                    valid_encoding, error_type = self.validate_relation_encoding(current_encoding)
-                    if error_type is not None:
+                    current_errors = self.relation_encoder_decoder.validate_encoding(
+                        current_encoding
+                    )
+                    for error_type in current_errors:
                         # TODO: count total amounts instead of returning bool values.
                         #  This requires to also count "correct".
                         errors[error_type] = 1
 
-                    if valid_encoding is not None:
+                    if len(current_errors) == 0:
+                        valid_encoding = tuple(current_encoding)  # type: ignore
                         encodings.append(valid_encoding)
                     current_encoding = []
                 else:
