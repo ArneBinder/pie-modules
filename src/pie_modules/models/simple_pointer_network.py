@@ -151,6 +151,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
                     prediction = {"pred": prediction_ids}
                 # the format of expected needs to be the same as the format of prediction
                 stage_metrics.update(prediction, {"pred": targets["tgt_tokens"]})
+                self.log(f"metric/{stage}", stage_metrics, prog_bar=False)
 
         return loss
 
@@ -168,25 +169,6 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         loss = self.step(batch, stage=STAGE_TEST, batch_idx=batch_idx)
 
         return loss
-
-    def on_train_epoch_end(self) -> None:
-        self._on_epoch_end(stage=STAGE_TRAIN)
-
-    def on_validation_epoch_end(self) -> None:
-        self._on_epoch_end(stage=STAGE_VAL)
-
-    def on_test_epoch_end(self) -> None:
-        self._on_epoch_end(stage=STAGE_TEST)
-
-    def _on_epoch_end(self, stage: str) -> None:
-        if self.metrics is not None:
-            metrics = self.metrics.get(stage, None)
-            if metrics is not None:
-                metric_dict = metrics.compute()
-                metrics.reset()
-                metric_dict_flat = flatten_dict(d=metric_dict, sep="/")
-                for k, v in metric_dict_flat.items():
-                    self.log(f"metric_{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
         optimizer = self.model.configure_optimizer()
