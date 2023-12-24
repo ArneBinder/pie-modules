@@ -377,26 +377,26 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             decode_annotations_func=self.decode_annotations,
         )
 
-    def get_valid_relation_encoding(
-        self, pair: List[int]
+    def validate_relation_encoding(
+        self, encoding: List[int]
     ) -> Tuple[Optional[Tuple[int, int, int, int, int, int, int]], Optional[str]]:
         valid_encoding: Optional[Tuple[int, int, int, int, int, int, int]] = None
         skip = False
         error_type = None
 
         # if we got a relation id too early, we skip the tuple
-        if len(pair) != 7:
+        if len(encoding) != 7:
             skip = True
             error_type = "len"
 
         # we got a span-only tuple ...
-        elif self.none_id in pair:
+        elif self.none_id in encoding:
             # TODO: assert that pair[2] in self.span_ids
             #  and pair[4..6] is self.none_id
             if not (
-                pair[2] in self.target_ids
-                and pair[5] in self.target_ids
-                and pair[6] in self.target_ids
+                encoding[2] in self.target_ids
+                and encoding[5] in self.target_ids
+                and encoding[6] in self.target_ids
             ):
                 # TODO: set error_type = "cross"? or return another error
                 skip = True
@@ -409,11 +409,11 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             # check the offsets
             # TODO: check that at positions 0, 1, 3, and 4, we have offsets
             # if any end index is smaller than the start index, skip the tuple
-            if pair[0] > pair[1] or pair[3] > pair[4]:
+            if encoding[0] > encoding[1] or encoding[3] > encoding[4]:
                 skip = True
                 error_type = "order"
             # if the spans overlap, skip the tuple
-            elif not (pair[1] < pair[3] or pair[0] > pair[4]):
+            elif not (encoding[1] < encoding[3] or encoding[0] > encoding[4]):
                 skip = True
                 error_type = "cover"
 
@@ -421,9 +421,9 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
             # if the label ids got mixed up (span vs. relation ids), skip the tuple
             if (
-                pair[2] in self.relation_ids
-                or pair[5] in self.relation_ids
-                or pair[6] in self.span_ids
+                encoding[2] in self.relation_ids
+                or encoding[5] in self.relation_ids
+                or encoding[6] in self.span_ids
             ):
                 # Consider making an additional layer of restrictions to prevent misalignment
                 # of the relationship and span tags (可以考虑做多一层限制，防止relation 和 span标签错位)
@@ -433,9 +433,9 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             # if at the label positions we have no label ids, skip the tuple
             span_and_relation_ids = self.relation_ids + self.span_ids
             if (
-                pair[2] not in span_and_relation_ids
-                or pair[5] not in span_and_relation_ids
-                or pair[6] not in span_and_relation_ids
+                encoding[2] not in span_and_relation_ids
+                or encoding[5] not in span_and_relation_ids
+                or encoding[6] not in span_and_relation_ids
             ):
                 # if not tag.issubset(self.relation_idx+self.span_idx):
                 skip = True
@@ -443,10 +443,10 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
         if not skip:
             # ignore type because of tuple length (already checked above)
-            valid_encoding = tuple(pair)  # type: ignore
+            valid_encoding = tuple(encoding)  # type: ignore
         return valid_encoding, error_type
 
-    def sanitize_sequence(
+    def get_valid_relation_encodings(
         self,
         tag_seq: List[int],
     ) -> Tuple[List[Tuple[int, int, int, int, int, int, int]], Dict[str, int], List[int]]:
@@ -468,7 +468,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                     current_encoding.append(i)
 
                     # check if the current_encoding is valid
-                    valid_encoding, error_type = self.get_valid_relation_encoding(current_encoding)
+                    valid_encoding, error_type = self.validate_relation_encoding(current_encoding)
                     if error_type is not None:
                         # TODO: count total amounts instead of returning bool values.
                         #  This requires to also count "correct".
@@ -531,8 +531,11 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         tgt_tokens.append(self.eos_id)
 
         # sanity check
-        _, invalid, remaining = self.sanitize_sequence(tag_seq=tgt_tokens[1:])
-        if not all(v == 0 for k, v in invalid.items() if k != "correct") or len(remaining) > 0:
+        _, encoding_errors, remaining = self.get_valid_relation_encodings(tag_seq=tgt_tokens[1:])
+        if (
+            not all(v == 0 for k, v in encoding_errors.items() if k != "correct")
+            or len(remaining) > 0
+        ):
             decoded, invalid = self.decode_annotations(
                 EncodingWithIdsAndOptionalCpmTag(tgt_tokens), metadata=metadata
             )
@@ -548,11 +551,13 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                     not_encoded[layer_name] = list(filtered)
             if len(not_encoded) > 0:
                 logger.warning(
-                    f"encoding errors: {invalid}, skipped annotations:\n"
+                    f"encoding errors: {encoding_errors}, skipped annotations:\n"
                     f"{json.dumps(not_encoded, sort_keys=True, indent=2)}"
                 )
             elif len([tag for tag in remaining if tag != self.eos_id]) > 0:
-                logger.warning(f"encoding errors: {invalid}, remaining encoding ids: {remaining}")
+                logger.warning(
+                    f"encoding errors: {encoding_errors}, remaining encoding ids: {remaining}"
+                )
 
         # build CPM tag
         if self.create_constraints:
@@ -569,7 +574,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         self, encoding: TaskOutputType, metadata: Optional[Dict[str, Any]] = None
     ) -> Tuple[Dict[str, List[Annotation]], Any]:
         # strip the bos token
-        relation_encodings, errors, remaining = self.sanitize_sequence(
+        relation_encodings, errors, remaining = self.get_valid_relation_encodings(
             tag_seq=encoding.tgt_tokens[1:]
         )
         relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []

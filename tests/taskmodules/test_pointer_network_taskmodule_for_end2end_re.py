@@ -466,6 +466,13 @@ def test_task_output(task_output, taskmodule):
         raise Exception(f"unknown partition_layer_name: {taskmodule.partition_layer_name}")
 
 
+def test_get_valid_relation_encoding(taskmodule):
+    relation_encoding = [14, 14, 5, 11, 12, 3, 6]
+    valid_relation_encoding, error_type = taskmodule.validate_relation_encoding(relation_encoding)
+    assert error_type is None
+    assert valid_relation_encoding == (14, 14, 5, 11, 12, 3, 6)
+
+
 def _test_annotations_from_output(task_encodings, task_outputs, taskmodule, layer_names_expected):
     assert len(task_outputs) == len(task_encodings)
 
