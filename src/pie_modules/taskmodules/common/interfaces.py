@@ -1,5 +1,5 @@
 import abc
-from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
+from typing import Any, Dict, Generic, List, Optional, Set, Tuple, TypeVar
 
 from pytorch_ie import Annotation
 from torchmetrics import Metric
@@ -22,6 +22,10 @@ class AnnotationEncoderDecoder(abc.ABC, Generic[A, AE]):
 
     @abc.abstractmethod
     def decode(self, encoding: AE, metadata: Optional[Dict[str, Any]] = None) -> A:
+        pass
+
+    @abc.abstractmethod
+    def validate_encoding(self, encoding: AE) -> Set[str]:
         pass
 
 
