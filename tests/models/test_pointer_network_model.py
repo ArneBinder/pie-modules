@@ -290,7 +290,7 @@ def test_metric_val(model, batch):
         "entities/micro": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
         "relations": {"is_about": {"recall": 50.0, "precision": 100.0, "f1": 66.6667}},
         "relations/micro": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
-        "invalid": {"len": 0.0, "order": 0.0, "cross": 0.0, "cover": 0.0},
+        "invalid": {},
         "invalid/all": 0.0,
     }
 

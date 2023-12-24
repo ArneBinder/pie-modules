@@ -40,6 +40,7 @@ from pie_modules.documents import (
 from ..document.processing import token_based_document_to_text_based, tokenize_document
 from ..utils import resolve_type
 from .common import BatchableMixin, HasBuildMetric, HasDecodeAnnotations
+from .common.interfaces import DecodingException
 from .pointer_network.annotation_encoder_decoder import (
     BinaryRelationEncoderDecoder,
     LabeledSpanEncoderDecoder,
@@ -84,15 +85,6 @@ TaskEncodingType: TypeAlias = TaskEncoding[
     TargetEncodingType,
 ]
 TaskOutputType: TypeAlias = EncodingWithIdsAndOptionalCpmTag
-
-
-def _span_is_in_partition(span: Span, partition: Optional[Span] = None):
-    if partition is None:
-        return True
-    return (
-        partition.start <= span.start < partition.end
-        and partition.start < span.end <= partition.end
-    )
 
 
 def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
@@ -386,43 +378,32 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             decode_annotations_func=self.decode_annotations,
         )
 
-    def get_valid_relation_encodings(
+    def decode_relations(
         self,
         tag_seq: List[int],
-    ) -> Tuple[List[Tuple[int, int, int, int, int, int, int]], Dict[str, int], List[int]]:
-        errors = {
-            "len": 0,
-            "order": 0,
-            "cross": 0,
-            "cover": 0,
-            # , "correct": 0 ,
-        }
-
+    ) -> Tuple[List[BinaryRelation], Dict[str, int], List[int]]:
+        errors = dict()
         encodings = []
         current_encoding: List[int] = []
-        valid_encoding: Tuple[int, int, int, int, int, int, int]
+        valid_encoding: BinaryRelation
         if len(tag_seq):
             for i in tag_seq:
-                # a tuple will be terminated when the next id is a relation id
-                # or when this is a none_id and the tuple has 6 entries (i.e. it will be completed with the next id)
-                if i in self.relation_ids or (i == self.none_id and len(current_encoding) == 6):
-                    current_encoding.append(i)
-
-                    # check if the current_encoding is valid
-                    current_errors = self.relation_encoder_decoder.validate_encoding(
-                        current_encoding
-                    )
-                    for error_type in current_errors:
+                current_encoding.append(i)
+                # An encoding is complete when it ends with a relation_id
+                # or when it contains a none_id and has a length of 7
+                if i in self.relation_ids or (i == self.none_id and len(current_encoding) == 7):
+                    # try to decode the current relation encoding
+                    try:
+                        valid_encoding = self.relation_encoder_decoder.decode(
+                            encoding=current_encoding
+                        )
+                        encodings.append(valid_encoding)
+                    except DecodingException as e:
                         # TODO: count total amounts instead of returning bool values.
                         #  This requires to also count "correct".
-                        errors[error_type] = 1
+                        errors[e.identifier] = 1
 
-                    if len(current_errors) == 0:
-                        valid_encoding = tuple(current_encoding)  # type: ignore
-                        encodings.append(valid_encoding)
                     current_encoding = []
-                else:
-                    current_encoding.append(i)
 
         return encodings, errors, current_encoding
 
@@ -475,7 +456,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         tgt_tokens.append(self.eos_id)
 
         # sanity check
-        _, encoding_errors, remaining = self.get_valid_relation_encodings(tag_seq=tgt_tokens[1:])
+        _, encoding_errors, remaining = self.decode_relations(tag_seq=tgt_tokens[1:])
         if (
             not all(v == 0 for k, v in encoding_errors.items() if k != "correct")
             or len(remaining) > 0
@@ -518,15 +499,12 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         self, encoding: TaskOutputType, metadata: Optional[Dict[str, Any]] = None
     ) -> Tuple[Dict[str, List[Annotation]], Any]:
         # strip the bos token
-        relation_encodings, errors, remaining = self.get_valid_relation_encodings(
+        decoded_relations, errors, remaining = self.decode_relations(
             tag_seq=encoding.tgt_tokens[1:]
         )
         relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
         entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
-        for relation_encoding in relation_encodings:
-            rel = self.relation_encoder_decoder.decode(
-                encoding=list(relation_encoding), metadata=metadata
-            )
+        for rel in decoded_relations:
             head_span = (rel.head.start, rel.head.end)
             entity_labels[head_span].append(rel.head.label)
 
