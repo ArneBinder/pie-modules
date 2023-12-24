@@ -47,17 +47,11 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         metric_intervals: Optional[Dict[str, int]] = None,
         use_prediction_for_metrics: bool = True,
         # optimizer / scheduler
-        layernorm_decay: Optional[float] = 0.001,  # deprecated
         warmup_proportion: float = 0.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        if layernorm_decay is not None:
-            logger.warning(
-                "layernorm_decay is deprecated, please use base_model_kwargs.encoder_layer_norm_decay instead!"
-            )
-            base_model_config["encoder_layer_norm_decay"] = layernorm_decay
-        self.save_hyperparameters(ignore=["layernorm_decay"])
+        self.save_hyperparameters()
 
         # optimizer / scheduler
         self.warmup_proportion = warmup_proportion
