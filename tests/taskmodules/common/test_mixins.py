@@ -27,5 +27,5 @@ def test_batchable_mixin():
     batch = Foo.batch(
         values=[x, y], dtypes={"a": torch.int64, "len_a": torch.int64}, pad_values={"a": 0}
     )
-    torch.testing.assert_allclose(batch["a"], torch.tensor([[1, 2, 3], [4, 5, 0]]))
-    torch.testing.assert_allclose(batch["len_a"], torch.tensor([3, 2]))
+    torch.testing.assert_close(batch["a"], torch.tensor([[1, 2, 3], [4, 5, 0]]))
+    torch.testing.assert_close(batch["len_a"], torch.tensor([3, 2]))
