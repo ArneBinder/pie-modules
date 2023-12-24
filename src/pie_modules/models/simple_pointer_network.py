@@ -181,6 +181,8 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             if metrics is not None:
                 metric_dict = metrics.compute()
                 metrics.reset()
+                # TODO: consider https://lightning.ai/docs/torchmetrics/stable/pages/overview.html#metriccollection
+                #  and self.log_dict()
                 metric_dict_flat = flatten_dict(d=metric_dict, sep="/")
                 for k, v in metric_dict_flat.items():
                     self.log(f"metric_{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
