@@ -246,6 +246,16 @@ def test_test_step_without_use_prediction_for_metrics(taskmodule, batch):
     }
 
 
+def test_predict_step(model, batch, config):
+    torch.manual_seed(42)
+    output = model.predict_step(batch, 0)
+    assert output is not None
+    assert set(output) == {"pred"}
+    torch.testing.assert_close(
+        output["pred"], torch.tensor([[0, 8, 9, 10, 12, 13, 10, 12, 13, 10, 12, 15, 1]])
+    )
+
+
 def test_configure_optimizers(model, config):
     optimizers = model.configure_optimizers()
     assert isinstance(optimizers, AdamW)
