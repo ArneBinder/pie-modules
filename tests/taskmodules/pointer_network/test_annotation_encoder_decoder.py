@@ -76,25 +76,6 @@ def test_span_encoder_decoder_wrong_offset():
     assert excinfo.value.identifier == "index"
 
 
-@pytest.mark.parametrize("exclusive_end", [True, False])
-def test_span_encoder_decoder_validate_encoding(exclusive_end):
-    """Test the SimpleSpanEncoderDecoder class."""
-
-    encoder_decoder = SpanEncoderDecoder(exclusive_end)
-
-    if exclusive_end:
-        assert encoder_decoder.validate_encoding([1, 2]) == set()
-        assert encoder_decoder.validate_encoding([2, 1]) == {"order"}
-        assert encoder_decoder.validate_encoding([1, 1]) == {"order"}
-        assert encoder_decoder.validate_encoding([1]) == {"len"}
-        assert encoder_decoder.validate_encoding([1, 2, 3]) == {"len"}
-    else:
-        assert encoder_decoder.validate_encoding([1, 1]) == set()
-        assert encoder_decoder.validate_encoding([2, 1]) == {"order"}
-        assert encoder_decoder.validate_encoding([1]) == {"len"}
-        assert encoder_decoder.validate_encoding([1, 2, 3]) == {"len"}
-
-
 def test_span_encoder_decoder_with_offset():
     """Test the SpanEncoderDecoderWithOffset class."""
 
@@ -102,20 +83,6 @@ def test_span_encoder_decoder_with_offset():
 
     assert encoder_decoder.encode(Span(start=1, end=2)) == [2, 3]
     assert encoder_decoder.decode([2, 3]) == Span(start=1, end=2)
-
-
-def test_span_encoder_decoder_with_offset_validate_encoding():
-    """Test the SpanEncoderDecoderWithOffset class."""
-
-    encoder_decoder = SpanEncoderDecoderWithOffset(offset=1)
-
-    assert encoder_decoder.validate_encoding([2, 3]) == set()
-    assert encoder_decoder.validate_encoding([3, 2]) == {"order"}
-    assert encoder_decoder.validate_encoding([2, 2]) == {"order"}
-    assert encoder_decoder.validate_encoding([2]) == {"len"}
-    assert encoder_decoder.validate_encoding([2, 3, 4]) == {"len"}
-    assert encoder_decoder.validate_encoding([0, 2]) == {"offset"}
-    assert encoder_decoder.validate_encoding([0]) == {"len", "offset"}
 
 
 @pytest.mark.parametrize("mode", ["indices_label", "label_indices"])
@@ -158,44 +125,6 @@ def test_labeled_span_encoder_decoder_wrong_label_encoding(mode):
             encoder_decoder.decode([4, 2, 3])
     assert str(excinfo.value) == "unknown label id: 4 (label2id: {'A': 0, 'B': 1})"
     assert excinfo.value.identifier == "label"
-
-
-@pytest.mark.parametrize("mode", ["indices_label", "label_indices"])
-def test_labeled_span_encoder_decoder_validate_encoding(mode):
-    """Test the LabeledSpanEncoderDecoder class."""
-
-    label2id = {"A": 0, "B": 1}
-    encoder_decoder = LabeledSpanEncoderDecoder(
-        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
-        label2id=label2id,
-        mode=mode,
-    )
-
-    # Note: we first strip the label encoding and then validate the span encoding and the label encoding
-    if mode == "indices_label":
-        assert encoder_decoder.validate_encoding([3, 4, 0]) == set()
-        assert encoder_decoder.validate_encoding([3, 4, 2]) == {"label"}
-        assert encoder_decoder.validate_encoding([4, 3, 0]) == {"order"}
-        assert encoder_decoder.validate_encoding([0, 3, 0]) == {"offset"}
-        assert encoder_decoder.validate_encoding([3, 3, 2]) == {"order", "label"}
-        assert encoder_decoder.validate_encoding([3, 0, 2]) == {"label", "offset"}
-        assert encoder_decoder.validate_encoding([3, 0]) == {"len"}
-        assert encoder_decoder.validate_encoding([3, 4, 5, 0]) == {"len"}
-        assert encoder_decoder.validate_encoding([3, 2]) == {"label", "len"}
-        assert encoder_decoder.validate_encoding([0, 2]) == {"label", "len", "offset"}
-    elif mode == "label_indices":
-        assert encoder_decoder.validate_encoding([0, 3, 4]) == set()
-        assert encoder_decoder.validate_encoding([2, 3, 4]) == {"label"}
-        assert encoder_decoder.validate_encoding([0, 4, 3]) == {"order"}
-        assert encoder_decoder.validate_encoding([0, 3, 0]) == {"offset"}
-        assert encoder_decoder.validate_encoding([2, 0, 3]) == {"label", "offset"}
-        assert encoder_decoder.validate_encoding([0, 3]) == {"len"}
-        assert encoder_decoder.validate_encoding([0, 3, 4, 5]) == {"len"}
-        assert encoder_decoder.validate_encoding([2, 3]) == {"label", "len"}
-        assert encoder_decoder.validate_encoding([0, 0]) == {"len", "offset"}
-        assert encoder_decoder.validate_encoding([2, 0]) == {"label", "len", "offset"}
-    else:
-        raise ValueError(f"unknown mode: {mode}")
 
 
 def test_labeled_span_encoder_decoder_unknown_mode():
@@ -510,52 +439,3 @@ def test_binary_relation_encoder_decoder_wrong_label_index():
         encoder_decoder.decode([1, 2, 3, 4, 5, 6, 7])
     assert str(excinfo.value) == "unknown label id: 7 (label2id: {'A': 0, 'B': 1, 'C': 2})"
     assert excinfo.value.identifier == "label"
-
-
-@pytest.mark.parametrize(
-    "mode", ["head_tail_label", "tail_head_label", "label_head_tail", "label_tail_head"]
-)
-def test_binary_relation_encoder_decoder_validate_encoding(mode):
-    """Test the BinaryRelationEncoderDecoder class."""
-
-    label2id = {"A": 0, "B": 1, "C": 2}
-    labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
-        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
-        label2id=label2id,
-        mode="indices_label",
-    )
-    encoder_decoder = BinaryRelationEncoderDecoder(
-        head_encoder_decoder=labeled_span_encoder_decoder,
-        tail_encoder_decoder=labeled_span_encoder_decoder,
-        label2id=label2id,
-        mode=mode,
-    )
-
-    if mode in ["head_tail_label", "tail_head_label"]:
-        assert encoder_decoder.validate_encoding([4, 5, 0, 6, 7, 1, 2]) == set()
-        assert encoder_decoder.validate_encoding([4, 5, 0, 6, 7, 1, 3]) == {"label"}
-        assert encoder_decoder.validate_encoding([4, 5, 0, 6, 7, 3, 2]) == {"label"}
-        assert encoder_decoder.validate_encoding([1, 5, 0, 6, 7, 2, 2]) == {"offset"}
-        assert encoder_decoder.validate_encoding([5, 4, 0, 6, 7, 1, 2]) == {"order"}
-        assert encoder_decoder.validate_encoding([5, 4, 0, 0, 7, 3, 2]) == {
-            "order",
-            "label",
-            "offset",
-        }
-        assert encoder_decoder.validate_encoding([5, 4, 0, 6, 7, 1, 2, 3]) == {"len"}
-        assert encoder_decoder.validate_encoding([4, 5, 0, 4, 7, 1, 2]) == {"overlap"}
-    elif mode in ["label_head_tail", "label_tail_head"]:
-        assert encoder_decoder.validate_encoding([2, 4, 5, 0, 6, 7, 1]) == set()
-        assert encoder_decoder.validate_encoding([3, 4, 5, 0, 6, 7, 1]) == {"label"}
-        assert encoder_decoder.validate_encoding([2, 4, 5, 0, 6, 7, 3]) == {"label"}
-        assert encoder_decoder.validate_encoding([2, 1, 5, 0, 6, 7, 2]) == {"offset"}
-        assert encoder_decoder.validate_encoding([2, 5, 4, 0, 6, 7, 1]) == {"order"}
-        assert encoder_decoder.validate_encoding([2, 5, 4, 0, 0, 7, 3]) == {
-            "order",
-            "label",
-            "offset",
-        }
-        assert encoder_decoder.validate_encoding([3, 5, 4, 0, 6, 7, 1, 2]) == {"len"}
-        assert encoder_decoder.validate_encoding([2, 4, 5, 0, 4, 7, 1]) == {"overlap"}
-    else:
-        raise ValueError(f"unknown mode: {mode}")

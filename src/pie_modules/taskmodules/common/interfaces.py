@@ -34,10 +34,6 @@ class AnnotationEncoderDecoder(abc.ABC, Generic[A, AE]):
     def decode(self, encoding: AE, metadata: Optional[Dict[str, Any]] = None) -> A:
         pass
 
-    @abc.abstractmethod
-    def validate_encoding(self, encoding: AE) -> Set[str]:
-        pass
-
 
 class HasDecodeAnnotations(abc.ABC, Generic[ACE]):
     """Interface for modules that can decode annotations."""
