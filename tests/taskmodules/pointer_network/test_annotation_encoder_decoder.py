@@ -3,6 +3,10 @@ from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 
 from pie_modules.taskmodules.pointer_network.annotation_encoder_decoder import (
     BinaryRelationEncoderDecoder,
+    DecodingLabelException,
+    DecodingLengthException,
+    DecodingNegativeIndexException,
+    DecodingOrderException,
     LabeledSpanEncoderDecoder,
     SpanEncoderDecoder,
     SpanEncoderDecoderWithOffset,
@@ -22,6 +26,56 @@ def test_span_encoder_decoder(exclusive_end):
         assert encoder_decoder.decode([1, 1]) == Span(start=1, end=2)
 
 
+def test_span_encoder_decoder_wrong_length():
+    """Test the SimpleSpanEncoderDecoder class."""
+
+    encoder_decoder = SpanEncoderDecoder()
+    with pytest.raises(DecodingLengthException) as excinfo:
+        encoder_decoder.decode([1])
+    assert (
+        str(excinfo.value)
+        == "two values are required to decode as Span, but encoding has length 1"
+    )
+    assert excinfo.value.identifier == "len"
+
+    with pytest.raises(DecodingLengthException) as excinfo:
+        encoder_decoder.decode([1, 2, 3])
+    assert (
+        str(excinfo.value)
+        == "two values are required to decode as Span, but encoding has length 3"
+    )
+    assert excinfo.value.identifier == "len"
+
+
+def test_span_encoder_decoder_wrong_order():
+    """Test the SimpleSpanEncoderDecoder class."""
+
+    encoder_decoder = SpanEncoderDecoder()
+
+    with pytest.raises(DecodingOrderException) as excinfo:
+        encoder_decoder.decode([3, 2])
+    assert (
+        str(excinfo.value)
+        == "end index can not be smaller than start index, but got: start=3, end=2"
+    )
+    assert excinfo.value.identifier == "order"
+
+    # zero-length span
+    span = encoder_decoder.decode([1, 1])
+    assert span is not None
+
+
+def test_span_encoder_decoder_wrong_offset():
+    """Test the SimpleSpanEncoderDecoder class."""
+
+    encoder_decoder = SpanEncoderDecoder()
+
+    with pytest.raises(DecodingNegativeIndexException) as excinfo:
+        encoder_decoder.decode([-1, 2])
+    assert str(excinfo.value) == "indices must be positive, but got: [-1, 2]"
+    assert excinfo.value.identifier == "index"
+
+
 @pytest.mark.parametrize("exclusive_end", [True, False])
 def test_span_encoder_decoder_validate_encoding(exclusive_end):
     """Test the SimpleSpanEncoderDecoder class."""
@@ -39,27 +93,6 @@ def test_span_encoder_decoder_validate_encoding(exclusive_end):
         assert encoder_decoder.validate_encoding([2, 1]) == {"order"}
         assert encoder_decoder.validate_encoding([1]) == {"len"}
         assert encoder_decoder.validate_encoding([1, 2, 3]) == {"len"}
-
-
-def test_span_encoder_decoder_wrong_input():
-    """Test the SimpleSpanEncoderDecoder class."""
-
-    encoder_decoder = SpanEncoderDecoder()
-
-    # test too many values
-    with pytest.raises(ValueError) as excinfo:
-        encoder_decoder.decode([1, 2, 3])
-    assert (
-        str(excinfo.value)
-        == "two values are required to decode as Span, but the encoding is: [1, 2, 3]"
-    )
-
-    # test too few values
-    with pytest.raises(ValueError) as excinfo:
-        encoder_decoder.decode([1])
-    assert (
-        str(excinfo.value) == "two values are required to decode as Span, but the encoding is: [1]"
-    )
 
 
 def test_span_encoder_decoder_with_offset():
@@ -104,6 +137,27 @@ def test_labeled_span_encoder_decoder(mode):
         assert encoder_decoder.decode([0, 3, 4]) == LabeledSpan(start=1, end=2, label="A")
     else:
         raise ValueError(f"unknown mode: {mode}")
+
+
+@pytest.mark.parametrize("mode", ["indices_label", "label_indices"])
+def test_labeled_span_encoder_decoder_wrong_label_encoding(mode):
+    """Test the LabeledSpanEncoderDecoder class."""
+
+    label2id = {"A": 0, "B": 1}
+    encoder_decoder = LabeledSpanEncoderDecoder(
+        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
+        label2id=label2id,
+        mode=mode,
+    )
+
+    if mode == "indices_label":
+        with pytest.raises(DecodingLabelException) as excinfo:
+            encoder_decoder.decode([2, 3, 4])
+    elif mode == "label_indices":
+        with pytest.raises(DecodingLabelException) as excinfo:
+            encoder_decoder.decode([4, 2, 3])
+    assert str(excinfo.value) == "unknown label id: 4 (label2id: {'A': 0, 'B': 1})"
+    assert excinfo.value.identifier == "label"
 
 
 @pytest.mark.parametrize("mode", ["indices_label", "label_indices"])
@@ -420,19 +474,42 @@ def test_binary_relation_encoder_decoder_wrong_encoding_size():
         label2id=label2id,
         mode="head_tail_label",
     )
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(DecodingLengthException) as excinfo:
         encoder_decoder.decode([1, 2, 3, 4, 5, 6])
     assert (
         str(excinfo.value)
-        == "seven values are required to decode as BinaryRelation, but the encoding is: [1, 2, 3, 4, 5, 6]"
+        == "seven values are required to decode as BinaryRelation, but the encoding has length 6"
     )
+    assert excinfo.value.identifier == "len"
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(DecodingLengthException) as excinfo:
         encoder_decoder.decode([1, 2, 3, 4, 5, 6, 7, 8])
     assert (
         str(excinfo.value)
-        == "seven values are required to decode as BinaryRelation, but the encoding is: [1, 2, 3, 4, 5, 6, 7, 8]"
+        == "seven values are required to decode as BinaryRelation, but the encoding has length 8"
     )
+    assert excinfo.value.identifier == "len"
+
+
+def test_binary_relation_encoder_decoder_wrong_label_index():
+    """Test the BinaryRelationEncoderDecoder class."""
+
+    label2id = {"A": 0, "B": 1, "C": 2}
+    labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
+        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
+        label2id=label2id,
+        mode="indices_label",
+    )
+    encoder_decoder = BinaryRelationEncoderDecoder(
+        head_encoder_decoder=labeled_span_encoder_decoder,
+        tail_encoder_decoder=labeled_span_encoder_decoder,
+        label2id=label2id,
+        mode="head_tail_label",
+    )
+    with pytest.raises(DecodingLabelException) as excinfo:
+        encoder_decoder.decode([1, 2, 3, 4, 5, 6, 7])
+    assert str(excinfo.value) == "unknown label id: 7 (label2id: {'A': 0, 'B': 1, 'C': 2})"
+    assert excinfo.value.identifier == "label"
 
 
 @pytest.mark.parametrize(

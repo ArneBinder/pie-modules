@@ -13,6 +13,16 @@ A = TypeVar("A", bound=Annotation)
 ACE = TypeVar("ACE")
 
 
+class DecodingException(Exception, Generic[AE], abc.ABC):
+    """Exception raised when decoding fails."""
+
+    identifier: str
+
+    def __init__(self, message: str, encoding: AE):
+        self.message = message
+        self.encoding = encoding
+
+
 class AnnotationEncoderDecoder(abc.ABC, Generic[A, AE]):
     """Base class for annotation encoders and decoders."""
 

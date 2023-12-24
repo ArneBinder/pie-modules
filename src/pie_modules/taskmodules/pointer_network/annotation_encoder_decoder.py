@@ -4,8 +4,29 @@ from typing import Any, Dict, List, Optional, Set
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 
 from pie_modules.taskmodules.common import AnnotationEncoderDecoder
+from pie_modules.taskmodules.common.interfaces import DecodingException
 
 logger = logging.getLogger(__name__)
+
+
+class DecodingLengthException(DecodingException[List[int]]):
+    identifier = "len"
+
+
+class DecodingOrderException(DecodingException[List[int]]):
+    identifier = "order"
+
+
+class DecodingSpanOverlapException(DecodingException[List[int]]):
+    identifier = "overlap"
+
+
+class DecodingLabelException(DecodingException[List[int]]):
+    identifier = "label"
+
+
+class DecodingNegativeIndexException(DecodingException[List[int]]):
+    identifier = "index"
 
 
 class SpanEncoderDecoder(AnnotationEncoderDecoder[Span, List[int]]):
@@ -20,12 +41,23 @@ class SpanEncoderDecoder(AnnotationEncoderDecoder[Span, List[int]]):
 
     def decode(self, encoding: List[int], metadata: Optional[Dict[str, Any]] = None) -> Span:
         if len(encoding) != 2:
-            raise ValueError(
-                f"two values are required to decode as Span, but the encoding is: {encoding}"
+            raise DecodingLengthException(
+                f"two values are required to decode as Span, but encoding has length {len(encoding)}",
+                encoding=encoding,
             )
         end_idx = encoding[1]
         if not self.exclusive_end:
             end_idx += 1
+        if end_idx < encoding[0]:
+            raise DecodingOrderException(
+                f"end index can not be smaller than start index, but got: start={encoding[0]}, "
+                f"end={end_idx}",
+                encoding=encoding,
+            )
+        if any(idx < 0 for idx in encoding):
+            raise DecodingNegativeIndexException(
+                f"indices must be positive, but got: {encoding}", encoding=encoding
+            )
         return Span(start=encoding[0], end=end_idx)
 
     def validate_encoding(self, encoding: List[int]) -> Set[str]:
@@ -98,6 +130,10 @@ class LabeledSpanEncoderDecoder(AnnotationEncoderDecoder[LabeledSpan, List[int]]
             raise ValueError(f"unknown mode: {self.mode}")
 
         decoded_span = self.span_encoder_decoder.decode(encoding=encoded_span, metadata=metadata)
+        if encoded_label not in self.id2label:
+            raise DecodingLabelException(
+                f"unknown label id: {encoded_label} (label2id: {self.label2id})", encoding=encoding
+            )
         result = LabeledSpan(
             start=decoded_span.start,
             end=decoded_span.end,
@@ -190,19 +226,25 @@ class BinaryRelationEncoderDecoder(AnnotationEncoderDecoder[BinaryRelation, List
         self, encoding: List[int], metadata: Optional[Dict[str, Any]] = None
     ) -> BinaryRelation:
         if len(encoding) != 7:
-            raise ValueError(
-                f"seven values are required to decode as BinaryRelation, but the encoding is: {encoding}"
+            raise DecodingLengthException(
+                f"seven values are required to decode as BinaryRelation, but the encoding has length {len(encoding)}",
+                encoding=encoding,
             )
         if self.mode.endswith("_label"):
-            label = self.id2label[encoding[6]]
+            encoded_label = encoding[6]
             encoded_arguments = encoding[:6]
             argument_mode = self.mode[: -len("_label")]
         elif self.mode.startswith("label_"):
-            label = self.id2label[encoding[0]]
+            encoded_label = encoding[0]
             encoded_arguments = encoding[1:]
             argument_mode = self.mode[len("label_") :]
         else:
             raise ValueError(f"unknown mode: {self.mode}")
+        if encoded_label not in self.id2label:
+            raise DecodingLabelException(
+                f"unknown label id: {encoded_label} (label2id: {self.label2id})", encoding=encoding
+            )
+        label = self.id2label[encoded_label]
         if self.is_single_span_label(label=label):
             if argument_mode == "head_tail":
                 span_encoder = self.head_encoder_decoder
