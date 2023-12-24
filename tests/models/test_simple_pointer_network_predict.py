@@ -51,7 +51,7 @@ def test_dump_sciarg_batch(loaded_taskmodule):
 
     task_encodings = loaded_taskmodule.encode([sciarg_document], encode_target=True)
     batch = loaded_taskmodule.collate(task_encodings)
-    path = FIXTURES_ROOT / "models" / "pointer_network_model" / "sciarg_batch_with_targets.pkl"
+    path = FIXTURES_ROOT / "models" / "pointer_network" / "sciarg_batch_with_targets.pkl"
     with open(path, "wb") as f:
         pickle.dump(batch, f)
 
