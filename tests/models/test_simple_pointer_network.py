@@ -256,6 +256,21 @@ def test_predict_step(model, batch, config):
     )
 
 
+def test_on_train_epoch_end(model, config):
+    torch.manual_seed(42)
+    model.on_train_epoch_end()
+
+
+def test_on_validation_epoch_end(model, config):
+    torch.manual_seed(42)
+    model.on_validation_epoch_end()
+
+
+def test_on_test_epoch_end(model, config):
+    torch.manual_seed(42)
+    model.on_test_epoch_end()
+
+
 def test_configure_optimizers(model, config):
     optimizers = model.configure_optimizers()
     assert isinstance(optimizers, AdamW)
