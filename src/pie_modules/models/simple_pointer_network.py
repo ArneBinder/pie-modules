@@ -76,7 +76,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
 
         self.model.adjust_original_model()
 
-        self.metrics: Optional[Dict[str, Metric]]
+        self.metrics: Dict[str, Metric] = {}
         if taskmodule_config is not None:
             # TODO: use AutoTaskModule.from_config() when it is available
             taskmodule_kwargs = copy.copy(taskmodule_config)
@@ -89,10 +89,13 @@ class SimplePointerNetworkModel(PyTorchIEModel):
                 )
             # NOTE: This is not a ModuleDict, so this will not live on the torch device!
             self.metrics = {stage: taskmodule.build_metric(stage) for stage in metric_splits}
-        else:
-            self.metrics = None
         self.metric_intervals = metric_intervals or {}
         self.use_prediction_for_metrics = use_prediction_for_metrics
+
+        # to make the metrics work with the lightning logging
+        self.metrics_train = self.metrics.get(STAGE_TRAIN, None)
+        self.metrics_val = self.metrics.get(STAGE_VAL, None)
+        self.metrics_test = self.metrics.get(STAGE_TEST, None)
 
     def predict(self, inputs, **kwargs) -> Dict[str, Any]:
         is_training = self.training
@@ -135,23 +138,22 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             f"loss/{stage}", loss, on_step=(stage == STAGE_TRAIN), on_epoch=True, prog_bar=True
         )
 
-        if self.metrics is not None:
-            stage_metrics = self.metrics.get(stage, None)
-            metric_interval = self.metric_intervals.get(stage, 1)
-            if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
-                if self.use_prediction_for_metrics:
-                    prediction = self.predict(inputs)
-                else:
-                    # construct prediction from the model output
-                    logits = outputs.logits
-                    # get the indices (these are without the initial bos_ids, see above)
-                    indices = torch.argmax(logits, dim=-1)
-                    # re-add the bos_ids
-                    prediction_ids = torch.cat([targets["tgt_tokens"][:, :1], indices], dim=-1)
-                    prediction = {"pred": prediction_ids}
-                # the format of expected needs to be the same as the format of prediction
-                stage_metrics.update(prediction, {"pred": targets["tgt_tokens"]})
-                self.log(f"metric/{stage}", stage_metrics, prog_bar=False)
+        stage_metrics = self.metrics.get(stage, None)
+        metric_interval = self.metric_intervals.get(stage, 1)
+        if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
+            if self.use_prediction_for_metrics:
+                prediction = self.predict(inputs)
+            else:
+                # construct prediction from the model output
+                logits = outputs.logits
+                # get the indices (these are without the initial bos_ids, see above)
+                indices = torch.argmax(logits, dim=-1)
+                # re-add the bos_ids
+                prediction_ids = torch.cat([targets["tgt_tokens"][:, :1], indices], dim=-1)
+                prediction = {"pred": prediction_ids}
+            # the format of expected needs to be the same as the format of prediction
+            stage_metrics.update(prediction, {"pred": targets["tgt_tokens"]})
+            self.log(f"metric/{stage}", stage_metrics, prog_bar=False)
 
         return loss
 
