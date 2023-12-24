@@ -168,7 +168,7 @@ def test_bart_pointer_network_beam_search(model, taskmodule):
         **model_kwargs
     )
 
-    torch.testing.assert_allclose(
+    torch.testing.assert_close(
         outputs,
         torch.tensor(
             [[0, 28, 41, 35, 33, 36, 17, 33, 36, 17, 33, 36, 17, 33, 36, 17, 33, 36, 37, 1]]
@@ -194,8 +194,8 @@ def test_bart_pointer_network_generate_with_scores(model, taskmodule):
         output_scores=True,
     )
     assert isinstance(outputs, BeamSearchEncoderDecoderOutput)
-    torch.testing.assert_allclose(outputs.sequences_scores, torch.tensor([-6.2436]))
-    torch.testing.assert_allclose(
+    torch.testing.assert_close(outputs.sequences_scores, torch.tensor([-6.2436]))
+    torch.testing.assert_close(
         outputs.sequences,
         torch.tensor(
             [[0, 28, 41, 35, 33, 36, 17, 48, 36, 17, 33, 55, 35, 33, 17, 48, 55, 35, 48, 2]]
@@ -227,7 +227,7 @@ def test_forward_with_labels(model, taskmodule, document):
         decoder_attention_mask=decoder_attention_mask,
     )
     loss = outputs.loss
-    torch.testing.assert_allclose(loss, torch.tensor(4.802009105682373))
+    torch.testing.assert_close(loss, torch.tensor(4.802009105682373))
 
 
 def test_head_named_params(model):
