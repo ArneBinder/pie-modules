@@ -29,8 +29,8 @@ class PointerHead(torch.nn.Module):
     ):
         super().__init__()
 
-        if not isinstance(decoder, BartDecoder):
-            raise ValueError("PointerHead only works with BartDecoder!")
+        # if not isinstance(decoder, BartDecoder):
+        #    raise ValueError("PointerHead only works with BartDecoder!")
         self.decoder = decoder
 
         self.pad_id = pad_id
@@ -124,18 +124,18 @@ class PointerHead(torch.nn.Module):
         position_ids = self.decoder_position_id_pattern.repeat(bsz, repeat_num)
 
         if self.increase_position_ids_per_record:
-            # TODO: check this
-            reshape_pos = position_ids.view(bsz, -1, pattern_len)
-            shift_pos = reshape_pos.size(1)  # TODO: isn't this the same as repeat_num?
+            position_ids_reshaped = position_ids.view(bsz, -1, pattern_len)
             add_shift_pos = (
-                torch.range(0, shift_pos - 1, device=reshape_pos.device)
+                torch.range(0, repeat_num - 1, device=position_ids_reshaped.device)
                 .repeat(bsz)
                 .view(bsz, -1)
                 .unsqueeze(-1)
             )
-            # TODO: add_shift_pos *= max(self.decoder_position_id_pattern) + 1?
-            reshape_pos = add_shift_pos + reshape_pos
-            position_ids = reshape_pos.view(bsz, -1).long()
+            # multiply by the highest position id in the pattern so that the position ids are unique
+            # for any decoder_position_id_pattern across all records
+            add_shift_pos *= max(self.decoder_position_id_pattern) + 1
+            position_ids_reshaped = add_shift_pos + position_ids_reshaped
+            position_ids = position_ids_reshaped.view(bsz, -1).long()
         # use start_position_id=0
         start_pos = torch.zeros(bsz, 1, dtype=position_ids.dtype, device=position_ids.device)
         # shift by 2 to account for start_position_id=0 and pad_position_id=1
