@@ -48,6 +48,8 @@ class BartAsPointerNetworkConfig(BartConfig):
         # other parameters
         use_encoder_mlp: bool = True,
         max_target_positions: Optional[int] = None,
+        decoder_position_id_pattern: Optional[List[int]] = None,
+        increase_position_ids_per_record: bool = False,
         # optimizer
         lr: float = 5e-5,
         weight_decay: float = 1e-2,
@@ -67,6 +69,8 @@ class BartAsPointerNetworkConfig(BartConfig):
 
         self.use_encoder_mlp = use_encoder_mlp
         self.max_target_positions = max_target_positions
+        self.decoder_position_id_pattern = decoder_position_id_pattern
+        self.increase_position_ids_per_record = increase_position_ids_per_record
 
         self.lr = lr
         self.weight_decay = weight_decay
@@ -88,7 +92,11 @@ class BartAsPointerNetwork(BartPreTrainedModel):
 
     def __init__(self, config: BartAsPointerNetworkConfig):
         super().__init__(config)
-        self.model = BartModel(config)
+        if self.config.decoder_position_id_pattern is not None:
+            # self.model = BartModelWithPositionIds(config)
+            raise NotImplementedError
+        else:
+            self.model = BartModel(config)
 
         self.pointer_head = PointerHead(
             decoder=self.model.decoder,
@@ -97,6 +105,8 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             eos_id=self.model.config.eos_token_id,
             pad_id=self.model.config.pad_token_id,
             use_encoder_mlp=self.model.config.use_encoder_mlp,
+            decoder_position_id_pattern=self.model.config.decoder_position_id_pattern,
+            increase_position_ids_per_record=self.model.config.increase_position_ids_per_record,
         )
 
         # Initialize weights and apply final processing

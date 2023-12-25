@@ -24,6 +24,8 @@ class PointerHead(torch.nn.Module):
         target_token_ids: List[int],
         # other parameters
         use_encoder_mlp: bool = False,
+        decoder_position_id_pattern: Optional[List[int]] = None,
+        increase_position_ids_per_record: bool = False,
     ):
         super().__init__()
 
@@ -59,6 +61,17 @@ class PointerHead(torch.nn.Module):
                 nn.ReLU(),
                 nn.Linear(hidden_size, hidden_size),
             )
+
+        self.position_id_pattern = decoder_position_id_pattern
+        if decoder_position_id_pattern is not None:
+            self.register_buffer(
+                "decoder_position_id_pattern", torch.tensor(decoder_position_id_pattern)
+            )
+        self.increase_position_ids_per_record = increase_position_ids_per_record
+
+    @property
+    def has_position_id_pattern(self):
+        return hasattr(self, "decoder_position_id_pattern")
 
     def output_size(self):
         return len(self.target_token_ids)
@@ -101,6 +114,41 @@ class PointerHead(torch.nn.Module):
 
         return decoder_input_ids
 
+    def prepare_decoder_position_ids(
+        self, input_ids: torch.LongTensor, attention_mask: Optional[torch.LongTensor] = None
+    ):
+        bsz, tokens_len = input_ids.size()
+        pattern_len = len(self.decoder_position_id_pattern)
+        # the number of full and partly records. note that tokens_len includes the bos token
+        repeat_num = (tokens_len - 2) // pattern_len + 1
+        position_ids = self.decoder_position_id_pattern.repeat(bsz, repeat_num)
+
+        if self.increase_position_ids_per_record:
+            # TODO: check this
+            reshape_pos = position_ids.view(bsz, -1, pattern_len)
+            shift_pos = reshape_pos.size(1)  # TODO: isn't this the same as repeat_num?
+            add_shift_pos = (
+                torch.range(0, shift_pos - 1, device=reshape_pos.device)
+                .repeat(bsz)
+                .view(bsz, -1)
+                .unsqueeze(-1)
+            )
+            # TODO: add_shift_pos *= max(self.decoder_position_id_pattern) + 1?
+            reshape_pos = add_shift_pos + reshape_pos
+            position_ids = reshape_pos.view(bsz, -1).long()
+        # use start_position_id=0
+        start_pos = torch.zeros(bsz, 1, dtype=position_ids.dtype, device=position_ids.device)
+        # shift by 2 to account for start_position_id=0 and pad_position_id=1
+        all_position_ids = torch.cat([start_pos, position_ids + 2], dim=-1)
+        all_position_ids_truncated = all_position_ids[:bsz, :tokens_len]
+
+        # during training, the attention mask is not None
+        if attention_mask is not None:
+            # pad with pad_position_id=1
+            return all_position_ids_truncated.masked_fill(~attention_mask.bool(), 1)
+        else:
+            return all_position_ids_truncated
+
     def overwrite_decoder_label_embeddings_with_mapping(
         self, label_embedding_mapping: Dict[int, List[int]], encoder_weights: torch.Tensor
     ):
@@ -135,6 +183,11 @@ class PointerHead(torch.nn.Module):
             encoder_input_ids=encoder_input_ids,
             attention_mask=attention_mask,
         )
+        if self.has_position_id_pattern:
+            kwargs["position_ids"] = self.prepare_decoder_position_ids(
+                input_ids=modified_decoder_input_ids,
+                attention_mask=attention_mask,
+            )
 
         decoder_outputs = self.decoder(input_ids=modified_decoder_input_ids, **kwargs)
         return decoder_outputs
