@@ -67,6 +67,7 @@ class PointerHead(torch.nn.Module):
         self,
         input_ids: torch.LongTensor,
         encoder_input_ids: torch.LongTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
     ):
         mapping_token_mask = input_ids.lt(self.pointer_offset)
         mapped_tokens = input_ids.masked_fill(input_ids.ge(self.pointer_offset), 0)
@@ -83,10 +84,17 @@ class PointerHead(torch.nn.Module):
         decoder_input_ids = torch.where(
             mapping_token_mask, tag_mapped_tokens, word_mapped_tokens
         )  # bsz x max_len
+
         # attention_mask = input_ids.ne(self.pad_token_id)  # inverted tgt_pad_mask?
-        cumsum = input_ids.eq(self.pad_id).flip(dims=[1]).cumsum(dim=-1)
-        tgt_pad_mask = cumsum.flip(dims=[1]).ne(cumsum[:, -1:])
-        decoder_input_ids = decoder_input_ids.masked_fill(tgt_pad_mask, self.pad_token_id)
+        # cumsum = input_ids.eq(self.pad_id).flip(dims=[1]).cumsum(dim=-1)
+        # tgt_pad_mask = cumsum.flip(dims=[1]).ne(cumsum[:, -1:])
+        # decoder_input_ids = decoder_input_ids.masked_fill(tgt_pad_mask, self.pad_token_id)
+
+        # during training, the attention mask available
+        if attention_mask is not None:
+            decoder_input_ids = decoder_input_ids.masked_fill(
+                ~attention_mask.bool(), self.pad_token_id
+            )
 
         # TODO: why was this in the original code?
         # decoder_input_ids = decoder_input_ids[:, :-1]
@@ -115,10 +123,17 @@ class PointerHead(torch.nn.Module):
             embed /= len(source_indices)
             self.decoder.embed_tokens.weight.data[special_token_index] = embed
 
-    def decoder_forward(self, input_ids, encoder_input_ids, **kwargs):
+    def decoder_forward(
+        self,
+        input_ids: torch.LongTensor,
+        encoder_input_ids: torch.LongTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ):
         modified_decoder_input_ids = self.prepare_decoder_input_ids(
             input_ids=input_ids,
             encoder_input_ids=encoder_input_ids,
+            attention_mask=attention_mask,
         )
 
         decoder_outputs = self.decoder(input_ids=modified_decoder_input_ids, **kwargs)
