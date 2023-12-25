@@ -59,10 +59,6 @@ class BartAsPointerNetworkConfig(BartConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        # we use the bos_id as the decoder_start_token_id
-        # TODO: does this still work if we pass another bos_token_id to BartAsPointerNetwork.from_pretrained()?
-        #  i.e. or will this be still the original bos_token_id?
-        self.decoder_start_token_id = self.bos_token_id
 
         self.label_ids = label_ids
         self.target_token_ids = target_token_ids
@@ -112,6 +108,8 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         self.resize_token_embeddings(vocab_size)
         # use mapping to better initialize the label embedding weights
         self.overwrite_decoder_label_embeddings_with_mapping()
+        # set the correct decoder_start_token_id
+        self.config.decoder_start_token_id = self.config.bos_token_id
 
     def base_model_named_params(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
         yield from self.model.named_parameters(prefix=prefix + self.base_model_prefix)
