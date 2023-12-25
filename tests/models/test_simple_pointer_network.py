@@ -77,7 +77,9 @@ def taskmodule(document):
             "relations": "binary_relations",
         },
         create_constraints=False,
-        # tokenizer_kwargs={"strict_span_conversion": False},
+        partition_layer_name="sentences",
+        # disable strict_span_conversion, this effects only the no_relation annotation
+        tokenizer_kwargs={"strict_span_conversion": False},
     )
 
     taskmodule.prepare(documents=[document])
@@ -103,10 +105,10 @@ def model(taskmodule, config) -> SimplePointerNetworkModel:
             embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
             max_length=512,
             num_beams=4,
+            **config,
         ),
         generation_kwargs=taskmodule.generation_kwargs,
         taskmodule_config=taskmodule._config(),
-        **config,
     )
     # set model to training mode, otherwise model.encoder.bart_encoder.training will be False!
     model.train()
@@ -132,30 +134,32 @@ def test_batch(batch, config):
     assert set(inputs) == {"src_tokens", "src_seq_len", "src_attention_mask"}
     torch.testing.assert_close(
         inputs["src_tokens"],
-        torch.tensor([[0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 3101, 162, 4, 2]]),
+        torch.tensor(
+            [[0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 2], [0, 18823, 162, 4, 2, 1, 1, 1, 1, 1]]
+        ),
     )
     torch.testing.assert_close(
         inputs["src_attention_mask"],
-        torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]),
+        torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 0, 0, 0, 0, 0]]),
     )
     torch.testing.assert_close(
         inputs["src_seq_len"],
-        torch.tensor([13]),
+        torch.tensor([10, 5]),
     )
 
     assert targets is not None
     assert set(targets) == {"tgt_tokens", "tgt_attention_mask", "tgt_seq_len", "CPM_tag"}
     torch.testing.assert_close(
         targets["tgt_tokens"],
-        torch.tensor([[0, 14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]]),
+        torch.tensor([[0, 14, 14, 5, 11, 12, 3, 6, 1], [0, 9, 9, 4, 2, 2, 2, 2, 1]]),
     )
     torch.testing.assert_close(
         targets["tgt_attention_mask"],
-        torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]),
+        torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1]]),
     )
     torch.testing.assert_close(
         targets["tgt_seq_len"],
-        torch.tensor([16]),
+        torch.tensor([9, 9]),
     )
 
 
@@ -170,7 +174,7 @@ def test_training_step(model, batch, config):
     torch.manual_seed(42)
     assert model.training
     loss = model.training_step(batch, 0)
-    torch.testing.assert_close(loss, torch.tensor(4.601412773132324))
+    torch.testing.assert_close(loss, torch.tensor(3.702044725418091))
 
 
 def test_validation_step(model, batch, config):
@@ -178,7 +182,7 @@ def test_validation_step(model, batch, config):
     model.eval()
     assert not model.training
     loss = model.validation_step(batch, 0)
-    torch.testing.assert_close(loss, torch.tensor(4.802009105682373))
+    torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
 
 
 def test_test_step(model, batch, config):
@@ -187,7 +191,7 @@ def test_test_step(model, batch, config):
     assert not model.training
     model.metrics["test"].reset()
     loss = model.test_step(batch, 0)
-    torch.testing.assert_close(loss, torch.tensor(4.802009105682373))
+    torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
     values = model.metrics["test"].compute()
     assert values == {
         "em": 0.0,
@@ -228,7 +232,7 @@ def test_test_step_without_use_prediction_for_metrics(taskmodule, batch):
     assert not model.training
     model.metrics["test"].reset()
     loss = model.test_step(batch, 0)
-    torch.testing.assert_close(loss, torch.tensor(4.802009105682373))
+    torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
     values = model.metrics["test"].compute()
     assert values == {
         "em": 0.0,
@@ -252,7 +256,13 @@ def test_predict_step(model, batch, config):
     assert output is not None
     assert set(output) == {"pred"}
     torch.testing.assert_close(
-        output["pred"], torch.tensor([[0, 8, 9, 10, 12, 13, 10, 12, 13, 10, 12, 15, 1]])
+        output["pred"],
+        torch.tensor(
+            [
+                [0, 8, 9, 10, 12, 13, 10, 12, 12, 13, 10, 1],
+                [0, 8, 8, 9, 9, 9, 9, 9, 9, 9, 10, 1],
+            ]
+        ),
     )
 
 
