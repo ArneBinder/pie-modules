@@ -117,8 +117,9 @@ def model(taskmodule) -> BartAsPointerNetwork:
         # mapping to better initialize the label embedding weights
         embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
     )
-    model.resize_token_embeddings(len(taskmodule.tokenizer))
-    model.overwrite_decoder_label_embeddings_with_mapping()
+
+    model.adjust_original_model()
+
     return model
 
 
