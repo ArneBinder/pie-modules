@@ -138,8 +138,14 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         self.resize_token_embeddings(vocab_size)
         # use mapping to better initialize the label embedding weights
         self.overwrite_decoder_label_embeddings_with_mapping()
+
+        # adjust generation settings
         # set the correct decoder_start_token_id
         self.config.decoder_start_token_id = self.config.bos_token_id
+        # disable ForcedBOSTokenLogitsProcessor
+        self.config.forced_bos_token_id = None
+        # disable ForcedEOSTokenLogitsProcessor
+        self.config.forced_eos_token_id = None
 
     def base_model_named_params(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
         yield from self.model.named_parameters(prefix=prefix + self.base_model_prefix)

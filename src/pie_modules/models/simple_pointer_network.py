@@ -64,12 +64,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         self.generation_kwargs = generation_kwargs or {}
 
         # TODO: Use AutoModelAsPointerNetwork when it is available
-        self.model = BartAsPointerNetwork.from_pretrained(
-            # generation
-            forced_bos_token_id=None,  # to disable ForcedBOSTokenLogitsProcessor
-            forced_eos_token_id=None,  # to disable ForcedEOSTokenLogitsProcessor
-            **base_model_config,
-        )
+        self.model = BartAsPointerNetwork.from_pretrained(**base_model_config)
 
         self.use_prediction_for_metrics: Set[str]
         if isinstance(use_prediction_for_metrics, bool):
