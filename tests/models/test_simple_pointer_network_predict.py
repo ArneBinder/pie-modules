@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 # wandb run: https://wandb.ai/arne/dataset-sciarg-task-ner_re-training/runs/terkqzyn
 MODEL_PATH = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-18_22-15-53"
+MODEL_PATH_WITH_POSITION_ID_PATTERN = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-18_22-15-53_position_id_pattern"
 
 
 @pytest.fixture(scope="module")
@@ -1042,4 +1043,41 @@ def test_sciarg_predict(trained_model, sciarg_batch, loaded_taskmodule):
                 score=1.0,
             ),
         },
+    }
+
+
+@pytest.mark.slow
+def test_sciarg_predict_with_position_id_pattern(sciarg_batch, loaded_taskmodule):
+    trained_model = SimplePointerNetworkModel.from_pretrained(MODEL_PATH_WITH_POSITION_ID_PATTERN)
+    assert trained_model is not None
+
+    torch.manual_seed(42)
+    inputs, targets = sciarg_batch
+    inputs_truncated = {k: v[:5] for k, v in inputs.items()}
+    targets_truncated = {k: v[:5] for k, v in targets.items()}
+
+    prediction = trained_model.predict(inputs_truncated, max_length=20)
+    assert prediction is not None
+    metric = loaded_taskmodule.build_metric()
+    metric.update(prediction, {"pred": targets_truncated["tgt_tokens"]})
+
+    values = metric.compute()
+    assert values == {
+        "em": 0.0,
+        "em_original": 0.4,
+        "labeled_spans": {
+            "background_claim": {"recall": 1.9608, "precision": 100.0, "f1": 3.8462},
+            "data": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "own_claim": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        },
+        "labeled_spans/micro": {"recall": 1.0753, "precision": 50.0, "f1": 2.1053},
+        "binary_relations": {
+            "semantically_same": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "supports": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "contradicts": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "parts_of_same": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        },
+        "binary_relations/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        "invalid": {"len": 0.2},
+        "invalid/all": 0.2,
     }
