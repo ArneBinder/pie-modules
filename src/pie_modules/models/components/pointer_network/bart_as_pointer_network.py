@@ -184,6 +184,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
+        decoder_position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
@@ -243,8 +244,9 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.pointer_head.decoder_forward(
             input_ids=decoder_input_ids,
-            encoder_input_ids=input_ids,
             attention_mask=decoder_attention_mask,
+            position_ids=decoder_position_ids,
+            encoder_input_ids=input_ids,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
@@ -290,6 +292,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
+        decoder_position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
@@ -326,10 +329,11 @@ class BartAsPointerNetwork(BartPreTrainedModel):
 
         outputs = self.model_forward(
             input_ids,
+            encoder_outputs=encoder_outputs,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
-            encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
+            decoder_position_ids=decoder_position_ids,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
@@ -387,6 +391,13 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         encoder_outputs=None,
         **kwargs,
     ):
+        result = {}
+        if self.pointer_head.has_position_id_pattern:
+            result["decoder_position_ids"] = self.pointer_head.prepare_decoder_position_ids(
+                input_ids=decoder_input_ids,
+                attention_mask=decoder_attention_mask,
+            )
+
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2]
@@ -400,18 +411,26 @@ class BartAsPointerNetwork(BartPreTrainedModel):
 
             decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
-        return {
-            "input_ids": encoder_input_ids,
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": encoder_attention_mask,
-            "decoder_attention_mask": decoder_attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
-        }
+            if "decoder_position_ids" in result:
+                result["decoder_position_ids"] = result["decoder_position_ids"][
+                    :, remove_prefix_length:
+                ]
+
+        result.update(
+            {
+                "input_ids": encoder_input_ids,
+                "encoder_outputs": encoder_outputs,
+                "past_key_values": past_key_values,
+                "decoder_input_ids": decoder_input_ids,
+                "attention_mask": encoder_attention_mask,
+                "decoder_attention_mask": decoder_attention_mask,
+                "head_mask": head_mask,
+                "decoder_head_mask": decoder_head_mask,
+                "cross_attn_head_mask": cross_attn_head_mask,
+                "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
+            }
+        )
+        return result
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(

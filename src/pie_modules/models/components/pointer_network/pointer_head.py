@@ -5,7 +5,6 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
-from transformers.models.bart.modeling_bart import BartDecoder
 from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
@@ -176,20 +175,27 @@ class PointerHead(torch.nn.Module):
         input_ids: torch.LongTensor,
         encoder_input_ids: torch.LongTensor,
         attention_mask: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ):
+        if self.has_position_id_pattern:
+            if position_ids is None:
+                position_ids = self.prepare_decoder_position_ids(
+                    input_ids=input_ids, attention_mask=attention_mask
+                )
+            # shallow copy kwargs to avoid modifying the original dict
+            kwargs = {**kwargs, "position_ids": position_ids}
+
         modified_decoder_input_ids = self.prepare_decoder_input_ids(
             input_ids=input_ids,
             encoder_input_ids=encoder_input_ids,
             attention_mask=attention_mask,
         )
-        if self.has_position_id_pattern:
-            kwargs["position_ids"] = self.prepare_decoder_position_ids(
-                input_ids=modified_decoder_input_ids,
-                attention_mask=attention_mask,
-            )
 
-        decoder_outputs = self.decoder(input_ids=modified_decoder_input_ids, **kwargs)
+        decoder_outputs = self.decoder(
+            input_ids=modified_decoder_input_ids, attention_mask=attention_mask, **kwargs
+        )
+
         return decoder_outputs
 
     def forward(
