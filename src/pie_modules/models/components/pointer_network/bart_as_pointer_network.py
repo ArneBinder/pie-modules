@@ -113,6 +113,24 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @classmethod
+    def _load_pretrained_model(
+        cls,
+        *args,
+        **kwargs,
+    ):
+        (
+            model,
+            missing_keys,
+            unexpected_keys,
+            mismatched_keys,
+            offload_index,
+            error_msgs,
+        ) = super()._load_pretrained_model(*args, **kwargs)
+        # adjust the model after loading the original model
+        model.adjust_after_loading_original_model()
+        return model, missing_keys, unexpected_keys, mismatched_keys, offload_index, error_msgs
+
     def adjust_after_loading_original_model(self):
         # target_token_ids contains all new target tokens for the labels and new tokens were added to the end
         # of the vocabulary, so we can use its maximum to resize the decoder embedding weights
