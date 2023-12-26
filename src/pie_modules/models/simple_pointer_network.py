@@ -77,6 +77,13 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             }
         else:
             self.use_prediction_for_metrics = use_prediction_for_metrics
+        missed_stages = set(metric_splits) - set(self.use_prediction_for_metrics)
+        if len(missed_stages) > 0:
+            raise ValueError(
+                f"There are stages in use_prediction_for_metrics that are not in metric_splits: "
+                f"{missed_stages}. Available metric splits: {metric_splits}."
+            )
+
         self.metric_intervals = metric_intervals or {}
         self.metrics: Dict[str, Metric] = {}
         if taskmodule_config is not None:
