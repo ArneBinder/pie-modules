@@ -1,7 +1,7 @@
 import copy
 import logging
 from collections.abc import MutableMapping
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 import torch
 from pytorch_ie import TaskModule
@@ -45,7 +45,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         # metrics
         metric_splits: List[str] = [STAGE_VAL, STAGE_TEST],
         metric_intervals: Optional[Dict[str, int]] = None,
-        use_prediction_for_metrics: Union[bool, Dict[str, bool]] = True,
+        use_prediction_for_metrics: Union[bool, List[str]] = True,
         # optimizer / scheduler
         warmup_proportion: float = 0.0,
         **kwargs,
@@ -70,14 +70,14 @@ class SimplePointerNetworkModel(PyTorchIEModel):
 
         self.model.adjust_original_model()
 
-        self.use_prediction_for_metrics: Dict[str, bool]
+        self.use_prediction_for_metrics: Set[str]
         if isinstance(use_prediction_for_metrics, bool):
-            self.use_prediction_for_metrics = {
-                stage: use_prediction_for_metrics for stage in metric_splits
-            }
+            self.use_prediction_for_metrics = (
+                set(metric_splits) if use_prediction_for_metrics else set()
+            )
         else:
-            self.use_prediction_for_metrics = use_prediction_for_metrics
-        missed_stages = set(metric_splits) - set(self.use_prediction_for_metrics)
+            self.use_prediction_for_metrics = set(use_prediction_for_metrics)
+        missed_stages = self.use_prediction_for_metrics - set(metric_splits)
         if len(missed_stages) > 0:
             raise ValueError(
                 f"There are stages in use_prediction_for_metrics that are not in metric_splits: "
@@ -143,7 +143,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         stage_metrics = self.metrics.get(stage, None)
         metric_interval = self.metric_intervals.get(stage, 1)
         if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
-            if self.use_prediction_for_metrics.get(stage, False):
+            if stage in self.use_prediction_for_metrics:
                 prediction = self.predict(inputs)
             else:
                 # construct prediction from the model output
