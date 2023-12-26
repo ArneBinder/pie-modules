@@ -14,7 +14,7 @@ from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 from tests import _config_to_str
 
 # just the default config for now
-CONFIGS = [{}]
+CONFIGS = [{}, {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}]
 CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
 
 logger = logging.getLogger(__name__)
@@ -174,7 +174,12 @@ def test_training_step(model, batch, config):
     torch.manual_seed(42)
     assert model.training
     loss = model.training_step(batch, 0)
-    torch.testing.assert_close(loss, torch.tensor(3.702044725418091))
+    if config == {}:
+        torch.testing.assert_close(loss, torch.tensor(3.702044725418091))
+    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
+        torch.testing.assert_close(loss, torch.tensor(3.945438861846924))
+    else:
+        raise ValueError(f"Unknown config: {config}")
 
 
 def test_validation_step(model, batch, config):
@@ -182,7 +187,12 @@ def test_validation_step(model, batch, config):
     model.eval()
     assert not model.training
     loss = model.validation_step(batch, 0)
-    torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
+    if config == {}:
+        torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
+    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
+        torch.testing.assert_close(loss, torch.tensor(4.204827308654785))
+    else:
+        raise ValueError(f"Unknown config: {config}")
 
 
 def test_test_step(model, batch, config):
@@ -191,7 +201,12 @@ def test_test_step(model, batch, config):
     assert not model.training
     model.metrics["test"].reset()
     loss = model.test_step(batch, 0)
-    torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
+    if config == {}:
+        torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
+    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
+        torch.testing.assert_close(loss, torch.tensor(4.204827308654785))
+    else:
+        raise ValueError(f"Unknown config: {config}")
     values = model.metrics["test"].compute()
     assert values == {
         "em": 0.0,
@@ -255,15 +270,28 @@ def test_predict_step(model, batch, config):
     output = model.predict_step(batch, 0)
     assert output is not None
     assert set(output) == {"pred"}
-    torch.testing.assert_close(
-        output["pred"],
-        torch.tensor(
-            [
-                [0, 8, 9, 10, 12, 13, 10, 12, 12, 13, 10, 1],
-                [0, 8, 8, 9, 9, 9, 9, 9, 9, 9, 10, 1],
-            ]
-        ),
-    )
+    if config == {}:
+        torch.testing.assert_close(
+            output["pred"],
+            torch.tensor(
+                [
+                    [0, 8, 9, 10, 12, 13, 10, 12, 12, 13, 10, 1],
+                    [0, 8, 8, 9, 9, 9, 9, 9, 9, 9, 10, 1],
+                ]
+            ),
+        )
+    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
+        torch.testing.assert_close(
+            output["pred"],
+            torch.tensor(
+                [
+                    [0, 8, 9, 10, 12, 13, 10, 12, 12, 13, 10, 1],
+                    [0, 4, 4, 4, 4, 4, 4, 4, 9, 9, 10, 1],
+                ]
+            ),
+        )
+    else:
+        raise ValueError(f"Unknown config: {config}")
 
 
 def test_on_train_epoch_end(model, config):
