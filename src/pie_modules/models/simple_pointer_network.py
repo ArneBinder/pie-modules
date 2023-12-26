@@ -71,7 +71,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             **base_model_config,
         )
 
-        self.model.adjust_original_model()
+        self.model.adjust_after_loading_original_model()
 
         self.use_prediction_for_metrics: Set[str]
         if isinstance(use_prediction_for_metrics, bool):
