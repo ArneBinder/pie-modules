@@ -1,7 +1,7 @@
 import copy
 import logging
 from collections.abc import MutableMapping
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import torch
 from pytorch_ie import TaskModule
@@ -45,7 +45,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         # metrics
         metric_splits: List[str] = [STAGE_VAL, STAGE_TEST],
         metric_intervals: Optional[Dict[str, int]] = None,
-        use_prediction_for_metrics: bool = True,
+        use_prediction_for_metrics: Union[bool, Dict[str, bool]] = True,
         # optimizer / scheduler
         warmup_proportion: float = 0.0,
         **kwargs,
@@ -70,7 +70,13 @@ class SimplePointerNetworkModel(PyTorchIEModel):
 
         self.model.adjust_original_model()
 
-        self.use_prediction_for_metrics = use_prediction_for_metrics
+        self.use_prediction_for_metrics: Dict[str, bool]
+        if isinstance(use_prediction_for_metrics, bool):
+            self.use_prediction_for_metrics = {
+                stage: use_prediction_for_metrics for stage in metric_splits
+            }
+        else:
+            self.use_prediction_for_metrics = use_prediction_for_metrics
         self.metric_intervals = metric_intervals or {}
         self.metrics: Dict[str, Metric] = {}
         if taskmodule_config is not None:
@@ -130,7 +136,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         stage_metrics = self.metrics.get(stage, None)
         metric_interval = self.metric_intervals.get(stage, 1)
         if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
-            if self.use_prediction_for_metrics:
+            if self.use_prediction_for_metrics.get(stage, False):
                 prediction = self.predict(inputs)
             else:
                 # construct prediction from the model output
