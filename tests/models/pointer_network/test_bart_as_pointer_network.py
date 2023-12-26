@@ -118,8 +118,6 @@ def model(taskmodule) -> BartAsPointerNetwork:
         embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
     )
 
-    model.adjust_after_loading_original_model()
-
     return model
 
 
