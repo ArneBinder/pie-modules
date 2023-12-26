@@ -13,6 +13,8 @@ from transformers.modeling_outputs import (
 from transformers.models.bart.modeling_bart import shift_tokens_right
 from transformers.utils import logging
 
+from pie_modules.models.base_models import BartModelWithDecoderPositionIds
+
 from .pointer_head import PointerHead
 
 logger = logging.get_logger(__name__)
@@ -93,8 +95,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
     def __init__(self, config: BartAsPointerNetworkConfig):
         super().__init__(config)
         if self.config.decoder_position_id_pattern is not None:
-            # self.model = BartModelWithPositionIds(config)
-            raise NotImplementedError
+            self.model = BartModelWithDecoderPositionIds(config)
         else:
             self.model = BartModel(config)
 
