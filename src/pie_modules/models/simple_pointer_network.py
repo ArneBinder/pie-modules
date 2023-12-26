@@ -46,14 +46,17 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         metric_splits: List[str] = [STAGE_VAL, STAGE_TEST],
         metric_intervals: Optional[Dict[str, int]] = None,
         use_prediction_for_metrics: Union[bool, List[str]] = True,
-        # optimizer / scheduler
+        # scheduler / optimizer
         warmup_proportion: float = 0.0,
+        # important: this is only used if the base model does not have a configure_optimizer method
+        learning_rate: Optional[float] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.save_hyperparameters()
 
         # optimizer / scheduler
+        self.learning_rate = learning_rate
         self.warmup_proportion = warmup_proportion
 
         # can be used to override the generation kwargs from the generation config that gets constructed from the
@@ -195,7 +198,20 @@ class SimplePointerNetworkModel(PyTorchIEModel):
                     self.log(f"metric_{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
-        optimizer = self.model.configure_optimizer()
+        if hasattr(self.model, "configure_optimizer") and callable(self.model.configure_optimizer):
+            if self.learning_rate is not None:
+                raise ValueError(
+                    f"learning_rate is set to {self.learning_rate}, but the *base model* ({type(self.model)}) has a "
+                    f"configure_optimizer method. Please set learning_rate to None and configure the optimizer "
+                    f"inside the *base model*."
+                )
+            optimizer = self.model.configure_optimizer()
+        else:
+            logger.warning(
+                "The model does not have a configure_optimizer method. Using default optimizer (AdamW) with provided "
+                f"learning_rate ({self.learning_rate})"
+            )
+            optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
 
         if self.warmup_proportion > 0.0:
             stepping_batches = self.trainer.estimated_stepping_batches
