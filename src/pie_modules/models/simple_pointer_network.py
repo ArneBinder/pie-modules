@@ -1,18 +1,19 @@
 import copy
 import logging
 from collections.abc import MutableMapping
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set, Type, Union
 
 import torch
 from pytorch_ie import TaskModule
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torchmetrics import Metric
-from transformers import get_linear_schedule_with_warmup
+from transformers import PreTrainedModel, get_linear_schedule_with_warmup
 
 from pie_modules.models.base_models import BartAsPointerNetwork
 from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 from pie_modules.taskmodules.common import HasBuildMetric
+from pie_modules.utils import resolve_type
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,9 @@ class SimplePointerNetworkModel(PyTorchIEModel):
     def __init__(
         self,
         base_model_config: Dict[str, Any],
+        base_model_type: Union[
+            str, Type[PreTrainedModel]
+        ] = "pie_modules.models.base_models.BartAsPointerNetwork",
         taskmodule_config: Optional[Dict[str, Any]] = None,
         generation_kwargs: Optional[Dict[str, Any]] = None,
         # metrics
@@ -62,8 +66,10 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         # can be used to override the default generation setup (created from the base model generation config)
         self.generation_kwargs = generation_kwargs or {}
 
-        # TODO: Use AutoModelAsPointerNetwork when it is available
-        self.model = BartAsPointerNetwork.from_pretrained(**base_model_config)
+        resolved_base_model_type = resolve_type(
+            base_model_type, expected_super_type=PreTrainedModel
+        )
+        self.model = resolved_base_model_type.from_pretrained(**base_model_config)
 
         self.use_prediction_for_metrics: Set[str]
         if isinstance(use_prediction_for_metrics, bool):
