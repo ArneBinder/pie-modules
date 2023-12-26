@@ -59,8 +59,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         self.learning_rate = learning_rate
         self.warmup_proportion = warmup_proportion
 
-        # can be used to override the generation kwargs from the generation config that gets constructed from the
-        # BartAsPointerNetwork config
+        # can be used to override the default generation setup (created from the base model generation config)
         self.generation_kwargs = generation_kwargs or {}
 
         # TODO: Use AutoModelAsPointerNetwork when it is available
