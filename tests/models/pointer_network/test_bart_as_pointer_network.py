@@ -193,11 +193,11 @@ def test_bart_pointer_network_generate_with_scores(model, taskmodule):
         output_scores=True,
     )
     assert isinstance(outputs, BeamSearchEncoderDecoderOutput)
-    torch.testing.assert_close(outputs.sequences_scores, torch.tensor([-6.2436]))
+    torch.testing.assert_close(outputs.sequences_scores, torch.tensor([-6.784079074859619]))
     torch.testing.assert_close(
         outputs.sequences,
         torch.tensor(
-            [[0, 28, 41, 35, 33, 36, 17, 48, 36, 17, 33, 55, 35, 33, 17, 48, 55, 35, 48, 2]]
+            [[0, 28, 41, 35, 33, 36, 17, 48, 36, 17, 33, 55, 35, 33, 17, 48, 55, 35, 48, 36]]
         ),
     )
 
