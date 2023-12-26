@@ -9,6 +9,7 @@ from pytorch_ie.core import AnnotationList, Document, annotation_field
 from pytorch_ie.documents import TextBasedDocument
 
 from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
+from pie_modules.taskmodules.pointer_network.metrics import AnnotationLayerMetric
 from pie_modules.taskmodules.pointer_network_taskmodule_for_end2end_re import (
     EncodingWithIdsAndOptionalCpmTag,
 )
@@ -519,3 +520,15 @@ def test_annotations_from_output(task_encodings, task_outputs, taskmodule):
         task_outputs=task_outputs,
         layer_names_expected={"entities", "relations"},
     )
+
+
+def test_build_metric(taskmodule):
+    metric = taskmodule.build_metric()
+    assert metric is not None
+    assert isinstance(metric, AnnotationLayerMetric)
+
+
+def test_generation_kwargs(taskmodule):
+    assert taskmodule.generation_kwargs == {
+        "no_repeat_ngram_size": 7,
+    }
