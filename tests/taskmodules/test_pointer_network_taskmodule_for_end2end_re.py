@@ -443,8 +443,7 @@ def test_collate(batch, taskmodule):
 def unbatched_output(taskmodule, batch):
     inputs, targets = batch
     # because the model is trained to reproduce the target tokens, we can just use them as model prediction
-    model_output = {"pred": targets["tgt_tokens"]}
-    return taskmodule.unbatch_output(model_output)
+    return taskmodule.unbatch_output(targets["tgt_tokens"])
 
 
 @pytest.fixture()

@@ -93,14 +93,11 @@ class AnnotationLayerMetric(Metric, Generic[T]):
         self.reset()
 
     def get_exact_matches(self, prediction, expected) -> int:
-        prediction_ids = prediction["pred"]
-        expected_ids = expected["pred"]
-
-        bsz = prediction_ids.size(0)
+        bsz = prediction.size(0)
 
         # TODO: is this to get the first eos index? Note that we use eos also for padding...
-        pred_eos_index = prediction_ids.flip(dims=[1]).eq(self.eos_id).cumsum(dim=1).long()
-        expected_eos_index = expected_ids.flip(dims=[1]).eq(self.eos_id).cumsum(dim=1).long()
+        pred_eos_index = prediction.flip(dims=[1]).eq(self.eos_id).cumsum(dim=1).long()
+        expected_eos_index = expected.flip(dims=[1]).eq(self.eos_id).cumsum(dim=1).long()
 
         pred_seq_len = pred_eos_index.flip(dims=[1]).eq(pred_eos_index[:, -1:]).sum(dim=1)  # bsz
         pred_seq_len = (pred_seq_len - 2).tolist()
@@ -114,8 +111,8 @@ class AnnotationLayerMetric(Metric, Generic[T]):
             # delete </s>
             # Note: I have absolutely no idea why this is not the same as:
             # expected[i, 1:expected_seq_len[i]]
-            ts_tensor = expected_ids[:, 1:][i, : expected_seq_len[i]]
-            ps_tensor = prediction_ids[:, 1:][i, : pred_seq_len[i]]
+            ts_tensor = expected[:, 1:][i, : expected_seq_len[i]]
+            ps_tensor = prediction[:, 1:][i, : pred_seq_len[i]]
             if torch.equal(ts_tensor, ps_tensor):
                 em += 1
 

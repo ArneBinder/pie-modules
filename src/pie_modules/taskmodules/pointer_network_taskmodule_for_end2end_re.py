@@ -704,11 +704,9 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         return inputs, targets
 
     def unbatch_output(self, model_output: ModelBatchOutput) -> Sequence[TaskOutputType]:
-        # model_output just contains "pred"
-        pred = model_output["pred"]
-        batch_size = pred.size(0)
+        batch_size = model_output.size(0)
         result = [
-            EncodingWithIdsAndOptionalCpmTag(pred[i].to(device="cpu").tolist())
+            EncodingWithIdsAndOptionalCpmTag(model_output[i].to(device="cpu").tolist())
             for i in range(batch_size)
         ]
         return result

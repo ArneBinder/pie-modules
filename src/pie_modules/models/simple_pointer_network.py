@@ -112,7 +112,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         if is_training:
             self.train()
 
-        return {"pred": outputs}
+        return outputs
 
     def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> Any:
         inputs, _ = batch
@@ -153,10 +153,9 @@ class SimplePointerNetworkModel(PyTorchIEModel):
                 # get the indices (these are without the initial bos_ids, see above)
                 indices = torch.argmax(logits, dim=-1)
                 # re-add the bos_ids
-                prediction_ids = torch.cat([targets["tgt_tokens"][:, :1], indices], dim=-1)
-                prediction = {"pred": prediction_ids}
+                prediction = torch.cat([targets["tgt_tokens"][:, :1], indices], dim=-1)
             # the format of expected needs to be the same as the format of prediction
-            stage_metrics.update(prediction, {"pred": targets["tgt_tokens"]})
+            stage_metrics.update(prediction, targets["tgt_tokens"])
 
         return loss
 

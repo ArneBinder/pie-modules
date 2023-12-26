@@ -269,10 +269,9 @@ def test_predict_step(model, batch, config):
     torch.manual_seed(42)
     output = model.predict_step(batch, 0)
     assert output is not None
-    assert set(output) == {"pred"}
     if config == {}:
         torch.testing.assert_close(
-            output["pred"],
+            output,
             torch.tensor(
                 [
                     [0, 8, 9, 10, 12, 13, 10, 12, 12, 13, 10, 1],
@@ -282,7 +281,7 @@ def test_predict_step(model, batch, config):
         )
     elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
         torch.testing.assert_close(
-            output["pred"],
+            output,
             torch.tensor(
                 [
                     [0, 8, 9, 10, 12, 13, 10, 12, 12, 13, 10, 1],

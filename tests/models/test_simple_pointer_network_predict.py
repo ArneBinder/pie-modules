@@ -77,7 +77,7 @@ def test_sciarg_predict(trained_model, sciarg_batch, loaded_taskmodule):
     prediction = trained_model.predict(inputs_truncated)
     assert prediction is not None
     metric = loaded_taskmodule.build_metric()
-    metric.update(prediction, {"pred": targets_truncated["tgt_tokens"]})
+    metric.update(prediction, targets_truncated["tgt_tokens"])
 
     values = metric.compute()
 
@@ -1059,7 +1059,7 @@ def test_sciarg_predict_with_position_id_pattern(sciarg_batch, loaded_taskmodule
     prediction = trained_model.predict(inputs_truncated, max_length=20)
     assert prediction is not None
     metric = loaded_taskmodule.build_metric()
-    metric.update(prediction, {"pred": targets_truncated["tgt_tokens"]})
+    metric.update(prediction, targets_truncated["tgt_tokens"])
 
     values = metric.compute()
     assert values == {
