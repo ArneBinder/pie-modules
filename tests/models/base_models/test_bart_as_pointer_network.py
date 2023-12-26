@@ -14,9 +14,7 @@ from transformers import (
 )
 from transformers.generation import BeamSearchEncoderDecoderOutput
 
-from pie_modules.models.components.pointer_network.bart_as_pointer_network import (
-    BartAsPointerNetwork,
-)
+from pie_modules.models.base_models import BartAsPointerNetwork
 from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 
 ARTICLE_TO_SUMMARIZE = (

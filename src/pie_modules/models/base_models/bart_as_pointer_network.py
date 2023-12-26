@@ -13,9 +13,10 @@ from transformers.modeling_outputs import (
 from transformers.models.bart.modeling_bart import shift_tokens_right
 from transformers.utils import logging
 
-from pie_modules.models.base_models import BartModelWithDecoderPositionIds
-
-from .pointer_head import PointerHead
+from pie_modules.models.base_models.bart_with_decoder_position_ids import (
+    BartModelWithDecoderPositionIds,
+)
+from pie_modules.models.components.pointer_head import PointerHead
 
 logger = logging.get_logger(__name__)
 

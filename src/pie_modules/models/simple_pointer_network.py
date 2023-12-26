@@ -10,9 +10,9 @@ from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torchmetrics import Metric
 from transformers import get_linear_schedule_with_warmup
 
-from ..taskmodules import PointerNetworkTaskModuleForEnd2EndRE
-from ..taskmodules.common import HasBuildMetric
-from .components.pointer_network.bart_as_pointer_network import BartAsPointerNetwork
+from pie_modules.models.base_models import BartAsPointerNetwork
+from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
+from pie_modules.taskmodules.common import HasBuildMetric
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +87,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             taskmodule_kwargs.pop(TaskModule.config_type_key)
             taskmodule = PointerNetworkTaskModuleForEnd2EndRE(**taskmodule_kwargs)
             taskmodule.post_prepare()
+            # TODO: remove this check when TaskModule.build_metric() is implemented
             if not isinstance(taskmodule, HasBuildMetric):
                 raise Exception(
                     f"taskmodule {taskmodule} does not implement HasBuildMetric interface"
