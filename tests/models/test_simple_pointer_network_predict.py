@@ -1,15 +1,14 @@
 import json
 import logging
 import os
-import pickle
 from collections import defaultdict
 
 import pytest
 import torch
+from pytorch_ie import AutoTaskModule, TaskModule
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 
 from pie_modules.models import SimplePointerNetworkModel
-from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 from tests import DUMP_FIXTURE_DATA, FIXTURES_ROOT
 
 logger = logging.getLogger(__name__)
@@ -18,6 +17,12 @@ logger = logging.getLogger(__name__)
 # wandb run: https://wandb.ai/arne/dataset-sciarg-task-ner_re-training/runs/terkqzyn
 MODEL_PATH = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-18_22-15-53"
 MODEL_PATH_WITH_POSITION_ID_PATTERN = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-18_22-15-53_position_id_pattern"
+TASKMODULE_PATH = (
+    FIXTURES_ROOT
+    / "taskmodules"
+    / "pointer_network_taskmodule_for_end2end_re"
+    / "sciarg_pretrained"
+)
 SCIARG_BATCH_PATH = (
     FIXTURES_ROOT
     / "taskmodules"
@@ -46,8 +51,8 @@ def test_trained_model(trained_model):
 
 
 @pytest.fixture(scope="module")
-def loaded_taskmodule():
-    taskmodule = PointerNetworkTaskModuleForEnd2EndRE.from_pretrained(MODEL_PATH)
+def loaded_taskmodule() -> TaskModule:
+    taskmodule: TaskModule = AutoTaskModule.from_pretrained(str(TASKMODULE_PATH))
     assert taskmodule.is_prepared
     return taskmodule
 
@@ -106,7 +111,6 @@ def test_sciarg_predict(
     assert prediction.tolist() == sciarg_batch_prediction.tolist()
 
 
-@pytest.mark.skipif(not os.path.exists(MODEL_PATH), reason=f"model not available: {MODEL_PATH}")
 def test_sciarg_metric(loaded_taskmodule, sciarg_batch_truncated, sciarg_batch_prediction):
     inputs, targets = sciarg_batch_truncated
     metric = loaded_taskmodule.configure_metric()
@@ -1080,12 +1084,12 @@ def test_sciarg_metric(loaded_taskmodule, sciarg_batch_truncated, sciarg_batch_p
 
 
 @pytest.mark.slow
-def test_sciarg_predict_with_position_id_pattern(sciarg_batch, loaded_taskmodule):
+def test_sciarg_predict_with_position_id_pattern(sciarg_batch_truncated, loaded_taskmodule):
     trained_model = SimplePointerNetworkModel.from_pretrained(MODEL_PATH_WITH_POSITION_ID_PATTERN)
     assert trained_model is not None
 
     torch.manual_seed(42)
-    inputs, targets = sciarg_batch
+    inputs, targets = sciarg_batch_truncated
     inputs_truncated = {k: v[:5] for k, v in inputs.items()}
     targets_truncated = {k: v[:5] for k, v in targets.items()}
 
