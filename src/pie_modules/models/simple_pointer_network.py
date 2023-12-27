@@ -112,7 +112,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             # NOTE: This is not a ModuleDict, so this will not live on the torch device!
             self.metrics = {stage: taskmodule.configure_metric(stage) for stage in metric_splits}
 
-    def predict(self, inputs, **kwargs) -> Dict[str, Any]:
+    def predict(self, inputs, **kwargs) -> torch.LongTensor:
         is_training = self.training
         self.eval()
 
