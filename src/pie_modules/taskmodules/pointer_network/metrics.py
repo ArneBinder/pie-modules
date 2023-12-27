@@ -162,13 +162,12 @@ class AnnotationLayerMetric(Metric, Generic[T]):
     def _nested_round(self, d: Dict[str, Any]) -> Dict[str, Any]:
         if self.round_precision is None:
             return d
-        res = {}
+        res: Dict[str, Any] = {}
         for k, v in d.items():
             if isinstance(v, dict):
                 res[k] = self._nested_round(v)
             elif isinstance(v, float):
-                # not sure why mypy complains here...
-                res[k] = round(v, self.round_precision)  # type: ignore
+                res[k] = round(v, self.round_precision)
             else:
                 res[k] = v
         return res
