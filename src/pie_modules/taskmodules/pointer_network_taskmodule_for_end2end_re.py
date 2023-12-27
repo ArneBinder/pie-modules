@@ -95,6 +95,32 @@ def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
     return v1.head.start - v2.head.start  # v1[0]["from"] - v2[0]["from"]
 
 
+def get_first_occurrence_index(
+    tensor: Union[torch.FloatTensor, torch.LongTensor], value: Union[float, int]
+) -> torch.LongTensor:
+    """Returns the index of the first occurrence of `value` in each row of `tensor`. If `value` is
+    not found, seq_len is returned.
+
+    Args:
+        tensor: the tensor of shape (bsz, seq_len) to search in
+        value: the value to search for
+
+    Returns: a tensor of shape (bsz,) containing the index of the first occurrence of `value` in each row of `tensor`.
+    """
+
+    mask_value = tensor.eq(value)
+    # count matching positions from the end
+    value_counts_to_end = mask_value.flip(dims=[1]).cumsum(dim=1).flip(dims=[1])
+    # at the first position stands the number of total matches
+    total_matches = value_counts_to_end[:, 0]
+    # the sum of all positions where the number of matches is equal to the total number of matches
+    # is the index *after* the first occurrence
+    result = value_counts_to_end.eq(total_matches.unsqueeze(-1)).sum(dim=1) - 1
+    # set result to seq_len if no match was found
+    result[total_matches == 0] = tensor.size(1)
+    return result
+
+
 # TODO: use enable BucketSampler (just mentioning here because no better place available for now)
 # see https://github.com/Lightning-AI/lightning/pull/13640#issuecomment-1199032224
 
@@ -372,7 +398,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
     def configure_metric(self, stage: Optional[str] = None) -> Metric:
         return AnnotationLayerMetric(
-            eos_id=self.eos_id,
             taskmodule=self,
             layer_names=self.layer_names,
             decode_annotations_func=self.decode_annotations,
@@ -710,21 +735,13 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     def unbatch_output(self, model_output: ModelBatchOutput) -> Sequence[TaskOutputType]:
         batch_size = model_output.size(0)
 
-        # TODO: calculate sequence length with eos_id and use that to truncate
-        # this code is taken from AnnotationLayerMetric.get_exact_matches(), needs to be checked and fixed!
-        # eos_indices = model_output.flip(dims=[1]).eq(self.eos_id).cumsum(dim=1).long()
-        # seq_lengths = eos_indices.flip(dims=[1]).eq(eos_indices[:, -1:]).sum(dim=1)
-        # seq_lengths_real = seq_lengths - 2
-        # first_eos_indices = get_first_occurrence_index(model_output, self.eos_id)
-        # if (first_eos_indices == -1).sum() > 0:
-        #    raise Exception(f"eos_id not found in model_output: {model_output}")
+        first_eos_indices = get_first_occurrence_index(model_output, self.eos_id)
+        if (first_eos_indices == -1).sum() > 0:
+            raise Exception(f"eos_id not found in model_output: {model_output}")
 
         result = [
             EncodingWithIdsAndOptionalCpmTag(
-                # model_output[i, : first_eos_indices[i]].to(device="cpu").tolist()
-                model_output[i]
-                .to(device="cpu")
-                .tolist()
+                model_output[i, : first_eos_indices[i]].to(device="cpu").tolist()
             )
             for i in range(batch_size)
         ]

@@ -210,7 +210,6 @@ def test_test_step(model, batch, config):
     values = model.metrics["test"].compute()
     assert values == {
         "em": 0.0,
-        "em_original": 0.0,
         "entities": {
             "topic": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
             "person": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
@@ -251,7 +250,6 @@ def test_test_step_without_use_prediction_for_metrics(taskmodule, batch):
     values = model.metrics["test"].compute()
     assert values == {
         "em": 0.0,
-        "em_original": 0.0,
         "entities": {
             "topic": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
             "person": {"recall": 0.0, "precision": 0.0, "f1": 0.0},

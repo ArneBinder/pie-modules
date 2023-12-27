@@ -12,6 +12,7 @@ from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 from pie_modules.taskmodules.common.metrics import AnnotationLayerMetric
 from pie_modules.taskmodules.pointer_network_taskmodule_for_end2end_re import (
     EncodingWithIdsAndOptionalCpmTag,
+    get_first_occurrence_index,
 )
 
 logger = logging.getLogger(__name__)
@@ -459,9 +460,9 @@ def task_output(task_outputs) -> EncodingWithIdsAndOptionalCpmTag:
 def test_task_output(task_output, taskmodule):
     output_list = task_output.tgt_tokens
     if taskmodule.partition_layer_name is None:
-        assert output_list == [0, 14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]
+        assert output_list == [0, 14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2]
     elif taskmodule.partition_layer_name == "sentences":
-        assert output_list == [0, 14, 14, 5, 11, 12, 3, 6, 1]
+        assert output_list == [0, 14, 14, 5, 11, 12, 3, 6]
     else:
         raise Exception(f"unknown partition_layer_name: {taskmodule.partition_layer_name}")
 
@@ -531,3 +532,17 @@ def test_generation_kwargs(taskmodule):
     assert taskmodule.generation_kwargs == {
         "no_repeat_ngram_size": 7,
     }
+
+
+def test_get_first_occurrence_index():
+    tensor = torch.tensor(
+        [
+            [0, 1, 1, 1, 1, 1],
+            [0, 0, 1, 1, 1, 1],
+            [0, 1, 1, 0, 0, 1],
+            [1, 1, 1, 1, 1, 1],
+            [0, 0, 0, 0, 0, 0],
+        ]
+    )
+    indices = get_first_occurrence_index(tensor, 1)
+    torch.testing.assert_close(indices, torch.tensor([1, 2, 1, 0, 6]))
