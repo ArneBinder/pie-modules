@@ -10,20 +10,20 @@ from torchmetrics import Metric
 logger = logging.getLogger(__name__)
 
 
-class LabeledAnnotationScores(Metric):
+class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
     def __init__(
         self,
-        label_mapping: Optional[Dict[int, str]] = None,
+        label_mapping: Optional[Dict[Any, str]] = None,
     ):
         super().__init__()
         self.label_mapping = label_mapping
         self.reset()
 
-    def reset(self):
+    def reset(self) -> None:
         super().reset()
-        self.gold = []
-        self.predicted = []
-        self.correct = []
+        self.gold: List[Annotation] = []
+        self.predicted: List[Annotation] = []
+        self.correct: List[Annotation] = []
 
     def get_precision_recall_f1(
         self, n_gold: int, n_predicted: int, n_correct: int
@@ -37,15 +37,19 @@ class LabeledAnnotationScores(Metric):
         f1 *= 100
         return {"recall": recall, "precision": precision, "f1": f1}
 
-    def compute(self) -> Tuple[Dict[str, float], Dict[str, Dict[str, float]]]:
+    def get_label(self, annotation: Annotation) -> Optional[str]:
+        label: Optional[str] = getattr(annotation, "label", None)
+        if self.label_mapping is not None:
+            return self.label_mapping[label]
+        return label
+
+    def compute(self) -> Tuple[Dict[str, float], Dict[Optional[str], Dict[str, float]]]:
         # per class
-        per_class: Dict[str, Dict[str, float]] = {}
-        gold_counter = Counter([x.label for x in self.gold])
-        predicted_counter = Counter([x.label for x in self.predicted])
-        correct_counter = Counter([x.label for x in self.correct])
+        per_class: Dict[Optional[str], Dict[str, float]] = {}
+        gold_counter = Counter([self.get_label(ann) for ann in self.gold])
+        predicted_counter = Counter([self.get_label(ann) for ann in self.predicted])
+        correct_counter = Counter([self.get_label(ann) for ann in self.correct])
         for label in gold_counter.keys() | predicted_counter.keys():
-            if self.label_mapping is not None:
-                label = self.label_mapping[label]
             n_gold = gold_counter.get(label, 0)
             n_predicted = predicted_counter.get(label, 0)
             n_correct = correct_counter.get(label, 0)
@@ -59,7 +63,7 @@ class LabeledAnnotationScores(Metric):
 
         return overall, per_class
 
-    def update(self, gold, predicted):
+    def update(self, gold, predicted) -> None:
         gold_set = set(gold)
         predicted_set = set(predicted)
         self.gold.extend(gold_set)
@@ -87,7 +91,10 @@ class AnnotationLayerMetric(Metric, Generic[T]):
         self.decode_annotations_func = decode_annotations_func
         self.eos_id = eos_id
         self.layer_metrics = ModuleDict(
-            {layer_name: LabeledAnnotationScores() for layer_name in self.layer_names}
+            {
+                layer_name: PrecisionRecallAndF1ForLabeledAnnotations()
+                for layer_name in self.layer_names
+            }
         )
 
         self.reset()
@@ -182,17 +189,17 @@ class AnnotationLayerMetric(Metric, Generic[T]):
         for layer_name, metric in self.layer_metrics.items():
             overall_layer_info, layer_info = metric.compute()
             res[layer_name] = layer_info
-            res[layer_name + "/micro"] = overall_layer_info
+            res[f"{layer_name}/micro"] = overall_layer_info
 
         # if invalid contains a "correct" key, use that to normalize, otherwise use the number of training examples
         if "correct" in self.invalid:
             invalid_total = sum(self.invalid.values())
-            # remove the "correct" entry to get the correct value for invalid/all below
-            self.invalid.pop("correct")
         else:
             invalid_total = self.total
         res["invalid"] = {k: v / invalid_total for k, v in self.invalid.items()}
-        res["invalid/all"] = sum(self.invalid.values()) / invalid_total
+        res["invalid/all"] = (
+            sum(v for k, v in self.invalid.items() if v != "correct") / invalid_total
+        )
 
         res = self._nested_round(res)
 
