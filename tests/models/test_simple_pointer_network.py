@@ -151,15 +151,15 @@ def test_batch(batch, config):
     assert set(targets) == {"tgt_tokens", "tgt_attention_mask", "tgt_seq_len", "CPM_tag"}
     torch.testing.assert_close(
         targets["tgt_tokens"],
-        torch.tensor([[0, 14, 14, 5, 11, 12, 3, 6, 1], [0, 9, 9, 4, 2, 2, 2, 2, 1]]),
+        torch.tensor([[14, 14, 5, 11, 12, 3, 6, 1], [9, 9, 4, 2, 2, 2, 2, 1]]),
     )
     torch.testing.assert_close(
         targets["tgt_attention_mask"],
-        torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1]]),
+        torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1]]),
     )
     torch.testing.assert_close(
         targets["tgt_seq_len"],
-        torch.tensor([9, 9]),
+        torch.tensor([8, 8]),
     )
 
 
@@ -272,8 +272,8 @@ def test_predict_step(model, batch, config):
             output,
             torch.tensor(
                 [
-                    [0, 8, 9, 10, 12, 13, 10, 12, 12, 13, 10, 1],
-                    [0, 8, 8, 9, 9, 9, 9, 9, 9, 9, 10, 1],
+                    [8, 9, 10, 12, 13, 10, 12, 12, 13, 10, 1],
+                    [8, 8, 9, 9, 9, 9, 9, 9, 9, 10, 1],
                 ]
             ),
         )
@@ -282,8 +282,8 @@ def test_predict_step(model, batch, config):
             output,
             torch.tensor(
                 [
-                    [0, 8, 9, 10, 12, 13, 10, 12, 12, 13, 10, 1],
-                    [0, 4, 4, 4, 4, 4, 4, 4, 9, 9, 10, 1],
+                    [8, 9, 10, 12, 13, 10, 12, 12, 13, 10, 1],
+                    [4, 4, 4, 4, 4, 4, 4, 9, 9, 10, 1],
                 ]
             ),
         )

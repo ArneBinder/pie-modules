@@ -123,13 +123,12 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         if is_training:
             self.train()
 
-        return outputs
         # TODO: move into base model? or does this work for "all" generative models?
         # strip the bos_id
-        # if isinstance(outputs, torch.Tensor):
-        #   return outputs[:, 1:]
-        # else:
-        #   raise ValueError(f"Unsupported output type: {type(outputs)}")
+        if isinstance(outputs, torch.Tensor):
+            return outputs[:, 1:]
+        else:
+            raise ValueError(f"Unsupported output type: {type(outputs)}")
 
     def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> Any:
         inputs, _ = batch
@@ -146,12 +145,8 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         if targets is None:
             raise ValueError("Targets must be provided for training or evaluation!")
 
-        # Truncate the bos_id. The decoder input_ids will be created by the model
-        # by shifting the labels one position to the right and adding the bos_id
-        labels = targets["tgt_tokens"][:, 1:]
-        # labels = targets["tgt_tokens"]
-        decoder_attention_mask = targets["tgt_attention_mask"][:, 1:]
-        # decoder_attention_mask = targets["tgt_attention_mask"]
+        labels = targets["tgt_tokens"]
+        decoder_attention_mask = targets["tgt_attention_mask"]
 
         outputs = self(inputs=inputs, labels=labels, decoder_attention_mask=decoder_attention_mask)
         loss = outputs.loss
@@ -170,10 +165,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
                 # construct prediction from the model output
                 logits = outputs.logits
                 # get the indices (these are without the initial bos_ids, see above)
-                indices = torch.argmax(logits, dim=-1)
-                # re-add the bos_ids
-                prediction = torch.cat([targets["tgt_tokens"][:, :1], indices], dim=-1)
-                # prediction = indices
+                prediction = torch.argmax(logits, dim=-1)
             # the format of expected needs to be the same as the format of prediction
             stage_metrics.update(prediction, targets["tgt_tokens"])
 

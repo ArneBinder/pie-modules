@@ -470,20 +470,18 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             if encoded_relation is not None:
                 relation_encodings[dummy_relation] = encoded_relation
 
-        # sort relations by start indices of head and tail
+        # sort relations by start indices of head and tail # TODO: is this correct?
         sorted_relations = sorted(relation_encodings, key=cmp_to_key(cmp_src_rel))
 
         # build target tokens
-        tgt_tokens = [self.bos_id]
-        # tgt_tokens = []
+        tgt_tokens = []
         for rel in sorted_relations:
             encoded_relation = relation_encodings[rel]
             tgt_tokens.extend(encoded_relation)
         tgt_tokens.append(self.eos_id)
 
         # sanity check
-        _, encoding_errors, remaining = self.decode_relations(tag_seq=tgt_tokens[1:])
-        # _, encoding_errors, remaining = self.decode_relations(tag_seq=tgt_tokens)
+        _, encoding_errors, remaining = self.decode_relations(tag_seq=tgt_tokens)
         if (
             not all(v == 0 for k, v in encoding_errors.items() if k != "correct")
             or len(remaining) > 0
@@ -525,11 +523,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     def decode_annotations(
         self, encoding: TaskOutputType, metadata: Optional[Dict[str, Any]] = None
     ) -> Tuple[Dict[str, List[Annotation]], Any]:
-        # strip the bos token
-        decoded_relations, errors, remaining = self.decode_relations(
-            tag_seq=encoding.tgt_tokens[1:]
-            # tag_seq=encoding.tgt_tokens
-        )
+        decoded_relations, errors, remaining = self.decode_relations(tag_seq=encoding.tgt_tokens)
         relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
         entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
         for rel in decoded_relations:
@@ -543,7 +537,8 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             else:
                 assert rel.head == rel.tail
 
-        # TODO: do we really need this majority vote? Why not keep both? Or parametrize this?
+        # It may happen that some spans take part in multiple relations, but got generated with different labels.
+        # In this case, we just create one span and take the most common label.
         entities: Dict[Tuple[int, int], LabeledSpan] = {}
         for (start, end), labels in entity_labels.items():
             c = Counter(labels)
@@ -605,8 +600,8 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         tgt_tokens: List[int],
     ) -> List[List[int]]:
         # strip the bos token
-        target = tgt_tokens[1:]
-        # target = tgt_tokens
+        # target = tgt_tokens[1:]
+        target = tgt_tokens
         # pad for 0
         likely_hood = np.ones(src_len + self.pointer_offset, dtype=int)
         likely_hood[: self.pointer_offset] = 0
@@ -735,13 +730,15 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     def unbatch_output(self, model_output: ModelBatchOutput) -> Sequence[TaskOutputType]:
         batch_size = model_output.size(0)
 
-        # Note that, if eos_id is not in model_output for a given batch item, first_eos_indices
-        # will be the seq_len for that batch item.
-        first_eos_indices = get_first_occurrence_index(model_output, self.eos_id)
+        # We use the position after the first eos token as the seq_len.
+        # Note that, if eos_id is not in model_output for a given batch item, the result will be
+        # model_output.size(1) + 1 (i.e. seq_len + 1) for that batch item. This is fine, because we use the
+        # seq_lengths just to truncate the output and want to keep everything if eos_id is not present.
+        seq_lengths = get_first_occurrence_index(model_output, self.eos_id) + 1
 
         result = [
             EncodingWithIdsAndOptionalCpmTag(
-                model_output[i, : first_eos_indices[i]].to(device="cpu").tolist()
+                model_output[i, : seq_lengths[i]].to(device="cpu").tolist()
             )
             for i in range(batch_size)
         ]

@@ -1,12 +1,10 @@
 import json
 import logging
 import os
-from collections import defaultdict
 
 import pytest
 import torch
 from pytorch_ie import AutoTaskModule, TaskModule
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 
 from pie_modules.models import SimplePointerNetworkModel
 from tests import DUMP_FIXTURE_DATA, FIXTURES_ROOT
