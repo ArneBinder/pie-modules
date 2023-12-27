@@ -450,6 +450,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
         # build target tokens
         tgt_tokens = [self.bos_id]
+        # tgt_tokens = []
         for rel in sorted_relations:
             encoded_relation = relation_encodings[rel]
             tgt_tokens.extend(encoded_relation)
@@ -457,6 +458,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
         # sanity check
         _, encoding_errors, remaining = self.decode_relations(tag_seq=tgt_tokens[1:])
+        # _, encoding_errors, remaining = self.decode_relations(tag_seq=tgt_tokens)
         if (
             not all(v == 0 for k, v in encoding_errors.items() if k != "correct")
             or len(remaining) > 0
@@ -501,6 +503,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         # strip the bos token
         decoded_relations, errors, remaining = self.decode_relations(
             tag_seq=encoding.tgt_tokens[1:]
+            # tag_seq=encoding.tgt_tokens
         )
         relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
         entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
@@ -578,6 +581,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     ) -> List[List[int]]:
         # strip the bos token
         target = tgt_tokens[1:]
+        # target = tgt_tokens
         # pad for 0
         likely_hood = np.ones(src_len + self.pointer_offset, dtype=int)
         likely_hood[: self.pointer_offset] = 0
@@ -711,9 +715,17 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         # eos_indices = model_output.flip(dims=[1]).eq(self.eos_id).cumsum(dim=1).long()
         # seq_lengths = eos_indices.flip(dims=[1]).eq(eos_indices[:, -1:]).sum(dim=1)
         # seq_lengths_real = seq_lengths - 2
+        # first_eos_indices = get_first_occurrence_index(model_output, self.eos_id)
+        # if (first_eos_indices == -1).sum() > 0:
+        #    raise Exception(f"eos_id not found in model_output: {model_output}")
 
         result = [
-            EncodingWithIdsAndOptionalCpmTag(model_output[i].to(device="cpu").tolist())
+            EncodingWithIdsAndOptionalCpmTag(
+                # model_output[i, : first_eos_indices[i]].to(device="cpu").tolist()
+                model_output[i]
+                .to(device="cpu")
+                .tolist()
+            )
             for i in range(batch_size)
         ]
         return result
