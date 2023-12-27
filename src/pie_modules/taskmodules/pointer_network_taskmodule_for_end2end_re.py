@@ -56,27 +56,27 @@ DocumentType: TypeAlias = TextBasedDocument
 
 @dataclasses.dataclass
 class InputEncodingType(BatchableMixin):
-    src_tokens: List[int]
-    src_attention_mask: List[int]
+    input_ids: List[int]
+    attention_mask: List[int]
 
 
 @dataclasses.dataclass
-class EncodingWithIdsAndOptionalCpmTag(BatchableMixin):
-    tgt_tokens: List[int]
-    CPM_tag: Optional[List[List[int]]] = None
+class LabelsAndOptionalConstraints(BatchableMixin):
+    labels: List[int]
+    constraints: Optional[List[List[int]]] = None
 
     @property
-    def tgt_attention_mask(self) -> List[int]:
-        return [1] * len(self.tgt_tokens)
+    def decoder_attention_mask(self) -> List[int]:
+        return [1] * len(self.labels)
 
 
-TargetEncodingType: TypeAlias = EncodingWithIdsAndOptionalCpmTag
+TargetEncodingType: TypeAlias = LabelsAndOptionalConstraints
 TaskEncodingType: TypeAlias = TaskEncoding[
     DocumentType,
     InputEncodingType,
     TargetEncodingType,
 ]
-TaskOutputType: TypeAlias = EncodingWithIdsAndOptionalCpmTag
+TaskOutputType: TypeAlias = LabelsAndOptionalConstraints
 
 
 def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
@@ -198,20 +198,18 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         # target encoding
         self.create_constraints = create_constraints
         self.pad_values = {
-            "tgt_tokens": self.target_pad_id,
-            "tgt_attention_mask": 0,
-            "src_tokens": self.tokenizer.pad_token_id,
-            "src_attention_mask": 0,
-            "CPM_tag": -1,
+            "input_ids": self.tokenizer.pad_token_id,
+            "attention_mask": 0,
+            "labels": self.target_pad_id,
+            "decoder_attention_mask": 0,
+            "constraints": -1,
         }
         self.dtypes = {
-            "tgt_tokens": torch.int64,
-            "tgt_attention_mask": torch.int64,
-            "src_seq_len": torch.int64,
-            "src_tokens": torch.int64,
-            "src_attention_mask": torch.int64,
-            "tgt_seq_len": torch.int64,
-            "CPM_tag": torch.int64,
+            "input_ids": torch.int64,
+            "attention_mask": torch.int64,
+            "labels": torch.int64,
+            "decoder_attention_mask": torch.int64,
+            "constraints": torch.int64,
         }
 
         # logging
@@ -397,14 +395,14 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
     def decode_relations(
         self,
-        tag_seq: List[int],
+        label_ids: List[int],
     ) -> Tuple[List[BinaryRelation], Dict[str, int], List[int]]:
         errors = dict()
         encodings = []
         current_encoding: List[int] = []
         valid_encoding: BinaryRelation
-        if len(tag_seq):
-            for i in tag_seq:
+        if len(label_ids):
+            for i in label_ids:
                 current_encoding.append(i)
                 # An encoding is complete when it ends with a relation_id
                 # or when it contains a none_id and has a length of 7
@@ -465,21 +463,21 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         # sort relations by start indices of head and tail # TODO: is this correct?
         sorted_relations = sorted(relation_encodings, key=cmp_to_key(cmp_src_rel))
 
-        # build target tokens
-        tgt_tokens = []
+        # build target_ids
+        target_ids = []
         for rel in sorted_relations:
             encoded_relation = relation_encodings[rel]
-            tgt_tokens.extend(encoded_relation)
-        tgt_tokens.append(self.eos_id)
+            target_ids.extend(encoded_relation)
+        target_ids.append(self.eos_id)
 
         # sanity check
-        _, encoding_errors, remaining = self.decode_relations(tag_seq=tgt_tokens)
+        _, encoding_errors, remaining = self.decode_relations(label_ids=target_ids)
         if (
             not all(v == 0 for k, v in encoding_errors.items() if k != "correct")
             or len(remaining) > 0
         ):
             decoded, invalid = self.decode_annotations(
-                EncodingWithIdsAndOptionalCpmTag(tgt_tokens), metadata=metadata
+                LabelsAndOptionalConstraints(target_ids), metadata=metadata
             )
             not_encoded = {}
             for layer_name in layers:
@@ -501,21 +499,20 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                     f"encoding errors: {encoding_errors}, remaining encoding ids: {remaining}"
                 )
 
-        # build CPM tag
         if self.create_constraints:
             if metadata is None or "src_len" not in metadata:
                 raise Exception("metadata with 'src_len' is required to create constraints")
-            src_len = metadata["src_len"]
-            constraints = self.build_constraints(src_len=src_len, tgt_tokens=tgt_tokens)
-            cpm_tag = constraints
+            constraints = self.build_constraints(
+                input_len=metadata["src_len"], target_ids=target_ids
+            )
         else:
-            cpm_tag = None
-        return EncodingWithIdsAndOptionalCpmTag(tgt_tokens=tgt_tokens, CPM_tag=cpm_tag)
+            constraints = None
+        return LabelsAndOptionalConstraints(labels=target_ids, constraints=constraints)
 
     def decode_annotations(
         self, encoding: TaskOutputType, metadata: Optional[Dict[str, Any]] = None
     ) -> Tuple[Dict[str, List[Annotation]], Any]:
-        decoded_relations, errors, remaining = self.decode_relations(tag_seq=encoding.tgt_tokens)
+        decoded_relations, errors, remaining = self.decode_relations(label_ids=encoding.labels)
         relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
         entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
         for rel in decoded_relations:
@@ -588,25 +585,22 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
     def build_constraints(
         self,
-        src_len: int,
-        tgt_tokens: List[int],
+        input_len: int,
+        target_ids: List[int],
     ) -> List[List[int]]:
-        # strip the bos token
-        # target = tgt_tokens[1:]
-        target = tgt_tokens
         # pad for 0
-        likely_hood = np.ones(src_len + self.pointer_offset, dtype=int)
+        likely_hood = np.ones(input_len + self.pointer_offset, dtype=int)
         likely_hood[: self.pointer_offset] = 0
         CMP_tag: List[np.ndarray] = [likely_hood]
-        for idx, t in enumerate(target[:-1]):
-            last7 = target[idx - 7 if idx - 7 > 0 else 0 : idx + 1]
-            likely_hood = np.ones(src_len + self.pointer_offset, dtype=int)
+        for idx, t in enumerate(target_ids[:-1]):
+            last7 = target_ids[idx - 7 if idx - 7 > 0 else 0 : idx + 1]
+            likely_hood = np.ones(input_len + self.pointer_offset, dtype=int)
             tag = self._pointer_tag(last=last7, t=t, idx=idx, arr=likely_hood)
             tag[self.none_id] = 1
             CMP_tag.append(tag)
-        last_end = np.zeros(src_len + self.pointer_offset, dtype=int)
+        last_end = np.zeros(input_len + self.pointer_offset, dtype=int)
         last_end[self.none_id] = 1
-        last_end[target[-1]] = 1
+        last_end[target_ids[-1]] = 1
         CMP_tag[-1] = last_end
         result = [i.tolist() for i in CMP_tag]
         return result
@@ -620,24 +614,27 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             tokenized_doc_id = task_encoding.metadata["tokenized_document"].id
             inputs = task_encoding.inputs
             targets = targets or task_encoding.targets
-            src_token_ids = inputs.src_tokens
-            src_tokens = self.tokenizer.convert_ids_to_tokens(src_token_ids)
-            tgt_token_ids = targets.tgt_tokens
-            tgt_tokens = [
-                self.targets[tgt_token_id]
-                if tgt_token_id < self.pointer_offset
-                else str(tgt_token_id)
+            input_tokens = self.tokenizer.convert_ids_to_tokens(inputs.input_ids)
+            label_tokens = [
+                self.targets[target_id_or_offset]
+                if target_id_or_offset < self.pointer_offset
+                else str(target_id_or_offset)
                 + " {"
-                + str(src_tokens[tgt_token_id - self.pointer_offset])
+                + str(input_tokens[target_id_or_offset - self.pointer_offset])
                 + "}"
-                for tgt_token_id in tgt_token_ids
+                for target_id_or_offset in targets.labels
             ]
             logger.info("*** Example ***")
-            logger.info(f"doc.id:        {tokenized_doc_id}")
-            logger.info(f"src_token_ids: {' '.join([str(i) for i in src_token_ids])}")
-            logger.info(f"src_tokens:    {' '.join(src_tokens)}")
-            logger.info(f"tgt_token_ids: {' '.join([str(i) for i in tgt_token_ids])}")
-            logger.info(f"tgt_tokens:    {' '.join(tgt_tokens)}")
+            logger.info(f"doc.id:       {tokenized_doc_id}")
+            logger.info(f"input_ids:    {' '.join([str(i) for i in inputs.input_ids])}")
+            logger.info(f"input_tokens: {' '.join(input_tokens)}")
+            logger.info(f"label_ids:    {' '.join([str(i) for i in targets.labels])}")
+            logger.info(f"label_tokens: {' '.join(label_tokens)}")
+            if self.create_constraints:
+                # only show the shape because the content is not very readable
+                logger.info(
+                    f"constraints:  Shape{np.array(targets.constraints).shape} (content is omitted)"
+                )
             self.log_first_n_examples -= 1
 
     def tokenize_document(self, document: DocumentType) -> List[TokenBasedDocument]:
@@ -671,8 +668,8 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                 TaskEncoding(
                     document=document,
                     inputs=InputEncodingType(
-                        src_tokens=tokenizer_encoding.ids,
-                        src_attention_mask=tokenizer_encoding.attention_mask,
+                        input_ids=tokenizer_encoding.ids,
+                        attention_mask=tokenizer_encoding.attention_mask,
                     ),
                     metadata={"tokenized_document": tokenized_doc},
                 )
@@ -694,7 +691,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         }
         result = self.encode_annotations(
             layers=layers,
-            metadata={**task_encoding.metadata, "src_len": len(task_encoding.inputs.src_tokens)},
+            metadata={**task_encoding.metadata, "src_len": len(task_encoding.inputs.input_ids)},
         )
 
         self.maybe_log_example(task_encoding=task_encoding, targets=result)
@@ -729,7 +726,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         seq_lengths = get_first_occurrence_index(model_output, self.eos_id) + 1
 
         result = [
-            EncodingWithIdsAndOptionalCpmTag(
+            LabelsAndOptionalConstraints(
                 model_output[i, : seq_lengths[i]].to(device="cpu").tolist()
             )
             for i in range(batch_size)

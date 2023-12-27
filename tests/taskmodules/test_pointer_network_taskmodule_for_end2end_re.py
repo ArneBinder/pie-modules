@@ -11,7 +11,7 @@ from pytorch_ie.documents import TextBasedDocument
 from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 from pie_modules.taskmodules.common.metrics import AnnotationLayerMetric
 from pie_modules.taskmodules.pointer_network_taskmodule_for_end2end_re import (
-    EncodingWithIdsAndOptionalCpmTag,
+    LabelsAndOptionalConstraints,
     get_first_occurrence_index,
 )
 
@@ -236,17 +236,17 @@ def task_encoding_without_target(taskmodule, document):
 def test_input_encoding(task_encoding_without_target, taskmodule):
     assert task_encoding_without_target is not None
     tokens = taskmodule.tokenizer.convert_ids_to_tokens(
-        task_encoding_without_target.inputs.src_tokens
+        task_encoding_without_target.inputs.input_ids
     )
     if taskmodule.partition_layer_name is None:
         assert asdict(task_encoding_without_target.inputs) == {
-            "src_tokens": [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 3101, 162, 4, 2],
-            "src_attention_mask": [1] * 13,
+            "input_ids": [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 3101, 162, 4, 2],
+            "attention_mask": [1] * 13,
         }
     elif taskmodule.partition_layer_name == "sentences":
         assert asdict(task_encoding_without_target.inputs) == {
-            "src_tokens": [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 2],
-            "src_attention_mask": [1] * 10,
+            "input_ids": [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 2],
+            "attention_mask": [1] * 10,
         }
     else:
         raise Exception(f"unknown partition_layer_name: {taskmodule.partition_layer_name}")
@@ -261,8 +261,8 @@ def test_target_encoding(target_encoding, taskmodule):
     assert target_encoding is not None
     if taskmodule.partition_layer_name is None:
         assert asdict(target_encoding) == {
-            "tgt_tokens": [14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1],
-            "CPM_tag": [
+            "labels": [14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1],
+            "constraints": [
                 [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                 [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
                 [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -282,8 +282,8 @@ def test_target_encoding(target_encoding, taskmodule):
         }
     elif taskmodule.partition_layer_name == "sentences":
         assert asdict(target_encoding) == {
-            "tgt_tokens": [14, 14, 5, 11, 12, 3, 6, 1],
-            "CPM_tag": [
+            "labels": [14, 14, 5, 11, 12, 3, 6, 1],
+            "constraints": [
                 [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                 [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
                 [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -313,20 +313,22 @@ def test_maybe_log_example(taskmodule, task_encoding, caplog, config):
     if config == {}:
         assert caplog.messages == [
             "*** Example ***",
-            "doc.id:        None-tokenized-1-of-1",
-            "src_token_ids: 0 713 16 10 34759 2788 59 1085 4 3101 162 4 2",
-            "src_tokens:    <s> This Ġis Ġa Ġdummy Ġtext Ġabout Ġnothing . ĠTrust Ġme . </s>",
-            "tgt_token_ids: 14 14 5 11 12 3 6 17 17 4 2 2 2 2 1",
-            "tgt_tokens:    14 {Ġnothing} 14 {Ġnothing} topic 11 {Ġdummy} 12 {Ġtext} content is_about 17 {Ġme} 17 {Ġme} person none none none none </s>",
+            "doc.id:       None-tokenized-1-of-1",
+            "input_ids:    0 713 16 10 34759 2788 59 1085 4 3101 162 4 2",
+            "input_tokens: <s> This Ġis Ġa Ġdummy Ġtext Ġabout Ġnothing . ĠTrust Ġme . " "</s>",
+            "label_ids:    14 14 5 11 12 3 6 17 17 4 2 2 2 2 1",
+            "label_tokens: 14 {Ġnothing} 14 {Ġnothing} topic 11 {Ġdummy} 12 {Ġtext} content is_about 17 {Ġme} 17 {Ġme} person none none none none </s>",
+            "constraints:  Shape(15, 20) (content is omitted)",
         ]
     elif config == {"partition_layer_name": "sentences"}:
         assert caplog.messages == [
             "*** Example ***",
-            "doc.id:        None-tokenized-1-of-2",
-            "src_token_ids: 0 713 16 10 34759 2788 59 1085 4 2",
-            "src_tokens:    <s> This Ġis Ġa Ġdummy Ġtext Ġabout Ġnothing . </s>",
-            "tgt_token_ids: 14 14 5 11 12 3 6 1",
-            "tgt_tokens:    14 {Ġnothing} 14 {Ġnothing} topic 11 {Ġdummy} 12 {Ġtext} content is_about </s>",
+            "doc.id:       None-tokenized-1-of-2",
+            "input_ids:    0 713 16 10 34759 2788 59 1085 4 2",
+            "input_tokens: <s> This Ġis Ġa Ġdummy Ġtext Ġabout Ġnothing . </s>",
+            "label_ids:    14 14 5 11 12 3 6 1",
+            "label_tokens: 14 {Ġnothing} 14 {Ġnothing} topic 11 {Ġdummy} 12 {Ġtext} content is_about </s>",
+            "constraints:  Shape(8, 17) (content is omitted)",
         ]
     else:
         raise Exception(f"unknown config: {config}")
@@ -369,11 +371,11 @@ def test_collate(batch, taskmodule):
     targets_lists = {k: targets[k].tolist() for k in sorted(targets)}
     if taskmodule.partition_layer_name is None:
         assert inputs_lists == {
-            "src_tokens": [[0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 3101, 162, 4, 2]],
-            "src_attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+            "input_ids": [[0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 3101, 162, 4, 2]],
+            "attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
         }
         assert targets_lists == {
-            "CPM_tag": [
+            "constraints": [
                 [
                     [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                     [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
@@ -392,19 +394,19 @@ def test_collate(batch, taskmodule):
                     [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                 ]
             ],
-            "tgt_tokens": [[14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]],
-            "tgt_attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+            "labels": [[14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]],
+            "decoder_attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
         }
     elif taskmodule.partition_layer_name == "sentences":
         assert inputs_lists == {
-            "src_tokens": [
+            "input_ids": [
                 [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 2],
                 [0, 18823, 162, 4, 2, 1, 1, 1, 1, 1],
             ],
-            "src_attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 0, 0, 0, 0, 0]],
+            "attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 0, 0, 0, 0, 0]],
         }
         assert targets_lists == {
-            "CPM_tag": [
+            "constraints": [
                 [
                     [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                     [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
@@ -426,8 +428,8 @@ def test_collate(batch, taskmodule):
                     [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
                 ],
             ],
-            "tgt_tokens": [[14, 14, 5, 11, 12, 3, 6, 1], [9, 9, 4, 2, 2, 2, 2, 1]],
-            "tgt_attention_mask": [
+            "labels": [[14, 14, 5, 11, 12, 3, 6, 1], [9, 9, 4, 2, 2, 2, 2, 1]],
+            "decoder_attention_mask": [
                 [1, 1, 1, 1, 1, 1, 1, 1],
                 [1, 1, 1, 1, 1, 1, 1, 1],
             ],
@@ -440,7 +442,7 @@ def test_collate(batch, taskmodule):
 def unbatched_output(taskmodule, batch):
     inputs, targets = batch
     # because the model is trained to reproduce the target tokens, we can just use them as model prediction
-    return taskmodule.unbatch_output(targets["tgt_tokens"])
+    return taskmodule.unbatch_output(targets["labels"])
 
 
 @pytest.fixture()
@@ -449,12 +451,12 @@ def task_outputs(unbatched_output):
 
 
 @pytest.fixture()
-def task_output(task_outputs) -> EncodingWithIdsAndOptionalCpmTag:
+def task_output(task_outputs) -> LabelsAndOptionalConstraints:
     return task_outputs[0]
 
 
 def test_task_output(task_output, taskmodule):
-    output_list = task_output.tgt_tokens
+    output_list = task_output.labels
     if taskmodule.partition_layer_name is None:
         assert output_list == [14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]
     elif taskmodule.partition_layer_name == "sentences":

@@ -209,12 +209,12 @@ def test_forward_with_labels(model, taskmodule, document):
     task_encodings = taskmodule.encode([document], encode_target=True)
     batch = taskmodule.collate(task_encodings)
     inputs, targets = batch
-    input_ids = inputs["src_tokens"]
-    attention_mask = inputs["src_attention_mask"]
+    input_ids = inputs["input_ids"]
+    attention_mask = inputs["attention_mask"]
     # Truncate the bos_id. The decoder input_ids will be created by the model
     # by shifting the labels one position to the right and adding the bos_id
-    labels = targets["tgt_tokens"]
-    decoder_attention_mask = targets["tgt_attention_mask"]
+    labels = targets["labels"]
+    decoder_attention_mask = targets["decoder_attention_mask"]
 
     torch.manual_seed(42)
     outputs = model(

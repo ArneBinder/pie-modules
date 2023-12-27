@@ -118,7 +118,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
 
         generation_kwargs = copy.deepcopy(self.generation_kwargs)
         generation_kwargs.update(kwargs)
-        outputs = self.model.generate(inputs["src_tokens"], **generation_kwargs)
+        outputs = self.model.generate(inputs["input_ids"], **generation_kwargs)
 
         if is_training:
             self.train()
@@ -136,8 +136,8 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         return pred
 
     def forward(self, inputs, **kwargs):
-        input_ids = inputs["src_tokens"]
-        attention_mask = inputs["src_attention_mask"]
+        input_ids = inputs["input_ids"]
+        attention_mask = inputs["attention_mask"]
         return self.model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
     def step(self, batch, stage: str, batch_idx: int) -> torch.FloatTensor:
@@ -145,8 +145,8 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         if targets is None:
             raise ValueError("Targets must be provided for training or evaluation!")
 
-        labels = targets["tgt_tokens"]
-        decoder_attention_mask = targets["tgt_attention_mask"]
+        labels = targets["labels"]
+        decoder_attention_mask = targets["decoder_attention_mask"]
 
         outputs = self(inputs=inputs, labels=labels, decoder_attention_mask=decoder_attention_mask)
         loss = outputs.loss
@@ -167,7 +167,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
                 # get the indices (these are without the initial bos_ids, see above)
                 prediction = torch.argmax(logits, dim=-1)
             # the format of expected needs to be the same as the format of prediction
-            stage_metrics.update(prediction, targets["tgt_tokens"])
+            stage_metrics.update(prediction, labels)
 
         return loss
 

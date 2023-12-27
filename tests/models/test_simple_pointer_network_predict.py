@@ -73,7 +73,7 @@ def test_dump_sciarg_batch(loaded_taskmodule):
     batch = loaded_taskmodule.collate(task_encodings)
     for data_type, data in zip(["inputs", "targets"], batch):
         # Note: we don't dump the CPM_tag, because it's too large
-        data_serializable = {k: v.tolist() for k, v in data.items() if k != "CPM_tag"}
+        data_serializable = {k: v.tolist() for k, v in data.items() if k != "constraints"}
         with open(str(SCIARG_BATCH_PATH).format(type=data_type), "w") as f:
             json.dump(data_serializable, f, sort_keys=True)
 
@@ -122,7 +122,7 @@ def test_sciarg_predict_with_position_id_pattern(sciarg_batch_truncated, loaded_
     prediction = trained_model.predict(inputs_truncated, max_length=20)
     assert prediction is not None
     metric = loaded_taskmodule.configure_metric()
-    metric.update(prediction, targets_truncated["tgt_tokens"])
+    metric.update(prediction, targets_truncated["labels"])
 
     values = metric.compute()
     assert values == {

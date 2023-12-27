@@ -131,26 +131,26 @@ def test_batch(batch, config):
     assert batch is not None
     inputs, targets = batch
     assert inputs is not None
-    assert set(inputs) == {"src_tokens", "src_attention_mask"}
+    assert set(inputs) == {"input_ids", "attention_mask"}
     torch.testing.assert_close(
-        inputs["src_tokens"],
+        inputs["input_ids"],
         torch.tensor(
             [[0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 2], [0, 18823, 162, 4, 2, 1, 1, 1, 1, 1]]
         ),
     )
     torch.testing.assert_close(
-        inputs["src_attention_mask"],
+        inputs["attention_mask"],
         torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 0, 0, 0, 0, 0]]),
     )
 
     assert targets is not None
-    assert set(targets) == {"tgt_tokens", "tgt_attention_mask"}
+    assert set(targets) == {"labels", "decoder_attention_mask"}
     torch.testing.assert_close(
-        targets["tgt_tokens"],
+        targets["labels"],
         torch.tensor([[14, 14, 5, 11, 12, 3, 6, 1], [9, 9, 4, 2, 2, 2, 2, 1]]),
     )
     torch.testing.assert_close(
-        targets["tgt_attention_mask"],
+        targets["decoder_attention_mask"],
         torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1]]),
     )
 
