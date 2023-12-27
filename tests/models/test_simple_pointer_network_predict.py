@@ -96,6 +96,7 @@ def test_sciarg_predict(trained_model, sciarg_batch, sciarg_batch_prediction, lo
     assert prediction.tolist() == sciarg_batch_prediction.tolist()
 
 
+@pytest.mark.skipif(not os.path.exists(MODEL_PATH), reason=f"model not available: {MODEL_PATH}")
 def test_sciarg_metric(loaded_taskmodule, sciarg_batch, sciarg_batch_prediction):
     inputs, targets = sciarg_batch
     metric = loaded_taskmodule.configure_metric()
