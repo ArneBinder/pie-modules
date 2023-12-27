@@ -1,4 +1,6 @@
+import json
 import logging
+import os
 import pickle
 from collections import defaultdict
 
@@ -16,6 +18,13 @@ logger = logging.getLogger(__name__)
 # wandb run: https://wandb.ai/arne/dataset-sciarg-task-ner_re-training/runs/terkqzyn
 MODEL_PATH = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-18_22-15-53"
 MODEL_PATH_WITH_POSITION_ID_PATTERN = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-18_22-15-53_position_id_pattern"
+
+SCIARG_BATCH_PREDICTION_PATH = (
+    FIXTURES_ROOT
+    / "models"
+    / "simple_pointer_network"
+    / f"sciarg_batch_prediction_{os.path.split(MODEL_PATH)[-1]}.json"
+)
 
 
 @pytest.fixture(scope="module")
@@ -67,8 +76,15 @@ def sciarg_batch():
     return batch
 
 
+@pytest.fixture(scope="module")
+def sciarg_batch_prediction():
+    with open(SCIARG_BATCH_PREDICTION_PATH) as f:
+        expected_prediction = json.load(f)
+    return expected_prediction
+
+
 @pytest.mark.slow
-def test_sciarg_predict(trained_model, sciarg_batch, loaded_taskmodule):
+def test_sciarg_predict(trained_model, sciarg_batch, sciarg_batch_prediction, loaded_taskmodule):
     torch.manual_seed(42)
     inputs, targets = sciarg_batch
     inputs_truncated = {k: v[:5] for k, v in inputs.items()}
@@ -76,6 +92,8 @@ def test_sciarg_predict(trained_model, sciarg_batch, loaded_taskmodule):
 
     prediction = trained_model.predict(inputs_truncated)
     assert prediction is not None
+    assert prediction.tolist() == sciarg_batch_prediction
+
     metric = loaded_taskmodule.configure_metric()
     metric.update(prediction, targets_truncated["tgt_tokens"])
 
