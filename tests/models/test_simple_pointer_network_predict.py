@@ -22,7 +22,7 @@ SCIARG_BATCH_PATH = (
     FIXTURES_ROOT
     / "taskmodules"
     / "pointer_network_taskmodule_for_end2end_re"
-    / "sciarg_batch_encoding.json"
+    / "sciarg_batch_encoding.{type}.json"
 )
 
 SCIARG_BATCH_PREDICTION_PATH = (
@@ -68,19 +68,23 @@ def test_dump_sciarg_batch(loaded_taskmodule):
     loaded_taskmodule.tokenizer_kwargs["strict_span_conversion"] = False
     task_encodings = loaded_taskmodule.encode([sciarg_document], encode_target=True)
     batch = loaded_taskmodule.collate(task_encodings)
-    batch_serializable = tuple({k: v.tolist() for k, v in item.items()} for item in batch)
-    with open(SCIARG_BATCH_PATH, "w") as f:
-        json.dump(batch_serializable, f, sort_keys=True)
+    for data_type, data in zip(["inputs", "targets"], batch):
+        # Note: we don't dump the CPM_tag, because it's too large
+        data_serializable = {k: v.tolist() for k, v in data.items() if k != "CPM_tag"}
+        with open(str(SCIARG_BATCH_PATH).format(type=data_type), "w") as f:
+            json.dump(data_serializable, f, sort_keys=True)
 
 
 @pytest.fixture(scope="module")
 def sciarg_batch_truncated():
-    with open(SCIARG_BATCH_PATH) as f:
-        batch_json = json.load(f)
-    inputs_json, targets_json = batch_json
-    inputs_truncated = {k: torch.tensor(v[:5]) for k, v in inputs_json.items()}
-    targets_truncated = {k: torch.tensor(v[:5]) for k, v in targets_json.items()}
-    return inputs_truncated, targets_truncated
+    batch = ()
+    for data_type in ["inputs", "targets"]:
+        path = str(SCIARG_BATCH_PATH).format(type=data_type)
+        with open(path) as f:
+            data_json = json.load(f)
+        data_truncated = {k: torch.tensor(v[:5]) for k, v in data_json.items()}
+        batch += (data_truncated,)
+    return batch
 
 
 @pytest.fixture(scope="module")
