@@ -7,6 +7,7 @@ import torch
 from pytorch_ie.auto import AutoTaskModule
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
+from torch.optim import Optimizer
 from torchmetrics import Metric
 from transformers import PreTrainedModel, get_linear_schedule_with_warmup
 
@@ -52,6 +53,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         warmup_proportion: float = 0.0,
         # important: this is only used if the base model does not have a configure_optimizer method
         learning_rate: Optional[float] = None,
+        optimizer_type: Optional[Union[str, Type[Optimizer]]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -59,6 +61,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
 
         # optimizer / scheduler
         self.learning_rate = learning_rate
+        self.optimizer_type = optimizer_type
         self.warmup_proportion = warmup_proportion
 
         # can be used to override the default generation setup (created from the base model generation config)
@@ -213,10 +216,19 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             optimizer = self.model.configure_optimizer()
         else:
             logger.warning(
-                "The model does not have a configure_optimizer method. Using default optimizer (AdamW) with provided "
-                f"learning_rate ({self.learning_rate})"
+                f"The model does not have a configure_optimizer method. Creating an optimizer of "
+                f"optimizer_type={self.optimizer_type} with the learning_rate={self.learning_rate} instead."
             )
-            optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
+            if self.optimizer_type is None:
+                raise ValueError(
+                    f"optimizer_type is None, but the *base model* ({type(self.model)}) does not have a "
+                    f"configure_optimizer method. Please set the optimizer_type to a valid optimizer type, "
+                    f"e.g. optimizer_type=torch.optim.Adam."
+                )
+            resolved_optimizer_type = resolve_type(
+                self.optimizer_type, expected_super_type=Optimizer
+            )
+            optimizer = resolved_optimizer_type(self.parameters(), lr=self.learning_rate)
 
         if self.warmup_proportion > 0.0:
             stepping_batches = self.trainer.estimated_stepping_batches
