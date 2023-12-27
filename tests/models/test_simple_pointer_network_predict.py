@@ -73,29 +73,33 @@ def sciarg_batch():
         "rb",
     ) as f:
         batch = pickle.load(f)
-    return batch
+    inputs, targets = batch
+    inputs_truncated = {k: v[:5] for k, v in inputs.items()}
+    targets_truncated = {k: v[:5] for k, v in targets.items()}
+    return inputs_truncated, targets_truncated
 
 
 @pytest.fixture(scope="module")
 def sciarg_batch_prediction():
     with open(SCIARG_BATCH_PREDICTION_PATH) as f:
         expected_prediction = json.load(f)
-    return expected_prediction
+    return torch.tensor(expected_prediction)
 
 
 @pytest.mark.slow
 def test_sciarg_predict(trained_model, sciarg_batch, sciarg_batch_prediction, loaded_taskmodule):
     torch.manual_seed(42)
     inputs, targets = sciarg_batch
-    inputs_truncated = {k: v[:5] for k, v in inputs.items()}
-    targets_truncated = {k: v[:5] for k, v in targets.items()}
 
-    prediction = trained_model.predict(inputs_truncated)
+    prediction = trained_model.predict(inputs)
     assert prediction is not None
-    assert prediction.tolist() == sciarg_batch_prediction
+    assert prediction.tolist() == sciarg_batch_prediction.tolist()
 
+
+def test_sciarg_metric(loaded_taskmodule, sciarg_batch, sciarg_batch_prediction):
+    inputs, targets = sciarg_batch
     metric = loaded_taskmodule.configure_metric()
-    metric.update(prediction, targets_truncated["tgt_tokens"])
+    metric.update(sciarg_batch_prediction, targets["tgt_tokens"])
 
     values = metric.compute()
 
