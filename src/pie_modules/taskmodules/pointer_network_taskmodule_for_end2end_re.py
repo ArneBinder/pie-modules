@@ -59,19 +59,11 @@ class InputEncodingType(BatchableMixin):
     src_tokens: List[int]
     src_attention_mask: List[int]
 
-    @property
-    def src_seq_len(self) -> int:
-        return len(self.src_tokens)
-
 
 @dataclasses.dataclass
 class EncodingWithIdsAndOptionalCpmTag(BatchableMixin):
     tgt_tokens: List[int]
     CPM_tag: Optional[List[List[int]]] = None
-
-    @property
-    def tgt_seq_len(self) -> int:
-        return len(self.tgt_tokens)
 
     @property
     def tgt_attention_mask(self) -> List[int]:
@@ -702,7 +694,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         }
         result = self.encode_annotations(
             layers=layers,
-            metadata={**task_encoding.metadata, "src_len": task_encoding.inputs.src_seq_len},
+            metadata={**task_encoding.metadata, "src_len": len(task_encoding.inputs.src_tokens)},
         )
 
         self.maybe_log_example(task_encoding=task_encoding, targets=result)

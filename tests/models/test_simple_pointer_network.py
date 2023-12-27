@@ -131,7 +131,7 @@ def test_batch(batch, config):
     assert batch is not None
     inputs, targets = batch
     assert inputs is not None
-    assert set(inputs) == {"src_tokens", "src_seq_len", "src_attention_mask"}
+    assert set(inputs) == {"src_tokens", "src_attention_mask"}
     torch.testing.assert_close(
         inputs["src_tokens"],
         torch.tensor(
@@ -142,13 +142,9 @@ def test_batch(batch, config):
         inputs["src_attention_mask"],
         torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 0, 0, 0, 0, 0]]),
     )
-    torch.testing.assert_close(
-        inputs["src_seq_len"],
-        torch.tensor([10, 5]),
-    )
 
     assert targets is not None
-    assert set(targets) == {"tgt_tokens", "tgt_attention_mask", "tgt_seq_len", "CPM_tag"}
+    assert set(targets) == {"tgt_tokens", "tgt_attention_mask"}
     torch.testing.assert_close(
         targets["tgt_tokens"],
         torch.tensor([[14, 14, 5, 11, 12, 3, 6, 1], [9, 9, 4, 2, 2, 2, 2, 1]]),
@@ -156,10 +152,6 @@ def test_batch(batch, config):
     torch.testing.assert_close(
         targets["tgt_attention_mask"],
         torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1]]),
-    )
-    torch.testing.assert_close(
-        targets["tgt_seq_len"],
-        torch.tensor([8, 8]),
     )
 
 

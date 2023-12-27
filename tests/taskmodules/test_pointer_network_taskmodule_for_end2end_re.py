@@ -369,7 +369,6 @@ def test_collate(batch, taskmodule):
     targets_lists = {k: targets[k].tolist() for k in sorted(targets)}
     if taskmodule.partition_layer_name is None:
         assert inputs_lists == {
-            "src_seq_len": [13],
             "src_tokens": [[0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 3101, 162, 4, 2]],
             "src_attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
         }
@@ -393,13 +392,11 @@ def test_collate(batch, taskmodule):
                     [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                 ]
             ],
-            "tgt_seq_len": [15],
             "tgt_tokens": [[14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]],
             "tgt_attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
         }
     elif taskmodule.partition_layer_name == "sentences":
         assert inputs_lists == {
-            "src_seq_len": [10, 5],
             "src_tokens": [
                 [0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 2],
                 [0, 18823, 162, 4, 2, 1, 1, 1, 1, 1],
@@ -429,7 +426,6 @@ def test_collate(batch, taskmodule):
                     [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
                 ],
             ],
-            "tgt_seq_len": [8, 8],
             "tgt_tokens": [[14, 14, 5, 11, 12, 3, 6, 1], [9, 9, 4, 2, 2, 2, 2, 1]],
             "tgt_attention_mask": [
                 [1, 1, 1, 1, 1, 1, 1, 1],
