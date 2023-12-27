@@ -735,9 +735,9 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     def unbatch_output(self, model_output: ModelBatchOutput) -> Sequence[TaskOutputType]:
         batch_size = model_output.size(0)
 
+        # Note that, if eos_id is not in model_output for a given batch item, first_eos_indices
+        # will be the seq_len for that batch item.
         first_eos_indices = get_first_occurrence_index(model_output, self.eos_id)
-        if (first_eos_indices == -1).sum() > 0:
-            raise Exception(f"eos_id not found in model_output: {model_output}")
 
         result = [
             EncodingWithIdsAndOptionalCpmTag(
