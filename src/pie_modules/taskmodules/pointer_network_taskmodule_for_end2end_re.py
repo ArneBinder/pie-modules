@@ -39,7 +39,7 @@ from pie_modules.documents import (
 
 from ..document.processing import token_based_document_to_text_based, tokenize_document
 from ..utils import resolve_type
-from .common import BatchableMixin, HasBuildMetric, HasDecodeAnnotations
+from .common import BatchableMixin, HasConfigureMetric, HasDecodeAnnotations
 from .common.interfaces import DecodingException
 from .pointer_network.annotation_encoder_decoder import (
     BinaryRelationEncoderDecoder,
@@ -101,7 +101,7 @@ def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
 
 @TaskModule.register()
 class PointerNetworkTaskModuleForEnd2EndRE(
-    HasBuildMetric,
+    HasConfigureMetric,
     HasDecodeAnnotations[TaskOutputType],
     TaskModule[
         DocumentType,
@@ -370,7 +370,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     def target_ids(self) -> Set[int]:
         return set(range(self.pointer_offset))
 
-    def build_metric(self, stage: Optional[str] = None) -> Metric:
+    def configure_metric(self, stage: Optional[str] = None) -> Metric:
         return AnnotationLayerMetric(
             eos_id=self.eos_id,
             taskmodule=self,

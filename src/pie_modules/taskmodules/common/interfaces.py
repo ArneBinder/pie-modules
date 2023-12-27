@@ -46,9 +46,9 @@ class HasDecodeAnnotations(abc.ABC, Generic[ACE]):
 
 
 # TODO: move into pytorch_ie
-class HasBuildMetric(abc.ABC):
-    """Interface for modules that can build metrics."""
+class HasConfigureMetric(abc.ABC):
+    """Interface for modules that can configure a metric."""
 
     @abc.abstractmethod
-    def build_metric(self, stage: Optional[str] = None) -> Metric:
+    def configure_metric(self, stage: Optional[str] = None) -> Metric:
         pass

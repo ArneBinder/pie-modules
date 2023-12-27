@@ -5,7 +5,7 @@ from torchmetrics import Metric
 
 from pie_modules.taskmodules.common import (
     AnnotationEncoderDecoder,
-    HasBuildMetric,
+    HasConfigureMetric,
     HasDecodeAnnotations,
 )
 
@@ -70,13 +70,13 @@ def test_has_build_metric():
         def compute(self):
             return 0
 
-    class MyMetricBuilder(HasBuildMetric):
+    class MyMetricBuilder(HasConfigureMetric):
         """A class that uses the HasBuildMetric class."""
 
-        def build_metric(self, stage: str = None):
+        def configure_metric(self, stage: str = None):
             return MyMetric()
 
     my_builder = MyMetricBuilder()
-    my_metric = my_builder.build_metric()
+    my_metric = my_builder.configure_metric()
     assert isinstance(my_metric, Metric)
     assert my_metric.compute() == 0

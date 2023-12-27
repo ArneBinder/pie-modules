@@ -12,7 +12,7 @@ from transformers import PreTrainedModel, get_linear_schedule_with_warmup
 
 from pie_modules.models.base_models import BartAsPointerNetwork
 from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
-from pie_modules.taskmodules.common import HasBuildMetric
+from pie_modules.taskmodules.common import HasConfigureMetric
 from pie_modules.utils import resolve_type
 
 logger = logging.getLogger(__name__)
@@ -94,12 +94,12 @@ class SimplePointerNetworkModel(PyTorchIEModel):
             taskmodule = PointerNetworkTaskModuleForEnd2EndRE(**taskmodule_kwargs)
             taskmodule.post_prepare()
             # TODO: remove this check when TaskModule.build_metric() is implemented
-            if not isinstance(taskmodule, HasBuildMetric):
+            if not isinstance(taskmodule, HasConfigureMetric):
                 raise Exception(
-                    f"taskmodule {taskmodule} does not implement HasBuildMetric interface"
+                    f"taskmodule {taskmodule} does not implement HasConfigureMetric interface"
                 )
             # NOTE: This is not a ModuleDict, so this will not live on the torch device!
-            self.metrics = {stage: taskmodule.build_metric(stage) for stage in metric_splits}
+            self.metrics = {stage: taskmodule.configure_metric(stage) for stage in metric_splits}
 
     def predict(self, inputs, **kwargs) -> Dict[str, Any]:
         is_training = self.training
