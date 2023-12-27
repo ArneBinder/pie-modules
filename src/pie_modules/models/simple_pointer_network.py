@@ -118,7 +118,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
 
         generation_kwargs = copy.deepcopy(self.generation_kwargs)
         generation_kwargs.update(kwargs)
-        outputs = self.model.generate(inputs["input_ids"], **generation_kwargs)
+        outputs = self.model.generate(**inputs, **generation_kwargs)
 
         if is_training:
             self.train()
@@ -132,23 +132,18 @@ class SimplePointerNetworkModel(PyTorchIEModel):
 
     def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> Any:
         inputs, _ = batch
-        pred = self.predict(inputs=inputs)
-        return pred
+        prediction = self.predict(inputs=inputs)
+        return prediction
 
     def forward(self, inputs, **kwargs):
-        input_ids = inputs["input_ids"]
-        attention_mask = inputs["attention_mask"]
-        return self.model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
+        return self.model(**inputs, **kwargs)
 
     def step(self, batch, stage: str, batch_idx: int) -> torch.FloatTensor:
         inputs, targets = batch
         if targets is None:
             raise ValueError("Targets must be provided for training or evaluation!")
 
-        labels = targets["labels"]
-        decoder_attention_mask = targets["decoder_attention_mask"]
-
-        outputs = self(inputs=inputs, labels=labels, decoder_attention_mask=decoder_attention_mask)
+        outputs = self(inputs=inputs, **targets)
         loss = outputs.loss
 
         # show loss on each step only during training
@@ -167,7 +162,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
                 # get the indices (these are without the initial bos_ids, see above)
                 prediction = torch.argmax(logits, dim=-1)
             # the format of expected needs to be the same as the format of prediction
-            stage_metrics.update(prediction, labels)
+            stage_metrics.update(prediction, targets["labels"])
 
         return loss
 

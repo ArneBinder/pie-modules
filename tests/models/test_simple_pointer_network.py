@@ -273,10 +273,7 @@ def test_predict_step(model, batch, config):
         torch.testing.assert_close(
             output,
             torch.tensor(
-                [
-                    [8, 9, 10, 12, 13, 10, 12, 12, 13, 10, 1],
-                    [4, 4, 4, 4, 4, 4, 4, 9, 9, 10, 1],
-                ]
+                [[8, 9, 10, 12, 13, 10, 12, 12, 13, 10, 1], [8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 1]]
             ),
         )
     else:

@@ -34,6 +34,12 @@ SCIARG_BATCH_PREDICTION_PATH = (
     / "simple_pointer_network"
     / f"sciarg_batch_prediction_{os.path.split(MODEL_PATH)[-1]}.json"
 )
+SCIARG_BATCH_PREDICTION_WITH_POSITION_ID_PATTERN_PATH = (
+    FIXTURES_ROOT
+    / "models"
+    / "simple_pointer_network"
+    / f"sciarg_batch_prediction_{os.path.split(MODEL_PATH_WITH_POSITION_ID_PATTERN)[-1]}.json"
+)
 
 
 @pytest.fixture(scope="module")
@@ -90,23 +96,44 @@ def sciarg_batch_truncated():
     return batch
 
 
-@pytest.fixture(scope="module")
-def sciarg_batch_prediction():
-    with open(SCIARG_BATCH_PREDICTION_PATH) as f:
+def load_prediction(path):
+    with open(path) as f:
         expected_prediction = json.load(f)
     return torch.tensor(expected_prediction)
 
 
 @pytest.mark.slow
-def test_sciarg_predict(
-    trained_model, sciarg_batch_truncated, sciarg_batch_prediction, loaded_taskmodule
-):
+def test_sciarg_predict(trained_model, sciarg_batch_truncated, loaded_taskmodule):
+    expected_prediction = load_prediction(SCIARG_BATCH_PREDICTION_PATH)
     torch.manual_seed(42)
     inputs, targets = sciarg_batch_truncated
 
     prediction = trained_model.predict(inputs)
     assert prediction is not None
-    assert prediction.tolist() == sciarg_batch_prediction.tolist()
+    assert prediction.tolist() == expected_prediction.tolist()
+
+    # calculate metrics just to check the scores
+    metric = loaded_taskmodule.configure_metric()
+    metric.update(prediction, targets["labels"])
+    values = metric.compute()
+    assert values == {
+        "em": 0.4,
+        "labeled_spans": {
+            "own_claim": {"recall": 25.0, "precision": 6.6667, "f1": 10.5263},
+            "background_claim": {"recall": 50.9804, "precision": 47.2727, "f1": 49.0566},
+            "data": {"recall": 20.5882, "precision": 20.5882, "f1": 20.5882},
+        },
+        "labeled_spans/micro": {"recall": 37.6344, "precision": 29.4118, "f1": 33.0189},
+        "binary_relations": {
+            "contradicts": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "parts_of_same": {"recall": 16.6667, "precision": 8.3333, "f1": 11.1111},
+            "supports": {"recall": 8.5106, "precision": 8.6957, "f1": 8.6022},
+            "semantically_same": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        },
+        "binary_relations/micro": {"recall": 8.0645, "precision": 8.4746, "f1": 8.2645},
+        "invalid": {"order": 0.4},
+        "invalid/all": 0.4,
+    }
 
 
 @pytest.mark.slow
@@ -114,32 +141,34 @@ def test_sciarg_predict_with_position_id_pattern(sciarg_batch_truncated, loaded_
     trained_model = SimplePointerNetworkModel.from_pretrained(MODEL_PATH_WITH_POSITION_ID_PATTERN)
     assert trained_model is not None
 
+    expected_prediction = load_prediction(SCIARG_BATCH_PREDICTION_WITH_POSITION_ID_PATTERN_PATH)
     torch.manual_seed(42)
     inputs, targets = sciarg_batch_truncated
-    inputs_truncated = {k: v[:5] for k, v in inputs.items()}
-    targets_truncated = {k: v[:5] for k, v in targets.items()}
 
-    prediction = trained_model.predict(inputs_truncated, max_length=20)
+    prediction = trained_model.predict(inputs, max_length=20)
     assert prediction is not None
+    assert prediction.tolist() == expected_prediction.tolist()
+
+    # calculate metrics just to check the scores
     metric = loaded_taskmodule.configure_metric()
-    metric.update(prediction, targets_truncated["labels"])
+    metric.update(prediction, targets["labels"])
 
     values = metric.compute()
     assert values == {
-        "em": 0.4,
-        "labeled_spans": {
-            "background_claim": {"recall": 1.9608, "precision": 100.0, "f1": 3.8462},
-            "data": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
-            "own_claim": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
-        },
-        "labeled_spans/micro": {"recall": 1.0753, "precision": 50.0, "f1": 2.1053},
         "binary_relations": {
-            "semantically_same": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
-            "supports": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
-            "contradicts": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
-            "parts_of_same": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "contradicts": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+            "parts_of_same": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+            "semantically_same": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+            "supports": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
         },
-        "binary_relations/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
-        "invalid": {"len": 0.2},
-        "invalid/all": 0.2,
+        "binary_relations/micro": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+        "em": 0.4,
+        "invalid": {"len": 0.6},
+        "invalid/all": 0.6,
+        "labeled_spans": {
+            "background_claim": {"f1": 3.8462, "precision": 100.0, "recall": 1.9608},
+            "data": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+            "own_claim": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+        },
+        "labeled_spans/micro": {"f1": 2.1277, "precision": 100.0, "recall": 1.0753},
     }
