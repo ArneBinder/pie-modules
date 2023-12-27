@@ -4,14 +4,12 @@ from collections.abc import MutableMapping
 from typing import Any, Dict, List, Optional, Set, Type, Union
 
 import torch
-from pytorch_ie import TaskModule
+from pytorch_ie.auto import AutoTaskModule
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torchmetrics import Metric
 from transformers import PreTrainedModel, get_linear_schedule_with_warmup
 
-from pie_modules.models.base_models import BartAsPointerNetwork
-from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 from pie_modules.taskmodules.common import HasConfigureMetric
 from pie_modules.utils import resolve_type
 
@@ -89,10 +87,19 @@ class SimplePointerNetworkModel(PyTorchIEModel):
         self.metrics: Dict[str, Metric] = {}
         if taskmodule_config is not None:
             # TODO: use AutoTaskModule.from_config() when it is available
-            taskmodule_kwargs = copy.copy(taskmodule_config)
-            taskmodule_kwargs.pop(TaskModule.config_type_key)
-            taskmodule = PointerNetworkTaskModuleForEnd2EndRE(**taskmodule_kwargs)
-            taskmodule.post_prepare()
+            taskmodule = AutoTaskModule._from_pretrained(
+                model_id="",
+                revision=None,
+                cache_dir=None,
+                force_download=False,
+                proxies=None,
+                resume_download=False,
+                local_files_only=False,
+                token=None,
+                map_location="cpu",
+                strict=False,
+                config=taskmodule_config,
+            )
             # TODO: remove this check when TaskModule.build_metric() is implemented
             if not isinstance(taskmodule, HasConfigureMetric):
                 raise Exception(
