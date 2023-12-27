@@ -1,351 +1,377 @@
-import math
-from typing import List, Optional
+import logging
+from dataclasses import dataclass
 
 import pytest
 import torch
+from pytorch_ie import AnnotationList, annotation_field
+from pytorch_ie.annotations import BinaryRelation, LabeledSpan
+from pytorch_ie.documents import TextBasedDocument
 from pytorch_lightning import Trainer
-from torch.optim import Optimizer
+from torch.optim import AdamW
 
 from pie_modules.models import SimpleGenerativeModel
-from pie_modules.models.simple_generative import STAGE_TEST, STAGE_VAL
-from pie_modules.taskmodules import TextToTextTaskModule
+from pie_modules.models.base_models import BartAsPointerNetwork
+from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
+from tests import _config_to_str
 
-MODEL_ID = "google/t5-efficient-tiny-nl2"
+# just the default config for now
+CONFIGS = [{}, {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}]
+CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
+
+logger = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope="module", params=CONFIG_DICT.keys())
+def config_str(request):
+    return request.param
 
 
 @pytest.fixture(scope="module")
-def taskmodule():
-    return TextToTextTaskModule(
-        tokenizer_name_or_path=MODEL_ID,
-        document_type="pie_modules.documents.TextDocumentWithAbstractiveSummary",
-        target_layer="abstractive_summary",
-        target_annotation_type="pie_modules.annotations.AbstractiveSummary",
-        tokenized_document_type="pie_modules.documents.TokenDocumentWithAbstractiveSummary",
-        text_metric_type="torchmetrics.text.ROUGEScore",
+def config(config_str):
+    return CONFIG_DICT[config_str]
+
+
+@pytest.fixture(scope="module")
+def document():
+    @dataclass
+    class ExampleDocument(TextBasedDocument):
+        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
+        relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+        sentences: AnnotationList[LabeledSpan] = annotation_field(target="text")
+
+    doc = ExampleDocument(text="This is a dummy text about nothing. Trust me.")
+    span1 = LabeledSpan(start=10, end=20, label="content")
+    span2 = LabeledSpan(start=27, end=34, label="topic")
+    span3 = LabeledSpan(start=42, end=44, label="person")
+    doc.entities.extend([span1, span2, span3])
+    assert str(span1) == "dummy text"
+    assert str(span2) == "nothing"
+    assert str(span3) == "me"
+    rel = BinaryRelation(head=span1, tail=span2, label="is_about")
+    doc.relations.append(rel)
+    assert str(rel.label) == "is_about"
+    assert str(rel.head) == "dummy text"
+    assert str(rel.tail) == "nothing"
+
+    no_rel = BinaryRelation(head=span1, tail=span3, label="no_relation")
+    doc.relations.append(no_rel)
+    assert str(no_rel.label) == "no_relation"
+    assert str(no_rel.head) == "dummy text"
+    assert str(no_rel.tail) == "me"
+
+    sent1 = LabeledSpan(start=0, end=35, label="1")
+    sent2 = LabeledSpan(start=36, end=45, label="2")
+    doc.sentences.extend([sent1, sent2])
+    assert str(sent1) == "This is a dummy text about nothing."
+    assert str(sent2) == "Trust me."
+    return doc
+
+
+@pytest.fixture(scope="module")
+def taskmodule(document):
+    taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
+        span_layer_name="entities",
+        relation_layer_name="relations",
+        exclude_labels_per_layer={"relations": ["no_relation"]},
+        annotation_field_mapping={
+            "entities": "labeled_spans",
+            "relations": "binary_relations",
+        },
+        create_constraints=False,
+        partition_layer_name="sentences",
+        # disable strict_span_conversion, this effects only the no_relation annotation
+        tokenizer_kwargs={"strict_span_conversion": False},
     )
 
+    taskmodule.prepare(documents=[document])
+
+    return taskmodule
+
+
+def test_taskmodule(taskmodule):
+    assert taskmodule.is_prepared
+
 
 @pytest.fixture(scope="module")
-def model(taskmodule):
-    return SimpleGenerativeModel(
-        base_model_type="transformers.AutoModelForSeq2SeqLM",
-        base_model_config=dict(pretrained_model_name_or_path=MODEL_ID),
-        # only use predictions for metrics in test stage to cover all cases (default is all stages)
-        use_prediction_for_metrics=[STAGE_TEST],
+def model(taskmodule, config) -> SimpleGenerativeModel:
+    torch.manual_seed(42)
+    model = SimpleGenerativeModel(
+        base_model_type=BartAsPointerNetwork,
+        base_model_config=dict(
+            pretrained_model_name_or_path="sshleifer/distilbart-xsum-12-1",
+            bos_token_id=taskmodule.bos_id,
+            eos_token_id=taskmodule.eos_id,
+            pad_token_id=taskmodule.eos_id,
+            label_ids=taskmodule.label_ids,
+            target_token_ids=taskmodule.target_token_ids,
+            embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
+            max_length=512,
+            num_beams=4,
+            **config,
+        ),
+        generation_kwargs=taskmodule.generation_kwargs,
         taskmodule_config=taskmodule._config(),
-        # use a strange learning rate to make sure it is passed through
-        learning_rate=13e-3,
-        optimizer_type="torch.optim.Adam",
     )
+    # set model to training mode, otherwise model.encoder.bart_encoder.training will be False!
+    model.train()
+    return model
 
 
 def test_model(model):
     assert model is not None
-    assert model.model is not None
-    assert model.taskmodule is not None
 
 
-def test_model_without_taskmodule(caplog):
-    with caplog.at_level("WARNING"):
-        model = SimpleGenerativeModel(
-            base_model_type="transformers.AutoModelForSeq2SeqLM",
-            base_model_config=dict(pretrained_model_name_or_path=MODEL_ID),
-        )
-    assert model is not None
-    assert len(caplog.messages) == 2
-    assert (
-        caplog.messages[0]
-        == "No taskmodule is available, so no metrics will be created. Please set taskmodule_config to a "
-        "valid taskmodule config to use metrics."
-    )
-    assert (
-        caplog.messages[1]
-        == "No taskmodule is available, so no generation config will be created. Consider setting "
-        "taskmodule_config to a valid taskmodule config to use specific setup for generation."
-    )
-
-
+# not used
 @pytest.fixture(scope="module")
-def batch(model):
-    inputs = {
-        "input_ids": torch.tensor(
-            [
-                [100, 19, 3, 9, 794, 1708, 1, 0, 0, 0, 0, 0],
-                [100, 19, 430, 794, 1708, 84, 19, 3, 9, 720, 1200, 1],
-            ]
-        ),
-        "attention_mask": torch.tensor(
-            [[1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]
-        ),
-    }
-
-    targets = {
-        "labels": torch.tensor([[3, 9, 1708, 1, 0], [3, 9, 1200, 1708, 1]]),
-        "decoder_attention_mask": torch.tensor([[1, 1, 1, 1, 0], [1, 1, 1, 1, 1]]),
-    }
-
-    return inputs, targets
+def batch(taskmodule, document):
+    task_encodings = taskmodule.encode(documents=[document], encode_target=True)
+    batch = taskmodule.collate(task_encodings)
+    return batch
 
 
-def test_batch(batch, taskmodule):
+def test_batch(batch, config):
+    assert batch is not None
     inputs, targets = batch
-    input_ids_tokens = [
-        taskmodule.tokenizer.convert_ids_to_tokens(input_ids) for input_ids in inputs["input_ids"]
-    ]
-    assert input_ids_tokens == [
-        [
-            "▁This",
-            "▁is",
-            "▁",
-            "a",
-            "▁test",
-            "▁document",
-            "</s>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-        ],
-        [
-            "▁This",
-            "▁is",
-            "▁another",
-            "▁test",
-            "▁document",
-            "▁which",
-            "▁is",
-            "▁",
-            "a",
-            "▁bit",
-            "▁longer",
-            "</s>",
-        ],
-    ]
+    assert inputs is not None
+    assert set(inputs) == {"input_ids", "attention_mask"}
+    torch.testing.assert_close(
+        inputs["input_ids"],
+        torch.tensor(
+            [[0, 713, 16, 10, 34759, 2788, 59, 1085, 4, 2], [0, 18823, 162, 4, 2, 1, 1, 1, 1, 1]]
+        ),
+    )
+    torch.testing.assert_close(
+        inputs["attention_mask"],
+        torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 0, 0, 0, 0, 0]]),
+    )
 
-    labels_tokens = [
-        taskmodule.tokenizer.convert_ids_to_tokens(labels) for labels in targets["labels"]
-    ]
-    assert labels_tokens == [
-        ["▁", "a", "▁document", "</s>", "<pad>"],
-        ["▁", "a", "▁longer", "▁document", "</s>"],
-    ]
+    assert targets is not None
+    assert set(targets) == {"labels", "decoder_attention_mask"}
+    torch.testing.assert_close(
+        targets["labels"],
+        torch.tensor([[14, 14, 5, 11, 12, 3, 6, 1], [9, 9, 4, 2, 2, 2, 2, 1]]),
+    )
+    torch.testing.assert_close(
+        targets["decoder_attention_mask"],
+        torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1]]),
+    )
 
 
-def test_training_step(batch, model):
-    model.train()
+def test_forward_without_labels(model, batch):
+    inputs, targets = batch
+    with pytest.raises(ValueError) as excinfo:
+        model(inputs)
+    assert str(excinfo.value) == "decoder_input_ids has to be set!"
+
+
+def test_training_step(model, batch, config):
     torch.manual_seed(42)
-    metric = model.get_metric(STAGE_VAL, batch_idx=0)
-    metric.reset()
-    loss = model.training_step(batch, batch_idx=0)
-    assert loss is not None
-    torch.testing.assert_close(loss, torch.tensor(8.98222827911377))
+    assert model.training
+    loss = model.training_step(batch, 0)
+    if config == {}:
+        torch.testing.assert_close(loss, torch.tensor(3.702044725418091))
+    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
+        torch.testing.assert_close(loss, torch.tensor(3.945438861846924))
+    else:
+        raise ValueError(f"Unknown config: {config}")
 
-    metric_values = metric.compute()
-    metric_values_float = {key: value.item() for key, value in metric_values.items()}
 
-    # we do not collect metrics during training, so all entries should be NaN
-    assert len(metric_values_float) > 0
-    assert all([math.isnan(value) for value in metric_values_float.values()])
+def test_validation_step(model, batch, config):
+    torch.manual_seed(42)
+    model.eval()
+    assert not model.training
+    loss = model.validation_step(batch, 0)
+    if config == {}:
+        torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
+    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
+        torch.testing.assert_close(loss, torch.tensor(4.204827308654785))
+    else:
+        raise ValueError(f"Unknown config: {config}")
 
+
+def test_test_step(model, batch, config):
+    torch.manual_seed(42)
+    model.eval()
+    assert not model.training
+    model.metrics["test"].reset()
+    loss = model.test_step(batch, 0)
+    if config == {}:
+        torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
+    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
+        torch.testing.assert_close(loss, torch.tensor(4.204827308654785))
+    else:
+        raise ValueError(f"Unknown config: {config}")
+    values = model.metrics["test"].compute()
+    assert values == {
+        "em": 0.0,
+        "entities": {
+            "topic": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "person": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "content": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        },
+        "entities/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        "relations": {"is_about": {"recall": 0.0, "precision": 0.0, "f1": 0.0}},
+        "relations/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        "invalid": {},
+        "invalid/all": 0.0,
+    }
+
+
+def test_test_step_without_use_prediction_for_metrics(taskmodule, batch):
+    torch.manual_seed(42)
+    model = SimpleGenerativeModel(
+        base_model_type=BartAsPointerNetwork,
+        base_model_config=dict(
+            pretrained_model_name_or_path="sshleifer/distilbart-xsum-12-1",
+            bos_token_id=taskmodule.bos_id,
+            eos_token_id=taskmodule.eos_id,
+            pad_token_id=taskmodule.eos_id,
+            label_ids=taskmodule.label_ids,
+            target_token_ids=taskmodule.target_token_ids,
+            embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
+            max_length=512,
+            num_beams=4,
+        ),
+        taskmodule_config=taskmodule._config(),
+        warmup_proportion=0.1,
+        use_prediction_for_metrics=False,
+    )
+    torch.manual_seed(42)
+    model.eval()
+    assert not model.training
+    model.metrics["test"].reset()
+    loss = model.test_step(batch, 0)
+    torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
+    values = model.metrics["test"].compute()
+    assert values == {
+        "em": 0.0,
+        "entities": {
+            "topic": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "person": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "content": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        },
+        "entities/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        "relations": {"is_about": {"recall": 0.0, "precision": 0.0, "f1": 0.0}},
+        "relations/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        "invalid": {},
+        "invalid/all": 0.0,
+    }
+
+
+def test_predict_step(model, batch, config):
+    torch.manual_seed(42)
+    output = model.predict_step(batch, 0)
+    assert output is not None
+    if config == {}:
+        torch.testing.assert_close(
+            output,
+            torch.tensor(
+                [
+                    [8, 9, 10, 12, 13, 10, 12, 12, 13, 10, 1],
+                    [8, 8, 9, 9, 9, 9, 9, 9, 9, 10, 1],
+                ]
+            ),
+        )
+    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
+        torch.testing.assert_close(
+            output,
+            torch.tensor(
+                [[8, 9, 10, 12, 13, 10, 12, 12, 13, 10, 1], [8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 1]]
+            ),
+        )
+    else:
+        raise ValueError(f"Unknown config: {config}")
+
+
+def test_on_train_epoch_end(model, config):
+    torch.manual_seed(42)
     model.on_train_epoch_end()
 
 
-def test_validation_step(batch, model):
-    model.eval()
+def test_on_validation_epoch_end(model, config):
     torch.manual_seed(42)
-    metric = model.get_metric(STAGE_VAL, batch_idx=0)
-    metric.reset()
-    loss = model.validation_step(batch, batch_idx=0)
-    assert loss is not None
-    torch.testing.assert_close(loss, torch.tensor(10.146586418151855))
-
-    metric_values = metric.compute()
-    metric_values_float = {key: value.item() for key, value in metric_values.items()}
-    assert metric_values_float == {
-        "rouge1_fmeasure": 0.0,
-        "rouge1_precision": 0.0,
-        "rouge1_recall": 0.0,
-        "rouge2_fmeasure": 0.0,
-        "rouge2_precision": 0.0,
-        "rouge2_recall": 0.0,
-        "rougeL_fmeasure": 0.0,
-        "rougeL_precision": 0.0,
-        "rougeL_recall": 0.0,
-        "rougeLsum_fmeasure": 0.0,
-        "rougeLsum_precision": 0.0,
-        "rougeLsum_recall": 0.0,
-    }
-
     model.on_validation_epoch_end()
 
 
-def test_test_step(batch, model):
-    model.eval()
+def test_on_test_epoch_end(model, config):
     torch.manual_seed(42)
-    metric = model.get_metric(STAGE_TEST, batch_idx=0)
-    metric.reset()
-    loss = model.test_step(batch, batch_idx=0)
-    assert loss is not None
-    torch.testing.assert_close(loss, torch.tensor(10.146586418151855))
-
-    metric_values = metric.compute()
-    metric_values_float = {key: value.item() for key, value in metric_values.items()}
-    assert metric_values_float == {
-        "rouge1_fmeasure": 0.1111111119389534,
-        "rouge1_precision": 0.06666667014360428,
-        "rouge1_recall": 0.3333333432674408,
-        "rouge2_fmeasure": 0.0,
-        "rouge2_precision": 0.0,
-        "rouge2_recall": 0.0,
-        "rougeL_fmeasure": 0.1111111119389534,
-        "rougeL_precision": 0.06666667014360428,
-        "rougeL_recall": 0.3333333432674408,
-        "rougeLsum_fmeasure": 0.0555555559694767,
-        "rougeLsum_precision": 0.03333333507180214,
-        "rougeLsum_recall": 0.1666666716337204,
-    }
-
     model.on_test_epoch_end()
 
 
-def test_predict_step(batch, model):
-    model.eval()
+def test_configure_optimizers(model, config):
+    optimizers = model.configure_optimizers()
+    assert isinstance(optimizers, AdamW)
+    assert len(optimizers.param_groups) == 6
+    assert all(param_group["lr"] == 5e-05 for param_group in optimizers.param_groups)
+    all_param_shapes = [
+        [tuple(p.shape) for p in param_group["params"]] for param_group in optimizers.param_groups
+    ]
+
+    # check that all parameters are covered
+    all_params = set(model.parameters())
+    all_params_in_param_groups = set()
+    for param_group in optimizers.param_groups:
+        all_params_in_param_groups.update(param_group["params"])
+    assert all_params_in_param_groups == all_params
+
+    # head parameters
+    assert optimizers.param_groups[0]["weight_decay"] == 0.01
+    # per default, it is with encoder_mlp
+    assert all_param_shapes[0] == [(1024, 1024), (1024,), (1024, 1024), (1024,)]
+
+    # decoder layer norm only parameters
+    assert optimizers.param_groups[1]["weight_decay"] == 0.01 == model.model.config.weight_decay
+    assert len(all_param_shapes[1]) == 8
+
+    # decoder only other parameters
+    assert optimizers.param_groups[2]["weight_decay"] == 0.01 == model.model.config.weight_decay
+    assert len(all_param_shapes[2]) == 21
+
+    # layer norm encoder only parameters
+    assert (
+        optimizers.param_groups[3]["weight_decay"]
+        == 0.001
+        == model.model.config.encoder_layer_norm_decay
+    )
+    assert len(all_param_shapes[3]) == 50
+
+    # remaining encoder only parameters
+    assert optimizers.param_groups[4]["weight_decay"] == 0.01 == model.model.config.weight_decay
+    assert len(all_param_shapes[4]) == 145
+
+    # encoder-decoder shared parameters (embed_tokens.weight)
+    assert optimizers.param_groups[5]["weight_decay"] == 0.01 == model.model.config.weight_decay
+    assert len(all_param_shapes[5]) == 1
+
+
+def test_configure_optimizers_with_warmup_proportion(taskmodule, config):
     torch.manual_seed(42)
-    predictions = model.predict_step(batch, batch_idx=0)
-    assert predictions is not None
-    torch.testing.assert_close(
-        predictions,
-        torch.tensor(
-            [
-                [32099, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [
-                    32099,
-                    19,
-                    3,
-                    9,
-                    248,
-                    194,
-                    12,
-                    129,
-                    25,
-                    708,
-                    5,
-                    37,
-                    166,
-                    794,
-                    1708,
-                    19,
-                    3,
-                    9,
-                    794,
-                ],
-            ]
+    model = SimpleGenerativeModel(
+        base_model_type=BartAsPointerNetwork,
+        base_model_config=dict(
+            pretrained_model_name_or_path="sshleifer/distilbart-xsum-12-1",
+            bos_token_id=taskmodule.bos_id,
+            eos_token_id=taskmodule.eos_id,
+            pad_token_id=taskmodule.eos_id,
+            label_ids=taskmodule.label_ids,
+            target_token_ids=taskmodule.target_token_ids,
+            embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
+            max_length=512,
+            num_beams=4,
         ),
+        taskmodule_config=taskmodule._config(),
+        warmup_proportion=0.1,
     )
+    # set model to training mode, otherwise model.encoder.bart_encoder.training will be False!
+    model.train()
 
-    predicted_tokens = [
-        model.taskmodule.tokenizer.convert_ids_to_tokens(prediction) for prediction in predictions
-    ]
-    assert predicted_tokens == [
-        [
-            "<extra_id_0>",
-            "</s>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-            "<pad>",
-        ],
-        [
-            "<extra_id_0>",
-            "▁is",
-            "▁",
-            "a",
-            "▁great",
-            "▁way",
-            "▁to",
-            "▁get",
-            "▁you",
-            "▁started",
-            ".",
-            "▁The",
-            "▁first",
-            "▁test",
-            "▁document",
-            "▁is",
-            "▁",
-            "a",
-            "▁test",
-        ],
-    ]
-
-
-@pytest.fixture(scope="module")
-def optimizer(model):
-    return model.configure_optimizers()
-
-
-def test_optimizer(optimizer):
-    assert optimizer is not None
-    assert isinstance(optimizer, torch.optim.Adam)
-    assert optimizer.defaults["lr"] == 13e-3
-    assert len(optimizer.param_groups) == 1
-    param_group = optimizer.param_groups[0]
-    assert len(param_group["params"]) == 47
-
-
-def _assert_optimizer(
-    actual: Optimizer,
-    expected: Optimizer,
-    allow_mismatching_param_group_keys: Optional[List[str]] = None,
-):
-    allow_mismatching_param_group_key_set = set(allow_mismatching_param_group_keys or [])
-    assert actual is not None
-    assert isinstance(actual, type(expected))
-    assert actual.defaults == expected.defaults
-    assert len(actual.param_groups) == len(expected.param_groups)
-    for actual_param_group, expected_param_group in zip(
-        actual.param_groups, expected.param_groups
-    ):
-        actual_keys = set(actual_param_group) - allow_mismatching_param_group_key_set
-        expected_keys = set(expected_param_group) - allow_mismatching_param_group_key_set
-        assert actual_keys == expected_keys
-        for key in actual_keys:
-            # also include the key in the comparison to have it in the assertion error message
-            assert (key, actual_param_group[key]) == (key, expected_param_group[key])
-
-
-def test_configure_optimizers_with_warmup(model, optimizer):
-    backup_value = model.warmup_proportion
-    model.warmup_proportion = 0.1
     model.trainer = Trainer(max_epochs=10)
-    optimizer_and_schedular = model.configure_optimizers()
-    assert optimizer_and_schedular is not None
-    assert isinstance(optimizer_and_schedular, tuple)
-    assert len(optimizer_and_schedular) == 2
-    optimizers, schedulers = optimizer_and_schedular
-    assert len(optimizers) == 1
-    _assert_optimizer(
-        optimizers[0], optimizer, allow_mismatching_param_group_keys=["initial_lr", "lr"]
-    )
-    assert len(schedulers) == 1
-    assert set(schedulers[0]) == {"scheduler", "interval"}
-    scheduler = schedulers[0]["scheduler"]
-    assert isinstance(scheduler, torch.optim.lr_scheduler.LambdaLR)
-    assert scheduler.optimizer is optimizers[0]
-    assert scheduler.base_lrs == [13e-3]
+    optimizers_and_schedulars = model.configure_optimizers()
+    assert optimizers_and_schedulars is not None
+    assert isinstance(optimizers_and_schedulars, tuple) and len(optimizers_and_schedulars) == 2
 
-    model.warmup_proportion = backup_value
+    optimizers, schedulers = optimizers_and_schedulars
+    assert isinstance(optimizers[0], torch.optim.Optimizer)
+    assert set(schedulers[0]) == {"scheduler", "interval"}
+    schedular = schedulers[0]["scheduler"]
+    assert isinstance(schedular, torch.optim.lr_scheduler.LRScheduler)

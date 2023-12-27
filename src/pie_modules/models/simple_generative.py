@@ -11,7 +11,7 @@ from torch.optim import Optimizer
 from torchmetrics import Metric
 from transformers import PreTrainedModel, get_linear_schedule_with_warmup
 
-from pie_modules.models.interface import RequiresTaskmoduleConfig
+from pie_modules.taskmodules.common import HasConfigureMetric
 from pie_modules.utils import resolve_type
 
 logger = logging.getLogger(__name__)
@@ -36,60 +36,23 @@ def flatten_dict(d: MutableMapping, parent_key: str = "", sep: str = "."):
 
 
 @PyTorchIEModel.register()
-class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
-    """This model is a simple wrapper around a generative model from Huggingface transformers. That
-    means, its predict() and predict_step() methods will call the generate() method of the base
-    model.
-
-    If a taskmodule config is provided, the taskmodule will be instantiated and used to create metrics and
-    a generation config with its configure_model_metric() and configure_model_generation() methods,
-    respectively.
-
-    If the base model has a configure_optimizer() method, this will be used to create the optimizer. Otherwise,
-    the optimizer_type and learning_rate will be used to create an optimizer.
-
-    Args:
-        base_model_type: The type of the base model, e.g. "transformers.AutoModelForSeq2SeqLM". It should have a
-            from_pretrained() method.
-        base_model_config: A dictionary with the keyword arguments that will be passed to the from_pretrained()
-            method of the base model.
-        override_generation_kwargs: The generation config for the base model. This will override the generation config
-            from the taskmodule, if one is provided.
-        taskmodule_config: The config for the taskmodule. This will be used to create metrics and a generation
-            config, if the taskmodule has a configure_model_metric() and configure_model_generation() method,
-            respectively.
-        metric_stages: A list of stage names, i.e. a subset of ("train", "val", "test"), for which metrics will be
-            created. Requires a taskmodule with a configure_model_metric() method.
-        metric_intervals: The intervals at which the metrics will be computed. This is a dictionary with the metric
-            stages ("train", "val", "test") as key and the interval as value. The interval determines how often the
-            metric will be computed, i.e. if the interval is 1, the metric will be computed for each batch. If the
-            interval is 2, the metric will be computed just for every second batch, i.e. the all other batches will
-            be skipped. This is useful to speed up training, because computing the metrics can be expensive.
-        use_prediction_for_metrics: Whether to use the generated prediction (e.g. via beam search) for the
-            metric calculation. Otherwise, the argmax of the logits from the model output will be used, which is
-            much less compute intense but amy overestimate the performance because each token is individually
-            predicted from the prefix of gold tokens.
-            The value can be a bool or a list of stage names. If this is True, this is equivalent to setting this to
-            the list of all metric stages. If it is False, this disables the use of predictions for all stages.
-        warmup_proportion: The proportion of the training steps that will be used for the warmup of the learning rate
-            scheduler.
-        learning_rate: The learning rate for the optimizer. If the base model has a configure_optimizer() method, this
-            will be ignored.
-        optimizer_type: The type of the optimizer. If the base model has a configure_optimizer() method, this will be
-            ignored.
-        **kwargs: Additional keyword arguments that will be passed to the PyTorchIEModel constructor.
-    """
-
+class SimpleGenerativeModel(PyTorchIEModel):
     def __init__(
         self,
         # base model setup
-        base_model_type: str,
-        base_model_config: Dict[str, Any],
+        base_model_type: str,  # e.g. "transformers.AutoModelForSeq2SeqLM"
+        base_model_config: Dict[
+            str, Any
+        ],  # overrides the base model config from the base model type
         # generation
-        override_generation_kwargs: Optional[Dict[str, Any]] = None,
+        generation_kwargs: Optional[
+            Dict[str, Any]
+        ] = None,  # overrides the generation config from the base model
         # metrics
-        taskmodule_config: Optional[Dict[str, Any]] = None,
-        metric_stages: List[str] = [STAGE_VAL, STAGE_TEST],
+        taskmodule_config: Optional[
+            Dict[str, Any]
+        ] = None,  # the taskmodule will be used to create the metrics
+        metric_splits: List[str] = [STAGE_VAL, STAGE_TEST],
         metric_intervals: Optional[Dict[str, int]] = None,
         use_prediction_for_metrics: Union[bool, List[str]] = True,
         # scheduler / optimizer
@@ -107,28 +70,34 @@ class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
         self.optimizer_type = optimizer_type
         self.warmup_proportion = warmup_proportion
 
-        # Note: We do not set expected_super_type=PreTrainedModel for resolve_type() because
-        #   AutoModel* classed such as AutoModelForSeq2SeqLM do not inherit from that.
-        resolved_base_model_type: Type[PreTrainedModel] = resolve_type(base_model_type)
+        # can be used to override the default generation setup (created from the base model generation config)
+        self.generation_kwargs = generation_kwargs or {}
+
+        resolved_base_model_type: Type[PreTrainedModel] = resolve_type(
+            base_model_type, expected_super_type=PreTrainedModel
+        )
         self.model = resolved_base_model_type.from_pretrained(**base_model_config)
 
         self.use_prediction_for_metrics: Set[str]
         if isinstance(use_prediction_for_metrics, bool):
             self.use_prediction_for_metrics = (
-                set(metric_stages) if use_prediction_for_metrics else set()
+                set(metric_splits) if use_prediction_for_metrics else set()
             )
         else:
             self.use_prediction_for_metrics = set(use_prediction_for_metrics)
-        missed_stages = self.use_prediction_for_metrics - set(metric_stages)
+        missed_stages = self.use_prediction_for_metrics - set(metric_splits)
         if len(missed_stages) > 0:
             raise ValueError(
-                f"There are stages in use_prediction_for_metrics that are not in metric_stages: "
-                f"{missed_stages}. Available metric splits: {metric_stages}."
+                f"There are stages in use_prediction_for_metrics that are not in metric_splits: "
+                f"{missed_stages}. Available metric splits: {metric_splits}."
             )
 
+        self.metric_intervals = metric_intervals or {}
+        # NOTE: This is not a ModuleDict, so this will not live on the torch device!
+        self.metrics: Dict[str, Metric] = {}
         if taskmodule_config is not None:
             # TODO: use AutoTaskModule.from_config() when it is available
-            self.taskmodule = AutoTaskModule._from_pretrained(
+            taskmodule = AutoTaskModule._from_pretrained(
                 model_id="",
                 revision=None,
                 cache_dir=None,
@@ -141,48 +110,22 @@ class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
                 strict=False,
                 config=taskmodule_config,
             )
-        else:
-            self.taskmodule = None
-
-        self.metric_intervals = metric_intervals or {}
-        self.metrics = self.configure_metrics(metric_stages=metric_stages)
-
-        self.generation_config = self.configure_generation(**(override_generation_kwargs or {}))
-
-    def configure_metrics(self, metric_stages: List[str]) -> Dict[str, Metric]:
-        if self.taskmodule is not None:
-            # get the metrics for the different stages
-            metrics = {
-                stage: self.taskmodule.configure_model_metric(stage) for stage in metric_stages
-            }
-            # keep only the metrics that are not None
-            # NOTE: This is not a ModuleDict, so this will not live on the torch device!
-            return {k: v for k, v in metrics.items() if v is not None}
-        else:
-            logger.warning(
-                "No taskmodule is available, so no metrics will be created. Please set taskmodule_config to a valid "
-                "taskmodule config to use metrics."
-            )
-            return {}
-
-    def configure_generation(self, **kwargs) -> Dict[str, Any]:
-        if self.taskmodule is not None:
-            # get the generation config from the taskmodule
-            generation_config = self.taskmodule.configure_model_generation()
-        else:
-            logger.warning(
-                "No taskmodule is available, so no generation config will be created. Consider "
-                "setting taskmodule_config to a valid taskmodule config to use specific setup for generation."
-            )
-            generation_config = {}
-        generation_config.update(kwargs)
-        return generation_config
+            # TODO: remove this check when TaskModule.build_metric() is implemented
+            if not isinstance(taskmodule, HasConfigureMetric):
+                logger.warning(
+                    f"taskmodule {taskmodule} does not implement HasConfigureMetric interface, no metrics will be "
+                    f"used."
+                )
+            else:
+                metrics = {stage: taskmodule.configure_metric(stage) for stage in metric_splits}
+                # keep only the metrics that are not None
+                self.metrics = {k: v for k, v in metrics.items() if v is not None}
 
     def predict(self, inputs, **kwargs) -> torch.LongTensor:
         is_training = self.training
         self.eval()
 
-        generation_kwargs = copy.deepcopy(self.generation_config)
+        generation_kwargs = copy.deepcopy(self.generation_kwargs)
         generation_kwargs.update(kwargs)
         outputs = self.model.generate(**inputs, **generation_kwargs)
 
@@ -204,14 +147,6 @@ class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
     def forward(self, inputs, **kwargs):
         return self.model(**inputs, **kwargs)
 
-    def get_metric(self, stage: str, batch_idx: int) -> Optional[Metric]:
-        stage_metrics = self.metrics.get(stage, None)
-        metric_interval = self.metric_intervals.get(stage, 1)
-        if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
-            return stage_metrics
-        else:
-            return None
-
     def step(self, batch, stage: str, batch_idx: int) -> torch.FloatTensor:
         inputs, targets = batch
         if targets is None:
@@ -225,8 +160,9 @@ class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
             f"loss/{stage}", loss, on_step=(stage == STAGE_TRAIN), on_epoch=True, prog_bar=True
         )
 
-        metric = self.get_metric(stage=stage, batch_idx=batch_idx)
-        if metric is not None:
+        stage_metrics = self.metrics.get(stage, None)
+        metric_interval = self.metric_intervals.get(stage, 1)
+        if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
             if stage in self.use_prediction_for_metrics:
                 prediction = self.predict(inputs)
             else:
@@ -235,7 +171,7 @@ class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
                 # get the indices (these are without the initial bos_ids, see above)
                 prediction = torch.argmax(logits, dim=-1)
             # the format of expected needs to be the same as the format of prediction
-            metric.update(prediction, targets["labels"])
+            stage_metrics.update(prediction, targets["labels"])
 
         return loss
 
@@ -273,7 +209,7 @@ class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
                 #  and self.log_dict()
                 metric_dict_flat = flatten_dict(d=metric_dict, sep="/")
                 for k, v in metric_dict_flat.items():
-                    self.log(f"metric/{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
+                    self.log(f"metric_{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
         if hasattr(self.model, "configure_optimizer") and callable(self.model.configure_optimizer):

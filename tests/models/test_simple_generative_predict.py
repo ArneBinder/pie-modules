@@ -6,7 +6,7 @@ import pytest
 import torch
 from pytorch_ie import AutoTaskModule, TaskModule
 
-from pie_modules.models import SimplePointerNetworkModel
+from pie_modules.models import SimpleGenerativeModel
 from tests import DUMP_FIXTURE_DATA, FIXTURES_ROOT
 
 logger = logging.getLogger(__name__)
@@ -43,8 +43,8 @@ SCIARG_BATCH_PREDICTION_WITH_POSITION_ID_PATTERN_PATH = (
 
 
 @pytest.fixture(scope="module")
-def trained_model() -> SimplePointerNetworkModel:
-    model = SimplePointerNetworkModel.from_pretrained(MODEL_PATH)  # , generation_kwargs=None)
+def trained_model() -> SimpleGenerativeModel:
+    model = SimpleGenerativeModel.from_pretrained(MODEL_PATH)  # , generation_kwargs=None)
     assert not model.training
     return model
 
@@ -138,7 +138,7 @@ def test_sciarg_predict(trained_model, sciarg_batch_truncated, loaded_taskmodule
 
 @pytest.mark.slow
 def test_sciarg_predict_with_position_id_pattern(sciarg_batch_truncated, loaded_taskmodule):
-    trained_model = SimplePointerNetworkModel.from_pretrained(MODEL_PATH_WITH_POSITION_ID_PATTERN)
+    trained_model = SimpleGenerativeModel.from_pretrained(MODEL_PATH_WITH_POSITION_ID_PATTERN)
     assert trained_model is not None
 
     expected_prediction = load_prediction(SCIARG_BATCH_PREDICTION_WITH_POSITION_ID_PATTERN_PATH)
