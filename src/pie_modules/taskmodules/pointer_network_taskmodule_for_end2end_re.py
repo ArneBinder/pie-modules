@@ -705,6 +705,13 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
     def unbatch_output(self, model_output: ModelBatchOutput) -> Sequence[TaskOutputType]:
         batch_size = model_output.size(0)
+
+        # TODO: calculate sequence length with eos_id and use that to truncate
+        # this code is taken from AnnotationLayerMetric.get_exact_matches(), needs to be checked and fixed!
+        # eos_indices = model_output.flip(dims=[1]).eq(self.eos_id).cumsum(dim=1).long()
+        # seq_lengths = eos_indices.flip(dims=[1]).eq(eos_indices[:, -1:]).sum(dim=1)
+        # seq_lengths_real = seq_lengths - 2
+
         result = [
             EncodingWithIdsAndOptionalCpmTag(model_output[i].to(device="cpu").tolist())
             for i in range(batch_size)

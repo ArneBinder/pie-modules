@@ -40,6 +40,7 @@ class SimplePointerNetworkModel(PyTorchIEModel):
     def __init__(
         self,
         base_model_config: Dict[str, Any],
+        # TODO: do not provide a default value here
         base_model_type: Union[
             str, Type[PreTrainedModel]
         ] = "pie_modules.models.base_models.BartAsPointerNetwork",
