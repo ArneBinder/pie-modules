@@ -41,12 +41,12 @@ from ..document.processing import token_based_document_to_text_based, tokenize_d
 from ..utils import resolve_type
 from .common import BatchableMixin, HasConfigureMetric, HasDecodeAnnotations
 from .common.interfaces import DecodingException
+from .common.metrics import AnnotationLayerMetric
 from .pointer_network.annotation_encoder_decoder import (
     BinaryRelationEncoderDecoder,
     LabeledSpanEncoderDecoder,
     SpanEncoderDecoderWithOffset,
 )
-from .pointer_network.metrics import AnnotationLayerMetric
 
 logger = logging.getLogger(__name__)
 
