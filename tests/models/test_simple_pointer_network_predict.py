@@ -18,6 +18,12 @@ logger = logging.getLogger(__name__)
 # wandb run: https://wandb.ai/arne/dataset-sciarg-task-ner_re-training/runs/terkqzyn
 MODEL_PATH = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-18_22-15-53"
 MODEL_PATH_WITH_POSITION_ID_PATTERN = "/home/arbi01/projects/pie-document-level/models/dataset-sciarg/task-ner_re/2023-12-18_22-15-53_position_id_pattern"
+SCIARG_BATCH_PATH = (
+    FIXTURES_ROOT
+    / "taskmodules"
+    / "pointer_network_taskmodule_for_end2end_re"
+    / "sciarg_batch_encoding.json"
+)
 
 SCIARG_BATCH_PREDICTION_PATH = (
     FIXTURES_ROOT
@@ -55,27 +61,25 @@ def test_loaded_taskmodule(loaded_taskmodule):
 def test_dump_sciarg_batch(loaded_taskmodule):
     from pie_datasets import DatasetDict
 
-    dataset = DatasetDict.load_dataset("pie/sciarg", name="merge_fragmented_spans")
+    dataset = DatasetDict.load_dataset("pie/sciarg")
     dataset_converted = dataset.to_document_type(loaded_taskmodule.document_type)
     sciarg_document = dataset_converted["train"][0]
 
+    loaded_taskmodule.tokenizer_kwargs["strict_span_conversion"] = False
     task_encodings = loaded_taskmodule.encode([sciarg_document], encode_target=True)
     batch = loaded_taskmodule.collate(task_encodings)
-    path = FIXTURES_ROOT / "models" / "pointer_network" / "sciarg_batch_with_targets.pkl"
-    with open(path, "wb") as f:
-        pickle.dump(batch, f)
+    batch_serializable = tuple({k: v.tolist() for k, v in item.items()} for item in batch)
+    with open(SCIARG_BATCH_PATH, "w") as f:
+        json.dump(batch_serializable, f, sort_keys=True)
 
 
 @pytest.fixture(scope="module")
-def sciarg_batch():
-    with open(
-        FIXTURES_ROOT / "models" / "pointer_network" / "sciarg_batch_with_targets.pkl",
-        "rb",
-    ) as f:
-        batch = pickle.load(f)
-    inputs, targets = batch
-    inputs_truncated = {k: v[:5] for k, v in inputs.items()}
-    targets_truncated = {k: v[:5] for k, v in targets.items()}
+def sciarg_batch_truncated():
+    with open(SCIARG_BATCH_PATH) as f:
+        batch_json = json.load(f)
+    inputs_json, targets_json = batch_json
+    inputs_truncated = {k: torch.tensor(v[:5]) for k, v in inputs_json.items()}
+    targets_truncated = {k: torch.tensor(v[:5]) for k, v in targets_json.items()}
     return inputs_truncated, targets_truncated
 
 
@@ -87,9 +91,11 @@ def sciarg_batch_prediction():
 
 
 @pytest.mark.slow
-def test_sciarg_predict(trained_model, sciarg_batch, sciarg_batch_prediction, loaded_taskmodule):
+def test_sciarg_predict(
+    trained_model, sciarg_batch_truncated, sciarg_batch_prediction, loaded_taskmodule
+):
     torch.manual_seed(42)
-    inputs, targets = sciarg_batch
+    inputs, targets = sciarg_batch_truncated
 
     prediction = trained_model.predict(inputs)
     assert prediction is not None
@@ -97,8 +103,8 @@ def test_sciarg_predict(trained_model, sciarg_batch, sciarg_batch_prediction, lo
 
 
 @pytest.mark.skipif(not os.path.exists(MODEL_PATH), reason=f"model not available: {MODEL_PATH}")
-def test_sciarg_metric(loaded_taskmodule, sciarg_batch, sciarg_batch_prediction):
-    inputs, targets = sciarg_batch
+def test_sciarg_metric(loaded_taskmodule, sciarg_batch_truncated, sciarg_batch_prediction):
+    inputs, targets = sciarg_batch_truncated
     metric = loaded_taskmodule.configure_metric()
     metric.update(sciarg_batch_prediction, targets["tgt_tokens"])
 
