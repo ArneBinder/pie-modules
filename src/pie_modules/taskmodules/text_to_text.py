@@ -23,7 +23,7 @@ from pie_modules.document.processing import (
 )
 from pie_modules.utils import resolve_type
 
-from .common import BatchableMixin, HasConfigureMetric
+from .common import BatchableMixin
 from .common.utils import get_first_occurrence_index
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,6 @@ TaskOutputType: TypeAlias = TargetEncodingType
 
 @TaskModule.register()
 class TextToTextTaskModule(
-    HasConfigureMetric,
     TaskModule[
         DocumentType,
         InputEncoding,
@@ -365,6 +364,4 @@ class TextToTextTaskModule(
             for annotation in annotations:
                 yield layer_name, annotation.copy()
 
-    def configure_metric(self, stage: Optional[str] = None) -> Optional[Metric]:
-        # TODO: this should return a metric that gets called with the model output and the target encoding
-        return None
+        # TODO: implement configure_model_metric(self, stage: str) -> Optional[Metric]

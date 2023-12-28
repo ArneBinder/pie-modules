@@ -24,7 +24,9 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.9"
-pytorch-ie = ">=0.29.4,<0.30.0"
+# requires https://github.com/ArneBinder/pytorch-ie/pull/392
+#pytorch-ie = ">=0.29.5,<0.30.0"
+pytorch-ie = {git = "https://github.com/arnebinder/pytorch-ie.git", branch = "taskmodule_configure_model_metric"}
 pytorch-lightning = "^2.1.0"
 torchmetrics = "^1"
 pytorch-crf = ">=0.7.2"
