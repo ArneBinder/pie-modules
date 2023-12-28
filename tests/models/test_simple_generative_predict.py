@@ -131,8 +131,8 @@ def test_sciarg_predict(trained_model, sciarg_batch_truncated, loaded_taskmodule
             "semantically_same": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
         },
         "binary_relations/micro": {"recall": 8.0645, "precision": 8.4746, "f1": 8.2645},
-        "invalid": {"order": 0.4},
-        "invalid/all": 0.4,
+        "invalid": {"correct": 0.977, "order": 0.023},
+        "invalid/all": 0.023,
     }
 
 
@@ -163,8 +163,8 @@ def test_sciarg_predict_with_position_id_pattern(sciarg_batch_truncated, loaded_
         },
         "binary_relations/micro": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
         "em": 0.4,
-        "invalid": {"len": 0.6},
-        "invalid/all": 0.6,
+        "invalid": {"correct": 0.1667, "len": 0.8333},
+        "invalid/all": 0.8333,
         "labeled_spans": {
             "background_claim": {"f1": 3.8462, "precision": 100.0, "recall": 1.9608},
             "data": {"f1": 0.0, "precision": 0.0, "recall": 0.0},

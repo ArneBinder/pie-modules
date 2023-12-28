@@ -78,6 +78,8 @@ TaskEncodingType: TypeAlias = TaskEncoding[
 ]
 TaskOutputType: TypeAlias = LabelsAndOptionalConstraints
 
+KEY_INVALID_CORRECT = "correct"
+
 
 def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
     if not all(isinstance(ann, LabeledSpan) for ann in [v1.head, v1.tail, v2.head, v2.tail]):
@@ -391,13 +393,14 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             taskmodule=self,
             layer_names=self.layer_names,
             decode_annotations_func=self.decode_annotations,
+            key_invalid_correct=KEY_INVALID_CORRECT,
         )
 
     def decode_relations(
         self,
         label_ids: List[int],
     ) -> Tuple[List[BinaryRelation], Dict[str, int], List[int]]:
-        errors = dict()
+        errors: Dict[str, int] = defaultdict(int)
         encodings = []
         current_encoding: List[int] = []
         valid_encoding: BinaryRelation
@@ -413,14 +416,13 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                             encoding=current_encoding
                         )
                         encodings.append(valid_encoding)
+                        errors[KEY_INVALID_CORRECT] += 1
                     except DecodingException as e:
-                        # TODO: count total amounts instead of returning bool values.
-                        #  This requires to also count "correct".
-                        errors[e.identifier] = 1
+                        errors[e.identifier] += 1
 
                     current_encoding = []
 
-        return encodings, errors, current_encoding
+        return encodings, dict(errors), current_encoding
 
     def encode_annotations(
         self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None
