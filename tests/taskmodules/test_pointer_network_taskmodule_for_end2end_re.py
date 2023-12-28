@@ -520,8 +520,8 @@ def test_annotations_from_output(task_encodings, task_outputs, taskmodule):
     )
 
 
-def test_configure_metric(taskmodule):
-    metric = taskmodule.configure_metric()
+def test_configure_model_metric(taskmodule):
+    metric = taskmodule.configure_model_metric()
     assert metric is not None
     assert isinstance(metric, AnnotationLayerMetric)
 

@@ -43,12 +43,3 @@ class HasDecodeAnnotations(abc.ABC, Generic[ACE]):
         self, encoding: ACE, metadata: Optional[Dict[str, Any]] = None
     ) -> Tuple[Dict[str, List[Annotation]], Any]:
         pass
-
-
-# TODO: move into pytorch_ie
-class HasConfigureMetric(abc.ABC):
-    """Interface for modules that can configure a metric."""
-
-    @abc.abstractmethod
-    def configure_metric(self, stage: Optional[str] = None) -> Metric:
-        pass

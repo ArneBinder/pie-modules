@@ -11,7 +11,6 @@ from torch.optim import Optimizer
 from torchmetrics import Metric
 from transformers import PreTrainedModel, get_linear_schedule_with_warmup
 
-from pie_modules.taskmodules.common import HasConfigureMetric
 from pie_modules.utils import resolve_type
 
 logger = logging.getLogger(__name__)
@@ -110,16 +109,9 @@ class SimpleGenerativeModel(PyTorchIEModel):
                 strict=False,
                 config=taskmodule_config,
             )
-            # TODO: remove this check when TaskModule.build_metric() is implemented
-            if not isinstance(taskmodule, HasConfigureMetric):
-                logger.warning(
-                    f"taskmodule {taskmodule} does not implement HasConfigureMetric interface, no metrics will be "
-                    f"used."
-                )
-            else:
-                metrics = {stage: taskmodule.configure_metric(stage) for stage in metric_splits}
-                # keep only the metrics that are not None
-                self.metrics = {k: v for k, v in metrics.items() if v is not None}
+            metrics = {stage: taskmodule.configure_model_metric(stage) for stage in metric_splits}
+            # keep only the metrics that are not None
+            self.metrics = {k: v for k, v in metrics.items() if v is not None}
 
     def predict(self, inputs, **kwargs) -> torch.LongTensor:
         is_training = self.training

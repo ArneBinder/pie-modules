@@ -1,11 +1,9 @@
 from typing import Any, Dict, List, Set, Tuple
 
 from pytorch_ie.annotations import Span
-from torchmetrics import Metric
 
 from pie_modules.taskmodules.common import (
     AnnotationEncoderDecoder,
-    HasConfigureMetric,
     HasDecodeAnnotations,
 )
 
@@ -56,27 +54,3 @@ def test_has_decode_annotations():
         {"spans": [Span(start=1, end=2)]},
         {"too_long": True},
     )
-
-
-def test_has_build_metric():
-    """Test the HasBuildMetric class."""
-
-    class MyMetric(Metric):
-        """A dummy metric class."""
-
-        def update(self, x):
-            pass
-
-        def compute(self):
-            return 0
-
-    class MyMetricBuilder(HasConfigureMetric):
-        """A class that uses the HasBuildMetric class."""
-
-        def configure_metric(self, stage: str = None):
-            return MyMetric()
-
-    my_builder = MyMetricBuilder()
-    my_metric = my_builder.configure_metric()
-    assert isinstance(my_metric, Metric)
-    assert my_metric.compute() == 0

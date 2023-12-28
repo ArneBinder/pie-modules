@@ -19,7 +19,7 @@ from typing import (
 import numpy as np
 import torch
 from pytorch_ie import AnnotationLayer, Document
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
+from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.core import Annotation, TaskEncoding, TaskModule
 from pytorch_ie.core.taskmodule import (
     InputEncoding,
@@ -39,7 +39,7 @@ from pie_modules.documents import (
 
 from ..document.processing import token_based_document_to_text_based, tokenize_document
 from ..utils import resolve_type
-from .common import BatchableMixin, HasConfigureMetric, HasDecodeAnnotations
+from .common import BatchableMixin, HasDecodeAnnotations
 from .common.interfaces import DecodingException
 from .common.metrics import AnnotationLayerMetric
 from .pointer_network.annotation_encoder_decoder import (
@@ -121,7 +121,6 @@ def get_first_occurrence_index(
 
 @TaskModule.register()
 class PointerNetworkTaskModuleForEnd2EndRE(
-    HasConfigureMetric,
     HasDecodeAnnotations[TaskOutputType],
     TaskModule[
         DocumentType,
@@ -388,7 +387,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     def target_ids(self) -> Set[int]:
         return set(range(self.pointer_offset))
 
-    def configure_metric(self, stage: Optional[str] = None) -> Metric:
+    def configure_model_metric(self, stage: Optional[str] = None) -> Optional[Metric]:
         return AnnotationLayerMetric(
             taskmodule=self,
             layer_names=self.layer_names,
