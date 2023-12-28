@@ -2,4 +2,5 @@ from .extractive_question_answering import ExtractiveQuestionAnsweringTaskModule
 from .re_text_classification_with_indices import (
     RETextClassificationWithIndicesTaskModule,
 )
+from .text_to_text import TextToTextTaskModule
 from .token_classification import TokenClassificationTaskModule

@@ -32,3 +32,23 @@ class ExtractiveAnswer(Span):
         # we assume that the first target is the text
         context = self.named_targets["base"]
         return str(context[self.start : self.end])
+
+
+@dataclasses.dataclass(eq=True, frozen=True)
+class AnnotationWithText(Annotation):
+    text: str
+    score: Optional[float] = dataclasses.field(default=None, compare=False)
+
+
+@dataclasses.dataclass(eq=True, frozen=True)
+class AbstractiveSummary(AnnotationWithText):
+    """An abstractive summary."""
+
+    pass
+
+
+@dataclasses.dataclass(eq=True, frozen=True)
+class GenerativeAnswer(AnnotationWithText):
+    """An answer to a question."""
+
+    question: Optional[Question] = None
