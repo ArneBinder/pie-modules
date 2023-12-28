@@ -1057,27 +1057,23 @@ files = [
 
 [[package]]
 name = "pytorch-ie"
-version = "0.29.4"
+version = "0.29.5"
 description = "State-of-the-art Information Extraction in PyTorch"
 optional = false
-python-versions = "^3.9"
-files = []
-develop = false
+python-versions = ">=3.9,<4.0"
+files = [
+    {file = "pytorch_ie-0.29.5-py3-none-any.whl", hash = "sha256:627bec6821be3c6c122dc861a9f5b313df313ffce1f3c9f0d0566aa0731dad64"},
+    {file = "pytorch_ie-0.29.5.tar.gz", hash = "sha256:80b4f9c85c7c53aac7d22ee88192114cd6ba667cd61f2b35ace27eb0ec21d2ae"},
+]
 
 [package.dependencies]
-absl-py = "^1.0.0"
+absl-py = ">=1.0.0,<2.0.0"
 fsspec = "<2023.9.0"
-pandas = "^2.0.0"
-pytorch-lightning = "^2"
+pandas = ">=2.0.0,<3.0.0"
+pytorch-lightning = ">=2,<3"
 torch = ">=1.10"
-torchmetrics = "^1"
-transformers = "^4.18"
-
-[package.source]
-type = "git"
-url = "https://github.com/arnebinder/pytorch-ie.git"
-reference = "taskmodule_configure_model_metric"
-resolved_reference = "7e51f06ada5d3ce88a3fe74a77e5479284e34d9d"
+torchmetrics = ">=1,<2"
+transformers = ">=4.18,<5.0"
 
 [[package]]
 name = "pytorch-lightning"
@@ -1897,4 +1893,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "9d36008a14321ec93ebd57da8843e6a5088a581ef9dd74557f844c859054f029"
+content-hash = "3af66bbfda3bdf964fc466172924a7d4198eee86689ea257427c6a864cadef83"
