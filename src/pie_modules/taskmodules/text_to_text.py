@@ -12,7 +12,6 @@ from pytorch_ie.core.taskmodule import (
     TaskBatchEncoding,
 )
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
-from torchmetrics import Metric
 from transformers import AutoTokenizer, PreTrainedTokenizer
 from typing_extensions import TypeAlias
 
