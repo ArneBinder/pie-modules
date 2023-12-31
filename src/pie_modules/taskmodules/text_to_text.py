@@ -146,7 +146,7 @@ class TextToTextTaskModule(
         return document[layer_name]
 
     @property
-    def generation_kwargs(self) -> Dict[str, Any]:
+    def generation_config(self) -> Dict[str, Any]:
         return {}
 
     def maybe_log_example(

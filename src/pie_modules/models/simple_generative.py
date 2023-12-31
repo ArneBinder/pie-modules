@@ -44,9 +44,9 @@ class SimpleGenerativeModel(PyTorchIEModel):
             str, Any
         ],  # overrides the base model config from the base model type
         # generation
-        generation_kwargs: Optional[
+        override_generation_kwargs: Optional[
             Dict[str, Any]
-        ] = None,  # overrides the generation config from the base model
+        ] = None,  # overrides the generation config from the base model / taskmodule
         # metrics
         taskmodule_config: Optional[
             Dict[str, Any]
@@ -69,9 +69,6 @@ class SimpleGenerativeModel(PyTorchIEModel):
         self.optimizer_type = optimizer_type
         self.warmup_proportion = warmup_proportion
 
-        # can be used to override the default generation setup (created from the base model generation config)
-        self.generation_kwargs = generation_kwargs or {}
-
         resolved_base_model_type: Type[PreTrainedModel] = resolve_type(
             base_model_type, expected_super_type=PreTrainedModel
         )
@@ -91,16 +88,9 @@ class SimpleGenerativeModel(PyTorchIEModel):
                 f"{missed_stages}. Available metric splits: {metric_splits}."
             )
 
-        self.metric_intervals = metric_intervals or {}
-        self.metrics = self.configure_metrics(taskmodule_config, metric_splits)
-
-    # TODO: move into PyTorchIEModel
-    def configure_metrics(
-        self, taskmodule_config: Optional[Dict[str, Any]], metric_splits: List[str]
-    ) -> Dict[str, Metric]:
         if taskmodule_config is not None:
             # TODO: use AutoTaskModule.from_config() when it is available
-            taskmodule = AutoTaskModule._from_pretrained(
+            self.taskmodule = AutoTaskModule._from_pretrained(
                 model_id="",
                 revision=None,
                 cache_dir=None,
@@ -113,17 +103,44 @@ class SimpleGenerativeModel(PyTorchIEModel):
                 strict=False,
                 config=self.taskmodule_config,
             )
+        else:
+            self.taskmodule = None
+
+        self.metric_intervals = metric_intervals or {}
+        self.metrics = self.configure_metrics(metric_splits)
+
+        self.generation_config = self.configure_generation(**(override_generation_kwargs or {}))
+
+    def configure_metrics(self, metric_splits: List[str]) -> Dict[str, Metric]:
+        if self.taskmodule is not None:
             # get the metrics for the different stages
-            metrics = {stage: taskmodule.configure_model_metric(stage) for stage in metric_splits}
+            metrics = {
+                stage: self.taskmodule.configure_model_metric(stage) for stage in metric_splits
+            }
             # keep only the metrics that are not None
             # NOTE: This is not a ModuleDict, so this will not live on the torch device!
             return {k: v for k, v in metrics.items() if v is not None}
         else:
             logger.warning(
-                "taskmodule_config is None, so no metrics will be created. Please set taskmodule_config to a valid "
+                "No taskmodule is available, so no metrics will be created. Please set taskmodule_config to a valid "
                 "taskmodule config to use metrics."
             )
             return {}
+
+    def configure_generation(self, **kwargs) -> Dict[str, Any]:
+        if self.taskmodule is not None:
+            # get the generation config from the taskmodule
+            generation_config = self.taskmodule.configure_model_generation()
+            if generation_config is not None:
+                self.generation_config.update(generation_config)
+        else:
+            logger.warning(
+                "No taskmodule is available, so no generation config will be created. Consider "
+                "setting taskmodule_config to a valid taskmodule config to use specific setup for generation."
+            )
+            generation_config = {}
+        generation_config.update(kwargs)
+        return generation_config
 
     def predict(self, inputs, **kwargs) -> torch.LongTensor:
         is_training = self.training
