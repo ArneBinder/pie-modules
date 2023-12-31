@@ -241,7 +241,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         return self.special_target2id[self.eos_token]
 
     @property
-    def generation_kwargs(self) -> Dict[str, Any]:
+    def generation_config(self) -> Dict[str, Any]:
         return {
             "no_repeat_ngram_size": 7,
             # TODO: add this when it looks really solid (currently strange behavior)

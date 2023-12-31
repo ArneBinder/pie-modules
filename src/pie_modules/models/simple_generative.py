@@ -44,9 +44,9 @@ class SimpleGenerativeModel(PyTorchIEModel):
             str, Any
         ],  # overrides the base model config from the base model type
         # generation
-        generation_kwargs: Optional[
+        override_generation_kwargs: Optional[
             Dict[str, Any]
-        ] = None,  # overrides the generation config from the base model
+        ] = None,  # overrides the generation config from the base model / taskmodule
         # metrics
         taskmodule_config: Optional[
             Dict[str, Any]
@@ -69,9 +69,6 @@ class SimpleGenerativeModel(PyTorchIEModel):
         self.optimizer_type = optimizer_type
         self.warmup_proportion = warmup_proportion
 
-        # can be used to override the default generation setup (created from the base model generation config)
-        self.generation_kwargs = generation_kwargs or {}
-
         resolved_base_model_type: Type[PreTrainedModel] = resolve_type(
             base_model_type, expected_super_type=PreTrainedModel
         )
@@ -90,6 +87,8 @@ class SimpleGenerativeModel(PyTorchIEModel):
                 f"There are stages in use_prediction_for_metrics that are not in metric_splits: "
                 f"{missed_stages}. Available metric splits: {metric_splits}."
             )
+
+        self.generation_config = {}
 
         self.metric_intervals = metric_intervals or {}
         # NOTE: This is not a ModuleDict, so this will not live on the torch device!
@@ -113,11 +112,20 @@ class SimpleGenerativeModel(PyTorchIEModel):
             # keep only the metrics that are not None
             self.metrics = {k: v for k, v in metrics.items() if v is not None}
 
+            if hasattr(taskmodule, "generation_config"):
+                logger.info(
+                    f"Using generation_config from taskmodule: {taskmodule.generation_config}"
+                )
+                self.generation_config.update(taskmodule.generation_config)
+
+        if override_generation_kwargs is not None:
+            self.generation_config.update(override_generation_kwargs)
+
     def predict(self, inputs, **kwargs) -> torch.LongTensor:
         is_training = self.training
         self.eval()
 
-        generation_kwargs = copy.deepcopy(self.generation_kwargs)
+        generation_kwargs = copy.deepcopy(self.generation_config)
         generation_kwargs.update(kwargs)
         outputs = self.model.generate(**inputs, **generation_kwargs)
 

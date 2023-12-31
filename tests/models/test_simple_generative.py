@@ -109,7 +109,6 @@ def model(taskmodule, config) -> SimpleGenerativeModel:
             num_beams=4,
             **config,
         ),
-        generation_kwargs=taskmodule.generation_kwargs,
         taskmodule_config=taskmodule._config(),
     )
     # set model to training mode, otherwise model.encoder.bart_encoder.training will be False!

@@ -7,6 +7,7 @@ import torch
 from pytorch_ie import AutoTaskModule, TaskModule
 
 from pie_modules.models import SimpleGenerativeModel
+from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 from tests import DUMP_FIXTURE_DATA, FIXTURES_ROOT
 
 logger = logging.getLogger(__name__)
