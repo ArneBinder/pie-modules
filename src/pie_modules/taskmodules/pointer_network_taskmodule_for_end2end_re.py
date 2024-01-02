@@ -247,6 +247,10 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             # "prefix_allowed_tokens_fn": self._prefix_allowed_tokens_fn,
         }
 
+    # def _prefix_allowed_tokens_fn(self, batch_id: int, input_ids: torch.LongTensor) -> List[int]:
+    #    _, _, remaining = self.decode_relations(label_ids=input_ids.tolist()[1:])
+    #    pass
+
     def _prepare(self, documents: Sequence[DocumentType]) -> None:
         # collect all labels
         labels: Dict[str, Set[str]] = {layer_name: set() for layer_name in self.layer_names}
@@ -552,35 +556,38 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         last: List[int],
         t: int,
         idx: int,
-        arr: np.ndarray,
+        input_len: int,
     ) -> np.ndarray:
+        arr = np.ones(input_len + self.pointer_offset, dtype=int)
         if t == 0:  # start # c1 [0, 1]
             arr[: self.pointer_offset] = 0
-        elif idx % 7 == 0:  # c1 [0,1, 23]
+        elif idx == 0:  # c1 [0,1, 23]
             arr[:t] = 0
-        elif idx % 7 == 1:  # tc1 [0,1,23, tc] span标签设为1
+        elif idx == 1:  # tc1 [0,1,23, tc] span标签设为1
             arr = np.zeros_like(arr, dtype=int)
             for i in self.span_ids:
                 arr[i] = 1
-        elif idx % 7 == 2:  # c2 [0,1,23,tc, 45]
+        elif idx == 2:  # c2 [0,1,23,tc, 45]
             arr[: self.pointer_offset] = 0
             arr[last[-3] : last[-2]] = 0
-        elif idx % 7 == 3:  # c2 [0,1,23,tc,45, 67]
+        elif idx == 3:  # c2 [0,1,23,tc,45, 67]
             arr[:t] = 0
             if t < last[-4]:
                 arr[last[-4] :] = 0
             else:
                 arr[last[-4] : last[-3]] = 0
-        elif idx % 7 == 4:  # tc2 [0,1,23,tc,45,67, tc]
+        elif idx == 4:  # tc2 [0,1,23,tc,45,67, tc]
             arr = np.zeros_like(arr, dtype=int)
             for i in self.span_ids:
                 arr[i] = 1
-        elif idx % 7 == 5:  # r [0,1,23,tc,45,67,tc, r]
+        elif idx == 5:  # r [0,1,23,tc,45,67,tc, r]
             arr = np.zeros_like(arr, dtype=int)
             for i in self.relation_ids:
                 arr[i] = 1
-        elif idx % 7 == 6:  # next
+        elif idx == 6:  # next
             arr[: self.pointer_offset] = 0
+
+        arr[self.none_id] = 1
         return arr
 
     def build_constraints(
@@ -593,10 +600,10 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         likely_hood[: self.pointer_offset] = 0
         CMP_tag: List[np.ndarray] = [likely_hood]
         for idx, t in enumerate(target_ids[:-1]):
-            last7 = target_ids[idx - 7 if idx - 7 > 0 else 0 : idx + 1]
-            likely_hood = np.ones(input_len + self.pointer_offset, dtype=int)
-            tag = self._pointer_tag(last=last7, t=t, idx=idx, arr=likely_hood)
-            tag[self.none_id] = 1
+            last7 = target_ids[max(idx - 7, 0) : idx + 1]
+            # last_tuple_start = (idx // 7) * 7
+            # last_tuple = target_ids[last_tuple_start : idx]
+            tag = self._pointer_tag(last=last7, t=t, idx=idx % 7, input_len=input_len)
             CMP_tag.append(tag)
         last_end = np.zeros(input_len + self.pointer_offset, dtype=int)
         last_end[self.none_id] = 1
