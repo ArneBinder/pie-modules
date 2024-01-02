@@ -255,7 +255,8 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         else:
             unpadded_label_ids = []
         _, _, remaining = self.decode_relations(label_ids=unpadded_label_ids)
-        # TODO: parametrize input_len
+        # TODO: parametrize input_len EDIT: input_len really needs to be the length of the (padded) input_ids!
+        #  Otherwise, the logits processor breaks because the indices are out of bounds.
         # this is a binary mask
         constraint = self._build_constraint(previous_ids=remaining, input_len=1024)
         # convert to indices
@@ -623,7 +624,8 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                 # allow only relation ids
                 result[self.relation_ids] = 1
         else:
-            raise Exception(f"unexpected idx: {idx}")
+            # any longer sequence can only be completed with padding
+            result[self.target_pad_id] = 1
         return result
 
     def build_constraints(
