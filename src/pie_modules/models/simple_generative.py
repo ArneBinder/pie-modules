@@ -88,14 +88,9 @@ class SimpleGenerativeModel(PyTorchIEModel):
                 f"{missed_stages}. Available metric splits: {metric_splits}."
             )
 
-        self.generation_config = {}
-
-        self.metric_intervals = metric_intervals or {}
-        # NOTE: This is not a ModuleDict, so this will not live on the torch device!
-        self.metrics: Dict[str, Metric] = {}
         if taskmodule_config is not None:
             # TODO: use AutoTaskModule.from_config() when it is available
-            taskmodule = AutoTaskModule._from_pretrained(
+            self.taskmodule = AutoTaskModule._from_pretrained(
                 model_id="",
                 revision=None,
                 cache_dir=None,
@@ -108,18 +103,42 @@ class SimpleGenerativeModel(PyTorchIEModel):
                 strict=False,
                 config=taskmodule_config,
             )
-            metrics = {stage: taskmodule.configure_model_metric(stage) for stage in metric_splits}
+        else:
+            self.taskmodule = None
+
+        self.metric_intervals = metric_intervals or {}
+        self.metrics = self.configure_metrics(metric_splits=metric_splits)
+
+        self.generation_config = self.configure_generation(**(override_generation_kwargs or {}))
+
+    def configure_metrics(self, metric_splits: List[str]) -> Dict[str, Metric]:
+        if self.taskmodule is not None:
+            # get the metrics for the different stages
+            metrics = {
+                stage: self.taskmodule.configure_model_metric(stage) for stage in metric_splits
+            }
             # keep only the metrics that are not None
-            self.metrics = {k: v for k, v in metrics.items() if v is not None}
+            # NOTE: This is not a ModuleDict, so this will not live on the torch device!
+            return {k: v for k, v in metrics.items() if v is not None}
+        else:
+            logger.warning(
+                "No taskmodule is available, so no metrics will be created. Please set taskmodule_config to a valid "
+                "taskmodule config to use metrics."
+            )
+            return {}
 
-            if hasattr(taskmodule, "generation_config"):
-                logger.info(
-                    f"Using generation_config from taskmodule: {taskmodule.generation_config}"
-                )
-                self.generation_config.update(taskmodule.generation_config)
-
-        if override_generation_kwargs is not None:
-            self.generation_config.update(override_generation_kwargs)
+    def configure_generation(self, **kwargs) -> Dict[str, Any]:
+        if self.taskmodule is not None:
+            # get the generation config from the taskmodule
+            generation_config = self.taskmodule.configure_model_generation()
+        else:
+            logger.warning(
+                "No taskmodule is available, so no generation config will be created. Consider "
+                "setting taskmodule_config to a valid taskmodule config to use specific setup for generation."
+            )
+            generation_config = {}
+        generation_config.update(kwargs)
+        return generation_config
 
     def predict(self, inputs, **kwargs) -> torch.LongTensor:
         is_training = self.training
@@ -147,6 +166,14 @@ class SimpleGenerativeModel(PyTorchIEModel):
     def forward(self, inputs, **kwargs):
         return self.model(**inputs, **kwargs)
 
+    def get_metric(self, stage: str, batch_idx: int) -> Optional[Metric]:
+        stage_metrics = self.metrics.get(stage, None)
+        metric_interval = self.metric_intervals.get(stage, 1)
+        if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
+            return stage_metrics
+        else:
+            return None
+
     def step(self, batch, stage: str, batch_idx: int) -> torch.FloatTensor:
         inputs, targets = batch
         if targets is None:
@@ -160,9 +187,8 @@ class SimpleGenerativeModel(PyTorchIEModel):
             f"loss/{stage}", loss, on_step=(stage == STAGE_TRAIN), on_epoch=True, prog_bar=True
         )
 
-        stage_metrics = self.metrics.get(stage, None)
-        metric_interval = self.metric_intervals.get(stage, 1)
-        if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
+        metric = self.get_metric(stage=stage, batch_idx=batch_idx)
+        if metric is not None:
             if stage in self.use_prediction_for_metrics:
                 prediction = self.predict(inputs)
             else:
@@ -171,7 +197,7 @@ class SimpleGenerativeModel(PyTorchIEModel):
                 # get the indices (these are without the initial bos_ids, see above)
                 prediction = torch.argmax(logits, dim=-1)
             # the format of expected needs to be the same as the format of prediction
-            stage_metrics.update(prediction, targets["labels"])
+            metric.update(prediction, targets["labels"])
 
         return loss
 

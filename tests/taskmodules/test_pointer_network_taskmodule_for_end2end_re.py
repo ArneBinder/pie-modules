@@ -526,8 +526,8 @@ def test_configure_model_metric(taskmodule):
     assert isinstance(metric, AnnotationLayerMetric)
 
 
-def test_generation_config(taskmodule):
-    assert taskmodule.generation_config == {
+def test_configure_model_generation(taskmodule):
+    assert taskmodule.configure_model_generation() == {
         "no_repeat_ngram_size": 7,
     }
 
