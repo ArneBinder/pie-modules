@@ -760,19 +760,26 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         return document[layer_name]
 
     def encode_target(self, task_encoding: TaskEncodingType) -> Optional[TargetEncodingType]:
-        document = task_encoding.metadata["tokenized_document"]
+        try:
+            document = task_encoding.metadata["tokenized_document"]
 
-        layers = {
-            layer_name: self.get_mapped_layer(document, layer_name=layer_name)
-            for layer_name in self.layer_names
-        }
-        result = self.encode_annotations(
-            layers=layers,
-            metadata={**task_encoding.metadata, "src_len": len(task_encoding.inputs.input_ids)},
-        )
+            layers = {
+                layer_name: self.get_mapped_layer(document, layer_name=layer_name)
+                for layer_name in self.layer_names
+            }
+            result = self.encode_annotations(
+                layers=layers,
+                metadata={
+                    **task_encoding.metadata,
+                    "src_len": len(task_encoding.inputs.input_ids),
+                },
+            )
 
-        self.maybe_log_example(task_encoding=task_encoding, targets=result)
-        return result
+            self.maybe_log_example(task_encoding=task_encoding, targets=result)
+            return result
+        except Exception as e:
+            logger.error(f"failed to encode target, it will be skipped: {e}")
+            return None
 
     def collate(self, task_encodings: Sequence[TaskEncodingType]) -> TaskBatchEncoding:
         if len(task_encodings) == 0:
