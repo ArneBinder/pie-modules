@@ -410,22 +410,46 @@ def test_predict_step(model, batch, config, taskmodule):
             raise ValueError(f"Unknown config: {config}")
 
 
-def test_on_train_epoch_end(model, config):
+@pytest.fixture(scope="module")
+def default_model(taskmodule, config) -> SimpleGenerativeModel:
     torch.manual_seed(42)
-    model.on_train_epoch_end()
+    model = SimpleGenerativeModel(
+        base_model_type=BartAsPointerNetwork,
+        base_model_config=dict(
+            pretrained_model_name_or_path="sshleifer/distilbart-xsum-12-1",
+            bos_token_id=taskmodule.bos_id,
+            eos_token_id=taskmodule.eos_id,
+            pad_token_id=taskmodule.eos_id,
+            label_ids=taskmodule.label_ids,
+            target_token_ids=taskmodule.target_token_ids,
+            embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
+            max_length=512,
+            num_beams=4,
+        ),
+        taskmodule_config=taskmodule._config(),
+    )
+    # set model to training mode, otherwise model.encoder.bart_encoder.training will be False!
+    model.train()
+    return model
 
 
-def test_on_validation_epoch_end(model, config):
+def test_on_train_epoch_end(default_model, config):
     torch.manual_seed(42)
-    model.on_validation_epoch_end()
+    default_model.on_train_epoch_end()
 
 
-def test_on_test_epoch_end(model, config):
+def test_on_validation_epoch_end(default_model, config):
     torch.manual_seed(42)
-    model.on_test_epoch_end()
+    default_model.on_validation_epoch_end()
 
 
-def test_configure_optimizers(model, config):
+def test_on_test_epoch_end(default_model, config):
+    torch.manual_seed(42)
+    default_model.on_test_epoch_end()
+
+
+def test_configure_optimizers(default_model, config):
+    model = default_model
     optimizers = model.configure_optimizers()
     assert isinstance(optimizers, AdamW)
     assert len(optimizers.param_groups) == 6
@@ -471,34 +495,21 @@ def test_configure_optimizers(model, config):
     assert len(all_param_shapes[5]) == 1
 
 
-def test_configure_optimizers_with_warmup_proportion(taskmodule, config):
-    torch.manual_seed(42)
-    model = SimpleGenerativeModel(
-        base_model_type=BartAsPointerNetwork,
-        base_model_config=dict(
-            pretrained_model_name_or_path="sshleifer/distilbart-xsum-12-1",
-            bos_token_id=taskmodule.bos_id,
-            eos_token_id=taskmodule.eos_id,
-            pad_token_id=taskmodule.eos_id,
-            label_ids=taskmodule.label_ids,
-            target_token_ids=taskmodule.target_token_ids,
-            embedding_weight_mapping=taskmodule.label_embedding_weight_mapping,
-            max_length=512,
-            num_beams=4,
-        ),
-        taskmodule_config=taskmodule._config(),
-        warmup_proportion=0.1,
-    )
-    # set model to training mode, otherwise model.encoder.bart_encoder.training will be False!
-    model.train()
+def test_configure_optimizers_with_warmup_proportion(default_model):
+    model = default_model
+    original_warmup_proportion = default_model.warmup_proportion
+    default_model.warmup_proportion = 0.1
 
     model.trainer = Trainer(max_epochs=10)
-    optimizers_and_schedulars = model.configure_optimizers()
-    assert optimizers_and_schedulars is not None
-    assert isinstance(optimizers_and_schedulars, tuple) and len(optimizers_and_schedulars) == 2
+    optimizers_and_schedulers = model.configure_optimizers()
+    assert optimizers_and_schedulers is not None
+    assert isinstance(optimizers_and_schedulers, tuple) and len(optimizers_and_schedulers) == 2
 
-    optimizers, schedulers = optimizers_and_schedulars
+    optimizers, schedulers = optimizers_and_schedulers
     assert isinstance(optimizers[0], torch.optim.Optimizer)
     assert set(schedulers[0]) == {"scheduler", "interval"}
     schedular = schedulers[0]["scheduler"]
     assert isinstance(schedular, torch.optim.lr_scheduler.LRScheduler)
+
+    # restore original value
+    default_model.warmup_proportion = original_warmup_proportion
