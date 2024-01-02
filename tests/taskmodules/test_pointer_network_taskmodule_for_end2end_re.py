@@ -308,6 +308,11 @@ def test_build_constraints(taskmodule, task_encoding, config):
     input_len = len(task_encoding.inputs.input_ids)
     target_ids = task_encoding.targets.labels
     max_id = input_len + taskmodule.pointer_offset
+    special_start = 0
+    none_start = len(taskmodule.special_targets)
+    span_start = none_start + 1
+    rel_start = span_start + len(taskmodule.span_ids)
+    offsets_start = rel_start + len(taskmodule.relation_ids)
     if config == {}:
         assert input_len == 13
         assert target_ids == [14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]
@@ -316,23 +321,33 @@ def test_build_constraints(taskmodule, task_encoding, config):
         constraints_tensor = torch.tensor(constraints)
         assert max_id == 20
         assert constraints_tensor.shape == (len(target_ids), max_id)
-        assert constraints == [
-            # bos, eos, none, content, person, topic, is_about; [7:]: offsets
-            [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
-            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
-            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        constraints_formatted = [
+            [
+                c[special_start:none_start],
+                c[none_start:span_start],
+                c[span_start:rel_start],
+                c[rel_start:offsets_start],
+                c[offsets_start:],
+            ]
+            for c in constraints
+        ]
+        assert constraints_formatted == [
+            # [bos, eos], [none], [content, person, topic], [is_about] [offsets (all remaining)]
+            [[0, 0], [0], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+            [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1]],
+            [[0, 0], [1], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+            [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0]],
+            [[0, 0], [1], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+            [[0, 0], [1], [0, 0, 0], [1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+            [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]],
+            [[0, 0], [1], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+            [[0, 0], [1], [1, 1, 1], [1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0]],
+            [[0, 0], [1], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+            [[0, 0], [1], [0, 0, 0], [1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+            [[0, 1], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
         ]
     elif config == {"partition_layer_name": "sentences"}:
         assert input_len == 10
@@ -342,29 +357,56 @@ def test_build_constraints(taskmodule, task_encoding, config):
         constraints_tensor = torch.tensor(constraints)
         assert max_id == 17
         assert constraints_tensor.shape == (len(target_ids), max_id)
-        assert constraints == [
-            # bos, eos, none, content, person, topic, is_about; [7:]: offsets
-            [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0],
-            [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        constraints_formatted = [
+            [
+                c[special_start:none_start],
+                c[none_start:span_start],
+                c[span_start:rel_start],
+                c[rel_start:offsets_start],
+                c[offsets_start:],
+            ]
+            for c in constraints
+        ]
+        assert constraints_formatted == [
+            # [bos, eos], [none], [content, person, topic], [is_about] [offsets (all remaining)]
+            [[0, 0], [0], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+            [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 1, 1, 1]],
+            [[0, 0], [1], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
+            [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 1, 1, 1, 0, 0, 0]],
+            [[0, 0], [1], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+            [[0, 0], [1], [0, 0, 0], [1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+            [[0, 1], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
         ]
     else:
         raise Exception(f"unknown config: {config}")
 
 
 def test_build_constraints_single_label(taskmodule):
+    special_start = 0
+    none_start = len(taskmodule.special_targets)
+    span_start = none_start + 1
+    rel_start = span_start + len(taskmodule.span_ids)
+    offsets_start = rel_start + len(taskmodule.relation_ids)
     input_len = 13
     target_ids = [14]
     max_id = input_len + taskmodule.pointer_offset
     constraints = taskmodule.build_constraints(input_len, target_ids)
     constraints_tensor = torch.tensor(constraints)
     assert constraints_tensor.shape == (len(target_ids), max_id)
-    assert constraints == [[0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]]
+    constraints_formatted = [
+        [
+            c[special_start:none_start],
+            c[none_start:span_start],
+            c[span_start:rel_start],
+            c[rel_start:offsets_start],
+            c[offsets_start:],
+        ]
+        for c in constraints
+    ]
+    assert constraints_formatted == [
+        [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]]
+    ]
 
 
 # def test_build_constraints_empty(taskmodule):
