@@ -18,6 +18,9 @@ from tests import _config_to_str
 CONFIGS = [{}, {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}]
 CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
 
+TASKMODULE_CONFIGS = [{}, {"create_constraints": True}]
+TASKMODULE_CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in TASKMODULE_CONFIGS}
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,6 +32,16 @@ def config_str(request):
 @pytest.fixture(scope="module")
 def config(config_str):
     return CONFIG_DICT[config_str]
+
+
+@pytest.fixture(scope="module", params=TASKMODULE_CONFIG_DICT.keys())
+def taskmodule_config_str(request):
+    return request.param
+
+
+@pytest.fixture(scope="module")
+def taskmodule_config(taskmodule_config_str):
+    return TASKMODULE_CONFIG_DICT[taskmodule_config_str]
 
 
 @pytest.fixture(scope="module")
@@ -68,7 +81,7 @@ def document():
 
 
 @pytest.fixture(scope="module")
-def taskmodule(document):
+def taskmodule(document, taskmodule_config):
     taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
         span_layer_name="entities",
         relation_layer_name="relations",
@@ -77,10 +90,10 @@ def taskmodule(document):
             "entities": "labeled_spans",
             "relations": "binary_relations",
         },
-        create_constraints=False,
         partition_layer_name="sentences",
         # disable strict_span_conversion, this effects only the no_relation annotation
         tokenizer_kwargs={"strict_span_conversion": False},
+        **taskmodule_config,
     )
 
     taskmodule.prepare(documents=[document])
@@ -128,7 +141,7 @@ def batch(taskmodule, document):
     return batch
 
 
-def test_batch(batch, config):
+def test_batch(batch, config, taskmodule):
     assert batch is not None
     inputs, targets = batch
     assert inputs is not None
@@ -145,7 +158,10 @@ def test_batch(batch, config):
     )
 
     assert targets is not None
-    assert set(targets) == {"labels", "decoder_attention_mask"}
+    if taskmodule.create_constraints:
+        assert set(targets) == {"constraints", "labels", "decoder_attention_mask"}
+    else:
+        assert set(targets) == {"labels", "decoder_attention_mask"}
     torch.testing.assert_close(
         targets["labels"],
         torch.tensor([[14, 14, 5, 11, 12, 3, 6, 1], [9, 9, 4, 2, 2, 2, 2, 1]]),
@@ -155,6 +171,35 @@ def test_batch(batch, config):
         torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1]]),
     )
 
+    if taskmodule.create_constraints:
+        torch.testing.assert_close(
+            targets["constraints"],
+            torch.tensor(
+                [
+                    [
+                        [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+                        [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0],
+                        [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    ],
+                    [
+                        [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1],
+                        [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, -1, -1, -1, -1, -1],
+                        [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
+                        [0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 1, 1, -1, -1, -1, -1, -1],
+                        [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
+                        [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
+                        [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
+                        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
+                    ],
+                ]
+            ),
+        )
+
 
 def test_forward_without_labels(model, batch):
     inputs, targets = batch
@@ -163,57 +208,101 @@ def test_forward_without_labels(model, batch):
     assert str(excinfo.value) == "decoder_input_ids has to be set!"
 
 
-def test_training_step(model, batch, config):
+def test_training_step(model, batch, config, taskmodule_config):
     torch.manual_seed(42)
     assert model.training
     loss = model.training_step(batch, 0)
-    if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(3.702044725418091))
-    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
-        torch.testing.assert_close(loss, torch.tensor(3.945438861846924))
+    if taskmodule_config == {}:
+        if config == {}:
+            torch.testing.assert_close(loss, torch.tensor(3.702044725418091))
+        elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
+            torch.testing.assert_close(loss, torch.tensor(3.945438861846924))
+        else:
+            raise ValueError(f"Unknown config: {config}")
+    elif taskmodule_config == {"create_constraints": True}:
+        if config == {}:
+            torch.testing.assert_close(loss, torch.tensor(6.148426055908203))
+        elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
+            torch.testing.assert_close(loss, torch.tensor(6.367420196533203))
+        else:
+            raise ValueError(f"Unknown config: {config}")
     else:
-        raise ValueError(f"Unknown config: {config}")
+        raise ValueError(f"Unknown taskmodule_config: {taskmodule_config}")
 
 
-def test_validation_step(model, batch, config):
+def test_validation_step(model, batch, config, taskmodule_config):
     torch.manual_seed(42)
     model.eval()
     assert not model.training
     loss = model.validation_step(batch, 0)
-    if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
-    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
-        torch.testing.assert_close(loss, torch.tensor(4.204827308654785))
+    if taskmodule_config == {}:
+        if config == {}:
+            torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
+        elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
+            torch.testing.assert_close(loss, torch.tensor(4.204827308654785))
+        else:
+            raise ValueError(f"Unknown config: {config}")
+    elif taskmodule_config == {"create_constraints": True}:
+        if config == {}:
+            torch.testing.assert_close(loss, torch.tensor(6.278500556945801))
+        elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
+            torch.testing.assert_close(loss, torch.tensor(6.575843334197998))
+        else:
+            raise ValueError(f"Unknown config: {config}")
     else:
-        raise ValueError(f"Unknown config: {config}")
+        raise ValueError(f"Unknown taskmodule_config: {taskmodule_config}")
 
 
-def test_test_step(model, batch, config):
+def test_test_step(model, batch, config, taskmodule_config):
     torch.manual_seed(42)
     model.eval()
     assert not model.training
     model.metrics["test"].reset()
     loss = model.test_step(batch, 0)
-    if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
-    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
-        torch.testing.assert_close(loss, torch.tensor(4.204827308654785))
+    if taskmodule_config == {}:
+        if config == {}:
+            torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
+        elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
+            torch.testing.assert_close(loss, torch.tensor(4.204827308654785))
+        else:
+            raise ValueError(f"Unknown config: {config}")
+        values = model.metrics["test"].compute()
+        assert values == {
+            "em": 0.0,
+            "entities": {
+                "topic": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+                "person": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+                "content": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            },
+            "entities/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "relations": {"is_about": {"recall": 0.0, "precision": 0.0, "f1": 0.0}},
+            "relations/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "invalid": {},
+            "invalid/all": 0.0,
+        }
+    elif taskmodule_config == {"create_constraints": True}:
+        if config == {}:
+            torch.testing.assert_close(loss, torch.tensor(6.278500556945801))
+        elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
+            torch.testing.assert_close(loss, torch.tensor(6.575843334197998))
+        else:
+            raise ValueError(f"Unknown config: {config}")
+        values = model.metrics["test"].compute()
+        assert values == {
+            "em": 0.0,
+            "entities": {
+                "topic": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+                "person": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+                "content": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            },
+            "entities/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "relations": {"is_about": {"recall": 0.0, "precision": 0.0, "f1": 0.0}},
+            "relations/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "invalid": {},
+            "invalid/all": 0.0,
+        }
     else:
-        raise ValueError(f"Unknown config: {config}")
-    values = model.metrics["test"].compute()
-    assert values == {
-        "em": 0.0,
-        "entities": {
-            "topic": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
-            "person": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
-            "content": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
-        },
-        "entities/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
-        "relations": {"is_about": {"recall": 0.0, "precision": 0.0, "f1": 0.0}},
-        "relations/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
-        "invalid": {},
-        "invalid/all": 0.0,
-    }
+        raise ValueError(f"Unknown taskmodule_config: {taskmodule_config}")
 
 
 def test_test_step_without_use_prediction_for_metrics(taskmodule, batch):
@@ -240,7 +329,10 @@ def test_test_step_without_use_prediction_for_metrics(taskmodule, batch):
     assert not model.training
     model.metrics["test"].reset()
     loss = model.test_step(batch, 0)
-    torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
+    if taskmodule.create_constraints:
+        torch.testing.assert_close(loss, torch.tensor(6.278500556945801))
+    else:
+        torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
     values = model.metrics["test"].compute()
     assert values == {
         "em": 0.0,

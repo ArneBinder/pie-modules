@@ -23,6 +23,7 @@ class PointerHead(torch.nn.Module):
         target_token_ids: List[int],
         # other parameters
         use_encoder_mlp: bool = False,
+        use_constraints_encoder_mlp: bool = False,
         decoder_position_id_pattern: Optional[List[int]] = None,
         increase_position_ids_per_record: bool = False,
     ):
@@ -55,6 +56,13 @@ class PointerHead(torch.nn.Module):
         hidden_size = self.decoder.embed_tokens.weight.size(1)
         if use_encoder_mlp:
             self.encoder_mlp = nn.Sequential(
+                nn.Linear(hidden_size, hidden_size),
+                nn.Dropout(0.3),
+                nn.ReLU(),
+                nn.Linear(hidden_size, hidden_size),
+            )
+        if use_constraints_encoder_mlp:
+            self.constraints_encoder_mlp = nn.Sequential(
                 nn.Linear(hidden_size, hidden_size),
                 nn.Dropout(0.3),
                 nn.ReLU(),
@@ -206,6 +214,7 @@ class PointerHead(torch.nn.Module):
         encoder_attention_mask,
         labels: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
+        constraints: Optional[torch.LongTensor] = None,
     ):
         # assemble the logits
         logits = last_hidden_state.new_full(
@@ -222,9 +231,8 @@ class PointerHead(torch.nn.Module):
             last_hidden_state,
             self.decoder.embed_tokens.weight[[self.eos_token_id]],
         )  # bsz x max_len x 1
-        label_scores = F.linear(
-            last_hidden_state, self.decoder.embed_tokens.weight[self.label_token_ids]
-        )  # bsz x max_len x num_class
+        label_embeddings = self.decoder.embed_tokens.weight[self.label_token_ids]
+        label_scores = F.linear(last_hidden_state, label_embeddings)  # bsz x max_len x num_class
 
         # the pointer depends on the src token embeddings, the encoder output and the decoder output
         # bsz x max_bpe_len x hidden_size
@@ -272,6 +280,7 @@ class PointerHead(torch.nn.Module):
         logits[:, :, self.pointer_offset :] = avg_word_scores
 
         loss = None
+        # compute the loss if labels are provided
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             logits_resized = logits.reshape(-1, logits.size(-1))
@@ -283,5 +292,45 @@ class PointerHead(torch.nn.Module):
                 ~mask_resized.to(torch.bool), loss_fct.ignore_index
             )
             loss = loss_fct(logits_resized, labels_masked)
+
+        # compute the constraints loss if constraints are provided
+        if constraints is not None:
+            if getattr(self, "constraints_encoder_mlp", None) is not None:
+                # TODO: is it fine to apply constraints_encoder_mlp to both src_outputs and label_embeddings?
+                #  This is what the original code seems to do, but this is different from the usage of encoder_mlp.
+                constraints_src_outputs = self.constraints_encoder_mlp(src_outputs)
+                constraints_label_embeddings = self.constraints_encoder_mlp(label_embeddings)
+            else:
+                constraints_src_outputs = src_outputs
+                constraints_label_embeddings = label_embeddings
+            constraints_label_scores = F.linear(
+                last_hidden_state,
+                constraints_label_embeddings,
+            )
+            constraints_word_scores = torch.einsum(
+                "blh,bnh->bln", last_hidden_state, constraints_src_outputs
+            )  # bsz x max_len x max_word_len
+            constraints_logits = last_hidden_state.new_full(
+                (
+                    last_hidden_state.size(0),
+                    last_hidden_state.size(1),
+                    self.pointer_offset + encoder_input_ids.size(-1),
+                ),
+                fill_value=-1e24,
+            )
+            constraints_logits[:, :, 2 : self.pointer_offset] = constraints_label_scores
+            constraints_logits[:, :, self.pointer_offset :] = constraints_word_scores
+
+            mask = constraints >= 0
+            constraints_logits_valid = constraints_logits[mask]
+            constraints_valid = constraints[mask]
+            loss_c = F.binary_cross_entropy(
+                torch.sigmoid(constraints_logits_valid), constraints_valid.float()
+            )
+
+            if loss is None:
+                loss = loss_c
+            else:
+                loss += loss_c
 
         return logits, loss

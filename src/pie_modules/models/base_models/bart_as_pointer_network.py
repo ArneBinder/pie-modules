@@ -320,6 +320,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         decoder_position_ids: Optional[torch.LongTensor] = None,
+        constraints: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
@@ -385,6 +386,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             encoder_attention_mask=attention_mask,
             labels=labels,
             decoder_attention_mask=decoder_attention_mask,
+            constraints=constraints,
         )
 
         if not return_dict:
