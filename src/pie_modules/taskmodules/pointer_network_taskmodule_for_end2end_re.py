@@ -28,7 +28,7 @@ from pytorch_ie.core.taskmodule import (
 )
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from torchmetrics import Metric
-from transformers import AutoTokenizer, PreTrainedTokenizer
+from transformers import AutoTokenizer, LogitsProcessorList, PreTrainedTokenizer
 from typing_extensions import TypeAlias
 
 # import for backwards compatibility (don't remove!)
@@ -45,6 +45,9 @@ from .pointer_network.annotation_encoder_decoder import (
     BinaryRelationEncoderDecoder,
     LabeledSpanEncoderDecoder,
     SpanEncoderDecoderWithOffset,
+)
+from .pointer_network.logits_processor import (
+    PrefixConstrainedLogitsProcessorWithMaximum,
 )
 
 logger = logging.getLogger(__name__)
@@ -244,10 +247,21 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     def configure_model_generation(self) -> Dict[str, Any]:
         result: Dict[str, Any] = {"no_repeat_ngram_size": 7}
         if self.constrained_generation:
-            result["prefix_allowed_tokens_fn"] = self._prefix_allowed_tokens_fn
+            logits_processor = LogitsProcessorList()
+            logits_processor.append(
+                PrefixConstrainedLogitsProcessorWithMaximum(
+                    prefix_allowed_tokens_fn=self._prefix_allowed_tokens_fn_with_maximum,
+                    # use dummy value of 1, this is fine because num_beams affects only the value of batch_id
+                    # which is not used in _prefix_allowed_tokens_fn_with_maximum()
+                    num_beams=1,
+                )
+            )
+            result["logits_processor"] = logits_processor
         return result
 
-    def _prefix_allowed_tokens_fn(self, batch_id: int, input_ids: torch.LongTensor) -> List[int]:
+    def _prefix_allowed_tokens_fn_with_maximum(
+        self, batch_id: int, input_ids: torch.LongTensor, maximum: int
+    ) -> List[int]:
         # remove the first token (bos_token) and use unbatch_output to un-pad the label_ids
         label_ids_without_bos = input_ids[1:]
         if len(label_ids_without_bos) > 0:
@@ -255,10 +269,10 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         else:
             unpadded_label_ids = []
         _, _, remaining = self.decode_relations(label_ids=unpadded_label_ids)
-        # TODO: parametrize input_len EDIT: input_len really needs to be the length of the (padded) input_ids!
-        #  Otherwise, the logits processor breaks because the indices are out of bounds.
         # this is a binary mask
-        constraint = self._build_constraint(previous_ids=remaining, input_len=1024)
+        constraint = self._build_constraint(
+            previous_ids=remaining, input_len=maximum - self.pointer_offset
+        )
         # convert to indices
         allowed_indices = torch.nonzero(constraint).squeeze(1)
         # convert to a list
