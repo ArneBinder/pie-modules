@@ -139,6 +139,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         relation_layer_name: str = "binary_relations",
         none_label: str = "none",
         loop_dummy_relation_name: str = "loop",
+        constrained_generation: bool = False,
         # generic pointer network
         label_tokens: Optional[Dict[str, str]] = None,
         label_representations: Optional[Dict[str, str]] = None,
@@ -182,6 +183,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         self.relation_layer_name = relation_layer_name
         self.none_label = none_label
         self.loop_dummy_relation_name = loop_dummy_relation_name
+        self.constrained_generation = constrained_generation
         # will be set in _post_prepare()
         self.relation_encoder_decoder: BinaryRelationEncoderDecoder
 
@@ -240,15 +242,26 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         return self.special_target2id[self.eos_token]
 
     def configure_model_generation(self) -> Dict[str, Any]:
-        return {
-            "no_repeat_ngram_size": 7,
-            # TODO: add this when it looks really solid (currently strange behavior)
-            # "prefix_allowed_tokens_fn": self._prefix_allowed_tokens_fn,
-        }
+        result: Dict[str, Any] = {"no_repeat_ngram_size": 7}
+        if self.constrained_generation:
+            result["prefix_allowed_tokens_fn"] = self._prefix_allowed_tokens_fn
+        return result
 
-    # def _prefix_allowed_tokens_fn(self, batch_id: int, input_ids: torch.LongTensor) -> List[int]:
-    #    _, _, remaining = self.decode_relations(label_ids=input_ids.tolist()[1:])
-    #    pass
+    def _prefix_allowed_tokens_fn(self, batch_id: int, input_ids: torch.LongTensor) -> List[int]:
+        # remove the first token (bos_token) and use unbatch_output to un-pad the label_ids
+        label_ids_without_bos = input_ids[1:]
+        if len(label_ids_without_bos) > 0:
+            unpadded_label_ids = self.unbatch_output(label_ids_without_bos.unsqueeze(0))[0].labels
+        else:
+            unpadded_label_ids = []
+        _, _, remaining = self.decode_relations(label_ids=unpadded_label_ids)
+        # TODO: parametrize input_len
+        # this is a binary mask
+        constraint = self._build_constraint(previous_ids=remaining, input_len=1024)
+        # convert to indices
+        allowed_indices = torch.nonzero(constraint).squeeze(1)
+        # convert to a list
+        return allowed_indices.tolist()
 
     def _prepare(self, documents: Sequence[DocumentType]) -> None:
         # collect all labels
