@@ -307,13 +307,13 @@ def task_encoding(task_encoding_without_target, target_encoding):
 def test_build_constraints(taskmodule, task_encoding, config):
     input_len = len(task_encoding.inputs.input_ids)
     target_ids = task_encoding.targets.labels
+    max_id = input_len + taskmodule.pointer_offset
     if config == {}:
         assert input_len == 13
         assert target_ids == [14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]
         assert len(target_ids) == 15
         constraints = taskmodule.build_constraints(input_len, target_ids)
         constraints_tensor = torch.tensor(constraints)
-        max_id = input_len + taskmodule.pointer_offset
         assert max_id == 20
         assert constraints_tensor.shape == (len(target_ids), max_id)
         assert constraints == [
@@ -340,7 +340,6 @@ def test_build_constraints(taskmodule, task_encoding, config):
         assert len(target_ids) == 8
         constraints = taskmodule.build_constraints(input_len, target_ids)
         constraints_tensor = torch.tensor(constraints)
-        max_id = input_len + taskmodule.pointer_offset
         assert max_id == 17
         assert constraints_tensor.shape == (len(target_ids), max_id)
         assert constraints == [
@@ -356,6 +355,26 @@ def test_build_constraints(taskmodule, task_encoding, config):
         ]
     else:
         raise Exception(f"unknown config: {config}")
+
+
+def test_build_constraints_single_label(taskmodule):
+    input_len = 13
+    target_ids = [14]
+    max_id = input_len + taskmodule.pointer_offset
+    constraints = taskmodule.build_constraints(input_len, target_ids)
+    constraints_tensor = torch.tensor(constraints)
+    assert constraints_tensor.shape == (len(target_ids), max_id)
+    assert constraints == [[0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]]
+
+
+# def test_build_constraints_empty(taskmodule):
+#    input_len = 13
+#    target_ids = []
+#    max_id = input_len + taskmodule.pointer_offset
+#    constraints = taskmodule.build_constraints(input_len, target_ids)
+#    constraints_tensor = torch.tensor(constraints)
+#    assert constraints_tensor.shape == (len(target_ids), max_id)
+#    assert constraints == []
 
 
 def test_maybe_log_example(taskmodule, task_encoding, caplog, config):
