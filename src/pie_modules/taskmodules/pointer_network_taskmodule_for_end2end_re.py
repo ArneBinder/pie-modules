@@ -651,14 +651,14 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             raise Exception(
                 "build_constraints() is only supported for BinaryRelationEncoderDecoder with mode 'tail_head_label' and LabeledSpanEncoderDecoder as (head|tail)_encoder_decoder with mode 'indices_label'"
             )
+        if target_ids[-1] != self.eos_id:
+            raise Exception(
+                f"expected eos_id [{self.eos_id}] at the end of target_ids: {target_ids}"
+            )
         labels_without_eos = target_ids[:-1]
         if len(labels_without_eos) % 7 != 0:
             raise Exception(
                 f"expected the number of labels_without_eos to be a multiple of 7: {target_ids}"
-            )
-        if target_ids[-1] != self.eos_id:
-            raise Exception(
-                f"expected eos_id [{self.eos_id}] at the end of target_ids: {target_ids}"
             )
         constraints: List[torch.LongTensor] = []
         for idx, t in enumerate(labels_without_eos):
