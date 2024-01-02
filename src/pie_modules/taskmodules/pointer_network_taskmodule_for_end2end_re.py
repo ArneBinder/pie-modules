@@ -16,7 +16,6 @@ from typing import (
     Union,
 )
 
-import numpy as np
 import torch
 from pytorch_ie import AnnotationLayer, Document
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
@@ -508,7 +507,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                 raise Exception("metadata with 'src_len' is required to create constraints")
             constraints = self.build_constraints(
                 input_len=metadata["src_len"], target_ids=target_ids
-            )
+            ).tolist()
         else:
             constraints = None
         return LabelsAndOptionalConstraints(labels=target_ids, constraints=constraints)
@@ -550,66 +549,122 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             self.relation_layer_name: relation_layer,
         }, errors
 
-    # TODO: use torch instead of numpy?
-    def _pointer_tag(
+    def _build_constraint(
         self,
-        last: List[int],
-        t: int,
-        idx: int,
+        previous_ids: List[int],
         input_len: int,
-    ) -> np.ndarray:
-        arr = np.ones(input_len + self.pointer_offset, dtype=int)
-        if t == 0:  # start # c1 [0, 1]
-            arr[: self.pointer_offset] = 0
-        elif idx == 0:  # c1 [0,1, 23]
-            arr[:t] = 0
-        elif idx == 1:  # tc1 [0,1,23, tc] span标签设为1
-            arr = np.zeros_like(arr, dtype=int)
-            for i in self.span_ids:
-                arr[i] = 1
-        elif idx == 2:  # c2 [0,1,23,tc, 45]
-            arr[: self.pointer_offset] = 0
-            arr[last[-3] : last[-2]] = 0
-        elif idx == 3:  # c2 [0,1,23,tc,45, 67]
-            arr[:t] = 0
-            if t < last[-4]:
-                arr[last[-4] :] = 0
+    ) -> torch.LongTensor:
+        result: torch.LongTensor = torch.zeros(input_len + self.pointer_offset, dtype=torch.int64)
+        contains_none = self.none_id in previous_ids
+        idx = len(previous_ids)
+        if idx == 0:  # [] -> first span start or eos
+            # Allow all offsets ...
+            result[self.pointer_offset :] = 1
+            # ... and the eos token.
+            result[self.eos_id] = 1
+        elif idx == 1:  # [14] -> first span end
+            # Allow all offsets greater than the span start.
+            span_start = previous_ids[-1]
+            result[span_start:] = 1
+        elif idx == 2:  # [14,14] -> first span label
+            # Allow only span ids.
+            result[self.span_ids] = 1
+        elif idx == 3:  # [14,14,s1] -> second span start or none
+            # Allow all offsets ...
+            result[self.pointer_offset :] = 1
+            # ... and the none token (for single spans).
+            result[self.none_id] = 1
+            # But exclude offsets covered by the first span.
+            first_span_start = previous_ids[0]
+            first_span_end = previous_ids[1] + 1
+            result[first_span_start:first_span_end] = 0
+        elif idx == 4:  # [14,14,s1,23] -> second span end or none
+            # if we have a none label, allow only none
+            if contains_none:
+                result[self.none_id] = 1
             else:
-                arr[last[-4] : last[-3]] = 0
-        elif idx == 4:  # tc2 [0,1,23,tc,45,67, tc]
-            arr = np.zeros_like(arr, dtype=int)
-            for i in self.span_ids:
-                arr[i] = 1
-        elif idx == 5:  # r [0,1,23,tc,45,67,tc, r]
-            arr = np.zeros_like(arr, dtype=int)
-            for i in self.relation_ids:
-                arr[i] = 1
-        elif idx == 6:  # next
-            arr[: self.pointer_offset] = 0
-
-        arr[self.none_id] = 1
-        return arr
+                # Allow all offsets after the second span start ...
+                second_span_start = previous_ids[-1]
+                result[second_span_start:] = 1
+                # ... but exclude offsets covered by the first span.
+                first_span_start = previous_ids[0]
+                first_span_end = previous_ids[1] + 1
+                result[first_span_start:first_span_end] = 0
+                # Mitigate overlap of first and second span:
+                # if first span is after the second span,
+                # disallow all offsets after the first span end
+                if first_span_start > second_span_start:
+                    result[first_span_end:] = 0
+        elif idx == 5:  # [14,14,s1,23,25] -> second span label or none
+            # if we have a none label, allow only none
+            if contains_none:
+                result[self.none_id] = 1
+            else:
+                # allow only span ids
+                result[self.span_ids] = 1
+        elif idx == 6:  # [14,14,s1,23,25,s2] -> relation label or none
+            # if we have a none label, allow only none
+            if contains_none:
+                result[self.none_id] = 1
+            else:
+                # allow only relation ids
+                result[self.relation_ids] = 1
+        else:
+            raise Exception(f"unexpected idx: {idx}")
+        return result
 
     def build_constraints(
         self,
         input_len: int,
         target_ids: List[int],
-    ) -> List[List[int]]:
-        # pad for 0
-        likely_hood = np.ones(input_len + self.pointer_offset, dtype=int)
-        likely_hood[: self.pointer_offset] = 0
-        CMP_tag: List[np.ndarray] = [likely_hood]
-        for idx, t in enumerate(target_ids[:-1]):
-            last7 = target_ids[max(idx - 7, 0) : idx + 1]
-            # last_tuple_start = (idx // 7) * 7
-            # last_tuple = target_ids[last_tuple_start : idx]
-            tag = self._pointer_tag(last=last7, t=t, idx=idx % 7, input_len=input_len)
-            CMP_tag.append(tag)
-        last_end = np.zeros(input_len + self.pointer_offset, dtype=int)
-        last_end[self.none_id] = 1
-        last_end[target_ids[-1]] = 1
-        CMP_tag[-1] = last_end
-        result = [i.tolist() for i in CMP_tag]
+    ) -> torch.LongTensor:
+        if not (
+            isinstance(self.relation_encoder_decoder, BinaryRelationEncoderDecoder)
+            and self.relation_encoder_decoder.mode == "tail_head_label"
+            and isinstance(
+                self.relation_encoder_decoder.head_encoder_decoder, LabeledSpanEncoderDecoder
+            )
+            and self.relation_encoder_decoder.head_encoder_decoder.mode == "indices_label"
+            and isinstance(
+                self.relation_encoder_decoder.head_encoder_decoder.span_encoder_decoder,
+                SpanEncoderDecoderWithOffset,
+            )
+            and self.relation_encoder_decoder.head_encoder_decoder.span_encoder_decoder.offset
+            == self.pointer_offset
+            and not self.relation_encoder_decoder.head_encoder_decoder.span_encoder_decoder.exclusive_end
+            and self.relation_encoder_decoder.head_encoder_decoder
+            == self.relation_encoder_decoder.tail_encoder_decoder
+        ):
+            raise Exception(
+                "build_constraints() is only supported for BinaryRelationEncoderDecoder with mode 'tail_head_label' and LabeledSpanEncoderDecoder as (head|tail)_encoder_decoder with mode 'indices_label'"
+            )
+        labels_without_eos = target_ids[:-1]
+        if len(labels_without_eos) % 7 != 0:
+            raise Exception(
+                f"expected the number of labels_without_eos to be a multiple of 7: {target_ids}"
+            )
+        if target_ids[-1] != self.eos_id:
+            raise Exception(
+                f"expected eos_id [{self.eos_id}] at the end of target_ids: {target_ids}"
+            )
+        constraints: List[torch.LongTensor] = []
+        for idx, t in enumerate(labels_without_eos):
+            current_tuple_start = (idx // 7) * 7
+            current_tuple = target_ids[current_tuple_start:idx]
+            current_constraints = self._build_constraint(
+                previous_ids=current_tuple, input_len=input_len
+            )
+            if current_constraints[t] == 0:
+                raise Exception(
+                    f"current_constraints[{t}] is 0, but should be 1: {current_constraints}"
+                )
+            constraints.append(current_constraints)
+        eos_constraint: torch.LongTensor = torch.zeros(
+            input_len + self.pointer_offset, dtype=torch.int64
+        )
+        eos_constraint[self.eos_id] = 1
+        constraints.append(eos_constraint)
+        result: torch.LongTensor = torch.stack(constraints)
         return result
 
     def maybe_log_example(
@@ -640,7 +695,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             if self.create_constraints:
                 # only show the shape because the content is not very readable
                 logger.info(
-                    f"constraints:  Shape{np.array(targets.constraints).shape} (content is omitted)"
+                    f"constraints:  {torch.tensor(targets.constraints).shape} (content is omitted)"
                 )
             self.log_first_n_examples -= 1
 

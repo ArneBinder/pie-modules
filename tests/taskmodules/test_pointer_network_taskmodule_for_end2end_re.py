@@ -263,35 +263,35 @@ def test_target_encoding(target_encoding, taskmodule):
         assert asdict(target_encoding) == {
             "labels": [14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1],
             "constraints": [
-                [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
-                [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-                [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-                [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
-                [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+                [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+                [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1],
+                [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             ],
         }
     elif taskmodule.partition_layer_name == "sentences":
         assert asdict(target_encoding) == {
             "labels": [14, 14, 5, 11, 12, 3, 6, 1],
             "constraints": [
-                [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-                [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0],
-                [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+                [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0],
+                [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             ],
         }
     else:
@@ -324,73 +324,165 @@ def test_build_constraints(taskmodule, task_encoding, config):
         assert target_ids == [14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]
         assert len(target_ids) == 15
         constraints = taskmodule.build_constraints(input_len, target_ids)
-        constraints_tensor = torch.tensor(constraints)
         assert max_id == 20
-        assert constraints_tensor.shape == (len(target_ids), max_id)
-        constraints_formatted = [_separate_constraint(c, taskmodule) for c in constraints]
+        assert constraints.shape == (len(target_ids), max_id)
+        constraints_formatted = [_separate_constraint(c, taskmodule) for c in constraints.tolist()]
+        # [bos, eos], [none], [content, person, topic], [is_about] [offsets (all remaining)]
         assert constraints_formatted == [
-            # [bos, eos], [none], [content, person, topic], [is_about] [offsets (all remaining)]
-            [[0, 0], [0], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
-            [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1]],
-            [[0, 0], [1], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
-            [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0]],
-            [[0, 0], [1], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-            [[0, 0], [1], [0, 0, 0], [1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
-            [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]],
-            [[0, 0], [1], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
-            [[0, 0], [1], [1, 1, 1], [1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0]],
-            [[0, 0], [1], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-            [[0, 0], [1], [0, 0, 0], [1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-            [[0, 1], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+            [[0, 1], [0], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],  # 14
+            [[0, 0], [0], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1]],  # 14
+            [[0, 0], [0], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 5
+            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1]],  # 11
+            [[0, 0], [0], [0, 0, 0], [0], [0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0]],  # 12
+            [[0, 0], [0], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 3
+            [[0, 0], [0], [0, 0, 0], [1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 6
+            [[0, 1], [0], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],  # 17
+            [[0, 0], [0], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]],  # 17
+            [[0, 0], [0], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 4
+            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1]],  # 2
+            [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 2
+            [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 2
+            [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 2
+            [[0, 1], [0], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 1
         ]
     elif config == {"partition_layer_name": "sentences"}:
         assert input_len == 10
         assert target_ids == [14, 14, 5, 11, 12, 3, 6, 1]
         assert len(target_ids) == 8
         constraints = taskmodule.build_constraints(input_len, target_ids)
-        constraints_tensor = torch.tensor(constraints)
         assert max_id == 17
-        assert constraints_tensor.shape == (len(target_ids), max_id)
-        constraints_formatted = [_separate_constraint(c, taskmodule) for c in constraints]
+        assert constraints.shape == (len(target_ids), max_id)
+        constraints_formatted = [_separate_constraint(c, taskmodule) for c in constraints.tolist()]
+        # [bos, eos], [none], [content, person, topic], [is_about] [offsets (all remaining)]
         assert constraints_formatted == [
-            # [bos, eos], [none], [content, person, topic], [is_about] [offsets (all remaining)]
-            [[0, 0], [0], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
-            [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 1, 1, 1]],
-            [[0, 0], [1], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
-            [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 1, 1, 1, 0, 0, 0]],
-            [[0, 0], [1], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-            [[0, 0], [1], [0, 0, 0], [1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-            [[0, 1], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+            [[0, 1], [0], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],  # 14
+            [[0, 0], [0], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 1, 1, 1]],  # 14
+            [[0, 0], [0], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 5
+            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 0, 1, 1]],  # 11
+            [[0, 0], [0], [0, 0, 0], [0], [0, 0, 0, 0, 1, 1, 1, 0, 0, 0]],  # 12
+            [[0, 0], [0], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 3
+            [[0, 0], [0], [0, 0, 0], [1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 6
+            [[0, 1], [0], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 1
         ]
     else:
         raise Exception(f"unknown config: {config}")
 
 
-def test_build_constraints_single_label(taskmodule):
+def test_build_constraint(taskmodule):
+    target_ids = [14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]
     input_len = 13
-    target_ids = [14]
-    max_id = input_len + taskmodule.pointer_offset
-    constraints = taskmodule.build_constraints(input_len, target_ids)
-    constraints_tensor = torch.tensor(constraints)
-    assert constraints_tensor.shape == (len(target_ids), max_id)
-    constraints_formatted = [_separate_constraint(c, taskmodule) for c in constraints]
-    assert constraints_formatted == [
-        [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]]
+
+    # empty previous_ids
+    constraint = taskmodule._build_constraint(previous_ids=[], input_len=input_len)
+    # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
+    constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
+    # allow eos and all offsets
+    assert constraint_formatted == [
+        [0, 1],
+        [0],
+        [0, 0, 0],
+        [0],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
     ]
 
+    # just first span start
+    constraint = taskmodule._build_constraint(previous_ids=[14], input_len=input_len)
+    # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
+    constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
+    # allow all offsets after first span start
+    assert constraint_formatted == [
+        [0, 0],
+        [0],
+        [0, 0, 0],
+        [0],
+        [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+    ]
 
-# def test_build_constraints_empty(taskmodule):
-#    input_len = 13
-#    target_ids = []
-#    max_id = input_len + taskmodule.pointer_offset
-#    constraints = taskmodule.build_constraints(input_len, target_ids)
-#    constraints_tensor = torch.tensor(constraints)
-#    assert constraints_tensor.shape == (len(target_ids), max_id)
-#    assert constraints == []
+    # first span start and end
+    constraint = taskmodule._build_constraint(previous_ids=[14, 14], input_len=input_len)
+    # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
+    constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
+    # allow all span ids
+    assert constraint_formatted == [
+        [0, 0],
+        [0],
+        [1, 1, 1],
+        [0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    ]
+
+    # first span start, end, and label
+    constraint = taskmodule._build_constraint(previous_ids=[14, 14, 5], input_len=input_len)
+    # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
+    constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
+    # allow none and all offsets except offsets covered by first span
+    assert constraint_formatted == [
+        [0, 0],
+        [1],
+        [0, 0, 0],
+        [0],
+        [1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1],
+    ]
+
+    # first span, and second span start
+    constraint = taskmodule._build_constraint(previous_ids=[14, 14, 5, 11], input_len=input_len)
+    # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
+    constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
+    # allow all offsets after second span start, but not after first span start
+    assert constraint_formatted == [
+        [0, 0],
+        [0],
+        [0, 0, 0],
+        [0],
+        [0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+    ]
+
+    # first span, and second span start and end
+    constraint = taskmodule._build_constraint(
+        previous_ids=[14, 14, 5, 11, 12], input_len=input_len
+    )
+    # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
+    constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
+    # allow all span ids
+    assert constraint_formatted == [
+        [0, 0],
+        [0],
+        [1, 1, 1],
+        [0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    ]
+
+    # first span, and second span
+    constraint = taskmodule._build_constraint(
+        previous_ids=[14, 14, 5, 11, 12, 3], input_len=input_len
+    )
+    # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
+    constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
+    # allow all relation ids
+    assert constraint_formatted == [
+        [0, 0],
+        [0],
+        [0, 0, 0],
+        [1],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    ]
+
+    # fist span, and (1 to 3)-times none
+    for i in range(1, 3):
+        none_ids = [2] * i
+        constraint = taskmodule._build_constraint(
+            previous_ids=[14, 14, 5] + none_ids, input_len=input_len
+        )
+        # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
+        constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
+        # allow only none
+        assert constraint_formatted == [
+            [0, 0],
+            [1],
+            [0, 0, 0],
+            [0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        ]
 
 
 def test_maybe_log_example(taskmodule, task_encoding, caplog, config):
@@ -407,7 +499,7 @@ def test_maybe_log_example(taskmodule, task_encoding, caplog, config):
             "input_tokens: <s> This Ġis Ġa Ġdummy Ġtext Ġabout Ġnothing . ĠTrust Ġme . " "</s>",
             "label_ids:    14 14 5 11 12 3 6 17 17 4 2 2 2 2 1",
             "label_tokens: 14 {Ġnothing} 14 {Ġnothing} topic 11 {Ġdummy} 12 {Ġtext} content is_about 17 {Ġme} 17 {Ġme} person none none none none </s>",
-            "constraints:  Shape(15, 20) (content is omitted)",
+            "constraints:  torch.Size([15, 20]) (content is omitted)",
         ]
     elif config == {"partition_layer_name": "sentences"}:
         assert caplog.messages == [
@@ -417,7 +509,7 @@ def test_maybe_log_example(taskmodule, task_encoding, caplog, config):
             "input_tokens: <s> This Ġis Ġa Ġdummy Ġtext Ġabout Ġnothing . </s>",
             "label_ids:    14 14 5 11 12 3 6 1",
             "label_tokens: 14 {Ġnothing} 14 {Ġnothing} topic 11 {Ġdummy} 12 {Ġtext} content is_about </s>",
-            "constraints:  Shape(8, 17) (content is omitted)",
+            "constraints:  torch.Size([8, 17]) (content is omitted)",
         ]
     else:
         raise Exception(f"unknown config: {config}")
@@ -466,21 +558,21 @@ def test_collate(batch, taskmodule):
         assert targets_lists == {
             "constraints": [
                 [
-                    [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
-                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+                    [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+                    [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1],
+                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                 ]
             ],
             "labels": [[14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]],
@@ -497,24 +589,24 @@ def test_collate(batch, taskmodule):
         assert targets_lists == {
             "constraints": [
                 [
-                    [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0],
-                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+                    [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0],
+                    [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                 ],
                 [
-                    [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1],
-                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, -1, -1, -1, -1, -1],
-                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
-                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1],
-                    [0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, -1, -1, -1, -1, -1],
-                    [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
-                    [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
-                    [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
+                    [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, -1, -1, -1, -1, -1],
+                    [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
+                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 1, 1, -1, -1, -1, -1, -1],
+                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
+                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
+                    [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
+                    [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
                 ],
             ],
             "labels": [[14, 14, 5, 11, 12, 3, 6, 1], [9, 9, 4, 2, 2, 2, 2, 1]],
