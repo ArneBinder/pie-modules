@@ -101,13 +101,13 @@ class SimpleGenerativeModel(PyTorchIEModel):
                 token=None,
                 map_location="cpu",
                 strict=False,
-                config=self.taskmodule_config,
+                config=taskmodule_config,
             )
         else:
             self.taskmodule = None
 
         self.metric_intervals = metric_intervals or {}
-        self.metrics = self.configure_metrics(metric_splits)
+        self.metrics = self.configure_metrics(metric_splits=metric_splits)
 
         self.generation_config = self.configure_generation(**(override_generation_kwargs or {}))
 
@@ -131,8 +131,6 @@ class SimpleGenerativeModel(PyTorchIEModel):
         if self.taskmodule is not None:
             # get the generation config from the taskmodule
             generation_config = self.taskmodule.configure_model_generation()
-            if generation_config is not None:
-                self.generation_config.update(generation_config)
         else:
             logger.warning(
                 "No taskmodule is available, so no generation config will be created. Consider "
@@ -146,7 +144,7 @@ class SimpleGenerativeModel(PyTorchIEModel):
         is_training = self.training
         self.eval()
 
-        generation_kwargs = copy.deepcopy(self.generation_kwargs)
+        generation_kwargs = copy.deepcopy(self.generation_config)
         generation_kwargs.update(kwargs)
         outputs = self.model.generate(**inputs, **generation_kwargs)
 
