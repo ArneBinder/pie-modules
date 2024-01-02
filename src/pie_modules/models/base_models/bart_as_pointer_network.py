@@ -50,6 +50,7 @@ class BartAsPointerNetworkConfig(BartConfig):
         embedding_weight_mapping: Optional[Dict[Union[int, str], List[int]]] = None,
         # other parameters
         use_encoder_mlp: bool = True,
+        use_constraints_encoder_mlp: bool = False,
         max_target_positions: Optional[int] = None,
         decoder_position_id_pattern: Optional[List[int]] = None,
         increase_position_ids_per_record: bool = False,
@@ -71,6 +72,7 @@ class BartAsPointerNetworkConfig(BartConfig):
         self.embedding_weight_mapping = embedding_weight_mapping
 
         self.use_encoder_mlp = use_encoder_mlp
+        self.use_constraints_encoder_mlp = use_constraints_encoder_mlp
         self.max_target_positions = max_target_positions
         self.decoder_position_id_pattern = decoder_position_id_pattern
         self.increase_position_ids_per_record = increase_position_ids_per_record
@@ -107,6 +109,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             eos_id=self.model.config.eos_token_id,
             pad_id=self.model.config.pad_token_id,
             use_encoder_mlp=self.model.config.use_encoder_mlp,
+            use_constraints_encoder_mlp=self.model.config.use_constraints_encoder_mlp,
             decoder_position_id_pattern=self.model.config.decoder_position_id_pattern,
             increase_position_ids_per_record=self.model.config.increase_position_ids_per_record,
         )
