@@ -114,7 +114,7 @@ def test_sciarg_predict(trained_model, sciarg_batch_truncated, loaded_taskmodule
     assert prediction.tolist() == expected_prediction.tolist()
 
     # calculate metrics just to check the scores
-    metric = loaded_taskmodule.configure_model_metric()
+    metric = loaded_taskmodule.configure_model_metric(stage="test")
     metric.update(prediction, targets["labels"])
     values = metric.compute()
     assert values == {
@@ -151,7 +151,7 @@ def test_sciarg_predict_with_position_id_pattern(sciarg_batch_truncated, loaded_
     assert prediction.tolist() == expected_prediction.tolist()
 
     # calculate metrics just to check the scores
-    metric = loaded_taskmodule.configure_model_metric()
+    metric = loaded_taskmodule.configure_model_metric(stage="test")
     metric.update(prediction, targets["labels"])
 
     values = metric.compute()
