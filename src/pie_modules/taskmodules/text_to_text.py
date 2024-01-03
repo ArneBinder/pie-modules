@@ -69,14 +69,14 @@ class TextToTextTaskModule(
 ):
     def __init__(
         self,
-        target_layer: str = "abstractive_summary",  # or "generative_answers" for question answering
-        target_annotation_type: str = "pie_modules.annotations.AbstractiveSummary",
+        tokenizer_name_or_path: str,
+        # input document
+        document_type: str,  # e.g. "pie_modules.documents.TextDocumentWithAbstractiveSummary"
+        tokenized_document_type: str,  # e.g. "pie_modules.documents.TokenDocumentWithQuestionsAndGenerativeAnswers",
+        target_layer: str,  # e.g. "abstractive_summary"
+        target_annotation_type: str,  # e.g. "pie_modules.annotations.AbstractiveSummary"
         source_layer: Optional[str] = None,  # e.g. "questions" for question answering
         source_annotation_field: Optional[str] = None,  # e.g. "question" for question answering
-        # tokenization
-        document_type: str = "pytorch_ie.documents.TextDocumentWithQuestionsAndGenerativeAnswers",
-        tokenized_document_type: str = "pie_modules.documents.TokenDocumentWithQuestionsAndGenerativeAnswers",
-        tokenizer_name_or_path: str = "facebook/bart-base",
         tokenizer_init_kwargs: Optional[Dict[str, Any]] = None,
         tokenizer_kwargs: Optional[Dict[str, Any]] = None,
         partition_layer_name: Optional[str] = None,
