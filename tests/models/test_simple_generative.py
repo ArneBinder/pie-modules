@@ -29,6 +29,8 @@ def model(taskmodule):
     return SimpleGenerativeModel(
         base_model_type="transformers.AutoModelForSeq2SeqLM",
         base_model_config=dict(pretrained_model_name_or_path=MODEL_ID),
+        # only use predictions for metrics in test stage to cover all cases (default is all stages)
+        use_prediction_for_metrics=[STAGE_TEST],
         taskmodule_config=taskmodule._config(),
         # use a strange learning rate to make sure it is passed through
         learning_rate=13e-3,
@@ -160,18 +162,18 @@ def test_validation_step(batch, model):
     metric_values = metric.compute()
     metric_values_float = {key: value.item() for key, value in metric_values.items()}
     assert metric_values_float == {
-        "rouge1_fmeasure": 0.1111111119389534,
-        "rouge1_precision": 0.06666667014360428,
-        "rouge1_recall": 0.3333333432674408,
+        "rouge1_fmeasure": 0.0,
+        "rouge1_precision": 0.0,
+        "rouge1_recall": 0.0,
         "rouge2_fmeasure": 0.0,
         "rouge2_precision": 0.0,
         "rouge2_recall": 0.0,
-        "rougeL_fmeasure": 0.1111111119389534,
-        "rougeL_precision": 0.06666667014360428,
-        "rougeL_recall": 0.3333333432674408,
-        "rougeLsum_fmeasure": 0.0555555559694767,
-        "rougeLsum_precision": 0.03333333507180214,
-        "rougeLsum_recall": 0.1666666716337204,
+        "rougeL_fmeasure": 0.0,
+        "rougeL_precision": 0.0,
+        "rougeL_recall": 0.0,
+        "rougeLsum_fmeasure": 0.0,
+        "rougeLsum_precision": 0.0,
+        "rougeLsum_recall": 0.0,
     }
 
     model.on_validation_epoch_end()
