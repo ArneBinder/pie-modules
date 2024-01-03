@@ -67,6 +67,21 @@ def task_encodings(taskmodule, documents) -> Sequence[TaskEncodingType]:
     return encodings
 
 
+def test_maybe_log_example(taskmodule, task_encodings, caplog):
+    counter_backup = taskmodule.log_first_n_examples
+
+    taskmodule.log_first_n_examples = 1
+    with caplog.at_level("INFO"):
+        taskmodule.maybe_log_example(task_encodings[0])
+
+    assert len(caplog.messages) == 3
+    assert caplog.messages[0] == "input_ids: [100, 19, 3, 9, 794, 1708, 1]"
+    assert caplog.messages[1] == "attention_mask: [1, 1, 1, 1, 1, 1, 1]"
+    assert caplog.messages[2] == "labels: [3, 9, 1708, 1]"
+
+    taskmodule.log_first_n_examples = counter_backup
+
+
 @pytest.fixture(scope="module")
 def input_encoding(taskmodule, task_encodings) -> InputEncodingType:
     assert len(task_encodings) > 0

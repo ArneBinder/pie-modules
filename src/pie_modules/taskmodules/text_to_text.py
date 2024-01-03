@@ -156,10 +156,12 @@ class TextToTextTaskModule(
     ):
         if self.log_first_n_examples is not None and self.log_first_n_examples > 0:
             inputs = task_encoding.inputs
-            targets = targets or task_encoding.targets
+
             logger.info(f"input_ids: {inputs.input_ids}")
             logger.info(f"attention_mask: {inputs.attention_mask}")
-            logger.info(f"labels: {targets.labels}")
+            if targets is not None or task_encoding.has_targets:
+                targets = targets or task_encoding.targets
+                logger.info(f"labels: {targets.labels}")
             self.log_first_n_examples -= 1
 
     def encode_annotations(
