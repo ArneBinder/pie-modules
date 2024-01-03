@@ -11,8 +11,8 @@ from pie_modules.documents import (
 )
 from pie_modules.taskmodules import TextToTextTaskModule
 from pie_modules.taskmodules.text_to_text import (
+    EncodingWithLabelsAndDecoderAttentionMask,
     InputEncodingType,
-    TargetEncodingType,
     TaskEncodingType,
     TaskOutputType,
 )
@@ -146,13 +146,13 @@ def test_metadata(taskmodule, metadata):
 
 
 @pytest.fixture(scope="module")
-def target_encoding(taskmodule, task_encodings) -> TargetEncodingType:
+def target_encoding(taskmodule, task_encodings) -> EncodingWithLabelsAndDecoderAttentionMask:
     assert len(task_encodings) > 0
     return task_encodings[0].targets
 
 
 def test_target_encoding(taskmodule, target_encoding):
-    assert isinstance(target_encoding, TargetEncodingType)
+    assert isinstance(target_encoding, EncodingWithLabelsAndDecoderAttentionMask)
     assert target_encoding.labels == [3, 9, 1708, 1]
     assert target_encoding.decoder_attention_mask == [1, 1, 1, 1]
 
@@ -203,7 +203,10 @@ def unbatched_output(taskmodule, batch) -> Sequence[TaskOutputType]:
 
 
 def test_unbatched_output(taskmodule, unbatched_output):
-    assert all(isinstance(output, TargetEncodingType) for output in unbatched_output)
+    assert all(
+        isinstance(output, EncodingWithLabelsAndDecoderAttentionMask)
+        for output in unbatched_output
+    )
     assert len(unbatched_output) == 2
 
     assert unbatched_output[0].labels == [3, 9, 1708, 1]

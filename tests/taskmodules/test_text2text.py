@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Sequence, Tuple
 import pytest
 import torch
 from pytorch_ie import Annotation, TaskEncoding
+from torchmetrics import Metric
 
 from pie_modules.annotations import AbstractiveSummary
 from pie_modules.documents import (
@@ -10,9 +11,10 @@ from pie_modules.documents import (
     TokenDocumentWithAbstractiveSummary,
 )
 from pie_modules.taskmodules import TextToTextTaskModule
+from pie_modules.taskmodules.metrics import RougeMetric
 from pie_modules.taskmodules.text_to_text import (
+    EncodingWithLabelsAndDecoderAttentionMask,
     InputEncodingType,
-    TargetEncodingType,
     TaskEncodingType,
     TaskOutputType,
 )
@@ -114,13 +116,13 @@ def test_metadata(taskmodule, metadata):
 
 
 @pytest.fixture(scope="module")
-def target_encoding(taskmodule, task_encodings) -> TargetEncodingType:
+def target_encoding(taskmodule, task_encodings) -> EncodingWithLabelsAndDecoderAttentionMask:
     assert len(task_encodings) > 0
     return task_encodings[0].targets
 
 
 def test_target_encoding(taskmodule, target_encoding):
-    assert isinstance(target_encoding, TargetEncodingType)
+    assert isinstance(target_encoding, EncodingWithLabelsAndDecoderAttentionMask)
     assert target_encoding.labels == [3, 9, 1708, 1]
     assert target_encoding.decoder_attention_mask == [1, 1, 1, 1]
 
@@ -166,7 +168,10 @@ def unbatched_output(taskmodule, batch) -> Sequence[TaskOutputType]:
 
 
 def test_unbatched_output(taskmodule, unbatched_output):
-    assert all(isinstance(output, TargetEncodingType) for output in unbatched_output)
+    assert all(
+        isinstance(output, EncodingWithLabelsAndDecoderAttentionMask)
+        for output in unbatched_output
+    )
     assert len(unbatched_output) == 2
 
     assert unbatched_output[0].labels == [3, 9, 1708, 1]
@@ -200,3 +205,15 @@ def test_decoded_annotations(taskmodule, decoded_annotations):
     assert annotations[0].score is None
     assert annotations[1].text == "a longer document"
     assert annotations[1].score is None
+
+
+def test_configure_model_metrics(taskmodule):
+    metric = taskmodule.configure_model_metric(stage="validation")
+    assert metric is not None
+    assert isinstance(metric, RougeMetric)
+
+
+def test_configure_model_generation(taskmodule):
+    generation_config = taskmodule.configure_model_generation()
+    assert generation_config is not None
+    assert generation_config == {}

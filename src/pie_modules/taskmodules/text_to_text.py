@@ -12,6 +12,7 @@ from pytorch_ie.core.taskmodule import (
     TaskBatchEncoding,
 )
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
+from torchmetrics import Metric
 from transformers import AutoTokenizer, PreTrainedTokenizer
 from typing_extensions import TypeAlias
 
@@ -22,8 +23,12 @@ from pie_modules.document.processing import (
 )
 from pie_modules.utils import resolve_type
 
-from .common import BatchableMixin
-from .common.utils import get_first_occurrence_index
+from .common import (
+    BatchableMixin,
+    EncodingWithLabelsAndDecoderAttentionMask,
+    get_first_occurrence_index,
+)
+from .metrics import RougeMetric
 
 logger = logging.getLogger(__name__)
 
@@ -37,23 +42,12 @@ class InputEncodingType(BatchableMixin):
     attention_mask: List[int]
 
 
-@dataclasses.dataclass
-class TargetEncodingType(BatchableMixin):
-    labels: List[int]
-    # TODO: verify that decoder_attention_mask makes sense for AutoModelForSeq2SeqLM instances
-    decoder_attention_mask: Optional[List[int]] = None
-
-    # @property
-    # def decoder_attention_mask(self) -> List[int]:
-    #    return [1] * len(self.labels)
-
-
 TaskEncodingType: TypeAlias = TaskEncoding[
     DocumentType,
     InputEncodingType,
-    TargetEncodingType,
+    EncodingWithLabelsAndDecoderAttentionMask,
 ]
-TaskOutputType: TypeAlias = TargetEncodingType
+TaskOutputType: TypeAlias = EncodingWithLabelsAndDecoderAttentionMask
 
 
 @TaskModule.register()
@@ -153,7 +147,7 @@ class TextToTextTaskModule(
     def maybe_log_example(
         self,
         task_encoding: TaskEncodingType,
-        targets: Optional[TargetEncodingType] = None,
+        targets: Optional[EncodingWithLabelsAndDecoderAttentionMask] = None,
     ):
         if self.log_first_n_examples is not None and self.log_first_n_examples > 0:
             inputs = task_encoding.inputs
@@ -169,7 +163,7 @@ class TextToTextTaskModule(
         self,
         layers: Dict[str, AnnotationLayer],
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> TargetEncodingType:
+    ) -> EncodingWithLabelsAndDecoderAttentionMask:
         target_annotations = []
         source_annotation = (
             metadata.get("source_annotation", None) if metadata is not None else None
@@ -203,7 +197,7 @@ class TextToTextTaskModule(
                 f"but expected {self.target_annotation_type}"
             )
         encoding = self.tokenizer(text)
-        return TargetEncodingType(
+        return EncodingWithLabelsAndDecoderAttentionMask(
             labels=encoding["input_ids"], decoder_attention_mask=encoding["attention_mask"]
         )
 
@@ -290,7 +284,9 @@ class TextToTextTaskModule(
 
         return task_encodings
 
-    def encode_target(self, task_encoding: TaskEncodingType) -> Optional[TargetEncodingType]:
+    def encode_target(
+        self, task_encoding: TaskEncodingType
+    ) -> Optional[EncodingWithLabelsAndDecoderAttentionMask]:
         document = task_encoding.metadata["tokenized_document"]
         source_annotation = task_encoding.metadata["source_annotation"]
 
@@ -317,7 +313,7 @@ class TextToTextTaskModule(
 
         targets = None
         if task_encodings[0].has_targets:
-            targets = TargetEncodingType.batch(
+            targets = EncodingWithLabelsAndDecoderAttentionMask.batch(
                 values=[x.targets for x in task_encodings],
                 dtypes=self.dtypes,
                 pad_values=self.pad_values,
@@ -369,4 +365,5 @@ class TextToTextTaskModule(
     def configure_model_generation(self) -> Optional[Dict[str, Any]]:
         return {}
 
-    # TODO: implement configure_model_metric(self, stage: str) -> Optional[Metric]
+    def configure_model_metric(self, stage: str) -> Optional[Metric]:
+        return RougeMetric(tokenizer=self.tokenizer, unbatch_func=self.unbatch_output)

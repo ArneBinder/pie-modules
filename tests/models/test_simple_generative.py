@@ -1,7 +1,10 @@
+import math
+
 import pytest
 import torch
 
 from pie_modules.models import SimpleGenerativeModel
+from pie_modules.models.simple_generative import STAGE_TEST, STAGE_VAL
 from pie_modules.taskmodules import TextToTextTaskModule
 
 MODEL_ID = "google/t5-efficient-tiny-nl2"
@@ -124,30 +127,85 @@ def test_batch(batch, taskmodule):
 
 
 def test_training_step(batch, model):
+    model.train()
+    torch.manual_seed(42)
+    metric = model.get_metric(STAGE_VAL, batch_idx=0)
+    metric.reset()
     loss = model.training_step(batch, batch_idx=0)
     assert loss is not None
-    torch.testing.assert_close(loss, torch.tensor(10.146586418151855))
+    torch.testing.assert_close(loss, torch.tensor(8.98222827911377))
+
+    metric_values = metric.compute()
+    metric_values_float = {key: value.item() for key, value in metric_values.items()}
+
+    # we do not collect metrics during training, so all entries should be NaN
+    assert len(metric_values_float) > 0
+    assert all([math.isnan(value) for value in metric_values_float.values()])
 
     model.on_train_epoch_end()
 
 
 def test_validation_step(batch, model):
+    model.eval()
+    torch.manual_seed(42)
+    metric = model.get_metric(STAGE_VAL, batch_idx=0)
+    metric.reset()
     loss = model.validation_step(batch, batch_idx=0)
     assert loss is not None
     torch.testing.assert_close(loss, torch.tensor(10.146586418151855))
+
+    metric_values = metric.compute()
+    metric_values_float = {key: value.item() for key, value in metric_values.items()}
+    assert metric_values_float == {
+        "rouge1_fmeasure": 0.1111111119389534,
+        "rouge1_precision": 0.06666667014360428,
+        "rouge1_recall": 0.3333333432674408,
+        "rouge2_fmeasure": 0.0,
+        "rouge2_precision": 0.0,
+        "rouge2_recall": 0.0,
+        "rougeL_fmeasure": 0.1111111119389534,
+        "rougeL_precision": 0.06666667014360428,
+        "rougeL_recall": 0.3333333432674408,
+        "rougeLsum_fmeasure": 0.0555555559694767,
+        "rougeLsum_precision": 0.03333333507180214,
+        "rougeLsum_recall": 0.1666666716337204,
+    }
 
     model.on_validation_epoch_end()
 
 
 def test_test_step(batch, model):
+    model.eval()
+    torch.manual_seed(42)
+    metric = model.get_metric(STAGE_TEST, batch_idx=0)
+    metric.reset()
     loss = model.test_step(batch, batch_idx=0)
     assert loss is not None
     torch.testing.assert_close(loss, torch.tensor(10.146586418151855))
+
+    metric_values = metric.compute()
+    metric_values_float = {key: value.item() for key, value in metric_values.items()}
+    assert metric_values_float == {
+        "rouge1_fmeasure": 0.1111111119389534,
+        "rouge1_precision": 0.06666667014360428,
+        "rouge1_recall": 0.3333333432674408,
+        "rouge2_fmeasure": 0.0,
+        "rouge2_precision": 0.0,
+        "rouge2_recall": 0.0,
+        "rougeL_fmeasure": 0.1111111119389534,
+        "rougeL_precision": 0.06666667014360428,
+        "rougeL_recall": 0.3333333432674408,
+        "rougeLsum_fmeasure": 0.0555555559694767,
+        "rougeLsum_precision": 0.03333333507180214,
+        "rougeLsum_recall": 0.1666666716337204,
+    }
 
     model.on_test_epoch_end()
 
 
 def test_predict_step(batch, model):
+    model.eval()
+    torch.manual_seed(42)
     predictions = model.predict_step(batch, batch_idx=0)
     assert predictions is not None
     torch.testing.assert_close(
