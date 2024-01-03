@@ -69,9 +69,9 @@ class SimpleGenerativeModel(PyTorchIEModel):
         self.optimizer_type = optimizer_type
         self.warmup_proportion = warmup_proportion
 
-        resolved_base_model_type: Type[PreTrainedModel] = resolve_type(
-            base_model_type, expected_super_type=PreTrainedModel
-        )
+        # Note: We do not set expected_super_type=PreTrainedModel for resolve_type() because
+        #   AutoModel* classed such as AutoModelForSeq2SeqLM do not inherit from that.
+        resolved_base_model_type: Type[PreTrainedModel] = resolve_type(base_model_type)
         self.model = resolved_base_model_type.from_pretrained(**base_model_config)
 
         self.use_prediction_for_metrics: Set[str]
