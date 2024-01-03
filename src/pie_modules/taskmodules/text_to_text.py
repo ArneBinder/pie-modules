@@ -23,11 +23,7 @@ from pie_modules.document.processing import (
 )
 from pie_modules.utils import resolve_type
 
-from .common import (
-    BatchableMixin,
-    EncodingWithLabelsAndDecoderAttentionMask,
-    get_first_occurrence_index,
-)
+from .common import BatchableMixin, get_first_occurrence_index
 from .metrics import TextMetric
 
 logger = logging.getLogger(__name__)
@@ -42,12 +38,22 @@ class InputEncodingType(BatchableMixin):
     attention_mask: List[int]
 
 
+@dataclasses.dataclass
+class TargetEncodingType(BatchableMixin):
+    labels: List[int]
+    decoder_attention_mask: Optional[List[int]] = None
+
+    # @property
+    # def decoder_attention_mask(self) -> List[int]:
+    #    return [1] * len(self.labels)
+
+
 TaskEncodingType: TypeAlias = TaskEncoding[
     DocumentType,
     InputEncodingType,
-    EncodingWithLabelsAndDecoderAttentionMask,
+    TargetEncodingType,
 ]
-TaskOutputType: TypeAlias = EncodingWithLabelsAndDecoderAttentionMask
+TaskOutputType: TypeAlias = TargetEncodingType
 
 
 @TaskModule.register()
@@ -147,7 +153,7 @@ class TextToTextTaskModule(
     def maybe_log_example(
         self,
         task_encoding: TaskEncodingType,
-        targets: Optional[EncodingWithLabelsAndDecoderAttentionMask] = None,
+        targets: Optional[TargetEncodingType] = None,
     ):
         if self.log_first_n_examples is not None and self.log_first_n_examples > 0:
             inputs = task_encoding.inputs
@@ -163,7 +169,7 @@ class TextToTextTaskModule(
         self,
         layers: Dict[str, AnnotationLayer],
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> EncodingWithLabelsAndDecoderAttentionMask:
+    ) -> TargetEncodingType:
         target_annotations = []
         source_annotation = (
             metadata.get("source_annotation", None) if metadata is not None else None
@@ -197,7 +203,7 @@ class TextToTextTaskModule(
                 f"but expected {self.target_annotation_type}"
             )
         encoding = self.tokenizer(text)
-        return EncodingWithLabelsAndDecoderAttentionMask(
+        return TargetEncodingType(
             labels=encoding["input_ids"], decoder_attention_mask=encoding["attention_mask"]
         )
 
@@ -284,9 +290,7 @@ class TextToTextTaskModule(
 
         return task_encodings
 
-    def encode_target(
-        self, task_encoding: TaskEncodingType
-    ) -> Optional[EncodingWithLabelsAndDecoderAttentionMask]:
+    def encode_target(self, task_encoding: TaskEncodingType) -> Optional[TargetEncodingType]:
         document = task_encoding.metadata["tokenized_document"]
         source_annotation = task_encoding.metadata["source_annotation"]
 
@@ -313,7 +317,7 @@ class TextToTextTaskModule(
 
         targets = None
         if task_encodings[0].has_targets:
-            targets = EncodingWithLabelsAndDecoderAttentionMask.batch(
+            targets = TargetEncodingType.batch(
                 values=[x.targets for x in task_encodings],
                 dtypes=self.dtypes,
                 pad_values=self.pad_values,
