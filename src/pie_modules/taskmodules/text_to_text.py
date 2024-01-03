@@ -366,4 +366,7 @@ class TextToTextTaskModule(
             for annotation in annotations:
                 yield layer_name, annotation.copy()
 
-        # TODO: implement configure_model_metric(self, stage: str) -> Optional[Metric]
+    def configure_model_generation(self) -> Optional[Dict[str, Any]]:
+        return {}
+
+    # TODO: implement configure_model_metric(self, stage: str) -> Optional[Metric]
