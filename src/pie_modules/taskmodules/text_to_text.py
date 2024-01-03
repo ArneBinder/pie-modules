@@ -1,6 +1,17 @@
 import dataclasses
 import logging
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Type, Union
+from typing import (
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Type,
+    Union,
+)
 
 import torch
 from pytorch_ie import AnnotationLayer, Document
@@ -165,6 +176,13 @@ class TextToTextTaskModule(
                 logger.info(f"labels: {targets.labels}")
             self.log_first_n_examples -= 1
 
+    def warn_once(self, message: str) -> None:
+        if not hasattr(self, "_warned"):
+            self._warned: Set[str] = set()
+        if message not in self._warned:
+            logger.warning(f"{message} (This warning will only be shown once.)")
+            self._warned.add(message)
+
     def encode_annotations(
         self,
         layers: Dict[str, AnnotationLayer],
@@ -189,10 +207,12 @@ class TextToTextTaskModule(
         else:
             target_annotations = layers[self.target_layer]
 
-        if len(target_annotations) != 1:
-            raise ValueError(
-                f"target_annotations {self.target_layer} contains {len(target_annotations)} annotations, "
-                f"but expected exactly one"
+        if len(target_annotations) == 0:
+            raise ValueError(f"target_annotations {self.target_layer} contains no annotation")
+        elif len(target_annotations) > 1:
+            self.warn_once(
+                f"target_annotations {self.target_layer} contains more than one annotation, "
+                f"but only the first one will be used"
             )
         annotation = target_annotations[0]
         if isinstance(annotation, self.target_annotation_type):
