@@ -75,6 +75,7 @@ class TextToTextTaskModule(
         tokenized_document_type: str,  # e.g. "pie_modules.documents.TokenDocumentWithQuestionsAndGenerativeAnswers",
         target_layer: str,  # e.g. "abstractive_summary"
         target_annotation_type: str,  # e.g. "pie_modules.annotations.AbstractiveSummary"
+        # TODO: rename to "guidance_*" (also tests)?
         source_layer: Optional[str] = None,  # e.g. "questions" for question answering
         source_annotation_field: Optional[str] = None,  # e.g. "question" for question answering
         tokenizer_init_kwargs: Optional[Dict[str, Any]] = None,
