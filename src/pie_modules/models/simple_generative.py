@@ -11,6 +11,7 @@ from torch.optim import Optimizer
 from torchmetrics import Metric
 from transformers import PreTrainedModel, get_linear_schedule_with_warmup
 
+from pie_modules.models.interface import RequiresTaskModuleConfig
 from pie_modules.utils import resolve_type
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ def flatten_dict(d: MutableMapping, parent_key: str = "", sep: str = "."):
 
 
 @PyTorchIEModel.register()
-class SimpleGenerativeModel(PyTorchIEModel):
+class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskModuleConfig):
     def __init__(
         self,
         # base model setup
