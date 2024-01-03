@@ -213,3 +213,14 @@ def test_configure_model_generation(taskmodule):
     generation_config = taskmodule.configure_model_generation()
     assert generation_config is not None
     assert generation_config == {}
+
+
+def test_warn_once(taskmodule, caplog):
+    with caplog.at_level("WARNING"):
+        taskmodule.warn_only_once("test")
+        taskmodule.warn_only_once("test")
+        taskmodule.warn_only_once("test2")
+
+    assert len(caplog.messages) == 2
+    assert caplog.messages[0] == "test (This warning will only be shown once)"
+    assert caplog.messages[1] == "test2 (This warning will only be shown once)"

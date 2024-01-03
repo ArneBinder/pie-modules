@@ -176,11 +176,11 @@ class TextToTextTaskModule(
                 logger.info(f"labels: {targets.labels}")
             self.log_first_n_examples -= 1
 
-    def warn_once(self, message: str) -> None:
+    def warn_only_once(self, message: str) -> None:
         if not hasattr(self, "_warned"):
             self._warned: Set[str] = set()
         if message not in self._warned:
-            logger.warning(f"{message} (This warning will only be shown once.)")
+            logger.warning(f"{message} (This warning will only be shown once)")
             self._warned.add(message)
 
     def encode_annotations(
@@ -210,7 +210,7 @@ class TextToTextTaskModule(
         if len(target_annotations) == 0:
             raise ValueError(f"target_annotations {self.target_layer} contains no annotation")
         elif len(target_annotations) > 1:
-            self.warn_once(
+            self.warn_only_once(
                 f"target_annotations {self.target_layer} contains more than one annotation, "
                 f"but only the first one will be used"
             )
