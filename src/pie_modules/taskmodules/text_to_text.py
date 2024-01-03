@@ -374,4 +374,4 @@ class TextToTextTaskModule(
             ]
             return texts
 
-        return TextMetric(tokenizer=self.tokenizer, unbatch_func=unbatch_and_untokenize)
+        return TextMetric(unbatch_func=unbatch_and_untokenize)
