@@ -36,12 +36,24 @@ def test_model(model):
     assert model.taskmodule is not None
 
 
-def test_model_without_taskmodule():
-    model = SimpleGenerativeModel(
-        base_model_type="transformers.AutoModelForSeq2SeqLM",
-        base_model_config=dict(pretrained_model_name_or_path=MODEL_ID),
-    )
+def test_model_without_taskmodule(caplog):
+    with caplog.at_level("WARNING"):
+        model = SimpleGenerativeModel(
+            base_model_type="transformers.AutoModelForSeq2SeqLM",
+            base_model_config=dict(pretrained_model_name_or_path=MODEL_ID),
+        )
     assert model is not None
+    assert len(caplog.messages) == 2
+    assert (
+        caplog.messages[0]
+        == "No taskmodule is available, so no metrics will be created. Please set taskmodule_config to a "
+        "valid taskmodule config to use metrics."
+    )
+    assert (
+        caplog.messages[1]
+        == "No taskmodule is available, so no generation config will be created. Consider setting "
+        "taskmodule_config to a valid taskmodule config to use specific setup for generation."
+    )
 
 
 @pytest.fixture(scope="module")
