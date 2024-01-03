@@ -1,1 +1,1 @@
-from .rouge import RougeMetric
+from .text import TextMetric

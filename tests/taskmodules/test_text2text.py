@@ -3,7 +3,6 @@ from typing import Any, Dict, List, Sequence, Tuple
 import pytest
 import torch
 from pytorch_ie import Annotation, TaskEncoding
-from torchmetrics import Metric
 
 from pie_modules.annotations import AbstractiveSummary
 from pie_modules.documents import (
@@ -11,7 +10,7 @@ from pie_modules.documents import (
     TokenDocumentWithAbstractiveSummary,
 )
 from pie_modules.taskmodules import TextToTextTaskModule
-from pie_modules.taskmodules.metrics import RougeMetric
+from pie_modules.taskmodules.metrics import TextMetric
 from pie_modules.taskmodules.text_to_text import (
     EncodingWithLabelsAndDecoderAttentionMask,
     InputEncodingType,
@@ -210,7 +209,7 @@ def test_decoded_annotations(taskmodule, decoded_annotations):
 def test_configure_model_metrics(taskmodule):
     metric = taskmodule.configure_model_metric(stage="validation")
     assert metric is not None
-    assert isinstance(metric, RougeMetric)
+    assert isinstance(metric, TextMetric)
 
 
 def test_configure_model_generation(taskmodule):

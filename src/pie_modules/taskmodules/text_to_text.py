@@ -28,7 +28,7 @@ from .common import (
     EncodingWithLabelsAndDecoderAttentionMask,
     get_first_occurrence_index,
 )
-from .metrics import RougeMetric
+from .metrics import TextMetric
 
 logger = logging.getLogger(__name__)
 
@@ -366,4 +366,12 @@ class TextToTextTaskModule(
         return {}
 
     def configure_model_metric(self, stage: str) -> Optional[Metric]:
-        return RougeMetric(tokenizer=self.tokenizer, unbatch_func=self.unbatch_output)
+        def unbatch_and_untokenize(batch: ModelBatchOutput) -> Sequence[str]:
+            unbatched = self.unbatch_output(batch)
+            texts = [
+                self.tokenizer.decode(encoding.labels, skip_special_tokens=True)
+                for encoding in unbatched
+            ]
+            return texts
+
+        return TextMetric(tokenizer=self.tokenizer, unbatch_func=unbatch_and_untokenize)
