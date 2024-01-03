@@ -24,7 +24,8 @@ def model(taskmodule):
         base_model_type="transformers.AutoModelForSeq2SeqLM",
         base_model_config=dict(pretrained_model_name_or_path=MODEL_ID),
         taskmodule_config=taskmodule._config(),
-        learning_rate=1e-3,
+        # use a strange learning rate to make sure it is passed through
+        learning_rate=13e-3,
         optimizer_type="torch.optim.Adam",
     )
 
@@ -33,6 +34,14 @@ def test_model(model):
     assert model is not None
     assert model.model is not None
     assert model.taskmodule is not None
+
+
+def test_model_without_taskmodule():
+    model = SimpleGenerativeModel(
+        base_model_type="transformers.AutoModelForSeq2SeqLM",
+        base_model_config=dict(pretrained_model_name_or_path=MODEL_ID),
+    )
+    assert model is not None
 
 
 @pytest.fixture(scope="module")
@@ -206,3 +215,13 @@ def test_predict_step(batch, model):
             "▁test",
         ],
     ]
+
+
+def test_configure_optimizers(model):
+    optimizer = model.configure_optimizers()
+    assert optimizer is not None
+    assert isinstance(optimizer, torch.optim.Adam)
+    assert optimizer.defaults["lr"] == 13e-3
+    assert len(optimizer.param_groups) == 1
+    param_group = optimizer.param_groups[0]
+    assert len(param_group["params"]) == 47
