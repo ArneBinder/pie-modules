@@ -1,7 +1,10 @@
 import math
+from typing import List, Optional
 
 import pytest
 import torch
+from pytorch_lightning import Trainer
+from torch.optim import Optimizer
 
 from pie_modules.models import SimpleGenerativeModel
 from pie_modules.models.simple_generative import STAGE_TEST, STAGE_VAL
@@ -287,11 +290,59 @@ def test_predict_step(batch, model):
     ]
 
 
-def test_configure_optimizers(model):
-    optimizer = model.configure_optimizers()
+@pytest.fixture(scope="module")
+def optimizer(model):
+    return model.configure_optimizers()
+
+
+def test_optimizer(optimizer):
     assert optimizer is not None
     assert isinstance(optimizer, torch.optim.Adam)
     assert optimizer.defaults["lr"] == 13e-3
     assert len(optimizer.param_groups) == 1
     param_group = optimizer.param_groups[0]
     assert len(param_group["params"]) == 47
+
+
+def _assert_optimizer(
+    actual: Optimizer,
+    expected: Optimizer,
+    allow_mismatching_param_group_keys: Optional[List[str]] = None,
+):
+    allow_mismatching_param_group_key_set = set(allow_mismatching_param_group_keys or [])
+    assert actual is not None
+    assert isinstance(actual, type(expected))
+    assert actual.defaults == expected.defaults
+    assert len(actual.param_groups) == len(expected.param_groups)
+    for actual_param_group, expected_param_group in zip(
+        actual.param_groups, expected.param_groups
+    ):
+        actual_keys = set(actual_param_group) - allow_mismatching_param_group_key_set
+        expected_keys = set(expected_param_group) - allow_mismatching_param_group_key_set
+        assert actual_keys == expected_keys
+        for key in actual_keys:
+            # also include the key in the comparison to have it in the assertion error message
+            assert (key, actual_param_group[key]) == (key, expected_param_group[key])
+
+
+def test_configure_optimizers_with_warmup(model, optimizer):
+    backup_value = model.warmup_proportion
+    model.warmup_proportion = 0.1
+    model.trainer = Trainer(max_epochs=10)
+    optimizer_and_schedular = model.configure_optimizers()
+    assert optimizer_and_schedular is not None
+    assert isinstance(optimizer_and_schedular, tuple)
+    assert len(optimizer_and_schedular) == 2
+    optimizers, schedulers = optimizer_and_schedular
+    assert len(optimizers) == 1
+    _assert_optimizer(
+        optimizers[0], optimizer, allow_mismatching_param_group_keys=["initial_lr", "lr"]
+    )
+    assert len(schedulers) == 1
+    assert set(schedulers[0]) == {"scheduler", "interval"}
+    scheduler = schedulers[0]["scheduler"]
+    assert isinstance(scheduler, torch.optim.lr_scheduler.LambdaLR)
+    assert scheduler.optimizer is optimizers[0]
+    assert scheduler.base_lrs == [13e-3]
+
+    model.warmup_proportion = backup_value
