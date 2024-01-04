@@ -24,6 +24,7 @@ from pytorch_ie.core.taskmodule import (
 )
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from torchmetrics import Metric
+from torchmetrics.text import ROUGEScore
 from transformers import AutoTokenizer, PreTrainedTokenizer
 from typing_extensions import TypeAlias
 
@@ -34,8 +35,11 @@ from pie_modules.document.processing import (
 )
 from pie_modules.utils import resolve_type
 
-from .common import BatchableMixin, get_first_occurrence_index
-from .metrics import TextMetric
+from .common import (
+    BatchableMixin,
+    WrappedMetricWithUnbatchFunction,
+    get_first_occurrence_index,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -398,4 +402,6 @@ class TextToTextTaskModule(
             ]
             return texts
 
-        return TextMetric(unbatch_func=unbatch_and_untokenize)
+        return WrappedMetricWithUnbatchFunction(
+            metric=ROUGEScore(), unbatch_function=unbatch_and_untokenize
+        )

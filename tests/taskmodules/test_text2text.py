@@ -10,7 +10,7 @@ from pie_modules.documents import (
     TokenDocumentWithAbstractiveSummary,
 )
 from pie_modules.taskmodules import TextToTextTaskModule
-from pie_modules.taskmodules.metrics import TextMetric
+from pie_modules.taskmodules.common import WrappedMetricWithUnbatchFunction
 from pie_modules.taskmodules.text_to_text import (
     InputEncodingType,
     TargetEncodingType,
@@ -206,7 +206,7 @@ def test_decoded_annotations(taskmodule, decoded_annotations):
 def test_configure_model_metrics(taskmodule):
     metric = taskmodule.configure_model_metric(stage="validation")
     assert metric is not None
-    assert isinstance(metric, TextMetric)
+    assert isinstance(metric, WrappedMetricWithUnbatchFunction)
 
 
 def test_configure_model_generation(taskmodule):

@@ -1,18 +1,19 @@
 import pytest
 from torch import isnan, tensor
+from torchmetrics.text import ROUGEScore
 
-from pie_modules.taskmodules.metrics import TextMetric
+from pie_modules.taskmodules.common import WrappedMetricWithUnbatchFunction
 
 
 @pytest.fixture(scope="module")
 def metric():
-    return TextMetric(unbatch_func=lambda x: x)
+    return WrappedMetricWithUnbatchFunction(metric=ROUGEScore(), unbatch_function=lambda x: x)
 
 
 def test_metric(metric):
     assert metric is not None
-    assert metric.unbatch_func is not None
-    assert metric.rouge_score is not None
+    assert metric.unbatch_function is not None
+    assert metric.metric is not None
 
     metric_values = metric.compute()
     assert len(metric_values) > 0
