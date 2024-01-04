@@ -32,6 +32,8 @@ def maybe_pad_values(
     """If an iterable of values is passed and a pad value is given, pad the values to the same
     length and create a tensor from them. Otherwise, return the values unchanged.
 
+    Note that the padding is done on all dimensions.
+
     Args:
         values: The values to pad.
         pad_value: The value to use for padding.
@@ -82,7 +84,11 @@ def maybe_to_tensor(
 
 
 class BatchableMixin:
-    """A mixin class that provides a batch method to batch a list of instances of the class.
+    """A mixin class that provides a batch method to batch a list of instances of the class. All
+    attributes, but also property methods, are batched. The batch method returns a dictionary with
+    all attribute / property names as keys. The values are tensors created from the stacked values
+    of the attributes / properties. The tensors are padded to the length of the longest instance in
+    the batch and converted to the given dtype.
 
     Example:
         >>> import dataclasses
