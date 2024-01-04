@@ -24,7 +24,6 @@ from pytorch_ie.core.taskmodule import (
 )
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from torchmetrics import Metric
-from torchmetrics.text import ROUGEScore
 from transformers import AutoTokenizer, PreTrainedTokenizer
 from typing_extensions import TypeAlias
 
@@ -102,6 +101,8 @@ class TextToTextTaskModule(
         guidance_annotation_field: The name of the field in the target annotations that contains the guidance
             annotation. Required if guidance_layer is defined to attach the guidance annotation to the newly created
             target annotation.
+        text_metric_type: The type of the text metric to use for evaluation. Must be a string that resolves to a
+            subclass of Metric, e.g. "torchmetrics.text.ROUGEScore" for ROUGE score.
         tokenizer_init_kwargs: Additional keyword arguments that are passed to the tokenizer constructor.
         tokenizer_kwargs: Additional keyword arguments that are passed when calling the tokenizer.
         partition_layer_name: The name of the annotation layer that contains the partitions. If set, the partitions
@@ -124,6 +125,7 @@ class TextToTextTaskModule(
         target_annotation_type: str,
         guidance_layer: Optional[str] = None,
         guidance_annotation_field: Optional[str] = None,
+        text_metric_type: Optional[str] = None,
         tokenizer_init_kwargs: Optional[Dict[str, Any]] = None,
         tokenizer_kwargs: Optional[Dict[str, Any]] = None,
         partition_layer_name: Optional[str] = None,
@@ -140,6 +142,9 @@ class TextToTextTaskModule(
             target_annotation_type, expected_super_type=AnnotationWithText
         )
         self.guidance_annotation_field = guidance_annotation_field
+        self.text_metric_type: Optional[Metric] = None
+        if text_metric_type is not None:
+            self.text_metric_type = resolve_type(text_metric_type, expected_super_type=Metric)
 
         # tokenization
         self._document_type: Type[TextBasedDocument] = resolve_type(
@@ -426,6 +431,9 @@ class TextToTextTaskModule(
         return {}
 
     def configure_model_metric(self, stage: str) -> Optional[Metric]:
+        if self.text_metric_type is None:
+            return None
+
         # we use a custom un-batch function here, because the ROUGEScore metric expects strings for
         # input and target
         def unbatch_and_untokenize(batch: ModelBatchOutput) -> Sequence[str]:
@@ -437,5 +445,5 @@ class TextToTextTaskModule(
             return texts
 
         return WrappedMetricWithUnbatchFunction(
-            metric=ROUGEScore(), unbatch_function=unbatch_and_untokenize
+            metric=self.text_metric_type(), unbatch_function=unbatch_and_untokenize
         )

@@ -51,6 +51,7 @@ def taskmodule():
         tokenized_document_type="pie_modules.documents.TokenDocumentWithQuestionsAndGenerativeAnswers",
         guidance_layer="questions",
         guidance_annotation_field="question",
+        text_metric_type="torchmetrics.text.ROUGEScore",
     )
 
 

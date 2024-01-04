@@ -28,8 +28,6 @@ pytorch-ie = ">=0.29.5,<0.30.0"
 pytorch-lightning = "^2.1.0"
 torchmetrics = "^1"
 pytorch-crf = ">=0.7.2"
-# for rouge metric
-nltk = "^3.8.1"
 
 [tool.poetry.group.dev.dependencies]
 torch = {version = "^2.1.0+cpu", source = "pytorch"}
@@ -37,6 +35,8 @@ pytest = "^7.4.2"
 pytest-cov = "^4.1.0"
 pre-commit = "^3.4.0"
 tabulate = "^0.9"
+# for rouge metric
+nltk = "^3.8.1"
 
 [[tool.poetry.source]]
 name = "pytorch"

@@ -46,6 +46,7 @@ def taskmodule():
         target_layer="abstractive_summary",
         target_annotation_type="pie_modules.annotations.AbstractiveSummary",
         tokenized_document_type="pie_modules.documents.TokenDocumentWithAbstractiveSummary",
+        text_metric_type="torchmetrics.text.ROUGEScore",
     )
 
 
