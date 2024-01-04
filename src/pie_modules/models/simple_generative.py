@@ -273,7 +273,7 @@ class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
                 #  and self.log_dict()
                 metric_dict_flat = flatten_dict(d=metric_dict, sep="/")
                 for k, v in metric_dict_flat.items():
-                    self.log(f"metric_{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
+                    self.log(f"metric/{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
         if hasattr(self.model, "configure_optimizer") and callable(self.model.configure_optimizer):
