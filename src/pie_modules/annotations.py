@@ -6,10 +6,13 @@ from pytorch_ie.core import Annotation
 
 
 @dataclasses.dataclass(eq=True, frozen=True)
-class Question(Annotation):
-    """A question about a context."""
-
+class AnnotationWithText(Annotation):
     text: str
+
+
+@dataclasses.dataclass(eq=True, frozen=True)
+class Question(AnnotationWithText):
+    """A question about a context."""
 
     def __str__(self) -> str:
         return self.text
@@ -32,3 +35,18 @@ class ExtractiveAnswer(Span):
         # we assume that the first target is the text
         context = self.named_targets["base"]
         return str(context[self.start : self.end])
+
+
+@dataclasses.dataclass(eq=True, frozen=True)
+class AbstractiveSummary(AnnotationWithText):
+    """An abstractive summary."""
+
+    score: Optional[float] = dataclasses.field(default=None, compare=False)
+
+
+@dataclasses.dataclass(eq=True, frozen=True)
+class GenerativeAnswer(AnnotationWithText):
+    """An answer to a question."""
+
+    score: Optional[float] = dataclasses.field(default=None, compare=False)
+    question: Optional[Question] = None

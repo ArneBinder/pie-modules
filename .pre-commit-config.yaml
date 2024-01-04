@@ -82,7 +82,8 @@ repos:
           - --skip=logs/**,data/**
           # hist: required for plotext.hist()
           # ba: denotes beginning of an encoding with label as 'a'. More details at src/pie_utils/sequence_tagging/ill_formed.py
-          - --ignore-words-list=hist,ba
+          # rouge: this is a metric name
+          - --ignore-words-list=hist,ba,rouge
 
   # python static type checking
   - repo: https://github.com/pre-commit/mirrors-mypy

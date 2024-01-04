@@ -18,12 +18,14 @@ Available models:
 - [SequenceClassificationModel](src/pie_modules/models/sequence_classification.py)
 - [TokenClassificationModelWithSeq2SeqEncoderAndCrf](src/pie_modules/models/token_classification_with_seq2seq_encoder_and_crf.py)
 - [SimpleExtractiveQuestionAnsweringModel](src/pie_modules/models/simple_extractive_question_answering.py)
+- [SimpleGenerativeModel](src/pie_modules/models/simple_generative.py)
 
 Available taskmodules:
 
 - [RETextClassificationWithIndicesTaskModule](src/pie_modules/taskmodules/re_text_classification_with_indices.py)
 - [TokenClassificationTaskModule](src/pie_modules/taskmodules/token_classification.py)
 - [ExtractiveQuestionAnsweringTaskModule](src/pie_modules/taskmodules/extractive_question_answering.py)
+- [TextToTextTaskModule](src/pie_modules/taskmodules/text_to_text.py)
 
 Available metrics:
 

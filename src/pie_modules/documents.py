@@ -1,10 +1,16 @@
 import dataclasses
 
+from pytorch_ie import AnnotationLayer
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.core import AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 
-from pie_modules.annotations import ExtractiveAnswer, Question
+from pie_modules.annotations import (
+    AbstractiveSummary,
+    ExtractiveAnswer,
+    GenerativeAnswer,
+    Question,
+)
 
 
 @dataclasses.dataclass
@@ -65,3 +71,33 @@ class TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions(
     TokenDocumentWithLabeledSpansAndBinaryRelations, TokenDocumentWithLabeledPartitions
 ):
     pass
+
+
+@dataclasses.dataclass
+class TextDocumentWithQuestionsAndGenerativeAnswers(TextBasedDocument):
+    """A text based PIE document with annotations for generative question answering."""
+
+    questions: AnnotationLayer[Question] = annotation_field()
+    generative_answers: AnnotationLayer[GenerativeAnswer] = annotation_field(target="questions")
+
+
+@dataclasses.dataclass
+class TokenDocumentWithQuestionsAndGenerativeAnswers(TokenBasedDocument):
+    """A tokenized PIE document with annotations for generative question answering."""
+
+    questions: AnnotationLayer[Question] = annotation_field()
+    generative_answers: AnnotationLayer[GenerativeAnswer] = annotation_field(target="questions")
+
+
+@dataclasses.dataclass
+class TextDocumentWithAbstractiveSummary(TextBasedDocument):
+    """A text based PIE document with annotations for abstractive summarization."""
+
+    abstractive_summary: AnnotationLayer[AbstractiveSummary] = annotation_field()
+
+
+@dataclasses.dataclass
+class TokenDocumentWithAbstractiveSummary(TokenBasedDocument):
+    """A tokenized PIE document with annotations for abstractive summarization."""
+
+    abstractive_summary: AnnotationLayer[AbstractiveSummary] = annotation_field()
