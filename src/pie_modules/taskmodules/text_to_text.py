@@ -56,6 +56,7 @@ class InputEncodingType(BatchableMixin):
 @dataclasses.dataclass
 class TargetEncodingType(BatchableMixin):
     labels: List[int]
+    # this is optional because we use the same type for TaskOutputType, which does not have this field
     decoder_attention_mask: Optional[List[int]] = None
 
 
@@ -78,21 +79,55 @@ class TextToTextTaskModule(
         TaskOutputType,
     ],
 ):
+    """A PIE task module for text-to-text tasks. It works with simple text annotations, e.g.
+    abstractive summaries, as target annotations.
+
+    It can also be used with additional guidance annotations, e.g. questions for generative question answering, in
+    which case the text of the guidance annotation is prepended to the input text.
+
+    Args:
+        tokenizer_name_or_path: The name (Huggingface Hub model identifier) or local path of the tokenizer to use.
+        document_type: The type of the input document. Must be a string that resolves to a subclass of
+            TextBasedDocument, e.g. "pie_modules.documents.TextDocumentWithAbstractiveSummary" for abstractive
+            summarization.
+        tokenized_document_type: The type of the tokenized document. Must be a string that resolves to a
+            subclass of TokenBasedDocument, e.g. "pie_modules.documents.TokenDocumentWithAbstractiveSummary" for
+            abstractive summarization.
+        target_layer: The name of the annotation layer that contains the target annotations, e.g. "abstractive_summary"
+            for abstractive summarization.
+        target_annotation_type: The type of the target annotations. Must be a string that resolves to a subclass
+            of AnnotationWithText, e.g. "pie_modules.annotations.AbstractiveSummary" for abstractive summarization.
+        guidance_layer: The name of the annotation layer that contains the guidance annotations. If set, the text of
+            the guidance annotation is prepended to the input text.
+        guidance_annotation_field: The name of the field in the target annotations that contains the guidance
+            annotation. Required if guidance_layer is defined to attach the guidance annotation to the newly created
+            target annotation.
+        tokenizer_init_kwargs: Additional keyword arguments that are passed to the tokenizer constructor.
+        tokenizer_kwargs: Additional keyword arguments that are passed when calling the tokenizer.
+        partition_layer_name: The name of the annotation layer that contains the partitions. If set, the partitions
+            will be used to split the input text into multiple parts which are then tokenized separately. This can be
+            used to split long documents into multiple parts to avoid exceeding the maximum input length of the
+            tokenizer / model.
+        annotation_field_mapping: A mapping from input document annotation layer names to layer names defined in the
+            document_type / tokenized_document_type. This can be used if the actual input documents have different
+            annotation layer names than the provided document_type / tokenized_document_type.
+        log_first_n_examples: The number of examples to log. If set to a positive integer n, the first n examples will
+            be logged. This can be used to check if the input and target encodings are as expected.
+    """
+
     def __init__(
         self,
         tokenizer_name_or_path: str,
-        # input document
-        document_type: str,  # e.g. "pie_modules.documents.TextDocumentWithAbstractiveSummary"
-        tokenized_document_type: str,  # e.g. "pie_modules.documents.TokenDocumentWithQuestionsAndGenerativeAnswers",
-        target_layer: str,  # e.g. "abstractive_summary"
-        target_annotation_type: str,  # e.g. "pie_modules.annotations.AbstractiveSummary"
-        guidance_layer: Optional[str] = None,  # e.g. "questions" for question answering
-        guidance_annotation_field: Optional[str] = None,  # e.g. "question" for question answering
+        document_type: str,
+        tokenized_document_type: str,
+        target_layer: str,
+        target_annotation_type: str,
+        guidance_layer: Optional[str] = None,
+        guidance_annotation_field: Optional[str] = None,
         tokenizer_init_kwargs: Optional[Dict[str, Any]] = None,
         tokenizer_kwargs: Optional[Dict[str, Any]] = None,
         partition_layer_name: Optional[str] = None,
         annotation_field_mapping: Optional[Dict[str, str]] = None,
-        # logging
         log_first_n_examples: Optional[int] = None,
         **kwargs,
     ):
@@ -164,7 +199,7 @@ class TextToTextTaskModule(
         self,
         task_encoding: TaskEncodingType,
         targets: Optional[TargetEncodingType] = None,
-    ):
+    ) -> None:
         if self.log_first_n_examples is not None and self.log_first_n_examples > 0:
             inputs = task_encoding.inputs
 
@@ -386,9 +421,13 @@ class TextToTextTaskModule(
                 yield layer_name, annotation.copy()
 
     def configure_model_generation(self) -> Optional[Dict[str, Any]]:
+        # we do not set any overrides here, because we want to use the default generation config as
+        # it is derived from the Huggingface base model config.json
         return {}
 
     def configure_model_metric(self, stage: str) -> Optional[Metric]:
+        # we use a custom un-batch function here, because the ROUGEScore metric expects strings for
+        # input and target
         def unbatch_and_untokenize(batch: ModelBatchOutput) -> Sequence[str]:
             unbatched = self.unbatch_output(batch)
             texts = [
