@@ -490,6 +490,21 @@ def test_build_constraint(taskmodule):
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         ]
 
+    # contains eos
+    constraint = taskmodule._build_constraint(
+        previous_ids=[14, 14, 5, 11, 12, 3, 6, 1], input_len=input_len
+    )
+    # [bos, eos/pad], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
+    constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
+    # allow only pad (same as eos)
+    assert constraint_formatted == [
+        [0, 1],
+        [0],
+        [0, 0, 0],
+        [0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    ]
+
 
 def test_maybe_log_example(taskmodule, task_encoding, caplog, config):
     original_log_first_n_examples = taskmodule.log_first_n_examples
@@ -720,15 +735,21 @@ def test_configure_model_generation(taskmodule):
     }
 
 
-def test_configure_model_generation_with_constrained_generation():
+def get_default_taskmodule(**kwargs):
     taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
         tokenizer_name_or_path="facebook/bart-base",
         labels_per_layer={
             "labeled_spans": ["content", "person", "topic"],
             "binary_relations": ["is_about"],
         },
-        constrained_generation=True,
+        **kwargs,
     )
+    taskmodule.post_prepare()
+    return taskmodule
+
+
+def test_configure_model_generation_with_constrained_generation():
+    taskmodule = get_default_taskmodule(constrained_generation=True)
     generation_config = taskmodule.configure_model_generation()
     assert set(generation_config) == {"no_repeat_ngram_size", "logits_processor"}
     assert generation_config["no_repeat_ngram_size"] == 7
@@ -736,3 +757,121 @@ def test_configure_model_generation_with_constrained_generation():
     assert isinstance(logits_processor, LogitsProcessorList)
     assert len(logits_processor) == 1
     assert isinstance(logits_processor[0], PrefixConstrainedLogitsProcessorWithMaximum)
+
+
+def test_prefix_allowed_tokens_fn_with_maximum():
+    taskmodule = get_default_taskmodule()
+    # not that this includes the leading bos token
+    add_previous_input_ids = torch.tensor([0, 14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1])
+
+    # empty input (first entry)
+    allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
+        batch_id=0, input_ids=add_previous_input_ids[:1], maximum=20
+    )
+    # allow the eos id [1] and all offset ids [7..19]
+    assert allowed_ids == [1, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+
+    # first span start
+    allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
+        batch_id=0, input_ids=add_previous_input_ids[:2], maximum=20
+    )
+    # allow all offset ids from first span start [14..19]
+    assert allowed_ids == [14, 15, 16, 17, 18, 19]
+
+    # first span start and end
+    allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
+        batch_id=0, input_ids=add_previous_input_ids[:3], maximum=20
+    )
+    # allow all span ids
+    assert allowed_ids == [3, 4, 5]
+
+    # first span start, end, and label
+    allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
+        batch_id=0, input_ids=add_previous_input_ids[:4], maximum=20
+    )
+    # allow none [2] and all offsets except offsets covered by first span [14]
+    assert allowed_ids == [2, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19]
+
+    # first span, and second span start
+    allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
+        batch_id=0, input_ids=add_previous_input_ids[:5], maximum=20
+    )
+    # allow all offsets from second span start [11], but before first span start [14] because it would be an overlap
+    assert allowed_ids == [11, 12, 13]
+
+    # first span, and second span start and end
+    allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
+        batch_id=0, input_ids=add_previous_input_ids[:6], maximum=20
+    )
+    # allow all span ids
+    assert allowed_ids == [3, 4, 5]
+
+    # first span, and second span
+    allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
+        batch_id=0, input_ids=add_previous_input_ids[:7], maximum=20
+    )
+    # allow all relation ids
+    assert allowed_ids == [6]
+
+    # entry begins (second entry)
+    allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
+        batch_id=0, input_ids=add_previous_input_ids[:8], maximum=20
+    )
+    # allow eos [1] and all offsets [7..19]
+    assert allowed_ids == [1, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+
+    # first span start
+    allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
+        batch_id=0, input_ids=add_previous_input_ids[:9], maximum=20
+    )
+    # allow all offsets from first span start [17..19]
+    assert allowed_ids == [17, 18, 19]
+
+    # first span start and end
+    allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
+        batch_id=0, input_ids=add_previous_input_ids[:10], maximum=20
+    )
+    # allow all span ids
+    assert allowed_ids == [3, 4, 5]
+
+    # first span start, end, and span label
+    allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
+        batch_id=0, input_ids=add_previous_input_ids[:11], maximum=20
+    )
+    # allow none [2] and all offsets except offsets covered by first span [17]
+    assert allowed_ids == [2, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19]
+
+    # first span, and none
+    allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
+        batch_id=0, input_ids=add_previous_input_ids[:12], maximum=20
+    )
+    # allow only none [2] because when the entry contains already a none id, it cannot be followed by anything else
+    assert allowed_ids == [2]
+
+    # first span, and none, and none
+    allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
+        batch_id=0, input_ids=add_previous_input_ids[:13], maximum=20
+    )
+    # allow only none [2] because when the entry contains already a none id, it cannot be followed by anything else
+    assert allowed_ids == [2]
+
+    # first span, and none, and none, and none
+    allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
+        batch_id=0, input_ids=add_previous_input_ids[:14], maximum=20
+    )
+    # allow only none [2] because when the entry contains already a none id, it cannot be followed by anything else
+    assert allowed_ids == [2]
+
+    # first span, and none, and none, and none, and none (second entry is complete)
+    allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
+        batch_id=0, input_ids=add_previous_input_ids[:15], maximum=20
+    )
+    # allow eos [1] and all offsets [7..19]
+    assert allowed_ids == [1, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+
+    # got an eos, so the sequence is complete
+    allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
+        batch_id=0, input_ids=add_previous_input_ids[:16], maximum=20
+    )
+    # allow only pad [1] (same as eos) because the sequence is complete
+    assert allowed_ids == [1]

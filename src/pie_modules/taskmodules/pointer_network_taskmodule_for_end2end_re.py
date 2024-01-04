@@ -559,6 +559,10 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         input_len: int,
     ) -> torch.LongTensor:
         result: torch.LongTensor = torch.zeros(input_len + self.pointer_offset, dtype=torch.int64)
+        if self.eos_id in previous_ids:
+            # once eos is predicted, only allow padding
+            result[self.target_pad_id] = 1
+            return result
         contains_none = self.none_id in previous_ids
         idx = len(previous_ids)
         if idx == 0:  # [] -> first span start or eos
