@@ -113,7 +113,10 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
     def __init__(
         self,
+        tokenizer_name_or_path: str,
         # specific for this use case
+        document_type: str = "pytorch_ie.documents.TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
+        tokenized_document_type: str = "pie_modules.documents.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
         span_layer_name: str = "labeled_spans",
         relation_layer_name: str = "binary_relations",
         none_label: str = "none",
@@ -127,9 +130,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         # target encoding
         create_constraints: bool = False,
         # tokenization
-        document_type: str = "pytorch_ie.documents.TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
-        tokenized_document_type: str = "pie_modules.documents.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
-        tokenizer_name_or_path: str = "facebook/bart-base",
         tokenizer_init_kwargs: Optional[Dict[str, Any]] = None,
         tokenizer_kwargs: Optional[Dict[str, Any]] = None,
         partition_layer_name: Optional[str] = None,

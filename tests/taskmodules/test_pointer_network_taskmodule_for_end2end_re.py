@@ -12,7 +12,6 @@ from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 from pie_modules.taskmodules.common import AnnotationLayerMetric
 from pie_modules.taskmodules.pointer_network_taskmodule_for_end2end_re import (
     LabelsAndOptionalConstraints,
-    get_first_occurrence_index,
 )
 
 logger = logging.getLogger(__name__)
@@ -102,6 +101,7 @@ def test_document(document):
 @pytest.fixture(scope="module")
 def taskmodule(document, config):
     taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
+        tokenizer_name_or_path="facebook/bart-base",
         span_layer_name="entities",
         relation_layer_name="relations",
         exclude_labels_per_layer={"relations": ["no_relation"]},
@@ -500,7 +500,8 @@ def test_maybe_log_example(taskmodule, task_encoding, caplog, config):
             "input_ids:    0 713 16 10 34759 2788 59 1085 4 3101 162 4 2",
             "input_tokens: <s> This Ġis Ġa Ġdummy Ġtext Ġabout Ġnothing . ĠTrust Ġme . " "</s>",
             "label_ids:    14 14 5 11 12 3 6 17 17 4 2 2 2 2 1",
-            "label_tokens: 14 {Ġnothing} 14 {Ġnothing} topic 11 {Ġdummy} 12 {Ġtext} content is_about 17 {Ġme} 17 {Ġme} person none none none none </s>",
+            "label_tokens: 14 {Ġnothing} 14 {Ġnothing} topic 11 {Ġdummy} 12 {Ġtext} content is_about 17 {Ġme} 17 "
+            "{Ġme} person none none none none </s>",
             "constraints:  torch.Size([15, 20]) (content is omitted)",
         ]
     elif config == {"partition_layer_name": "sentences"}:
@@ -713,17 +714,3 @@ def test_configure_model_generation(taskmodule):
     assert taskmodule.configure_model_generation() == {
         "no_repeat_ngram_size": 7,
     }
-
-
-def test_get_first_occurrence_index():
-    tensor = torch.tensor(
-        [
-            [0, 1, 1, 1, 1, 1],
-            [0, 0, 1, 1, 1, 1],
-            [0, 1, 1, 0, 0, 1],
-            [1, 1, 1, 1, 1, 1],
-            [0, 0, 0, 0, 0, 0],
-        ]
-    )
-    indices = get_first_occurrence_index(tensor, 1)
-    torch.testing.assert_close(indices, torch.tensor([1, 2, 1, 0, 6]))

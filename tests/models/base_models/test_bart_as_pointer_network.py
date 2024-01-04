@@ -64,6 +64,7 @@ def document():
 @pytest.fixture(scope="module")
 def taskmodule(document):
     taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
+        tokenizer_name_or_path=MODEL_NAME_OR_PATH,
         span_layer_name="entities",
         relation_layer_name="relations",
         exclude_labels_per_layer={"relations": ["no_relation"]},
