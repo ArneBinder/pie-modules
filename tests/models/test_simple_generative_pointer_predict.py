@@ -118,7 +118,7 @@ def test_sciarg_predict(trained_model, sciarg_batch_truncated, loaded_taskmodule
     metric.update(prediction, targets["labels"])
     values = metric.compute()
     assert values == {
-        "em": 0.4,
+        "encoding_match": 0.4,
         "labeled_spans": {
             "own_claim": {"recall": 25.0, "precision": 6.6667, "f1": 10.5263},
             "background_claim": {"recall": 50.9804, "precision": 47.2727, "f1": 49.0566},
@@ -132,8 +132,8 @@ def test_sciarg_predict(trained_model, sciarg_batch_truncated, loaded_taskmodule
             "semantically_same": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
         },
         "binary_relations/micro": {"recall": 8.0645, "precision": 8.4746, "f1": 8.2645},
-        "invalid": {"correct": 0.977, "order": 0.023},
-        "invalid/all": 0.023,
+        "errors": {"correct": 0.977, "order": 0.023},
+        "errors/all": 0.023,
     }
 
 
@@ -163,9 +163,9 @@ def test_sciarg_predict_with_position_id_pattern(sciarg_batch_truncated, loaded_
             "supports": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
         },
         "binary_relations/micro": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
-        "em": 0.4,
-        "invalid": {"correct": 0.1667, "len": 0.8333},
-        "invalid/all": 0.8333,
+        "encoding_match": 0.4,
+        "errors": {"correct": 0.1667, "len": 0.8333},
+        "errors/all": 0.8333,
         "labeled_spans": {
             "background_claim": {"f1": 3.8462, "precision": 100.0, "recall": 1.9608},
             "data": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
