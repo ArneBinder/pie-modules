@@ -105,7 +105,7 @@ def metadata(taskmodule, task_encodings) -> Dict[str, Any]:
 
 
 def test_metadata(taskmodule, metadata):
-    assert set(metadata) == {"tokenized_document", "source_annotation"}
+    assert set(metadata) == {"tokenized_document", "guidance_annotation"}
 
     tokenized_document = metadata["tokenized_document"]
     assert isinstance(tokenized_document, TokenDocumentWithAbstractiveSummary)

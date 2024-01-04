@@ -49,8 +49,8 @@ def taskmodule():
         target_layer="generative_answers",
         target_annotation_type="pie_modules.annotations.GenerativeAnswer",
         tokenized_document_type="pie_modules.documents.TokenDocumentWithQuestionsAndGenerativeAnswers",
-        source_layer="questions",
-        source_annotation_field="question",
+        guidance_layer="questions",
+        guidance_annotation_field="question",
     )
 
 
@@ -123,7 +123,7 @@ def metadata(taskmodule, task_encodings) -> Dict[str, Any]:
 
 
 def test_metadata(taskmodule, metadata):
-    assert set(metadata) == {"tokenized_document", "source_annotation"}
+    assert set(metadata) == {"tokenized_document", "guidance_annotation"}
 
     tokenized_document = metadata["tokenized_document"]
     assert isinstance(tokenized_document, TokenDocumentWithQuestionsAndGenerativeAnswers)

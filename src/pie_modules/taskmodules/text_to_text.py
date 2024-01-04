@@ -58,10 +58,6 @@ class TargetEncodingType(BatchableMixin):
     labels: List[int]
     decoder_attention_mask: Optional[List[int]] = None
 
-    # @property
-    # def decoder_attention_mask(self) -> List[int]:
-    #    return [1] * len(self.labels)
-
 
 TaskEncodingType: TypeAlias = TaskEncoding[
     DocumentType,
@@ -90,9 +86,8 @@ class TextToTextTaskModule(
         tokenized_document_type: str,  # e.g. "pie_modules.documents.TokenDocumentWithQuestionsAndGenerativeAnswers",
         target_layer: str,  # e.g. "abstractive_summary"
         target_annotation_type: str,  # e.g. "pie_modules.annotations.AbstractiveSummary"
-        # TODO: rename to "guidance_*" (also tests)?
-        source_layer: Optional[str] = None,  # e.g. "questions" for question answering
-        source_annotation_field: Optional[str] = None,  # e.g. "question" for question answering
+        guidance_layer: Optional[str] = None,  # e.g. "questions" for question answering
+        guidance_annotation_field: Optional[str] = None,  # e.g. "question" for question answering
         tokenizer_init_kwargs: Optional[Dict[str, Any]] = None,
         tokenizer_kwargs: Optional[Dict[str, Any]] = None,
         partition_layer_name: Optional[str] = None,
@@ -105,11 +100,11 @@ class TextToTextTaskModule(
         self.save_hyperparameters()
 
         self.target_layer = target_layer
-        self.source_layer = source_layer
+        self.guidance_layer = guidance_layer
         self.target_annotation_type: Type[AnnotationWithText] = resolve_type(
             target_annotation_type, expected_super_type=AnnotationWithText
         )
-        self.source_annotation_field = source_annotation_field
+        self.guidance_annotation_field = guidance_annotation_field
 
         # tokenization
         self._document_type: Type[TextBasedDocument] = resolve_type(
@@ -193,20 +188,20 @@ class TextToTextTaskModule(
         metadata: Optional[Dict[str, Any]] = None,
     ) -> TargetEncodingType:
         target_annotations = []
-        source_annotation = (
-            metadata.get("source_annotation", None) if metadata is not None else None
+        guidance_annotation = (
+            metadata.get("guidance_annotation", None) if metadata is not None else None
         )
-        if source_annotation is not None:
-            if self.source_annotation_field is None:
+        if guidance_annotation is not None:
+            if self.guidance_annotation_field is None:
                 raise ValueError(
-                    "source_annotation is available, but source_annotation_field is not set"
+                    "guidance_annotation is available, but guidance_annotation_field is not set"
                 )
-            # filter annotations that belong to the source_annotation
+            # filter annotations that belong to the guidance_annotation
             for target_annotation in layers[self.target_layer]:
-                current_source_annotation = getattr(
-                    target_annotation, self.source_annotation_field
+                current_guidance_annotation = getattr(
+                    target_annotation, self.guidance_annotation_field
                 )
-                if current_source_annotation == source_annotation:
+                if current_guidance_annotation == guidance_annotation:
                     target_annotations.append(target_annotation)
         else:
             target_annotations = layers[self.target_layer]
@@ -236,18 +231,18 @@ class TextToTextTaskModule(
     ) -> Tuple[Dict[str, List[Annotation]], Any]:
         text = self.tokenizer.decode(encoding.labels, skip_special_tokens=True)
         annotation_kwargs = {}
-        if self.source_annotation_field is not None:
+        if self.guidance_annotation_field is not None:
             if metadata is None:
                 raise ValueError(
-                    "metadata is required to decode annotations with source_annotation_field"
+                    "metadata is required to decode annotations with guidance_annotation_field"
                 )
-            source_annotation = metadata.get("source_annotation", None)
-            if source_annotation is not None:
-                if self.source_annotation_field is None:
+            guidance_annotation = metadata.get("guidance_annotation", None)
+            if guidance_annotation is not None:
+                if self.guidance_annotation_field is None:
                     raise ValueError(
-                        "source_annotation is available, but source_annotation_field is not set"
+                        "guidance_annotation is available, but guidance_annotation_field is not set"
                     )
-                annotation_kwargs[self.source_annotation_field] = source_annotation
+                annotation_kwargs[self.guidance_annotation_field] = guidance_annotation
 
         decoded_layers = {
             self.target_layer: [self.target_annotation_type(text=text, **annotation_kwargs)]
@@ -286,15 +281,15 @@ class TextToTextTaskModule(
         self, document: DocumentType, is_training: bool = False
     ) -> Optional[Union[TaskEncodingType, Sequence[TaskEncodingType]]]:
         task_encodings: List[TaskEncodingType] = []
-        if self.source_layer is None:
-            source_annotations = [None]
+        if self.guidance_layer is None:
+            guidance_annotations = [None]
         else:
-            source_annotations = document[self.source_layer]
-        for source_annotation in source_annotations:
+            guidance_annotations = document[self.guidance_layer]
+        for guidance_annotation in guidance_annotations:
             source_text = None
-            if source_annotation is not None:
+            if guidance_annotation is not None:
                 # Here could also more sophisticated logic be implemented
-                source_text = source_annotation.text
+                source_text = guidance_annotation.text
             tokenized_docs = self.tokenize_document(document, source_text=source_text)
             for tokenized_doc in tokenized_docs:
                 tokenizer_encoding = tokenized_doc.metadata["tokenizer_encoding"]
@@ -307,7 +302,7 @@ class TextToTextTaskModule(
                         ),
                         metadata={
                             "tokenized_document": tokenized_doc,
-                            "source_annotation": source_annotation,
+                            "guidance_annotation": guidance_annotation,
                         },
                     )
                 )
@@ -316,7 +311,7 @@ class TextToTextTaskModule(
 
     def encode_target(self, task_encoding: TaskEncodingType) -> Optional[TargetEncodingType]:
         document = task_encoding.metadata["tokenized_document"]
-        source_annotation = task_encoding.metadata["source_annotation"]
+        guidance_annotation = task_encoding.metadata["guidance_annotation"]
 
         layers = {
             layer_name: self.get_mapped_layer(document, layer_name=layer_name)
@@ -324,7 +319,7 @@ class TextToTextTaskModule(
         }
         result = self.encode_annotations(
             layers=layers,
-            metadata={**task_encoding.metadata, "source_annotation": source_annotation},
+            metadata={**task_encoding.metadata, "guidance_annotation": guidance_annotation},
         )
 
         self.maybe_log_example(task_encoding=task_encoding, targets=result)
