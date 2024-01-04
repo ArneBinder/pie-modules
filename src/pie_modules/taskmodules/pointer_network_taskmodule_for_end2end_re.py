@@ -39,9 +39,10 @@ from pie_modules.documents import (
 from ..document.processing import token_based_document_to_text_based, tokenize_document
 from ..utils import resolve_type
 from .common import (
-    AnnotationLayerMetric,
     BatchableMixin,
     DecodingException,
+    PrecisionRecallAndF1ForLabeledAnnotations,
+    WrappedLayerMetricsWithUnbatchAndDecodingFunction,
     get_first_occurrence_index,
 )
 from .pointer_network.annotation_encoder_decoder import (
@@ -394,11 +395,16 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         return set(range(self.pointer_offset))
 
     def configure_model_metric(self, stage: Optional[str] = None) -> Optional[Metric]:
-        return AnnotationLayerMetric(
-            taskmodule=self,
-            layer_names=self.layer_names,
-            decode_annotations_func=self.decode_annotations,
-            key_invalid_correct=KEY_INVALID_CORRECT,
+        layer_metrics = {
+            layer_name: PrecisionRecallAndF1ForLabeledAnnotations()
+            for layer_name in self.layer_names
+        }
+
+        return WrappedLayerMetricsWithUnbatchAndDecodingFunction(
+            unbatch_function=self.unbatch_output,
+            decode_annotations_with_errors_function=self.decode_annotations,
+            layer_metrics=layer_metrics,
+            error_key_correct=KEY_INVALID_CORRECT,
         )
 
     def decode_relations(
@@ -518,7 +524,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
     def decode_annotations(
         self, encoding: TaskOutputType, metadata: Optional[Dict[str, Any]] = None
-    ) -> Tuple[Dict[str, List[Annotation]], Any]:
+    ) -> Tuple[Dict[str, List[Annotation]], Dict[str, int]]:
         decoded_relations, errors, remaining = self.decode_relations(label_ids=encoding.labels)
         relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
         entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)

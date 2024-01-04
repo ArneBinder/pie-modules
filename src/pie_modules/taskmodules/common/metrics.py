@@ -13,7 +13,7 @@ from typing import (
     TypeVar,
 )
 
-from pytorch_ie import Annotation, TaskModule
+from pytorch_ie import Annotation
 from torch.nn import ModuleDict
 from torchmetrics import Metric
 
@@ -123,43 +123,63 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
         self.gold.extend(gold_set)
         self.predicted.extend(predicted_set)
         self.correct.extend(gold_set & predicted_set)
-
-    def inc_idx(self, n: int = 1):
-        self.idx += n
+        self.idx += 1
 
 
-class AnnotationLayerMetric(Metric, Generic[T]):
+U = TypeVar("U")
+
+
+class WrappedLayerMetricsWithUnbatchAndDecodingFunction(Metric, Generic[T, U]):
+    """A wrapper around annotation layer metrics that can be used with batched encoded annotations.
+
+    Args:
+        layer_metrics: A dictionary mapping layer names to annotation layer metrics. Each metric
+            should be a subclass of torchmetrics.Metric and should take two sets of annotations as
+            input.
+        unbatch_function: A function that takes a batched input and returns an iterable of
+            individual inputs. This is used to unbatch the input before passing it to the annotation
+            decoding function (decode_annotations_with_errors_function).
+        decode_annotations_with_errors_function: A function that takes an annotation encoding and
+            returns a tuple of two dictionaries. The first dictionary maps layer names to a list of
+            annotations. The second dictionary maps error names to the number of errors that were
+            encountered while decoding the annotations.
+        round_precision: The number of digits to round the results to. If None, no rounding is
+            performed.
+        error_key_correct: The key in the error dictionary whose value should be the number of *correctly*
+            decoded annotations, so that the sum of all values in the error dictionary can be used to
+            normalize the error counts. If None, the total number of training examples is used to
+            normalize the error counts.
+    """
+
     def __init__(
         self,
-        taskmodule: TaskModule[Any, Any, Any, Any, Any, T],
-        layer_names: List[str],
-        decode_annotations_func: Callable[[T], Tuple[Dict[str, List[Annotation]], Dict[str, int]]],
+        layer_metrics: Dict[str, Metric],
+        unbatch_function: Callable[[T], Iterable[U]],
+        decode_annotations_with_errors_function: Callable[
+            [U], Tuple[Dict[str, List[Annotation]], Dict[str, int]]
+        ],
         round_precision: Optional[int] = 4,
-        key_invalid_correct: Optional[str] = None,
+        error_key_correct: Optional[str] = None,
     ):
         super().__init__()
-        self.taskmodule = taskmodule
 
-        self.key_invalid_correct = key_invalid_correct
-        self.layer_names = layer_names
+        self.key_error_correct = error_key_correct
         self.round_precision = round_precision
-        self.decode_annotations_func = decode_annotations_func
-        self.layer_metrics = ModuleDict(
-            {
-                layer_name: PrecisionRecallAndF1ForLabeledAnnotations()
-                for layer_name in self.layer_names
-            }
-        )
+        self.unbatch_function = unbatch_function
+        self.decode_annotations_with_errors_func = decode_annotations_with_errors_function
+        self.layer_metrics = ModuleDict(layer_metrics)
 
         self.reset()
 
     def update(self, prediction, expected):
-        prediction_list = self.taskmodule.unbatch_output(prediction)
-        expected_list = self.taskmodule.unbatch_output(expected)
+        prediction_list = self.unbatch_function(prediction)
+        expected_list = self.unbatch_function(expected)
 
         for expected_encoding, prediction_encoding in zip(expected_list, prediction_list):
-            gold_annotations, gold_errors = self.decode_annotations_func(expected_encoding)
-            predicted_annotations, predicted_errors = self.decode_annotations_func(
+            gold_annotations, gold_errors = self.decode_annotations_with_errors_func(
+                expected_encoding
+            )
+            predicted_annotations, predicted_errors = self.decode_annotations_with_errors_func(
                 prediction_encoding
             )
             for k, v in predicted_errors.items():
@@ -170,7 +190,6 @@ class AnnotationLayerMetric(Metric, Generic[T]):
                 gold_layer = set(gold_annotations[layer_name])
                 pred_layer = set(predicted_annotations[layer_name])
                 metric.update(gold_layer, pred_layer)
-                metric.inc_idx()
 
             if expected_encoding == prediction_encoding:
                 self.em += 1
@@ -226,14 +245,13 @@ class AnnotationLayerMetric(Metric, Generic[T]):
             res[f"{layer_name}/micro"] = overall_layer_info
 
         # if invalid contains a "correct" key, use that to normalize, otherwise use the number of training examples
-        if self.key_invalid_correct in self.invalid:
+        if self.key_error_correct in self.invalid:
             invalid_total = sum(self.invalid.values())
         else:
             invalid_total = self.total
         res["invalid"] = {k: v / invalid_total for k, v in self.invalid.items()}
         res["invalid/all"] = (
-            sum(v for k, v in self.invalid.items() if k != self.key_invalid_correct)
-            / invalid_total
+            sum(v for k, v in self.invalid.items() if k != self.key_error_correct) / invalid_total
         )
 
         res = self._nested_round(res)

@@ -10,7 +10,9 @@ from pytorch_ie.documents import TextBasedDocument
 from transformers import LogitsProcessorList
 
 from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
-from pie_modules.taskmodules.common import AnnotationLayerMetric
+from pie_modules.taskmodules.common import (
+    WrappedLayerMetricsWithUnbatchAndDecodingFunction,
+)
 from pie_modules.taskmodules.pointer_network.logits_processor import (
     PrefixConstrainedLogitsProcessorWithMaximum,
 )
@@ -726,7 +728,7 @@ def test_annotations_from_output(task_encodings, task_outputs, taskmodule):
 def test_configure_model_metric(taskmodule):
     metric = taskmodule.configure_model_metric()
     assert metric is not None
-    assert isinstance(metric, AnnotationLayerMetric)
+    assert isinstance(metric, WrappedLayerMetricsWithUnbatchAndDecodingFunction)
 
 
 def test_configure_model_generation(taskmodule):
