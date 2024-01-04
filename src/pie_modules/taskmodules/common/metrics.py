@@ -6,6 +6,15 @@ T = TypeVar("T")
 
 
 class WrappedMetricWithUnbatchFunction(Metric, Generic[T]):
+    """A wrapper around a metric that can be used with a batched input.
+
+    Args:
+        unbatch_function: A function that takes a batched input and returns an iterable of
+            individual inputs. This is used to unbatch the input before passing it to the wrapped
+            metric.
+        metric: The metric to wrap. It should be a subclass of torchmetrics.Metric.
+    """
+
     def __init__(
         self, unbatch_function: Callable[[T], Iterable[Any]], metric: Metric, **kwargs
     ) -> None:
