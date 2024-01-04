@@ -7,9 +7,13 @@ import torch
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.core import AnnotationList, Document, annotation_field
 from pytorch_ie.documents import TextBasedDocument
+from transformers import LogitsProcessorList
 
 from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 from pie_modules.taskmodules.common import AnnotationLayerMetric
+from pie_modules.taskmodules.pointer_network.logits_processor import (
+    PrefixConstrainedLogitsProcessorWithMaximum,
+)
 from pie_modules.taskmodules.pointer_network_taskmodule_for_end2end_re import (
     LabelsAndOptionalConstraints,
 )
@@ -714,3 +718,21 @@ def test_configure_model_generation(taskmodule):
     assert taskmodule.configure_model_generation() == {
         "no_repeat_ngram_size": 7,
     }
+
+
+def test_configure_model_generation_with_constrained_generation():
+    taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
+        tokenizer_name_or_path="facebook/bart-base",
+        labels_per_layer={
+            "labeled_spans": ["content", "person", "topic"],
+            "binary_relations": ["is_about"],
+        },
+        constrained_generation=True,
+    )
+    generation_config = taskmodule.configure_model_generation()
+    assert set(generation_config) == {"no_repeat_ngram_size", "logits_processor"}
+    assert generation_config["no_repeat_ngram_size"] == 7
+    logits_processor = generation_config["logits_processor"]
+    assert isinstance(logits_processor, LogitsProcessorList)
+    assert len(logits_processor) == 1
+    assert isinstance(logits_processor[0], PrefixConstrainedLogitsProcessorWithMaximum)
