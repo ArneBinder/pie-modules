@@ -2,10 +2,7 @@ from typing import Any, Dict, List, Set, Tuple
 
 from pytorch_ie.annotations import Span
 
-from pie_modules.taskmodules.common import (
-    AnnotationEncoderDecoder,
-    HasDecodeAnnotations,
-)
+from pie_modules.taskmodules.common import AnnotationEncoderDecoder
 
 
 def test_annotation_encoder_decoder():
@@ -29,28 +26,3 @@ def test_annotation_encoder_decoder():
     assert encoder_decoder.decode((1, 2)) == Span(start=1, end=2)
     assert encoder_decoder.validate_encoding((1, 2)) == set()
     assert encoder_decoder.validate_encoding((2, 1)) == {"order"}
-
-
-def test_has_decode_annotations():
-    """Test the HasDecodeAnnotations class."""
-
-    class MyAnnotationDecoder(HasDecodeAnnotations[List[int]]):
-        """A class that uses the HasDecodeAnnotations class."""
-
-        def decode_annotations(
-            self, encoding: List[int], **kwargs
-        ) -> Tuple[Dict[str, List[Span]], Any]:
-            return {"spans": [Span(start=encoding[0], end=encoding[1])]}, {
-                "too_long": len(encoding) > 2
-            }
-
-    my_class = MyAnnotationDecoder()
-
-    assert my_class.decode_annotations([1, 2]) == (
-        {"spans": [Span(start=1, end=2)]},
-        {"too_long": False},
-    )
-    assert my_class.decode_annotations([1, 2, 3]) == (
-        {"spans": [Span(start=1, end=2)]},
-        {"too_long": True},
-    )

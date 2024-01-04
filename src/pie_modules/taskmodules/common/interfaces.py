@@ -1,8 +1,7 @@
 import abc
-from typing import Any, Dict, Generic, List, Optional, Set, Tuple, TypeVar
+from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
 
 from pytorch_ie import Annotation
-from torchmetrics import Metric
 
 # Annotation Encoding type: encoding for a single annotation
 AE = TypeVar("AE")
@@ -32,14 +31,4 @@ class AnnotationEncoderDecoder(abc.ABC, Generic[A, AE]):
 
     @abc.abstractmethod
     def decode(self, encoding: AE, metadata: Optional[Dict[str, Any]] = None) -> A:
-        pass
-
-
-class HasDecodeAnnotations(abc.ABC, Generic[ACE]):
-    """Interface for modules that can decode annotations."""
-
-    @abc.abstractmethod
-    def decode_annotations(
-        self, encoding: ACE, metadata: Optional[Dict[str, Any]] = None
-    ) -> Tuple[Dict[str, List[Annotation]], Any]:
         pass

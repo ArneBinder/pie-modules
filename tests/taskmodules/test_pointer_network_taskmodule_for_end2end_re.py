@@ -9,7 +9,7 @@ from pytorch_ie.core import AnnotationList, Document, annotation_field
 from pytorch_ie.documents import TextBasedDocument
 
 from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
-from pie_modules.taskmodules.common.metrics import AnnotationLayerMetric
+from pie_modules.taskmodules.common import AnnotationLayerMetric
 from pie_modules.taskmodules.pointer_network_taskmodule_for_end2end_re import (
     LabelsAndOptionalConstraints,
     get_first_occurrence_index,

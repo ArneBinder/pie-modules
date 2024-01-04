@@ -38,9 +38,12 @@ from pie_modules.documents import (
 
 from ..document.processing import token_based_document_to_text_based, tokenize_document
 from ..utils import resolve_type
-from .common import BatchableMixin, HasDecodeAnnotations
-from .common.interfaces import DecodingException
-from .common.metrics import AnnotationLayerMetric
+from .common import (
+    AnnotationLayerMetric,
+    BatchableMixin,
+    DecodingException,
+    get_first_occurrence_index,
+)
 from .pointer_network.annotation_encoder_decoder import (
     BinaryRelationEncoderDecoder,
     LabeledSpanEncoderDecoder,
@@ -91,39 +94,12 @@ def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
     return v1.head.start - v2.head.start  # v1[0]["from"] - v2[0]["from"]
 
 
-def get_first_occurrence_index(
-    tensor: Union[torch.FloatTensor, torch.LongTensor], value: Union[float, int]
-) -> torch.LongTensor:
-    """Returns the index of the first occurrence of `value` in each row of `tensor`. If `value` is
-    not found, seq_len is returned.
-
-    Args:
-        tensor: the tensor of shape (bsz, seq_len) to search in
-        value: the value to search for
-
-    Returns: a tensor of shape (bsz,) containing the index of the first occurrence of `value` in each row of `tensor`.
-    """
-
-    mask_value = tensor.eq(value)
-    # count matching positions from the end
-    value_counts_to_end = mask_value.flip(dims=[1]).cumsum(dim=1).flip(dims=[1])
-    # at the first position stands the number of total matches
-    total_matches = value_counts_to_end[:, 0]
-    # the sum of all positions where the number of matches is equal to the total number of matches
-    # is the index *after* the first occurrence
-    result = value_counts_to_end.eq(total_matches.unsqueeze(-1)).sum(dim=1) - 1
-    # set result to seq_len if no match was found
-    result[total_matches == 0] = tensor.size(1)
-    return result
-
-
 # TODO: use enable BucketSampler (just mentioning here because no better place available for now)
 # see https://github.com/Lightning-AI/lightning/pull/13640#issuecomment-1199032224
 
 
 @TaskModule.register()
 class PointerNetworkTaskModuleForEnd2EndRE(
-    HasDecodeAnnotations[TaskOutputType],
     TaskModule[
         DocumentType,
         InputEncoding,
