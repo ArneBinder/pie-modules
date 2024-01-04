@@ -97,27 +97,22 @@ class PointerHead(torch.nn.Module):
         encoder_input_ids_index = encoder_input_ids_index.masked_fill(
             encoder_input_ids_index.lt(0), 0
         )
-        # TODO: parametrize this (use max input length)
-        assert encoder_input_ids_index.max() < 1024
+        encoder_input_length = encoder_input_ids.size(1)
+        if encoder_input_ids_index.max() >= encoder_input_length:
+            raise ValueError(
+                f"encoder_input_ids_index.max() [{encoder_input_ids_index.max()}] must be smaller "
+                f"than encoder_input_length [{encoder_input_length}]!"
+            )
+
         word_mapped_tokens = encoder_input_ids.gather(index=encoder_input_ids_index, dim=1)
 
-        decoder_input_ids = torch.where(
-            mapping_token_mask, tag_mapped_tokens, word_mapped_tokens
-        )  # bsz x max_len
+        decoder_input_ids = torch.where(mapping_token_mask, tag_mapped_tokens, word_mapped_tokens)
 
-        # attention_mask = input_ids.ne(self.pad_token_id)  # inverted tgt_pad_mask?
-        # cumsum = input_ids.eq(self.pad_id).flip(dims=[1]).cumsum(dim=-1)
-        # tgt_pad_mask = cumsum.flip(dims=[1]).ne(cumsum[:, -1:])
-        # decoder_input_ids = decoder_input_ids.masked_fill(tgt_pad_mask, self.pad_token_id)
-
-        # during training, the attention mask available
+        # during training, the attention mask is available
         if attention_mask is not None:
             decoder_input_ids = decoder_input_ids.masked_fill(
                 ~attention_mask.bool(), self.pad_token_id
             )
-
-        # TODO: why was this in the original code?
-        # decoder_input_ids = decoder_input_ids[:, :-1]
 
         return decoder_input_ids
 
@@ -216,6 +211,8 @@ class PointerHead(torch.nn.Module):
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         constraints: Optional[torch.LongTensor] = None,
     ):
+        decoder_embed_tokens = self.decoder.embed_tokens
+
         # assemble the logits
         logits = last_hidden_state.new_full(
             (
@@ -226,53 +223,33 @@ class PointerHead(torch.nn.Module):
             fill_value=-1e24,
         )
 
-        # eos and tag scores depend only on the decoder output
-        eos_scores = F.linear(
-            last_hidden_state,
-            self.decoder.embed_tokens.weight[[self.eos_token_id]],
-        )  # bsz x max_len x 1
-        label_embeddings = self.decoder.embed_tokens.weight[self.label_token_ids]
-        label_scores = F.linear(last_hidden_state, label_embeddings)  # bsz x max_len x num_class
+        # eos and label scores depend only on the decoder output
+        # bsz x max_len x 1
+        eos_scores = F.linear(last_hidden_state, decoder_embed_tokens.weight[[self.eos_token_id]])
+        label_embeddings = decoder_embed_tokens.weight[self.label_token_ids]
+        # bsz x max_len x num_class
+        label_scores = F.linear(last_hidden_state, label_embeddings)
 
         # the pointer depends on the src token embeddings, the encoder output and the decoder output
         # bsz x max_bpe_len x hidden_size
-        # src_outputs = state.encoder_output
         src_outputs = encoder_last_hidden_state
-        if hasattr(self, "encoder_mlp"):
+        if getattr(self, "encoder_mlp", None) is not None:
             src_outputs = self.encoder_mlp(src_outputs)
 
-        # mask = state.encoder_mask.eq(0)
-        input_embed = self.decoder.embed_tokens(
-            encoder_input_ids
-        )  # bsz x max_word_len x hidden_size
-        # bsz = encoder_input_ids.size(0)
-        # position_embed = torch.stack(
-        #    [self.encoder_embed_positions(encoder_input_ids)] * bsz, dim=0
-        # )
+        # bsz x max_word_len x hidden_size
+        input_embed = decoder_embed_tokens(encoder_input_ids)
 
-        word_scores = torch.einsum(
-            "blh,bnh->bln", last_hidden_state, src_outputs
-        )  # bsz x max_len x max_word_len
-        gen_scores = torch.einsum(
-            "blh,bnh->bln", last_hidden_state, input_embed
-        )  # bsz x max_len x max_word_len
-        # positions_scores = torch.einsum(
-        #    "blh,bnh->bln", hidden_state, position_embed
-        # )  # bsz x max_len x max_word_len
-
-        # if self.position_type == 9:
-        #    avg_word_scores = (positions_scores + word_scores) / 2
-        # elif self.position_type == 10:
-        #    avg_word_scores = positions_scores
-        # else:
+        # bsz x max_len x max_word_len
+        word_scores = torch.einsum("blh,bnh->bln", last_hidden_state, src_outputs)
+        gen_scores = torch.einsum("blh,bnh->bln", last_hidden_state, input_embed)
         avg_word_scores = (gen_scores + word_scores) / 2
-        # TODO: what exactly does this mask?
+
+        # TODO: what exactly does this mask? Masking special tokens?
         mask = encoder_attention_mask.eq(0)
         mask = mask.unsqueeze(1)
-        # TODO: what are 2 and 1?
+        # TODO: what are 2 and 1 (for ge)? Note that 2 is the eos_token_id of Bart.
         mask = mask.__or__(encoder_input_ids.eq(2).cumsum(dim=1).ge(1).unsqueeze(1))
         avg_word_scores = avg_word_scores.masked_fill(mask, -1e32)
-        # word_scores = word_scores.masked_fill(mask, -1e32)
 
         # Note: logits[:, :, 0] contains the score for the bos token which should be never generated!
         logits[:, :, 1:2] = eos_scores
@@ -303,13 +280,11 @@ class PointerHead(torch.nn.Module):
             else:
                 constraints_src_outputs = src_outputs
                 constraints_label_embeddings = label_embeddings
-            constraints_label_scores = F.linear(
-                last_hidden_state,
-                constraints_label_embeddings,
-            )
+            constraints_label_scores = F.linear(last_hidden_state, constraints_label_embeddings)
+            # bsz x max_len x max_word_len
             constraints_word_scores = torch.einsum(
                 "blh,bnh->bln", last_hidden_state, constraints_src_outputs
-            )  # bsz x max_len x max_word_len
+            )
             constraints_logits = last_hidden_state.new_full(
                 (
                     last_hidden_state.size(0),
