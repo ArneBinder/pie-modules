@@ -183,7 +183,7 @@ class WrappedLayerMetricsWithUnbatchAndDecodingFunction(Metric, Generic[T, U]):
                 prediction_encoding
             )
             for k, v in predicted_errors.items():
-                self.invalid[k] += v
+                self.errors[k] += v
 
             for layer_name, metric in self.layer_metrics.items():
                 # remove duplicates from layer data
@@ -192,7 +192,7 @@ class WrappedLayerMetricsWithUnbatchAndDecodingFunction(Metric, Generic[T, U]):
                 metric.update(gold_layer, pred_layer)
 
             if expected_encoding == prediction_encoding:
-                self.em += 1
+                self.encoding_match += 1
 
             self.total += 1
 
@@ -205,17 +205,17 @@ class WrappedLayerMetricsWithUnbatchAndDecodingFunction(Metric, Generic[T, U]):
         # total number of tuples
         self.total = 1e-13
 
-        self.invalid = defaultdict(int)
+        self.errors = defaultdict(int)
         # this contains the number of examples where the full target sequence was predicted correctly (exact matches)
-        self.em = 0
+        self.encoding_match = 0
 
     @property
     def state(self) -> Dict[str, Any]:
         # copy to disallow modification of the state
         return {
             "total": copy.copy(self.total),
-            "invalid": copy.deepcopy(self.invalid),
-            "em": copy.copy(self.em),
+            "errors": copy.deepcopy(self.errors),
+            "encoding_match": copy.copy(self.encoding_match),
             "layer_metrics": {
                 layer_name: metric.state for layer_name, metric in self.layer_metrics.items()
             },
@@ -237,21 +237,21 @@ class WrappedLayerMetricsWithUnbatchAndDecodingFunction(Metric, Generic[T, U]):
     def compute(self):
         res = {}
 
-        res["em"] = self.em / self.total
+        res["encoding_match"] = self.encoding_match / self.total
 
         for layer_name, metric in self.layer_metrics.items():
             overall_layer_info, layer_info = metric.compute()
             res[layer_name] = layer_info
             res[f"{layer_name}/micro"] = overall_layer_info
 
-        # if invalid contains a "correct" key, use that to normalize, otherwise use the number of training examples
-        if self.key_error_correct in self.invalid:
-            invalid_total = sum(self.invalid.values())
+        # if errors contains a "correct" key, use that to normalize, otherwise use the number of training examples
+        if self.key_error_correct in self.errors:
+            errors_total = sum(self.errors.values())
         else:
-            invalid_total = self.total
-        res["invalid"] = {k: v / invalid_total for k, v in self.invalid.items()}
-        res["invalid/all"] = (
-            sum(v for k, v in self.invalid.items() if k != self.key_error_correct) / invalid_total
+            errors_total = self.total
+        res["errors"] = {k: v / errors_total for k, v in self.errors.items()}
+        res["errors/all"] = (
+            sum(v for k, v in self.errors.items() if k != self.key_error_correct) / errors_total
         )
 
         res = self._nested_round(res)

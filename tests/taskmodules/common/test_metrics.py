@@ -114,13 +114,13 @@ def sciarg_batch_prediction():
 
 
 def test_taskmodule_metric(taskmodule, sciarg_batch_truncated, sciarg_batch_prediction):
-    metric = taskmodule.configure_model_metric()
+    metric = taskmodule.configure_model_metric("test")
     inputs, targets = sciarg_batch_truncated
     metric.update(sciarg_batch_prediction, targets["labels"])
 
     values = metric.compute()
     assert values == {
-        "em": 0.4,
+        "encoding_match": 0.4,
         "labeled_spans": {
             "own_claim": {"recall": 25.0, "precision": 6.6667, "f1": 10.5263},
             "background_claim": {"recall": 50.9804, "precision": 47.2727, "f1": 49.0566},
@@ -134,8 +134,8 @@ def test_taskmodule_metric(taskmodule, sciarg_batch_truncated, sciarg_batch_pred
             "semantically_same": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
         },
         "binary_relations/micro": {"recall": 8.0645, "precision": 8.4746, "f1": 8.2645},
-        "invalid": {"correct": 0.977, "order": 0.023},
-        "invalid/all": 0.023,
+        "errors": {"correct": 0.977, "order": 0.023},
+        "errors/all": 0.023,
     }
 
-    assert set(metric.state) == {"layer_metrics", "total", "em", "invalid"}
+    assert set(metric.state) == {"layer_metrics", "total", "encoding_match", "errors"}
