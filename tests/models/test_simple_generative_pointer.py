@@ -276,45 +276,48 @@ def test_test_step(model, batch, config, taskmodule):
 
     if taskmodule.constrained_generation and decoder_position_id_pattern == [0, 0, 1, 0, 0, 1, 1]:
         assert values == {
-            "encoding_match": 0.0,
+            "exact_encoding_matches": 0.0,
+            "decoding_errors": {"correct": 1.0, "all": 0.0},
             "entities": {
-                "content": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
-                "person": {"f1": 50.0, "precision": 33.3333, "recall": 100.0},
-                "topic": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+                "person": {"recall": 100.0, "precision": 33.3333, "f1": 50.0},
+                "content": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+                "topic": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+                "micro": {"recall": 33.3333, "precision": 14.2857, "f1": 20.0},
             },
-            "entities/micro": {"f1": 20.0, "precision": 14.2857, "recall": 33.3333},
-            "errors": {"correct": 1.0},
-            "errors/all": 0.0,
-            "relations": {"is_about": {"f1": 0.0, "precision": 0.0, "recall": 0.0}},
-            "relations/micro": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+            "relations": {
+                "is_about": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+                "micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            },
         }
     elif taskmodule.constrained_generation and decoder_position_id_pattern is None:
         assert values == {
-            "encoding_match": 0.0,
+            "exact_encoding_matches": 0.0,
+            "decoding_errors": {"correct": 1.0, "all": 0.0},
             "entities": {
-                "content": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
-                "person": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
-                "topic": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+                "person": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+                "content": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+                "topic": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+                "micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
             },
-            "entities/micro": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
-            "errors": {"correct": 1.0},
-            "errors/all": 0.0,
-            "relations": {"is_about": {"f1": 0.0, "precision": 0.0, "recall": 0.0}},
-            "relations/micro": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+            "relations": {
+                "is_about": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+                "micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            },
         }
     else:
         assert values == {
-            "encoding_match": 0.0,
+            "exact_encoding_matches": 0.0,
+            "decoding_errors": {"all": 0.0},
             "entities": {
-                "topic": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
                 "person": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
                 "content": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+                "topic": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+                "micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
             },
-            "entities/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
-            "relations": {"is_about": {"recall": 0.0, "precision": 0.0, "f1": 0.0}},
-            "relations/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
-            "errors": {},
-            "errors/all": 0.0,
+            "relations": {
+                "is_about": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+                "micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            },
         }
 
 
@@ -348,17 +351,18 @@ def test_test_step_without_use_prediction_for_metrics(taskmodule, batch):
         torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
     values = model.metrics["test"].compute()
     assert values == {
-        "encoding_match": 0.0,
+        "exact_encoding_matches": 0.0,
+        "decoding_errors": {"all": 0.0},
         "entities": {
-            "topic": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
             "person": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
             "content": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "topic": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
         },
-        "entities/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
-        "relations": {"is_about": {"recall": 0.0, "precision": 0.0, "f1": 0.0}},
-        "relations/micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
-        "errors": {},
-        "errors/all": 0.0,
+        "relations": {
+            "is_about": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        },
     }
 
 

@@ -397,7 +397,8 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
     def configure_model_metric(self, stage: Optional[str] = None) -> Optional[Metric]:
         layer_metrics = {
-            layer_name: PrecisionRecallAndF1ForLabeledAnnotations()
+            # TODO: disable in_percent when tests for metrics are complete
+            layer_name: PrecisionRecallAndF1ForLabeledAnnotations(in_percent=True)
             for layer_name in self.layer_names
         }
 

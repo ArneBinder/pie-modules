@@ -22,12 +22,30 @@ logger = logging.getLogger(__name__)
 
 
 class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
+    """Computes precision, recall and F1 for labeled annotations. Inputs and targets are lists of
+    annotations. True positives are counted as the number of annotations that are the same in both
+    inputs and targets calculated as exact matches via set operation, false positives and false
+    negatives accordingly. The annotations are deduplicated for each instance. But if the same
+    annotation occurs in different instances, it is counted as two separate annotations.
+
+    Args:
+        label_mapping: A dictionary mapping annotation labels to human-readable labels. If None,
+            the annotation labels are used as they are. Can be used to map label ids to string labels.
+        key_micro: The key to use for the micro-average in the metric result dictionary.
+        in_percent: Whether to return the results in percent, i.e. values between 0 and 100 instead of
+            between 0 and 1.
+    """
+
     def __init__(
         self,
         label_mapping: Optional[Dict[Any, str]] = None,
+        key_micro: str = "micro",
+        in_percent: bool = False,
     ):
         super().__init__()
         self.label_mapping = label_mapping
+        self.key_micro = key_micro
+        self.in_percent = in_percent
         self.reset()
 
     def reset(self) -> None:
@@ -53,9 +71,10 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
         precision = 0.0 if n_predicted == 0 else (n_correct / n_predicted)
         f1 = 0.0 if recall + precision == 0 else (2 * precision * recall) / (precision + recall)
 
-        recall *= 100
-        precision *= 100
-        f1 *= 100
+        if self.in_percent:
+            recall *= 100
+            precision *= 100
+            f1 *= 100
         return {"recall": recall, "precision": precision, "f1": f1}
 
     def get_label(self, annotation: Annotation) -> Optional[str]:
@@ -64,9 +83,10 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
             return self.label_mapping[label]
         return label
 
-    def compute(self) -> Tuple[Dict[str, float], Dict[Optional[str], Dict[str, float]]]:
+    def compute(self) -> Dict[Optional[str], Dict[str, float]]:
+        result: Dict[Optional[str], Dict[str, float]] = {}
+
         # per class
-        per_class: Dict[Optional[str], Dict[str, float]] = {}
         gold_counter = Counter([self.get_label(ann) for idx, ann in self.gold])
         predicted_counter = Counter([self.get_label(ann) for idx, ann in self.predicted])
         correct_counter = Counter([self.get_label(ann) for idx, ann in self.correct])
@@ -74,7 +94,7 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
             n_gold = gold_counter.get(label, 0)
             n_predicted = predicted_counter.get(label, 0)
             n_correct = correct_counter.get(label, 0)
-            per_class[label] = self.get_precision_recall_f1(n_gold, n_predicted, n_correct)
+            result[label] = self.get_precision_recall_f1(n_gold, n_predicted, n_correct)
 
         # overall
         n_gold = len(self.gold)
@@ -82,7 +102,14 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
         n_correct = len(self.correct)
         overall = self.get_precision_recall_f1(n_gold, n_predicted, n_correct)
 
-        return overall, per_class
+        if self.key_micro in result:
+            raise ValueError(
+                f"key_micro={self.key_micro} is already used in the metric result dictionary because it was found "
+                f"as a label of the annotations. Please choose a different value for key_micro."
+            )
+        result[self.key_micro] = overall
+
+        return result
 
     def update(self, gold: Iterable[Annotation], predicted: Iterable[Annotation]) -> None:
         # remove duplicates within each list, but collect them with the instance idx to allow
@@ -152,7 +179,7 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
             decoded annotations, so that the sum of all values in the error dictionary can be used to
             normalize the error counts. If None, the total number of training examples is used to
             normalize the error counts.
-        collect_encoding_matches: Whether to collect the number of examples where the full target encoding
+        collect_exact_encoding_matches: Whether to collect the number of examples where the full target encoding
             was predicted correctly (exact matches).
     """
 
@@ -165,12 +192,12 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
         ],
         round_precision: Optional[int] = 4,
         error_key_correct: Optional[str] = None,
-        collect_encoding_matches: bool = True,
+        collect_exact_encoding_matches: bool = True,
     ):
         super().__init__()
 
         self.key_error_correct = error_key_correct
-        self.collect_encoding_matches = collect_encoding_matches
+        self.collect_exact_encoding_matches = collect_exact_encoding_matches
         self.round_precision = round_precision
         self.unbatch_function = unbatch_function
         self.decode_annotations_with_errors_func = decode_annotations_with_errors_function
@@ -193,7 +220,7 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
             for layer_name, metric in self.layer_metrics.items():
                 metric.update(gold_annotations[layer_name], predicted_annotations[layer_name])
 
-            if self.collect_encoding_matches:
+            if self.collect_exact_encoding_matches:
                 if isinstance(expected_encoding, torch.Tensor) and isinstance(
                     prediction_encoding, torch.Tensor
                 ):
@@ -201,7 +228,7 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
                 else:
                     is_match = expected_encoding == prediction_encoding
                 if is_match:
-                    self.encoding_match += 1
+                    self.exact_encoding_matches += 1
 
             self.total += 1
 
@@ -216,7 +243,7 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
 
         self.errors = defaultdict(int)
         # this contains the number of examples where the full target sequence was predicted correctly (exact matches)
-        self.encoding_match = 0
+        self.exact_encoding_matches = 0
 
     @property
     def state(self) -> Dict[str, Any]:
@@ -224,7 +251,7 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
         return {
             "total": copy.copy(self.total),
             "errors": copy.deepcopy(self.errors),
-            "encoding_match": copy.copy(self.encoding_match),
+            "exact_encoding_matches": copy.copy(self.exact_encoding_matches),
             "layer_metrics": {
                 layer_name: metric.state for layer_name, metric in self.layer_metrics.items()
             },
@@ -246,23 +273,27 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
     def compute(self):
         res = {}
 
-        if self.collect_encoding_matches:
-            res["encoding_match"] = self.encoding_match / self.total
-
-        for layer_name, metric in self.layer_metrics.items():
-            overall_layer_info, layer_info = metric.compute()
-            res[layer_name] = layer_info
-            res[f"{layer_name}/micro"] = overall_layer_info
+        if self.collect_exact_encoding_matches:
+            res["exact_encoding_matches"] = self.exact_encoding_matches / self.total
 
         # if errors contains a "correct" key, use that to normalize, otherwise use the number of training examples
         if self.key_error_correct in self.errors:
             errors_total = sum(self.errors.values())
         else:
             errors_total = self.total
-        res["errors"] = {k: v / errors_total for k, v in self.errors.items()}
-        res["errors/all"] = (
-            sum(v for k, v in self.errors.items() if k != self.key_error_correct) / errors_total
-        )
+        res["decoding_errors"] = {k: v / errors_total for k, v in self.errors.items()}
+        if "all" not in res["decoding_errors"]:
+            res["decoding_errors"]["all"] = (
+                sum(v for k, v in self.errors.items() if k != self.key_error_correct)
+                / errors_total
+            )
+
+        for layer_name, metric in self.layer_metrics.items():
+            if layer_name in res:
+                raise ValueError(
+                    f"Layer name '{layer_name}' is already used in the metric result dictionary."
+                )
+            res[layer_name] = metric.compute()
 
         res = self._nested_round(res)
 

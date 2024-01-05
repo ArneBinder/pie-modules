@@ -118,22 +118,21 @@ def test_sciarg_predict(trained_model, sciarg_batch_truncated, loaded_taskmodule
     metric.update(prediction, targets["labels"])
     values = metric.compute()
     assert values == {
-        "encoding_match": 0.4,
+        "exact_encoding_matches": 0.4,
+        "decoding_errors": {"correct": 0.977, "order": 0.023, "all": 0.023},
         "labeled_spans": {
+            "data": {"recall": 20.5882, "precision": 20.5882, "f1": 20.5882},
             "own_claim": {"recall": 25.0, "precision": 6.6667, "f1": 10.5263},
             "background_claim": {"recall": 50.9804, "precision": 47.2727, "f1": 49.0566},
-            "data": {"recall": 20.5882, "precision": 20.5882, "f1": 20.5882},
+            "micro": {"recall": 37.6344, "precision": 29.4118, "f1": 33.0189},
         },
-        "labeled_spans/micro": {"recall": 37.6344, "precision": 29.4118, "f1": 33.0189},
         "binary_relations": {
-            "contradicts": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
-            "parts_of_same": {"recall": 16.6667, "precision": 8.3333, "f1": 11.1111},
             "supports": {"recall": 8.5106, "precision": 8.6957, "f1": 8.6022},
+            "parts_of_same": {"recall": 16.6667, "precision": 8.3333, "f1": 11.1111},
+            "contradicts": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
             "semantically_same": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "micro": {"recall": 8.0645, "precision": 8.4746, "f1": 8.2645},
         },
-        "binary_relations/micro": {"recall": 8.0645, "precision": 8.4746, "f1": 8.2645},
-        "errors": {"correct": 0.977, "order": 0.023},
-        "errors/all": 0.023,
     }
 
 
@@ -156,20 +155,19 @@ def test_sciarg_predict_with_position_id_pattern(sciarg_batch_truncated, loaded_
 
     values = metric.compute()
     assert values == {
-        "binary_relations": {
-            "contradicts": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
-            "parts_of_same": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
-            "semantically_same": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
-            "supports": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
-        },
-        "binary_relations/micro": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
-        "encoding_match": 0.4,
-        "errors": {"correct": 0.1667, "len": 0.8333},
-        "errors/all": 0.8333,
+        "exact_encoding_matches": 0.4,
+        "decoding_errors": {"len": 0.8333, "correct": 0.1667, "all": 0.8333},
         "labeled_spans": {
-            "background_claim": {"f1": 3.8462, "precision": 100.0, "recall": 1.9608},
-            "data": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
-            "own_claim": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+            "background_claim": {"recall": 1.9608, "precision": 100.0, "f1": 3.8462},
+            "data": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "own_claim": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "micro": {"recall": 1.0753, "precision": 100.0, "f1": 2.1277},
         },
-        "labeled_spans/micro": {"f1": 2.1277, "precision": 100.0, "recall": 1.0753},
+        "binary_relations": {
+            "semantically_same": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "contradicts": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "supports": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "parts_of_same": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "micro": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        },
     }
