@@ -1,20 +1,12 @@
-import json
 import math
 
 import pytest
-import torch
-from pytorch_ie import AutoTaskModule, TaskModule
 from pytorch_ie.annotations import LabeledSpan
 from torchmetrics import Metric
 
 from pie_modules.taskmodules.common import (
     PrecisionRecallAndF1ForLabeledAnnotations,
     WrappedMetricWithUnbatchFunction,
-)
-from tests.models.test_simple_generative_pointer_predict import (
-    SCIARG_BATCH_PATH,
-    SCIARG_BATCH_PREDICTION_PATH,
-    TASKMODULE_PATH,
 )
 
 
