@@ -55,6 +55,17 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
         self.correct: List[Tuple[int, Annotation]] = []
         self.idx = 0
 
+    def update(self, gold: Iterable[Annotation], predicted: Iterable[Annotation]) -> None:
+        # remove duplicates within each list, but collect them with the instance idx to allow
+        # for same annotations in different examples (otherwise they would be counted as one
+        # because they are not attached to a specific document)
+        gold_set = {(self.idx, ann) for ann in set(gold)}
+        predicted_set = {(self.idx, ann) for ann in set(predicted)}
+        self.gold.extend(gold_set)
+        self.predicted.extend(predicted_set)
+        self.correct.extend(gold_set & predicted_set)
+        self.idx += 1
+
     @property
     def state(self) -> Dict[str, Any]:
         # copy to disallow modification of the state
@@ -110,17 +121,6 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
         result[self.key_micro] = overall
 
         return result
-
-    def update(self, gold: Iterable[Annotation], predicted: Iterable[Annotation]) -> None:
-        # remove duplicates within each list, but collect them with the instance idx to allow
-        # for same annotations in different examples (otherwise they would be counted as one
-        # because they are not attached to a specific document)
-        gold_set = {(self.idx, ann) for ann in set(gold)}
-        predicted_set = {(self.idx, ann) for ann in set(predicted)}
-        self.gold.extend(gold_set)
-        self.predicted.extend(predicted_set)
-        self.correct.extend(gold_set & predicted_set)
-        self.idx += 1
 
 
 T = TypeVar("T")
