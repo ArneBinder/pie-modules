@@ -116,8 +116,8 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
 
         if self.key_micro in result:
             raise ValueError(
-                f"key_micro={self.key_micro} is already used in the metric result dictionary because it was found "
-                f"as a label of the annotations. Please choose a different value for key_micro."
+                f"The key '{self.key_micro}' was used as an annotation label, but it is reserved for "
+                f"the micro average. You can change which key is used for that with the 'key_micro' argument."
             )
         result[self.key_micro] = overall
 
