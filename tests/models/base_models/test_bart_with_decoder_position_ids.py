@@ -1,6 +1,11 @@
+import pytest
 import torch
+from torch.nn import Embedding
+from transformers import BartConfig
+from transformers.models.bart.modeling_bart import BartLearnedPositionalEmbedding
 
 from pie_modules.models.base_models.bart_with_decoder_position_ids import (
+    BartDecoderWithPositionIds,
     BartLearnedPositionalEmbeddingWithPositionIds,
 )
 
@@ -24,3 +29,49 @@ def test_bart_learned_positional_embedding_with_position_ids():
     torch.testing.assert_close(original, replaced_original)
     assert replaced_different.shape == (1, 10, 6)
     assert not torch.allclose(original, replaced_different)
+
+
+@pytest.fixture(scope="module")
+def bart_config():
+    return BartConfig(
+        vocab_size=30,
+        d_model=10,
+        encoder_layers=1,
+        decoder_layers=1,
+        encoder_attention_heads=2,
+        decoder_attention_heads=2,
+        encoder_ffn_dim=20,
+        decoder_ffn_dim=20,
+        max_position_embeddings=10,
+    )
+
+
+@pytest.fixture(scope="module")
+def bart_decoder_with_position_ids(bart_config):
+    return BartDecoderWithPositionIds(config=bart_config)
+
+
+def test_bart_decoder_with_position_ids(bart_decoder_with_position_ids):
+    assert bart_decoder_with_position_ids is not None
+
+
+def test_bart_decoder_with_position_ids_get_input_embeddings(bart_decoder_with_position_ids):
+    input_embeddings = bart_decoder_with_position_ids.get_input_embeddings()
+    assert input_embeddings is not None
+    assert isinstance(input_embeddings, Embedding)
+    assert input_embeddings.embedding_dim == 10
+    assert input_embeddings.num_embeddings == 30
+
+
+def test_set_input_embeddings(bart_decoder_with_position_ids):
+    original_input_embeddings = bart_decoder_with_position_ids.get_input_embeddings()
+    torch.manual_seed(42)
+    new_input_embeddings = Embedding(
+        original_input_embeddings.num_embeddings, original_input_embeddings.embedding_dim
+    )
+    bart_decoder_with_position_ids.set_input_embeddings(new_input_embeddings)
+    input_embeddings = bart_decoder_with_position_ids.get_input_embeddings()
+    assert input_embeddings == new_input_embeddings
+    assert input_embeddings is not original_input_embeddings
+    # recover original input embeddings
+    bart_decoder_with_position_ids.set_input_embeddings(original_input_embeddings)
