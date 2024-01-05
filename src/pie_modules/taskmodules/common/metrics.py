@@ -13,6 +13,7 @@ from typing import (
     TypeVar,
 )
 
+import torch
 from pytorch_ie import Annotation
 from torch.nn import ModuleDict
 from torchmetrics import Metric
@@ -115,11 +116,12 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
 
         return overall, per_class
 
-    def update(self, gold, predicted) -> None:
-        # include idx to allow for same annotations in different examples (otherwise they would be counted as one
+    def update(self, gold: Iterable[Annotation], predicted: Iterable[Annotation]) -> None:
+        # remove duplicates within each list, but collect them with the instance idx to allow
+        # for same annotations in different examples (otherwise they would be counted as one
         # because they are not attached to a specific document)
-        gold_set = {(self.idx, ann) for ann in gold}
-        predicted_set = {(self.idx, ann) for ann in predicted}
+        gold_set = {(self.idx, ann) for ann in set(gold)}
+        predicted_set = {(self.idx, ann) for ann in set(predicted)}
         self.gold.extend(gold_set)
         self.predicted.extend(predicted_set)
         self.correct.extend(gold_set & predicted_set)
@@ -149,6 +151,8 @@ class WrappedLayerMetricsWithUnbatchAndDecodingFunction(Metric, Generic[T, U]):
             decoded annotations, so that the sum of all values in the error dictionary can be used to
             normalize the error counts. If None, the total number of training examples is used to
             normalize the error counts.
+        collect_encoding_matches: Whether to collect the number of examples where the full target encoding
+            was predicted correctly (exact matches).
     """
 
     def __init__(
@@ -156,14 +160,16 @@ class WrappedLayerMetricsWithUnbatchAndDecodingFunction(Metric, Generic[T, U]):
         layer_metrics: Dict[str, Metric],
         unbatch_function: Callable[[T], Iterable[U]],
         decode_annotations_with_errors_function: Callable[
-            [U], Tuple[Dict[str, List[Annotation]], Dict[str, int]]
+            [U], Tuple[Dict[str, Iterable[Annotation]], Dict[str, int]]
         ],
         round_precision: Optional[int] = 4,
         error_key_correct: Optional[str] = None,
+        collect_encoding_matches: bool = True,
     ):
         super().__init__()
 
         self.key_error_correct = error_key_correct
+        self.collect_encoding_matches = collect_encoding_matches
         self.round_precision = round_precision
         self.unbatch_function = unbatch_function
         self.decode_annotations_with_errors_func = decode_annotations_with_errors_function
@@ -176,9 +182,7 @@ class WrappedLayerMetricsWithUnbatchAndDecodingFunction(Metric, Generic[T, U]):
         expected_list = self.unbatch_function(expected)
 
         for expected_encoding, prediction_encoding in zip(expected_list, prediction_list):
-            gold_annotations, gold_errors = self.decode_annotations_with_errors_func(
-                expected_encoding
-            )
+            gold_annotations, _ = self.decode_annotations_with_errors_func(expected_encoding)
             predicted_annotations, predicted_errors = self.decode_annotations_with_errors_func(
                 prediction_encoding
             )
@@ -186,13 +190,17 @@ class WrappedLayerMetricsWithUnbatchAndDecodingFunction(Metric, Generic[T, U]):
                 self.errors[k] += v
 
             for layer_name, metric in self.layer_metrics.items():
-                # remove duplicates from layer data
-                gold_layer = set(gold_annotations[layer_name])
-                pred_layer = set(predicted_annotations[layer_name])
-                metric.update(gold_layer, pred_layer)
+                metric.update(gold_annotations[layer_name], predicted_annotations[layer_name])
 
-            if expected_encoding == prediction_encoding:
-                self.encoding_match += 1
+            if self.collect_encoding_matches:
+                if isinstance(expected_encoding, torch.Tensor) and isinstance(
+                    prediction_encoding, torch.Tensor
+                ):
+                    is_match = torch.equal(expected_encoding, prediction_encoding)
+                else:
+                    is_match = expected_encoding == prediction_encoding
+                if is_match:
+                    self.encoding_match += 1
 
             self.total += 1
 
@@ -237,7 +245,8 @@ class WrappedLayerMetricsWithUnbatchAndDecodingFunction(Metric, Generic[T, U]):
     def compute(self):
         res = {}
 
-        res["encoding_match"] = self.encoding_match / self.total
+        if self.collect_encoding_matches:
+            res["encoding_match"] = self.encoding_match / self.total
 
         for layer_name, metric in self.layer_metrics.items():
             overall_layer_info, layer_info = metric.compute()
