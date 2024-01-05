@@ -34,11 +34,8 @@ from pie_modules.document.processing import (
 )
 from pie_modules.utils import resolve_type
 
-from .common import (
-    BatchableMixin,
-    WrappedMetricWithUnbatchFunction,
-    get_first_occurrence_index,
-)
+from .common import BatchableMixin, get_first_occurrence_index
+from .metrics import WrappedMetricWithUnbatchFunction
 
 logger = logging.getLogger(__name__)
 
