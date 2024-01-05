@@ -132,7 +132,7 @@ class WrappedMetricWithUnbatchFunction(Metric, Generic[T]):
 U = TypeVar("U")
 
 
-class WrappedLayerMetricsWithUnbatchAndDecodingFunction(Metric, Generic[T, U]):
+class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[T, U]):
     """A wrapper around annotation layer metrics that can be used with batched encoded annotations.
 
     Args:

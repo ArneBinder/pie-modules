@@ -1,7 +1,7 @@
 from .interfaces import AnnotationEncoderDecoder, DecodingException
 from .metrics import (
     PrecisionRecallAndF1ForLabeledAnnotations,
-    WrappedLayerMetricsWithUnbatchAndDecodingFunction,
+    WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction,
     WrappedMetricWithUnbatchFunction,
 )
 from .mixins import BatchableMixin

@@ -43,7 +43,7 @@ from .common import (
     BatchableMixin,
     DecodingException,
     PrecisionRecallAndF1ForLabeledAnnotations,
-    WrappedLayerMetricsWithUnbatchAndDecodingFunction,
+    WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction,
     get_first_occurrence_index,
 )
 from .pointer_network.annotation_encoder_decoder import (
@@ -401,7 +401,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             for layer_name in self.layer_names
         }
 
-        return WrappedLayerMetricsWithUnbatchAndDecodingFunction(
+        return WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(
             unbatch_function=self.unbatch_output,
             decode_annotations_with_errors_function=self.decode_annotations,
             layer_metrics=layer_metrics,
