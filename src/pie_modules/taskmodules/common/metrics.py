@@ -174,7 +174,7 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
         unbatch_function: A function that takes a batched input and returns an iterable of
             individual inputs. This is used to unbatch the input before passing it to the annotation
             decoding function (decode_annotations_with_errors_function).
-        decode_annotations_with_errors_function: A function that takes an annotation encoding and
+        decode_layers_with_errors_function: A function that takes an annotation encoding and
             returns a tuple of two dictionaries. The first dictionary maps layer names to a list of
             annotations. The second dictionary maps error names to the number of errors that were
             encountered while decoding the annotations.
@@ -191,10 +191,8 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
     def __init__(
         self,
         layer_metrics: Dict[str, Metric],
-        unbatch_function: Callable[[T], Iterable[U]],
-        decode_annotations_with_errors_function: Callable[
-            [U], Tuple[Dict[str, Iterable[Annotation]], Dict[str, int]]
-        ],
+        unbatch_function: Callable[[T], Sequence[U]],
+        decode_layers_with_errors_function: Callable[[U], Tuple[Dict[str, Any], Dict[str, int]]],
         round_precision: Optional[int] = 4,
         error_key_correct: Optional[str] = None,
         collect_exact_encoding_matches: bool = True,
@@ -205,7 +203,7 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
         self.collect_exact_encoding_matches = collect_exact_encoding_matches
         self.round_precision = round_precision
         self.unbatch_function = unbatch_function
-        self.decode_annotations_with_errors_func = decode_annotations_with_errors_function
+        self.decode_layers_with_errors_function = decode_layers_with_errors_function
         self.layer_metrics = ModuleDict(layer_metrics)
 
         self.reset()
@@ -213,17 +211,21 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
     def update(self, prediction, expected):
         prediction_list = self.unbatch_function(prediction)
         expected_list = self.unbatch_function(expected)
+        if len(prediction_list) != len(expected_list):
+            raise ValueError(
+                f"Number of predictions ({len(prediction_list)}) and targets ({len(expected_list)}) do not match."
+            )
 
         for expected_encoding, prediction_encoding in zip(expected_list, prediction_list):
-            gold_annotations, _ = self.decode_annotations_with_errors_func(expected_encoding)
-            predicted_annotations, predicted_errors = self.decode_annotations_with_errors_func(
+            expected_layers, _ = self.decode_layers_with_errors_function(expected_encoding)
+            predicted_layers, predicted_errors = self.decode_layers_with_errors_function(
                 prediction_encoding
             )
             for k, v in predicted_errors.items():
                 self.errors[k] += v
 
             for layer_name, metric in self.layer_metrics.items():
-                metric.update(gold_annotations[layer_name], predicted_annotations[layer_name])
+                metric.update(expected_layers[layer_name], predicted_layers[layer_name])
 
             if self.collect_exact_encoding_matches:
                 if isinstance(expected_encoding, torch.Tensor) and isinstance(

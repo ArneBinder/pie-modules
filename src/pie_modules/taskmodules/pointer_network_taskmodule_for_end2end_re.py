@@ -404,7 +404,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
         return WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(
             unbatch_function=self.unbatch_output,
-            decode_annotations_with_errors_function=self.decode_annotations,
+            decode_layers_with_errors_function=self.decode_annotations,
             layer_metrics=layer_metrics,
             error_key_correct=KEY_INVALID_CORRECT,
         )
