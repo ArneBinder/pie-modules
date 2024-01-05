@@ -113,6 +113,7 @@ def test_bart_decoder_with_position_ids_forward(bart_decoder_with_position_ids):
 
 @pytest.fixture(scope="module")
 def bart_model_with_decoder_position_ids(bart_config):
+    torch.manual_seed(42)
     return BartModelWithDecoderPositionIds(config=bart_config)
 
 
@@ -158,7 +159,13 @@ def test_bart_model_with_decoder_position_ids_get_decoder(bart_model_with_decode
     assert isinstance(decoder, BartDecoderWithPositionIds)
 
 
-def test_bart_model_with_decoder_position_forward(bart_model_with_decoder_position_ids):
+@pytest.mark.parametrize(
+    "return_dict",
+    [True, False],
+)
+def test_bart_model_with_decoder_position_forward(
+    bart_model_with_decoder_position_ids, return_dict
+):
     # Arrange
     model = bart_model_with_decoder_position_ids
     input_ids = torch.tensor([[0, 1, 2, 3, 4, 5, 6, 7]])
@@ -167,18 +174,80 @@ def test_bart_model_with_decoder_position_forward(bart_model_with_decoder_positi
 
     # Act
     torch.manual_seed(42)
-    original = model(input_ids=input_ids)
+    original = model(input_ids=input_ids, return_dict=return_dict)[0]
     torch.manual_seed(42)
-    replaced_original = model(input_ids=input_ids, decoder_position_ids=position_ids_original)
+    replaced_original = model(
+        input_ids=input_ids, decoder_position_ids=position_ids_original, return_dict=return_dict
+    )[0]
     torch.manual_seed(42)
-    replaced_different = model(input_ids=input_ids, decoder_position_ids=position_ids_different)
+    replaced_different = model(
+        input_ids=input_ids, decoder_position_ids=position_ids_different, return_dict=return_dict
+    )[0]
 
     # Assert
-    assert isinstance(original, Seq2SeqModelOutput)
-    assert original.last_hidden_state.shape == (1, 8, 10)
-    assert isinstance(replaced_original, Seq2SeqModelOutput)
-    torch.testing.assert_close(original.last_hidden_state, replaced_original.last_hidden_state)
+    assert isinstance(original, torch.FloatTensor)
+    assert original.shape == (1, 8, 10)
+    torch.testing.assert_close(
+        original[0, :5, :3],
+        torch.tensor(
+            [
+                [0.7961970567703247, 1.2232387065887451, 0.7286717295646667],
+                [0.034051503986120224, -0.9746682047843933, -0.700711190700531],
+                [0.1363907903432846, -0.4540761113166809, -1.2949464321136475],
+                [1.1136258840560913, -0.1388537585735321, 1.538393259048462],
+                [-1.1127841472625732, 0.22768200933933258, 1.6438117027282715],
+            ]
+        ),
+    )
+    torch.testing.assert_close(
+        original.sum(dim=-1),
+        torch.tensor(
+            [
+                [
+                    -2.384185791015625e-07,
+                    -4.76837158203125e-07,
+                    -2.682209014892578e-07,
+                    2.086162567138672e-07,
+                    5.960464477539063e-08,
+                    5.960464477539063e-08,
+                    0.0,
+                    0.0,
+                ]
+            ]
+        ),
+    )
+    assert isinstance(replaced_original, torch.FloatTensor)
+    torch.testing.assert_close(original, replaced_original)
 
-    assert isinstance(replaced_different, Seq2SeqModelOutput)
-    assert replaced_different.last_hidden_state.shape == (1, 8, 10)
-    assert not torch.allclose(original.last_hidden_state, replaced_different.last_hidden_state)
+    assert isinstance(replaced_different, torch.FloatTensor)
+    assert replaced_different.shape == (1, 8, 10)
+    torch.testing.assert_close(
+        replaced_different[0, :5, :3],
+        torch.tensor(
+            [
+                [0.7961970567703247, 1.2232387065887451, 0.7286717295646667],
+                [0.1183161735534668, -0.7555443048477173, -1.230163812637329],
+                [1.2578136920928955, 0.18759475648403168, -0.1578090786933899],
+                [0.5176712870597839, 0.9378399848937988, 1.3435578346252441],
+                [0.6121589541435242, -1.0105386972427368, 2.361997365951538],
+            ]
+        ),
+    )
+    torch.testing.assert_close(
+        replaced_different.sum(dim=-1),
+        torch.tensor(
+            [
+                [
+                    -2.384185791015625e-07,
+                    -4.76837158203125e-07,
+                    -2.682209014892578e-07,
+                    2.086162567138672e-07,
+                    5.960464477539063e-08,
+                    5.960464477539063e-08,
+                    0.0,
+                    0.0,
+                ]
+            ]
+        ),
+    )
+    assert not torch.allclose(replaced_different, original)

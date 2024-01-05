@@ -488,10 +488,12 @@ class BartModelWithDecoderPositionIds(BartPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        if not isinstance(encoder_outputs, BaseModelOutput):
+        if not (
+            isinstance(encoder_outputs, BaseModelOutput) or isinstance(encoder_outputs, tuple)
+        ):
             raise ValueError(
                 "Inconsistent output: The output of the model encoder should be of type "
-                f"`BaseModelOutputWithPastAndCrossAttentions`, but is of type `{type(encoder_outputs)}`."
+                f"`BaseModelOutput` or tuple, but is of type `{type(encoder_outputs)}`."
             )
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
