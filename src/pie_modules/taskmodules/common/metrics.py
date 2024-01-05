@@ -47,34 +47,21 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
         self.label_mapping = label_mapping
         self.key_micro = key_micro
         self.in_percent = in_percent
-        self.reset()
-
-    def reset(self) -> None:
-        super().reset()
-        self.gold: List[Tuple[int, Annotation]] = []
-        self.predicted: List[Tuple[int, Annotation]] = []
-        self.correct: List[Tuple[int, Annotation]] = []
-        self.idx = 0
+        self.add_state("gold", default=[])
+        self.add_state("predicted", default=[])
+        self.add_state("correct", default=[])
+        self.add_state("idx", default=torch.tensor(0))
 
     def update(self, gold: Iterable[Annotation], predicted: Iterable[Annotation]) -> None:
         # remove duplicates within each list, but collect them with the instance idx to allow
         # for same annotations in different examples (otherwise they would be counted as one
         # because they are not attached to a specific document)
-        gold_set = {(self.idx, ann) for ann in set(gold)}
-        predicted_set = {(self.idx, ann) for ann in set(predicted)}
+        gold_set = {(self.idx.item(), ann) for ann in set(gold)}
+        predicted_set = {(self.idx.item(), ann) for ann in set(predicted)}
         self.gold.extend(gold_set)
         self.predicted.extend(predicted_set)
         self.correct.extend(gold_set & predicted_set)
         self.idx += 1
-
-    @property
-    def state(self) -> Dict[str, Any]:
-        # copy to disallow modification of the state
-        return {
-            "gold": copy.deepcopy(self.gold),
-            "predicted": copy.deepcopy(self.predicted),
-            "correct": copy.deepcopy(self.correct),
-        }
 
     def get_precision_recall_f1(
         self, n_gold: int, n_predicted: int, n_correct: int
@@ -206,7 +193,12 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
         self.decode_layers_with_errors_function = decode_layers_with_errors_function
         self.layer_metrics = ModuleDict(layer_metrics)
 
-        self.reset()
+        # total number of encodings
+        self.add_state("total", default=torch.tensor(0))
+        # this contains the number of examples where the full target sequence was predicted correctly (exact matches)
+        self.add_state("exact_encoding_matches", default=torch.tensor(0))
+        # decoding errors: tuples of (error name, number of errors)
+        self.add_state("errors", default=[])
 
     def update(self, prediction, expected):
         prediction_list = self.unbatch_function(prediction)
@@ -221,8 +213,7 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
             predicted_layers, predicted_errors = self.decode_layers_with_errors_function(
                 prediction_encoding
             )
-            for k, v in predicted_errors.items():
-                self.errors[k] += v
+            self.errors.extend(predicted_errors.items())
 
             for layer_name, metric in self.layer_metrics.items():
                 metric.update(expected_layers[layer_name], predicted_layers[layer_name])
@@ -245,25 +236,6 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
         for metric in self.layer_metrics.values():
             metric.reset()
 
-        # total number of tuples
-        self.total = 1e-13
-
-        self.errors = defaultdict(int)
-        # this contains the number of examples where the full target sequence was predicted correctly (exact matches)
-        self.exact_encoding_matches = 0
-
-    @property
-    def state(self) -> Dict[str, Any]:
-        # copy to disallow modification of the state
-        return {
-            "total": copy.copy(self.total),
-            "errors": copy.deepcopy(self.errors),
-            "exact_encoding_matches": copy.copy(self.exact_encoding_matches),
-            "layer_metrics": {
-                layer_name: metric.state for layer_name, metric in self.layer_metrics.items()
-            },
-        }
-
     def _nested_round(self, d: Dict[str, Any]) -> Dict[str, Any]:
         if self.round_precision is None:
             return d
@@ -279,20 +251,27 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
 
     def compute(self):
         res = {}
-
         if self.collect_exact_encoding_matches:
-            res["exact_encoding_matches"] = self.exact_encoding_matches / self.total
+            res["exact_encoding_matches"] = (
+                self.exact_encoding_matches / self.total if self.total > 0 else 0.0
+            )
 
+        errors = defaultdict(int)
+        for k, v in self.errors:
+            errors[k] += v
         # if errors contains a "correct" key, use that to normalize, otherwise use the number of training examples
-        if self.key_error_correct in self.errors:
-            errors_total = sum(self.errors.values())
+        if self.key_error_correct in errors:
+            errors_total = sum(errors.values())
         else:
             errors_total = self.total
-        res["decoding_errors"] = {k: v / errors_total for k, v in self.errors.items()}
+        res["decoding_errors"] = {
+            k: v / errors_total if errors_total > 0 else 0.0 for k, v in errors.items()
+        }
         if "all" not in res["decoding_errors"]:
             res["decoding_errors"]["all"] = (
-                sum(v for k, v in self.errors.items() if k != self.key_error_correct)
-                / errors_total
+                sum(v for k, v in errors.items() if k != self.key_error_correct) / errors_total
+                if errors_total > 0
+                else 0.0
             )
 
         for layer_name, metric in self.layer_metrics.items():

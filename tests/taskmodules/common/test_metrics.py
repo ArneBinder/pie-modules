@@ -2,6 +2,7 @@ import json
 from typing import Any, Dict, Tuple
 
 import pytest
+import torch
 from pytorch_ie.annotations import LabeledSpan
 from torchmetrics import Metric
 
@@ -15,11 +16,23 @@ from pie_modules.taskmodules.common import (
 def test_precision_recall_and_f1_for_labeled_annotations():
     metric = PrecisionRecallAndF1ForLabeledAnnotations()
     assert metric.compute() == {"micro": {"f1": 0.0, "precision": 0.0, "recall": 0.0}}
+    assert metric.metric_state == {
+        "gold": [],
+        "predicted": [],
+        "correct": [],
+        "idx": torch.tensor(0),
+    }
 
     metric.update(
         gold=[LabeledSpan(start=0, end=1, label="a")],
         predicted=[LabeledSpan(start=0, end=1, label="a")],
     )
+    assert metric.metric_state == {
+        "gold": [(0, LabeledSpan(start=0, end=1, label="a", score=1.0))],
+        "predicted": [(0, LabeledSpan(start=0, end=1, label="a", score=1.0))],
+        "correct": [(0, LabeledSpan(start=0, end=1, label="a", score=1.0))],
+        "idx": torch.tensor(1),
+    }
     assert metric.compute() == {
         "a": {"recall": 1.0, "precision": 1.0, "f1": 1.0},
         "micro": {"recall": 1.0, "precision": 1.0, "f1": 1.0},
@@ -30,6 +43,19 @@ def test_precision_recall_and_f1_for_labeled_annotations():
         gold=[LabeledSpan(start=0, end=1, label="a"), LabeledSpan(start=0, end=1, label="b")],
         predicted=[LabeledSpan(start=0, end=1, label="b"), LabeledSpan(start=0, end=1, label="c")],
     )
+    assert set(metric.metric_state) == {"gold", "predicted", "correct", "idx"}
+    assert metric.metric_state["idx"] == torch.tensor(1)
+    assert set(metric.metric_state["gold"]) == {
+        (0, LabeledSpan(start=0, end=1, label="a", score=1.0)),
+        (0, LabeledSpan(start=0, end=1, label="b", score=1.0)),
+    }
+    assert set(metric.metric_state["predicted"]) == {
+        (0, LabeledSpan(start=0, end=1, label="b", score=1.0)),
+        (0, LabeledSpan(start=0, end=1, label="c", score=1.0)),
+    }
+    assert set(metric.metric_state["correct"]) == {
+        (0, LabeledSpan(start=0, end=1, label="b", score=1.0)),
+    }
     assert metric.compute() == {
         "b": {"recall": 1.0, "precision": 1.0, "f1": 1.0},
         "a": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
@@ -51,6 +77,19 @@ def test_precision_recall_and_f1_for_labeled_annotations():
             LabeledSpan(start=0, end=1, label="c"),
         ],
     )
+    assert set(metric.metric_state) == {"gold", "predicted", "correct", "idx"}
+    assert metric.metric_state["idx"] == torch.tensor(1)
+    assert set(metric.metric_state["gold"]) == {
+        (0, LabeledSpan(start=0, end=1, label="a", score=1.0)),
+        (0, LabeledSpan(start=0, end=1, label="b", score=1.0)),
+    }
+    assert set(metric.metric_state["predicted"]) == {
+        (0, LabeledSpan(start=0, end=1, label="b", score=1.0)),
+        (0, LabeledSpan(start=0, end=1, label="c", score=1.0)),
+    }
+    assert set(metric.metric_state["correct"]) == {
+        (0, LabeledSpan(start=0, end=1, label="b", score=1.0)),
+    }
     assert metric.compute() == {
         "b": {"recall": 1.0, "precision": 1.0, "f1": 1.0},
         "a": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
@@ -68,6 +107,17 @@ def test_precision_recall_and_f1_for_labeled_annotations():
         gold=[LabeledSpan(start=0, end=1, label="b")],
         predicted=[LabeledSpan(start=0, end=1, label="a")],
     )
+    assert set(metric.metric_state) == {"gold", "predicted", "correct", "idx"}
+    assert metric.metric_state["idx"] == torch.tensor(2)
+    assert set(metric.metric_state["gold"]) == {
+        (0, LabeledSpan(start=0, end=1, label="a", score=1.0)),
+        (1, LabeledSpan(start=0, end=1, label="b", score=1.0)),
+    }
+    assert set(metric.metric_state["predicted"]) == {
+        (0, LabeledSpan(start=0, end=1, label="b", score=1.0)),
+        (1, LabeledSpan(start=0, end=1, label="a", score=1.0)),
+    }
+    assert set(metric.metric_state["correct"]) == set()
     assert metric.compute() == {
         "a": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
         "b": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
@@ -207,8 +257,14 @@ def test_wrapped_layer_metrics_with_unbatch_and_decode_with_errors_function(
     assert metric.unbatch_function is not None
     assert metric.decode_layers_with_errors_function is not None
     assert metric.layer_metrics is not None
+    assert metric.metric_state == {
+        "total": torch.tensor(0),
+        "exact_encoding_matches": torch.tensor(0),
+        "errors": [],
+    }
 
     values = metric.compute()
+    assert metric.metric_state
     assert values == {
         "decoding_errors": {"all": 0.0},
         "entities": 0.0,
@@ -222,6 +278,11 @@ def test_wrapped_layer_metrics_with_unbatch_and_decode_with_errors_function(
         prediction=json.dumps({"entities": ["E1"], "relations": ["R1"]}),
         expected=json.dumps({"entities": ["E1"], "relations": ["R1"]}),
     )
+    assert metric.metric_state == {
+        "total": torch.tensor(1),
+        "exact_encoding_matches": torch.tensor(1),
+        "errors": [("dummy", 0)],
+    }
     values = metric.compute()
     assert values == {
         "decoding_errors": {"all": 0.0, "dummy": 0.0},
@@ -241,6 +302,11 @@ def test_wrapped_layer_metrics_with_unbatch_and_decode_with_errors_function(
         + "\n"
         + json.dumps({"entities": ["E1"], "relations": ["R2"]}),
     )
+    assert metric.metric_state == {
+        "total": torch.tensor(2),
+        "exact_encoding_matches": torch.tensor(1),
+        "errors": [("dummy", 0), ("dummy", 0)],
+    }
     values = metric.compute()
     assert values == {
         "decoding_errors": {"all": 0.0, "dummy": 0.0},
@@ -255,6 +321,11 @@ def test_wrapped_layer_metrics_with_unbatch_and_decode_with_errors_function(
         prediction="error",
         expected=json.dumps({"entities": ["E1"], "relations": []}),
     )
+    assert metric.metric_state == {
+        "total": torch.tensor(1),
+        "exact_encoding_matches": torch.tensor(0),
+        "errors": [("dummy", 1)],
+    }
     values = metric.compute()
     # In the case on an error, the decoding function returns adict with empty lists for entities and relations.
     # Thus, we get a perfect match for entities and a 0.0 match for relations.
