@@ -725,18 +725,6 @@ def test_annotations_from_output(task_encodings, task_outputs, taskmodule):
     )
 
 
-def test_configure_model_metric(taskmodule):
-    metric = taskmodule.configure_model_metric()
-    assert metric is not None
-    assert isinstance(metric, WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction)
-
-
-def test_configure_model_generation(taskmodule):
-    assert taskmodule.configure_model_generation() == {
-        "no_repeat_ngram_size": 7,
-    }
-
-
 def get_default_taskmodule(**kwargs):
     taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
         tokenizer_name_or_path="facebook/bart-base",
@@ -748,6 +736,71 @@ def get_default_taskmodule(**kwargs):
     )
     taskmodule.post_prepare()
     return taskmodule
+
+
+def test_configure_model_metric():
+    taskmodule = get_default_taskmodule()
+    metric = taskmodule.configure_model_metric()
+    assert metric is not None
+    assert isinstance(metric, WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction)
+    values = metric.compute()
+    assert values == {
+        "binary_relations": {"micro": {"f1": 0.0, "precision": 0.0, "recall": 0.0}},
+        "decoding_errors": {"all": 0.0},
+        "exact_encoding_matches": 0.0,
+        "labeled_spans": {"micro": {"f1": 0.0, "precision": 0.0, "recall": 0.0}},
+    }
+
+    labels = torch.tensor([[14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]])
+    # test with expected == prediction
+    metric.update(labels, labels)
+    values = metric.compute()
+    assert values == {
+        "exact_encoding_matches": 1.0,
+        "decoding_errors": {"correct": 1.0, "all": 0.0},
+        "labeled_spans": {
+            "content": {"recall": 100.0, "precision": 100.0, "f1": 100.0},
+            "person": {"recall": 100.0, "precision": 100.0, "f1": 100.0},
+            "topic": {"recall": 100.0, "precision": 100.0, "f1": 100.0},
+            "micro": {"recall": 100.0, "precision": 100.0, "f1": 100.0},
+        },
+        "binary_relations": {
+            "is_about": {"recall": 100.0, "precision": 100.0, "f1": 100.0},
+            "micro": {"recall": 100.0, "precision": 100.0, "f1": 100.0},
+        },
+    }
+    torch.random.manual_seed(42)
+    # random_labels = torch.randint(0, 20, (1, 30))
+    # split into random_labels1 and random_labels2 just for better code formatting
+    random_labels1 = [0, 14, 4, 19, 2, 6, 18, 3, 0, 8, 8, 14, 2, 1]
+    random_labels2 = [14, 6, 7, 8, 4, 1, 17, 9, 14, 7, 13, 15, 5, 12, 18, 13]
+    labels_random = torch.tensor([random_labels1 + random_labels2])
+    metric.reset()
+    # test the case where we have mixed results (correct and wrong)
+    metric.update(labels, labels)
+    metric.update(prediction=labels_random, expected=labels)
+    values = metric.compute()
+    assert values == {
+        "exact_encoding_matches": 0.5,
+        "decoding_errors": {"correct": 0.5, "len": 0.25, "order": 0.25, "all": 0.5},
+        "labeled_spans": {
+            "content": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
+            "person": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
+            "topic": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
+            "micro": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
+        },
+        "binary_relations": {
+            "is_about": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
+            "micro": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
+        },
+    }
+
+
+def test_configure_model_generation():
+    taskmodule = get_default_taskmodule()
+    assert taskmodule.configure_model_generation() == {
+        "no_repeat_ngram_size": 7,
+    }
 
 
 def test_configure_model_generation_with_constrained_generation():
