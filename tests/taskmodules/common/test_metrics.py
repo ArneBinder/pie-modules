@@ -122,7 +122,7 @@ def test_precision_recall_and_f1_for_labeled_annotations_key_micro_error():
     assert (
         str(excinfo.value)
         == "The key 'micro' was used as an annotation label, but it is reserved for the micro average. "
-           "You can change which key is used for that with the 'key_micro' argument."
+        "You can change which key is used for that with the 'key_micro' argument."
     )
 
 
