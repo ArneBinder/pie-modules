@@ -1,10 +1,10 @@
 import json
+import math
 
 import pytest
 import torch
 from pytorch_ie import AutoTaskModule, TaskModule
-from torch import isnan, tensor
-from torchmetrics.text import ROUGEScore
+from torchmetrics import Metric
 
 from pie_modules.taskmodules.common import WrappedMetricWithUnbatchFunction
 from tests.models.test_simple_generative_pointer_predict import (
@@ -15,76 +15,60 @@ from tests.models.test_simple_generative_pointer_predict import (
 
 
 @pytest.fixture(scope="module")
-def metric():
-    return WrappedMetricWithUnbatchFunction(metric=ROUGEScore(), unbatch_function=lambda x: x)
+def wrapped_metric_with_unbatch_function():
+    class ExactMatchMetric(Metric):
+        """A simple metric that computes the exact match ratio between predictions and targets."""
+
+        def __init__(self):
+            super().__init__()
+            self.add_state("matching", default=[])
+
+        def update(self, prediction: str, target: str):
+            self.matching.append(prediction == target)
+
+        def compute(self):
+            return sum(self.matching) / len(self.matching) if self.matching else float("nan")
+
+    # just split the strings to unbatch the inputs
+    return WrappedMetricWithUnbatchFunction(
+        metric=ExactMatchMetric(), unbatch_function=lambda x: x.split()
+    )
 
 
-def test_metric(metric):
+def test_wrapped_metric_with_unbatch_function(wrapped_metric_with_unbatch_function):
+    metric = wrapped_metric_with_unbatch_function
     assert metric is not None
     assert metric.unbatch_function is not None
     assert metric.metric is not None
 
-    metric_values = metric.compute()
-    assert len(metric_values) > 0
-    assert all(isnan(value) for value in metric_values.values())
+    metric_value = metric.compute()
+    assert math.isnan(metric_value)
 
-
-def test_metric_equal_predictions_and_targets(metric):
     metric.reset()
-    metric.update(predictions=["test"], targets=["test"])
-    assert metric.compute() == {
-        "rouge1_fmeasure": tensor(1.0),
-        "rouge1_precision": tensor(1.0),
-        "rouge1_recall": tensor(1.0),
-        "rouge2_fmeasure": tensor(0.0),
-        "rouge2_precision": tensor(0.0),
-        "rouge2_recall": tensor(0.0),
-        "rougeL_fmeasure": tensor(1.0),
-        "rougeL_precision": tensor(1.0),
-        "rougeL_recall": tensor(1.0),
-        "rougeLsum_fmeasure": tensor(1.0),
-        "rougeLsum_precision": tensor(1.0),
-        "rougeLsum_recall": tensor(1.0),
-    }
+    metric.update(predictions="abc", targets="abc")
+    assert metric.compute() == 1.0
 
-
-def test_metric_different_predictions_and_targets(metric):
     metric.reset()
-    metric.update(predictions=["test"], targets=["different"])
-    assert metric.compute() == {
-        "rouge1_fmeasure": tensor(0.0),
-        "rouge1_precision": tensor(0.0),
-        "rouge1_recall": tensor(0.0),
-        "rouge2_fmeasure": tensor(0.0),
-        "rouge2_precision": tensor(0.0),
-        "rouge2_recall": tensor(0.0),
-        "rougeL_fmeasure": tensor(0.0),
-        "rougeL_precision": tensor(0.0),
-        "rougeL_recall": tensor(0.0),
-        "rougeLsum_fmeasure": tensor(0.0),
-        "rougeLsum_precision": tensor(0.0),
-        "rougeLsum_recall": tensor(0.0),
-    }
+    metric.update(predictions="abc", targets="def")
+    assert metric.compute() == 0.0
 
-
-def test_metric_partially_different_predictions_and_targets(metric):
     metric.reset()
-    metric.update(predictions=["test"], targets=["test different"])
-    metric_values = metric.compute()
-    assert metric_values == {
-        "rouge1_fmeasure": tensor(0.6666666865348816),
-        "rouge1_precision": tensor(1.0),
-        "rouge1_recall": tensor(0.5000),
-        "rouge2_fmeasure": tensor(0.0),
-        "rouge2_precision": tensor(0.0),
-        "rouge2_recall": tensor(0.0),
-        "rougeL_fmeasure": tensor(0.6666666865348816),
-        "rougeL_precision": tensor(1.0),
-        "rougeL_recall": tensor(0.5000),
-        "rougeLsum_fmeasure": tensor(0.6666666865348816),
-        "rougeLsum_precision": tensor(1.0),
-        "rougeLsum_recall": tensor(0.5000),
-    }
+    metric.update(predictions="abc def", targets="abc def")
+    assert metric.compute() == 1.0
+
+    metric.reset()
+    metric.update(predictions="abc def", targets="def abc")
+    assert metric.compute() == 0.0
+
+    metric.reset()
+    metric.update(predictions="abc xyz", targets="def xyz")
+    assert metric.compute() == 0.5
+
+
+def test_wrapped_metric_with_unbatch_function_size_mismatch(wrapped_metric_with_unbatch_function):
+    with pytest.raises(ValueError) as excinfo:
+        wrapped_metric_with_unbatch_function.update(predictions="abc", targets="abc def")
+    assert str(excinfo.value) == "Number of predictions (1) and targets (2) do not match."
 
 
 @pytest.fixture(scope="module")
