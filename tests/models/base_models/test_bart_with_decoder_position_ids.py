@@ -63,7 +63,7 @@ def test_bart_decoder_with_position_ids_get_input_embeddings(bart_decoder_with_p
     assert input_embeddings.num_embeddings == 30
 
 
-def test_set_input_embeddings(bart_decoder_with_position_ids):
+def test_bart_decoder_with_position_ids_set_input_embeddings(bart_decoder_with_position_ids):
     original_input_embeddings = bart_decoder_with_position_ids.get_input_embeddings()
     torch.manual_seed(42)
     new_input_embeddings = Embedding(
