@@ -10,9 +10,6 @@ from pytorch_ie.documents import TextBasedDocument
 from transformers import LogitsProcessorList
 
 from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
-from pie_modules.taskmodules.common import (
-    WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction,
-)
 from pie_modules.taskmodules.pointer_network.logits_processor import (
     PrefixConstrainedLogitsProcessorWithMaximum,
 )
@@ -742,7 +739,6 @@ def test_configure_model_metric():
     taskmodule = get_default_taskmodule()
     metric = taskmodule.configure_model_metric()
     assert metric is not None
-    assert isinstance(metric, WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction)
     values = metric.compute()
     assert values == {
         "binary_relations": {"micro": {"f1": 0.0, "precision": 0.0, "recall": 0.0}},

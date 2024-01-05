@@ -39,12 +39,10 @@ from pie_modules.documents import (
 
 from ..document.processing import token_based_document_to_text_based, tokenize_document
 from ..utils import resolve_type
-from .common import (
-    BatchableMixin,
-    DecodingException,
+from .common import BatchableMixin, DecodingException, get_first_occurrence_index
+from .metrics import (
     PrecisionRecallAndF1ForLabeledAnnotations,
     WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction,
-    get_first_occurrence_index,
 )
 from .pointer_network.annotation_encoder_decoder import (
     BinaryRelationEncoderDecoder,
