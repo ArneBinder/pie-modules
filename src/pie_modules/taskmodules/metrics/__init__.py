@@ -1,2 +1,4 @@
+from .precision_recall_and_f1_for_labeled_annotations import (
+    PrecisionRecallAndF1ForLabeledAnnotations,
+)
 from .wrapped_metric_with_unbatch_function import WrappedMetricWithUnbatchFunction
-from .precision_recall_and_f1_for_labeled_annotations import PrecisionRecallAndF1ForLabeledAnnotations
