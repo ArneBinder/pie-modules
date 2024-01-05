@@ -1,4 +1,3 @@
-import copy
 import logging
 from collections import Counter, defaultdict
 from typing import (
@@ -7,7 +6,6 @@ from typing import (
     Dict,
     Generic,
     Iterable,
-    List,
     Optional,
     Sequence,
     Tuple,
