@@ -6,6 +6,7 @@ from functools import cmp_to_key
 from typing import (
     Any,
     Dict,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -489,9 +490,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             not all(v == 0 for k, v in encoding_errors.items() if k != "correct")
             or len(remaining) > 0
         ):
-            decoded, invalid = self.decode_annotations(
-                LabelsAndOptionalConstraints(target_ids), metadata=metadata
-            )
+            decoded, invalid = self.decode_annotations(LabelsAndOptionalConstraints(target_ids))
             not_encoded = {}
             for layer_name in layers:
                 # convert to dicts to make them comparable (original annotations are attached which breaks comparison)
@@ -523,8 +522,8 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         return LabelsAndOptionalConstraints(labels=target_ids, constraints=constraints)
 
     def decode_annotations(
-        self, encoding: TaskOutputType, metadata: Optional[Dict[str, Any]] = None
-    ) -> Tuple[Dict[str, List[Annotation]], Dict[str, int]]:
+        self, encoding: TaskOutputType
+    ) -> Tuple[Dict[str, Iterable[Annotation]], Dict[str, int]]:
         decoded_relations, errors, remaining = self.decode_relations(label_ids=encoding.labels)
         relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
         entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
@@ -823,7 +822,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         task_output: TaskOutputType,
     ) -> Iterator[Tuple[str, Annotation]]:
         layers, errors = self.decode_annotations(
-            encoding=task_output, metadata=task_encoding.metadata
+            encoding=task_output,  # metadata=task_encoding.metadata
         )
         tokenized_document = task_encoding.metadata["tokenized_document"]
 
