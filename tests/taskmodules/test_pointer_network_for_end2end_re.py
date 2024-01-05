@@ -13,7 +13,7 @@ from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 from pie_modules.taskmodules.pointer_network.logits_processor import (
     PrefixConstrainedLogitsProcessorWithMaximum,
 )
-from pie_modules.taskmodules.pointer_network_taskmodule_for_end2end_re import (
+from pie_modules.taskmodules.pointer_network_for_end2end_re import (
     LabelsAndOptionalConstraints,
 )
 
