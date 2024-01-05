@@ -26,6 +26,7 @@ Available taskmodules:
 - [TokenClassificationTaskModule](src/pie_modules/taskmodules/token_classification.py)
 - [ExtractiveQuestionAnsweringTaskModule](src/pie_modules/taskmodules/extractive_question_answering.py)
 - [TextToTextTaskModule](src/pie_modules/taskmodules/text_to_text.py)
+- [PointerNetworkTaskModuleForEnd2EndRE](src/pie_modules/taskmodules/pointer_network_for_end2end_re.py)
 
 Available metrics:
 
