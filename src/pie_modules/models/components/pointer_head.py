@@ -85,9 +85,6 @@ class PointerHead(torch.nn.Module):
     def use_prepared_position_ids(self):
         return hasattr(self, "decoder_position_id_pattern")
 
-    def output_size(self):
-        return len(self.target_token_ids)
-
     def set_embeddings(self, embedding: nn.Embedding) -> None:
         self.embeddings = embedding
 
@@ -129,6 +126,7 @@ class PointerHead(torch.nn.Module):
 
         decoder_input_ids = torch.where(mapping_token_mask, tag_mapped_tokens, word_mapped_tokens)
 
+        # TODO: it looks like that is not required because the pad id gets automatically mapped to the pad token id
         # during training, the attention mask is available
         if attention_mask is not None:
             decoder_input_ids = decoder_input_ids.masked_fill(
