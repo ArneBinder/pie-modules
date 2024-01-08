@@ -43,8 +43,6 @@ def get_non_layer_norm_parameters(
 class BartAsPointerNetworkConfig(BartConfig):
     def __init__(
         self,
-        # label space ids (note that all target ids are: [bos_id, eos_id] + label_ids)
-        label_ids: Optional[List[int]] = None,
         # respective token ids for the label-, eos-, and pad ids. Can be used as a mapping from the
         # target ids to the token ids.
         target_token_ids: Optional[List[int]] = None,
@@ -67,7 +65,6 @@ class BartAsPointerNetworkConfig(BartConfig):
     ):
         super().__init__(**kwargs)
 
-        self.label_ids = label_ids
         self.target_token_ids = target_token_ids
 
         self.embedding_weight_mapping = embedding_weight_mapping
@@ -103,7 +100,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
 
         self.pointer_head = PointerHead(
             # target space ids
-            label_ids=self.model.config.label_ids,
+            bos_id=self.model.config.bos_token_id,
             eos_id=self.model.config.eos_token_id,
             pad_id=self.model.config.pad_token_id,
             # decoder-input token ids

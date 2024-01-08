@@ -110,7 +110,6 @@ def model(taskmodule) -> BartAsPointerNetwork:
         bos_token_id=taskmodule.bos_id,
         eos_token_id=taskmodule.eos_id,
         pad_token_id=taskmodule.eos_id,
-        label_ids=taskmodule.label_ids,
         # target token id space
         target_token_ids=taskmodule.target_token_ids,
         # mapping to better initialize the label embedding weights

@@ -16,7 +16,7 @@ class PointerHead(torch.nn.Module):
         self,
         embeddings: nn.Embedding,
         # output space (targets)
-        label_ids: List[int],
+        bos_id: int,
         eos_id: int,
         pad_id: int,
         # (decoder) input space
@@ -32,14 +32,21 @@ class PointerHead(torch.nn.Module):
 
         self.embeddings = embeddings
 
-        self.pad_id = pad_id
-        self.eos_id = eos_id
-
         self.pointer_offset = len(target_token_ids)
+
+        self.bos_id = bos_id
+        self.eos_id = eos_id
+        self.pad_id = pad_id
+        # all ids that are not bos, eos or pad are label ids
+        self.label_ids = [
+            target_id
+            for target_id in range(self.pointer_offset)
+            if target_id not in [self.bos_id, self.eos_id, self.pad_id]
+        ]
 
         target2token_id = torch.LongTensor(target_token_ids)
         self.register_buffer("target2token_id", target2token_id)
-        self.label_token_ids = [target_token_ids[label_id] for label_id in label_ids]
+        self.label_token_ids = self.target2token_id[self.label_ids]
 
         if self.eos_id >= self.pointer_offset:
             raise ValueError(
@@ -196,8 +203,8 @@ class PointerHead(torch.nn.Module):
     def forward(
         self,
         last_hidden_state,
-        encoder_last_hidden_state,
         encoder_input_ids,
+        encoder_last_hidden_state,
         encoder_attention_mask,
         labels: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -234,16 +241,16 @@ class PointerHead(torch.nn.Module):
         gen_scores = torch.einsum("blh,bnh->bln", last_hidden_state, input_embed)
         avg_word_scores = (gen_scores + word_scores) / 2
 
-        # TODO: what exactly does this mask? Masking special tokens?
+        # TODO: what exactly does this mask? Masking special tokens? use special_token_mask instead?
         mask = encoder_attention_mask.eq(0)
         mask = mask.unsqueeze(1)
         # TODO: what are 2 and 1 (for ge)? Note that 2 is the eos_token_id of Bart.
         mask = mask.__or__(encoder_input_ids.eq(2).cumsum(dim=1).ge(1).unsqueeze(1))
         avg_word_scores = avg_word_scores.masked_fill(mask, -1e32)
 
-        # Note: logits[:, :, 0] contains the score for the bos token which should be never generated!
-        logits[:, :, 1:2] = eos_scores
-        logits[:, :, 2 : self.pointer_offset] = label_scores
+        # Note: the remaining row in logits contains the score for the bos token which should be never generated!
+        logits[:, :, self.eos_id : self.eos_id + 1] = eos_scores
+        logits[:, :, self.label_ids] = label_scores
         logits[:, :, self.pointer_offset :] = avg_word_scores
 
         loss = None
@@ -283,7 +290,7 @@ class PointerHead(torch.nn.Module):
                 ),
                 fill_value=-1e24,
             )
-            constraints_logits[:, :, 2 : self.pointer_offset] = constraints_label_scores
+            constraints_logits[:, :, self.label_ids] = constraints_label_scores
             constraints_logits[:, :, self.pointer_offset :] = constraints_word_scores
 
             mask = constraints >= 0
