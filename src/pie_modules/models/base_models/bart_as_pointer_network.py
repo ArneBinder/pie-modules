@@ -198,8 +198,6 @@ class BartAsPointerNetwork(BartPreTrainedModel):
 
     def get_decoder(self):
         return self.model.get_decoder()
-        # TODO: return self.pointer_decoder?
-        # return self.pointer_decoder
 
     def overwrite_decoder_label_embeddings_with_mapping(
         self, mapping: Optional[Dict[Union[int, str], List[int]]] = None
@@ -208,7 +206,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             mapping = self.config.embedding_weight_mapping
         if mapping is None:
             raise ValueError("No mapping provided to overwrite the decoder label embeddings!")
-        # Because of serialization, the keys may be strings. Convert them back to ints.
+        # Because of config serialization, the keys may be strings. Convert them back to ints.
         mapping_converted = {int(k): v for k, v in mapping.items()}
         self.pointer_head.overwrite_label_embeddings_with_mapping(
             mapping_converted, encoder_weights=self.model.encoder.embed_tokens.weight
