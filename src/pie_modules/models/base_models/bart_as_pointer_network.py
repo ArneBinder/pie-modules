@@ -45,7 +45,8 @@ class BartAsPointerNetworkConfig(BartConfig):
         self,
         # label space ids (note that all target ids are: [bos_id, eos_id] + label_ids)
         label_ids: Optional[List[int]] = None,
-        # mapping from label space ids to target token ids
+        # respective token ids for the label-, eos-, and pad ids. Can be used as a mapping from the
+        # target ids to the token ids.
         target_token_ids: Optional[List[int]] = None,
         # token id mapping to better initialize the label embedding weights
         embedding_weight_mapping: Optional[Dict[Union[int, str], List[int]]] = None,
@@ -75,6 +76,7 @@ class BartAsPointerNetworkConfig(BartConfig):
         self.use_encoder_mlp = use_encoder_mlp
         self.use_constraints_encoder_mlp = use_constraints_encoder_mlp
         self.max_target_positions = max_target_positions
+
         self.decoder_position_id_pattern = decoder_position_id_pattern
         self.increase_position_ids_per_record = increase_position_ids_per_record
 
@@ -102,12 +104,16 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             self.model = BartModel(config)
 
         self.pointer_head = PointerHead(
-            embeddings=self.model.decoder.embed_tokens,
-            target_token_ids=self.model.config.target_token_ids,
-            embedding_weight_mapping=self.model.config.embedding_weight_mapping,
+            # target space ids
             label_ids=self.model.config.label_ids,
             eos_id=self.model.config.eos_token_id,
             pad_id=self.model.config.pad_token_id,
+            # decoder-input token ids
+            target_token_ids=self.model.config.target_token_ids,
+            # embeddings
+            embeddings=self.model.decoder.embed_tokens,
+            embedding_weight_mapping=self.model.config.embedding_weight_mapping,
+            # other parameters
             use_encoder_mlp=self.model.config.use_encoder_mlp,
             use_constraints_encoder_mlp=self.model.config.use_constraints_encoder_mlp,
             decoder_position_id_pattern=self.model.config.decoder_position_id_pattern,

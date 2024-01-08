@@ -15,11 +15,11 @@ class PointerHead(torch.nn.Module):
     def __init__(
         self,
         embeddings: nn.Embedding,
-        # label space
+        # output space (targets)
         label_ids: List[int],
         eos_id: int,
         pad_id: int,
-        # target token space
+        # (decoder) input space
         target_token_ids: List[int],
         embedding_weight_mapping: Optional[Dict[Union[int, str], List[int]]] = None,
         # other parameters
@@ -35,18 +35,11 @@ class PointerHead(torch.nn.Module):
         self.pad_id = pad_id
         self.eos_id = eos_id
 
+        self.pointer_offset = len(target_token_ids)
+
         target2token_id = torch.LongTensor(target_token_ids)
         self.register_buffer("target2token_id", target2token_id)
         self.label_token_ids = [target_token_ids[label_id] for label_id in label_ids]
-
-        self.pointer_offset = len(target2token_id)
-
-        self.embedding_weight_mapping = None
-        if embedding_weight_mapping is not None:
-            # Because of config serialization, the keys may be strings. Convert them back to ints.
-            self.embedding_weight_mapping = {
-                int(k): v for k, v in embedding_weight_mapping.items()
-            }
 
         if self.eos_id >= self.pointer_offset:
             raise ValueError(
@@ -74,6 +67,13 @@ class PointerHead(torch.nn.Module):
                 nn.ReLU(),
                 nn.Linear(hidden_size, hidden_size),
             )
+
+        self.embedding_weight_mapping = None
+        if embedding_weight_mapping is not None:
+            # Because of config serialization, the keys may be strings. Convert them back to ints.
+            self.embedding_weight_mapping = {
+                int(k): v for k, v in embedding_weight_mapping.items()
+            }
 
         if decoder_position_id_pattern is not None:
             self.register_buffer(
