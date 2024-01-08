@@ -75,7 +75,6 @@ class PointerHead(torch.nn.Module):
                 nn.Linear(hidden_size, hidden_size),
             )
 
-        self.position_id_pattern = decoder_position_id_pattern
         if decoder_position_id_pattern is not None:
             self.register_buffer(
                 "decoder_position_id_pattern", torch.tensor(decoder_position_id_pattern)
@@ -83,7 +82,7 @@ class PointerHead(torch.nn.Module):
         self.increase_position_ids_per_record = increase_position_ids_per_record
 
     @property
-    def has_position_id_pattern(self):
+    def use_prepared_position_ids(self):
         return hasattr(self, "decoder_position_id_pattern")
 
     def output_size(self):
@@ -182,7 +181,7 @@ class PointerHead(torch.nn.Module):
         **kwargs,
     ) -> Dict[str, torch.Tensor]:
         inputs = {"attention_mask": attention_mask, **kwargs}
-        if self.has_position_id_pattern:
+        if self.use_prepared_position_ids:
             if position_ids is None:
                 position_ids = self.prepare_decoder_position_ids(
                     input_ids=input_ids, attention_mask=attention_mask

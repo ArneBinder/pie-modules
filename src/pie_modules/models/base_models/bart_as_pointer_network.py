@@ -420,7 +420,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         **kwargs,
     ):
         result = {}
-        if self.pointer_head.has_position_id_pattern:
+        if self.pointer_head.use_prepared_position_ids:
             result["decoder_position_ids"] = self.pointer_head.prepare_decoder_position_ids(
                 input_ids=decoder_input_ids,
                 attention_mask=decoder_attention_mask,
