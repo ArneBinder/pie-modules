@@ -14,7 +14,7 @@ class PointerHead(torch.nn.Module):
     # Copy and generate,
     def __init__(
         self,
-        decoder,
+        embeddings: nn.Embedding,
         # label space
         label_ids: List[int],
         eos_id: int,
@@ -29,9 +29,7 @@ class PointerHead(torch.nn.Module):
     ):
         super().__init__()
 
-        # if not isinstance(decoder, BartDecoder):
-        #    raise ValueError("PointerHead only works with BartDecoder!")
-        self.decoder = decoder
+        self.embeddings = embeddings
 
         self.pad_id = pad_id
         self.eos_id = eos_id
@@ -53,7 +51,7 @@ class PointerHead(torch.nn.Module):
             )
         self.pad_token_id = target_token_ids[self.pad_id]
 
-        hidden_size = self.decoder.embed_tokens.weight.size(1)
+        hidden_size = self.embeddings.embedding_dim
         if use_encoder_mlp:
             self.encoder_mlp = nn.Sequential(
                 nn.Linear(hidden_size, hidden_size),
@@ -82,6 +80,9 @@ class PointerHead(torch.nn.Module):
 
     def output_size(self):
         return len(self.target_token_ids)
+
+    def set_embedding(self, embedding: nn.Embedding) -> None:
+        self.embeddings = embedding
 
     def prepare_decoder_input_ids(
         self,
@@ -151,7 +152,7 @@ class PointerHead(torch.nn.Module):
         else:
             return all_position_ids_truncated
 
-    def overwrite_decoder_label_embeddings_with_mapping(
+    def overwrite_label_embeddings_with_mapping(
         self, label_embedding_mapping: Dict[int, List[int]], encoder_weights: torch.Tensor
     ):
         """Overwrite the decoder label embeddings with embeddings from an encoder. This is useful
@@ -169,37 +170,32 @@ class PointerHead(torch.nn.Module):
         for special_token_index, source_indices in label_embedding_mapping.items():
             embed = encoder_weights.data[source_indices[0]]
             for i in source_indices[1:]:
-                embed += self.decoder.embed_tokens.weight.data[i]
+                embed += self.embeddings.weight.data[i]
             embed /= len(source_indices)
-            self.decoder.embed_tokens.weight.data[special_token_index] = embed
+            self.embeddings.weight.data[special_token_index] = embed
 
-    def decoder_forward(
+    def prepare_decoder_inputs(
         self,
         input_ids: torch.LongTensor,
         encoder_input_ids: torch.LongTensor,
         attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
-    ):
+    ) -> Dict[str, torch.Tensor]:
+        inputs = {"attention_mask": attention_mask, **kwargs}
         if self.has_position_id_pattern:
             if position_ids is None:
                 position_ids = self.prepare_decoder_position_ids(
                     input_ids=input_ids, attention_mask=attention_mask
                 )
-            # shallow copy kwargs to avoid modifying the original dict
-            kwargs = {**kwargs, "position_ids": position_ids}
+            inputs["position_ids"] = position_ids
 
-        modified_decoder_input_ids = self.prepare_decoder_input_ids(
+        inputs["input_ids"] = self.prepare_decoder_input_ids(
             input_ids=input_ids,
             encoder_input_ids=encoder_input_ids,
             attention_mask=attention_mask,
         )
-
-        decoder_outputs = self.decoder(
-            input_ids=modified_decoder_input_ids, attention_mask=attention_mask, **kwargs
-        )
-
-        return decoder_outputs
+        return inputs
 
     def forward(
         self,
@@ -211,8 +207,6 @@ class PointerHead(torch.nn.Module):
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         constraints: Optional[torch.LongTensor] = None,
     ):
-        decoder_embed_tokens = self.decoder.embed_tokens
-
         # assemble the logits
         logits = last_hidden_state.new_full(
             (
@@ -225,8 +219,8 @@ class PointerHead(torch.nn.Module):
 
         # eos and label scores depend only on the decoder output
         # bsz x max_len x 1
-        eos_scores = F.linear(last_hidden_state, decoder_embed_tokens.weight[[self.eos_token_id]])
-        label_embeddings = decoder_embed_tokens.weight[self.label_token_ids]
+        eos_scores = F.linear(last_hidden_state, self.embeddings.weight[[self.eos_token_id]])
+        label_embeddings = self.embeddings.weight[self.label_token_ids]
         # bsz x max_len x num_class
         label_scores = F.linear(last_hidden_state, label_embeddings)
 
@@ -237,7 +231,7 @@ class PointerHead(torch.nn.Module):
             src_outputs = self.encoder_mlp(src_outputs)
 
         # bsz x max_word_len x hidden_size
-        input_embed = decoder_embed_tokens(encoder_input_ids)
+        input_embed = self.embeddings(encoder_input_ids)
 
         # bsz x max_len x max_word_len
         word_scores = torch.einsum("blh,bnh->bln", last_hidden_state, src_outputs)

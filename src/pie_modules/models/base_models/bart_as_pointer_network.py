@@ -1,6 +1,7 @@
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch.utils.checkpoint
+from torch import nn
 from torch.nn import Parameter
 from torch.optim import Optimizer
 from transformers import BartConfig, BartModel, BartPreTrainedModel
@@ -91,8 +92,6 @@ class BartAsPointerNetwork(BartPreTrainedModel):
     _tied_weights_keys = [
         "encoder.embed_tokens.weight",
         "decoder.embed_tokens.weight",
-        # "lm_head.weight",
-        # TODO: add pointer_head.weight?
     ]
 
     def __init__(self, config: BartAsPointerNetworkConfig):
@@ -103,7 +102,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             self.model = BartModel(config)
 
         self.pointer_head = PointerHead(
-            decoder=self.model.decoder,
+            embeddings=self.model.decoder.embed_tokens,
             target_token_ids=self.model.config.target_token_ids,
             label_ids=self.model.config.label_ids,
             eos_id=self.model.config.eos_token_id,
@@ -134,6 +133,13 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         # adjust the model after loading the original model
         model.adjust_after_loading_original_model()
         return model, missing_keys, unexpected_keys, mismatched_keys, offload_index, error_msgs
+
+    def resize_token_embeddings(
+        self, new_num_tokens: Optional[int] = None, pad_to_multiple_of: Optional[int] = None
+    ) -> nn.Embedding:
+        result = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        self.pointer_head.set_embedding(result)
+        return result
 
     def adjust_after_loading_original_model(self):
         # target_token_ids contains all new target tokens for the labels and new tokens were added to the end
@@ -204,7 +210,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             raise ValueError("No mapping provided to overwrite the decoder label embeddings!")
         # Because of serialization, the keys may be strings. Convert them back to ints.
         mapping_converted = {int(k): v for k, v in mapping.items()}
-        self.pointer_head.overwrite_decoder_label_embeddings_with_mapping(
+        self.pointer_head.overwrite_label_embeddings_with_mapping(
             mapping_converted, encoder_weights=self.model.encoder.embed_tokens.weight
         )
 
@@ -271,8 +277,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
                 f"'{type(encoder_outputs)}'."
             )
 
-        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
-        decoder_outputs = self.pointer_head.decoder_forward(
+        decoder_inputs = self.pointer_head.prepare_decoder_inputs(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             position_ids=decoder_position_ids,
@@ -287,6 +292,10 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
+        )
+        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
+        decoder_outputs = self.model.decoder(
+            **decoder_inputs,
         )
 
         if not return_dict:
