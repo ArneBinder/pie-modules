@@ -111,6 +111,50 @@ def test_bart_decoder_with_position_ids_forward(bart_decoder_with_position_ids):
     assert not torch.allclose(original.last_hidden_state, replaced_different.last_hidden_state)
 
 
+def test_bart_decoder_with_position_ids_forward_with_inputs_embeds(bart_decoder_with_position_ids):
+    # Arrange
+    model = bart_decoder_with_position_ids
+    inputs_embeds = torch.randn(1, 8, 10)
+    position_ids_original = torch.tensor([[0, 1, 2, 3, 4, 5, 6, 7]])
+    position_ids_different = torch.tensor([[0, 0, 0, 1, 1, 1, 2, 2]])
+
+    # Act
+    torch.manual_seed(42)
+    original = model(inputs_embeds=inputs_embeds)
+    torch.manual_seed(42)
+    replaced_original = model(inputs_embeds=inputs_embeds, position_ids=position_ids_original)
+    torch.manual_seed(42)
+    replaced_different = model(inputs_embeds=inputs_embeds, position_ids=position_ids_different)
+
+    # Assert
+    assert isinstance(original, BaseModelOutputWithPastAndCrossAttentions)
+    assert original.last_hidden_state.shape == (1, 8, 10)
+    assert isinstance(replaced_original, BaseModelOutputWithPastAndCrossAttentions)
+    torch.testing.assert_close(original.last_hidden_state, replaced_original.last_hidden_state)
+
+    assert isinstance(replaced_different, BaseModelOutputWithPastAndCrossAttentions)
+    assert replaced_different.last_hidden_state.shape == (1, 8, 10)
+    assert not torch.allclose(original.last_hidden_state, replaced_different.last_hidden_state)
+
+
+def test_bart_decoder_with_position_ids_forward_wrong_position_ids_shape(
+    bart_decoder_with_position_ids,
+):
+    # Arrange
+    model = bart_decoder_with_position_ids
+    input_ids = torch.tensor([[0, 1, 2, 3]])
+    position_ids_wrong_shape = torch.tensor([[0, 1, 2]])
+
+    # Act
+    torch.manual_seed(42)
+    with pytest.raises(ValueError) as excinfo:
+        model(input_ids=input_ids, position_ids=position_ids_wrong_shape)
+    assert (
+        str(excinfo.value)
+        == "Position IDs shape torch.Size([1, 3]) does not match input ids shape torch.Size([1, 4])."
+    )
+
+
 @pytest.fixture(scope="module")
 def bart_model_with_decoder_position_ids(bart_config):
     torch.manual_seed(42)
