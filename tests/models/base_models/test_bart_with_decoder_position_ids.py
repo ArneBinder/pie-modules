@@ -2,19 +2,13 @@ import pytest
 import torch
 from torch.nn import Embedding
 from transformers import BartConfig
-from transformers.modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    Seq2SeqModelOutput,
-)
-from transformers.models.bart.modeling_bart import (
-    BartEncoder,
-    BartLearnedPositionalEmbedding,
-)
+from transformers.modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
+from transformers.models.bart.modeling_bart import BartEncoder
 
+from pie_modules.models.base_models import BartModelWithDecoderPositionIds
 from pie_modules.models.base_models.bart_with_decoder_position_ids import (
     BartDecoderWithPositionIds,
     BartLearnedPositionalEmbeddingWithPositionIds,
-    BartModelWithDecoderPositionIds,
 )
 
 
