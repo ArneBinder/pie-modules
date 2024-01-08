@@ -53,7 +53,6 @@ class BartAsPointerNetworkConfig(BartConfig):
         # other parameters
         use_encoder_mlp: bool = True,
         use_constraints_encoder_mlp: bool = False,
-        max_target_positions: Optional[int] = None,
         decoder_position_id_pattern: Optional[List[int]] = None,
         increase_position_ids_per_record: bool = False,
         # optimizer
@@ -75,7 +74,6 @@ class BartAsPointerNetworkConfig(BartConfig):
 
         self.use_encoder_mlp = use_encoder_mlp
         self.use_constraints_encoder_mlp = use_constraints_encoder_mlp
-        self.max_target_positions = max_target_positions
 
         self.decoder_position_id_pattern = decoder_position_id_pattern
         self.increase_position_ids_per_record = increase_position_ids_per_record
