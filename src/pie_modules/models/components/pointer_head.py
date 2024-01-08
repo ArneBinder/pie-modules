@@ -81,7 +81,7 @@ class PointerHead(torch.nn.Module):
     def output_size(self):
         return len(self.target_token_ids)
 
-    def set_embedding(self, embedding: nn.Embedding) -> None:
+    def set_embeddings(self, embedding: nn.Embedding) -> None:
         self.embeddings = embedding
 
     def prepare_decoder_input_ids(
@@ -152,23 +152,20 @@ class PointerHead(torch.nn.Module):
         else:
             return all_position_ids_truncated
 
-    def overwrite_label_embeddings_with_mapping(
-        self, label_embedding_mapping: Dict[int, List[int]], encoder_weights: torch.Tensor
+    def overwrite_embeddings_with_mapping(
+        self, mapping: Dict[int, List[int]], embedding_weights: torch.Tensor
     ):
-        """Overwrite the decoder label embeddings with embeddings from an encoder. This is useful
-        if the label vocabulary is a subset of the source vocabulary. In this case, the embeddings
-        of the label tokens will be initialized with the average of the embeddings of the source
-        tokens.
+        """Overwrite individual embeddings with embeddings for other tokens. This is useful, for
+        instance, if the label vocabulary is a subset of the source vocabulary. In this case, it
+        can be used to initialize each label embedding with one or multiple (averaged) source
+        embeddings.
 
-        :param label_embedding_mapping: a mapping from label token ids to source token ids
-        :param encoder_weights: the encoder weights
+        :param mapping: a mapping from target token ids to multiple source token ids
+        :param embedding_weights: the encoder weights to modify
         :return: None
         """
-
-        if label_embedding_mapping is None:
-            raise ValueError("No label_embedding_mapping provided!")
-        for special_token_index, source_indices in label_embedding_mapping.items():
-            embed = encoder_weights.data[source_indices[0]]
+        for special_token_index, source_indices in mapping.items():
+            embed = embedding_weights.data[source_indices[0]]
             for i in source_indices[1:]:
                 embed += self.embeddings.weight.data[i]
             embed /= len(source_indices)

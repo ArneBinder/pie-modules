@@ -137,9 +137,9 @@ class BartAsPointerNetwork(BartPreTrainedModel):
     def resize_token_embeddings(
         self, new_num_tokens: Optional[int] = None, pad_to_multiple_of: Optional[int] = None
     ) -> nn.Embedding:
-        result = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        self.pointer_head.set_embedding(result)
-        return result
+        new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        self.pointer_head.set_embeddings(new_embeddings)
+        return new_embeddings
 
     def adjust_after_loading_original_model(self):
         # target_token_ids contains all new target tokens for the labels and new tokens were added to the end
@@ -147,7 +147,14 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         vocab_size = max(self.config.target_token_ids) + 1
         self.resize_token_embeddings(vocab_size)
         # use mapping to better initialize the label embedding weights
-        self.overwrite_decoder_label_embeddings_with_mapping()
+        if self.config.embedding_weight_mapping is not None:
+            # Because of config serialization, the keys may be strings. Convert them back to ints.
+            mapping_converted = {
+                int(k): v for k, v in self.config.embedding_weight_mapping.items()
+            }
+            self.pointer_head.overwrite_embeddings_with_mapping(
+                mapping_converted, embedding_weights=self.model.encoder.embed_tokens.weight
+            )
 
         # adjust generation settings
         # set the correct decoder_start_token_id
@@ -198,19 +205,6 @@ class BartAsPointerNetwork(BartPreTrainedModel):
 
     def get_decoder(self):
         return self.model.get_decoder()
-
-    def overwrite_decoder_label_embeddings_with_mapping(
-        self, mapping: Optional[Dict[Union[int, str], List[int]]] = None
-    ):
-        if mapping is None:
-            mapping = self.config.embedding_weight_mapping
-        if mapping is None:
-            raise ValueError("No mapping provided to overwrite the decoder label embeddings!")
-        # Because of config serialization, the keys may be strings. Convert them back to ints.
-        mapping_converted = {int(k): v for k, v in mapping.items()}
-        self.pointer_head.overwrite_label_embeddings_with_mapping(
-            mapping_converted, encoder_weights=self.model.encoder.embed_tokens.weight
-        )
 
     def model_forward(
         self,
