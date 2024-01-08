@@ -277,6 +277,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
                 f"'{type(encoder_outputs)}'."
             )
 
+        # this adjusts the input_ids and, if available, the position_ids
         decoder_inputs = self.pointer_head.prepare_decoder_inputs(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
