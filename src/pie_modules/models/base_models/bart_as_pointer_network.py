@@ -104,6 +104,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         self.pointer_head = PointerHead(
             embeddings=self.model.decoder.embed_tokens,
             target_token_ids=self.model.config.target_token_ids,
+            embedding_weight_mapping=self.model.config.embedding_weight_mapping,
             label_ids=self.model.config.label_ids,
             eos_id=self.model.config.eos_token_id,
             pad_id=self.model.config.pad_token_id,
@@ -130,7 +131,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             offload_index,
             error_msgs,
         ) = super()._load_pretrained_model(*args, **kwargs)
-        # adjust the model after loading the original model
+        # adjust the model after loading the original model (e.g. vanilla BartModel)
         model.adjust_after_loading_original_model()
         return model, missing_keys, unexpected_keys, mismatched_keys, offload_index, error_msgs
 
@@ -138,23 +139,16 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         self, new_num_tokens: Optional[int] = None, pad_to_multiple_of: Optional[int] = None
     ) -> nn.Embedding:
         new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        # we also need to update the embeddings in the pointer head
         self.pointer_head.set_embeddings(new_embeddings)
         return new_embeddings
 
     def adjust_after_loading_original_model(self):
         # target_token_ids contains all new target tokens for the labels and new tokens were added to the end
-        # of the vocabulary, so we can use its maximum to resize the decoder embedding weights
-        vocab_size = max(self.config.target_token_ids) + 1
-        self.resize_token_embeddings(vocab_size)
-        # use mapping to better initialize the label embedding weights
-        if self.config.embedding_weight_mapping is not None:
-            # Because of config serialization, the keys may be strings. Convert them back to ints.
-            mapping_converted = {
-                int(k): v for k, v in self.config.embedding_weight_mapping.items()
-            }
-            self.pointer_head.overwrite_embeddings_with_mapping(
-                mapping_converted, embedding_weights=self.model.encoder.embed_tokens.weight
-            )
+        # of the vocabulary, so we can use its maximum to resize the embedding weights
+        self.resize_token_embeddings(new_num_tokens=max(self.config.target_token_ids) + 1)
+        # initialize the newly added embeddings for the labels with better weights from the original embeddings
+        self.pointer_head.overwrite_embeddings_with_mapping()
 
         # adjust generation settings
         # set the correct decoder_start_token_id

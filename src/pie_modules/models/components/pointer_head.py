@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -21,6 +21,7 @@ class PointerHead(torch.nn.Module):
         pad_id: int,
         # target token space
         target_token_ids: List[int],
+        embedding_weight_mapping: Optional[Dict[Union[int, str], List[int]]] = None,
         # other parameters
         use_encoder_mlp: bool = False,
         use_constraints_encoder_mlp: bool = False,
@@ -39,6 +40,13 @@ class PointerHead(torch.nn.Module):
         self.label_token_ids = [target_token_ids[label_id] for label_id in label_ids]
 
         self.pointer_offset = len(target2token_id)
+
+        self.embedding_weight_mapping = None
+        if embedding_weight_mapping is not None:
+            # Because of config serialization, the keys may be strings. Convert them back to ints.
+            self.embedding_weight_mapping = {
+                int(k): v for k, v in embedding_weight_mapping.items()
+            }
 
         if self.eos_id >= self.pointer_offset:
             raise ValueError(
@@ -83,6 +91,19 @@ class PointerHead(torch.nn.Module):
 
     def set_embeddings(self, embedding: nn.Embedding) -> None:
         self.embeddings = embedding
+
+    def overwrite_embeddings_with_mapping(self) -> None:
+        """Overwrite individual embeddings with embeddings for other tokens.
+
+        This is useful, for instance, if the label vocabulary is a subset of the source vocabulary.
+        In this case, this method can be used to initialize each label embedding with one or
+        multiple (averaged) source embeddings.
+        """
+        if self.embedding_weight_mapping is not None:
+            for special_token_index, source_indices in self.embedding_weight_mapping.items():
+                self.embeddings.weight.data[special_token_index] = self.embeddings.weight.data[
+                    source_indices
+                ].mean(dim=0)
 
     def prepare_decoder_input_ids(
         self,
@@ -151,25 +172,6 @@ class PointerHead(torch.nn.Module):
             return all_position_ids_truncated.masked_fill(~attention_mask.bool(), 1)
         else:
             return all_position_ids_truncated
-
-    def overwrite_embeddings_with_mapping(
-        self, mapping: Dict[int, List[int]], embedding_weights: torch.Tensor
-    ):
-        """Overwrite individual embeddings with embeddings for other tokens. This is useful, for
-        instance, if the label vocabulary is a subset of the source vocabulary. In this case, it
-        can be used to initialize each label embedding with one or multiple (averaged) source
-        embeddings.
-
-        :param mapping: a mapping from target token ids to multiple source token ids
-        :param embedding_weights: the encoder weights to modify
-        :return: None
-        """
-        for special_token_index, source_indices in mapping.items():
-            embed = embedding_weights.data[source_indices[0]]
-            for i in source_indices[1:]:
-                embed += self.embeddings.weight.data[i]
-            embed /= len(source_indices)
-            self.embeddings.weight.data[special_token_index] = embed
 
     def prepare_decoder_inputs(
         self,
