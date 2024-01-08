@@ -14,13 +14,14 @@ class PointerHead(torch.nn.Module):
     # Copy and generate,
     def __init__(
         self,
-        embeddings: nn.Embedding,
+        # (decoder) input space
+        target_token_ids: List[int],
         # output space (targets)
         bos_id: int,
         eos_id: int,
         pad_id: int,
-        # (decoder) input space
-        target_token_ids: List[int],
+        # embeddings
+        embeddings: nn.Embedding,
         embedding_weight_mapping: Optional[Dict[Union[int, str], List[int]]] = None,
         # other parameters
         use_encoder_mlp: bool = False,
@@ -34,29 +35,30 @@ class PointerHead(torch.nn.Module):
 
         self.pointer_offset = len(target_token_ids)
 
+        # check that bos, eos, and pad are not out of bounds
+        for target_id, target_id_name in zip(
+            [bos_id, eos_id, pad_id], ["bos_id", "eos_id", "pad_id"]
+        ):
+            if target_id >= len(target_token_ids):
+                raise ValueError(
+                    f"{target_id_name} [{target_id}] must be smaller than the number of target token ids "
+                    f"[{len(target_token_ids)}]!"
+                )
+
         self.bos_id = bos_id
         self.eos_id = eos_id
         self.pad_id = pad_id
         # all ids that are not bos, eos or pad are label ids
         self.label_ids = [
             target_id
-            for target_id in range(self.pointer_offset)
+            for target_id in range(len(target_token_ids))
             if target_id not in [self.bos_id, self.eos_id, self.pad_id]
         ]
 
         target2token_id = torch.LongTensor(target_token_ids)
         self.register_buffer("target2token_id", target2token_id)
         self.label_token_ids = self.target2token_id[self.label_ids]
-
-        if self.eos_id >= self.pointer_offset:
-            raise ValueError(
-                f"eos_id [{self.eos_id}] must be smaller than pointer_offset [{self.pointer_offset}]!"
-            )
         self.eos_token_id = target_token_ids[self.eos_id]
-        if self.pad_id >= self.pointer_offset:
-            raise ValueError(
-                f"pad_id [{self.pad_id}] must be smaller than pointer_offset [{self.pointer_offset}]!"
-            )
         self.pad_token_id = target_token_ids[self.pad_id]
 
         hidden_size = self.embeddings.embedding_dim
