@@ -1,0 +1,32 @@
+{
+  "taskmodule_type": "PointerNetworkTaskModuleForEnd2EndRE",
+  "document_type": "pytorch_ie.documents.TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
+  "tokenized_document_type": "pie_modules.documents.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
+  "tokenizer_name_or_path": "facebook/bart-base",
+  "tokenizer_init_kwargs": {
+    "add_prefix_space": true
+  },
+  "tokenizer_kwargs": {
+    "truncation": true,
+    "stride": 128
+  },
+  "partition_layer_name": "labeled_partitions",
+  "annotation_field_mapping": null,
+  "labels_per_layer": {
+    "labeled_spans": [
+      "background_claim",
+      "data",
+      "own_claim"
+    ],
+    "binary_relations": [
+      "contradicts",
+      "parts_of_same",
+      "semantically_same",
+      "supports"
+    ]
+  },
+  "label_tokens": null,
+  "label_representations": null,
+  "create_constraints": true,
+  "log_first_n_examples": null
+}
