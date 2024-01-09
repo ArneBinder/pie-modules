@@ -144,7 +144,6 @@ class PointerHead(torch.nn.Module):
 
         return decoder_input_ids
 
-    # TODO: move to BartAsPointerNetwork?
     def prepare_decoder_position_ids(
         self, input_ids: torch.LongTensor, attention_mask: Optional[torch.LongTensor] = None
     ):
