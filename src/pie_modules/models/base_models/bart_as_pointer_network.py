@@ -201,115 +201,6 @@ class BartAsPointerNetwork(BartPreTrainedModel):
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def model_forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        decoder_position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Seq2SeqModelOutput]:
-        # different to other models, Bart automatically creates decoder_input_ids from
-        # input_ids if no decoder_input_ids are provided
-        if decoder_input_ids is None:
-            # we can not create the decoder_input_ids from input_ids, because we need the
-            # encoder_input_ids for the pointer network
-            raise ValueError("decoder_input_ids has to be set!")
-
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.model.config.output_attentions
-        )
-        output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.model.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.model.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.model.config.use_return_dict
-
-        if encoder_outputs is None:
-            encoder_outputs = self.model.encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                head_mask=head_mask,
-                inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
-
-        if not isinstance(encoder_outputs, (BaseModelOutput, tuple)):
-            raise ValueError(
-                f"Inconsistent encoder_outputs: either should be of type BaseModelOutput or tuple, but it is "
-                f"'{type(encoder_outputs)}'."
-            )
-
-        # this adjusts the input_ids and, if available, the position_ids
-        decoder_inputs = self.pointer_head.prepare_decoder_inputs(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
-            position_ids=decoder_position_ids,
-            encoder_input_ids=input_ids,
-            encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            past_key_values=past_key_values,
-            inputs_embeds=decoder_inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-        )
-        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
-        decoder_outputs = self.model.decoder(
-            **decoder_inputs,
-        )
-
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
-
-        if not isinstance(decoder_outputs, BaseModelOutputWithPastAndCrossAttentions):
-            raise ValueError(
-                "Inconsistent output: The output of the model decoder should be of type "
-                f"`Seq2SeqLMOutput`, but is of type `{type(decoder_outputs)}`."
-            )
-        if not isinstance(encoder_outputs, BaseModelOutput):
-            raise ValueError(
-                "Inconsistent output: The output of the model encoder should be of type "
-                f"`BaseModelOutputWithPastAndCrossAttentions`, but is of type `{type(encoder_outputs)}`."
-            )
-        return Seq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
-        )
-
     # @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     # @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     # @add_end_docstrings(BART_GENERATION_EXAMPLE)
@@ -355,13 +246,24 @@ class BartAsPointerNetwork(BartPreTrainedModel):
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
 
-        outputs = self.model_forward(
-            input_ids,
+        if decoder_input_ids is None:
+            # we can not create the decoder_input_ids from input_ids, because we need the
+            # encoder_input_ids for the pointer network
+            raise ValueError("decoder_input_ids has to be set!")
+
+        # this adjusts the input_ids and, if available, the position_ids
+        decoder_inputs = self.pointer_head.prepare_decoder_inputs(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            position_ids=decoder_position_ids,
+            encoder_input_ids=input_ids,
+        )
+
+        model_inputs = dict(
+            input_ids=input_ids,
             encoder_outputs=encoder_outputs,
             attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
-            decoder_position_ids=decoder_position_ids,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
@@ -373,6 +275,9 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=True,
         )
+        for k, v in decoder_inputs.items():
+            model_inputs[f"decoder_{k}"] = v
+        outputs = self.model(**model_inputs)
 
         if not isinstance(outputs, Seq2SeqModelOutput):
             raise ValueError(
