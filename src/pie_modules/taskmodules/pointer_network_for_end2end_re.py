@@ -94,10 +94,6 @@ def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
     return v1.head.start - v2.head.start  # v1[0]["from"] - v2[0]["from"]
 
 
-# TODO: use enable BucketSampler (just mentioning here because no better place available for now)
-# see https://github.com/Lightning-AI/lightning/pull/13640#issuecomment-1199032224
-
-
 @TaskModule.register()
 class PointerNetworkTaskModuleForEnd2EndRE(
     TaskModule[
