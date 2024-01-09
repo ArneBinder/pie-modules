@@ -5,12 +5,7 @@ from torch import nn
 from torch.nn import Parameter
 from torch.optim import Optimizer
 from transformers import BartConfig, BartModel, BartPreTrainedModel
-from transformers.modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPastAndCrossAttentions,
-    Seq2SeqLMOutput,
-    Seq2SeqModelOutput,
-)
+from transformers.modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
 from transformers.models.bart.modeling_bart import shift_tokens_right
 from transformers.utils import logging
 
