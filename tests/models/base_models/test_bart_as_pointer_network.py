@@ -790,6 +790,38 @@ def test_base_model_named_params(model):
     assert parameter_shapes == expected_parameter_shapes
 
 
+def test_configure_optimizer(model):
+    optimizer = model.configure_optimizer()
+    assert isinstance(optimizer, torch.optim.AdamW)
+    assert optimizer.defaults["lr"] == 0.001
+    assert optimizer.defaults["weight_decay"] == model.config.weight_decay == 0.01
+    assert len(optimizer.param_groups) == 6
+    assert all(param_group["lr"] == model.config.lr for param_group in optimizer.param_groups)
+
+    # head parameters
+    assert optimizer.param_groups[0]["weight_decay"] == model.config.weight_decay == 0.01
+    # decoder only layer norm parameters
+    assert optimizer.param_groups[1]["weight_decay"] == model.config.weight_decay == 0.01
+    # decoder only other parameters
+    assert optimizer.param_groups[2]["weight_decay"] == model.config.weight_decay == 0.01
+    # encoder only layer norm parameters
+    assert (
+        optimizer.param_groups[3]["weight_decay"] == model.config.encoder_layer_norm_decay == 0.001
+    )
+    # encoder only other parameters
+    assert optimizer.param_groups[4]["weight_decay"] == model.config.weight_decay == 0.01
+    # encoder-decoder shared parameters
+    assert optimizer.param_groups[5]["weight_decay"] == model.config.weight_decay == 0.01
+
+    all_optimized_parameters = set()
+    for param_group in optimizer.param_groups:
+        all_optimized_parameters.update(set(param_group["params"]))
+    assert len(all_optimized_parameters) == 229
+    # check that all model parameters are covered
+    all_model_parameters = {param for name, param in model.named_parameters()}
+    assert all_optimized_parameters == all_model_parameters
+
+
 ARTICLE_TO_SUMMARIZE = (
     "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
     "amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were "
