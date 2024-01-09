@@ -484,7 +484,9 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         self, inputs_tensor: torch.Tensor, model_kwargs, model_input_name: Optional[str] = None
     ) -> Dict[str, Any]:
         result = super()._prepare_encoder_decoder_kwargs_for_generation(
-            inputs_tensor, model_kwargs, model_input_name
+            inputs_tensor=inputs_tensor,
+            model_kwargs=model_kwargs,
+            model_input_name=model_input_name,
         )
         # add items that are needed for pointer network
         result["encoder_input_ids"] = inputs_tensor
