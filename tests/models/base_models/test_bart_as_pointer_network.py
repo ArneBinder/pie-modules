@@ -14,7 +14,7 @@ from pie_modules.models.base_models import (
 )
 from tests import _config_to_str
 
-# TODO: is there an even smaller model we can use?
+# TODO: is there an even smaller model we can use? maybe sshleifer/tiny-mbart?
 MODEL_NAME_OR_PATH = "sshleifer/distilbart-xsum-12-1"
 CONFIGS = [{}, {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}]
 CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
