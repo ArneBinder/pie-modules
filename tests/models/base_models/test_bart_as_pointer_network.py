@@ -14,8 +14,8 @@ from pie_modules.models.base_models import (
 )
 from tests import _config_to_str
 
-# TODO: is there an even smaller model we can use? maybe sshleifer/tiny-mbart?
-MODEL_NAME_OR_PATH = "sshleifer/distilbart-xsum-12-1"
+# this is a small model that can be used for testing
+MODEL_NAME_OR_PATH = "sshleifer/bart-tiny-random"
 CONFIGS = [{}, {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}]
 CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
 
@@ -86,7 +86,7 @@ def model(config) -> BartAsPointerNetwork:
         # label id space
         bos_token_id=0,  # taskmodule.bos_id,
         eos_token_id=1,  # taskmodule.eos_id,
-        pad_token_id=1,  # taskmodule1.eos_id,
+        pad_token_id=1,  # taskmodule.eos_id,
         # target token id space
         target_token_ids=[0, 2, 50266, 50269, 50268, 50265, 50267],  # taskmodule.target_token_ids,
         # mapping to better initialize the label embedding weights
@@ -195,7 +195,7 @@ def test_prepare_decoder_input_ids_from_labels(decoder_input_ids):
     )
 
 
-def test_forward(model, batch, decoder_input_ids):
+def test_forward(model, batch, decoder_input_ids, config):
     inputs, targets = batch
     torch.manual_seed(42)
     outputs = model(**inputs, decoder_input_ids=decoder_input_ids)
@@ -210,35 +210,35 @@ def test_forward(model, batch, decoder_input_ids):
             [
                 [
                     -1.0000000138484279e24,
-                    3.682220935821533,
-                    -0.9326803684234619,
-                    -0.2263697385787964,
-                    -0.48132020235061646,
-                    0.19212239980697632,
-                    0.9095813632011414,
+                    -0.23238050937652588,
+                    0.2958170473575592,
+                    0.05529244616627693,
+                    0.042530909180641174,
+                    0.10081343352794647,
+                    -0.07145103812217712,
                     -1.0000000331813535e32,
-                    4.807478904724121,
-                    1.807602882385254,
-                    1.1034345626831055,
-                    -0.13411815464496613,
-                    1.1551722288131714,
-                    0.4741371273994446,
-                    -0.45863986015319824,
-                    2.8401033878326416,
+                    -0.08469001948833466,
+                    0.09224237501621246,
+                    0.022736266255378723,
+                    -0.056650951504707336,
+                    0.00475323386490345,
+                    0.0679982528090477,
+                    0.04947580397129059,
+                    -0.08609804511070251,
                     -1.0000000331813535e32,
                 ],
                 [
                     -1.0000000138484279e24,
-                    3.8057942390441895,
-                    -1.1438947916030884,
-                    -0.8277881741523743,
-                    -0.21552562713623047,
-                    -0.2897053360939026,
-                    0.3493768572807312,
+                    -0.23274853825569153,
+                    0.2960396707057953,
+                    0.05556505173444748,
+                    0.04273711144924164,
+                    0.10071950405836105,
+                    -0.07135685533285141,
                     -1.0000000331813535e32,
-                    3.0700643062591553,
-                    1.6204582452774048,
-                    3.234086036682129,
+                    0.06317455321550369,
+                    0.06436678022146225,
+                    -0.07508281618356705,
                     -1.0000000331813535e32,
                     -1.0000000331813535e32,
                     -1.0000000331813535e32,
@@ -250,22 +250,47 @@ def test_forward(model, batch, decoder_input_ids):
         ),
     )
     # check the sum of all logits
-    if model.pointer_head.use_prepared_position_ids:
+    if config == {}:
         torch.testing.assert_close(
             outputs.logits.sum(0).sum(0),
             torch.tensor(
                 [
                     -1.6000000221574846e25,
-                    55.108062744140625,
-                    -6.472843647003174,
-                    -6.713191509246826,
-                    -7.203713893890381,
-                    -3.5198893547058105,
-                    25.30033302307129,
+                    -0.9064984917640686,
+                    1.1896746158599854,
+                    0.979636013507843,
+                    0.1837124079465866,
+                    1.3070943355560303,
+                    -0.12108190357685089,
                     -1.6000000530901656e33,
-                    19.98822021484375,
-                    47.84223937988281,
-                    55.134300231933594,
+                    -0.12742891907691956,
+                    0.6052249073982239,
+                    -0.4059778153896332,
+                    -8.000000265450828e32,
+                    -8.000000265450828e32,
+                    -8.000000265450828e32,
+                    -8.000000265450828e32,
+                    -8.000000265450828e32,
+                    -1.6000000530901656e33,
+                ]
+            ),
+        )
+    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
+        torch.testing.assert_close(
+            outputs.logits.sum(0).sum(0),
+            torch.tensor(
+                [
+                    -1.6000000221574846e25,
+                    -0.5539568662643433,
+                    0.7004714012145996,
+                    1.5720455646514893,
+                    -0.3760949671268463,
+                    0.7738710641860962,
+                    -0.10904453694820404,
+                    -1.6000000530901656e33,
+                    -0.013624418526887894,
+                    0.48998790979385376,
+                    -0.5045579075813293,
                     -8.000000265450828e32,
                     -8.000000265450828e32,
                     -8.000000265450828e32,
@@ -276,30 +301,7 @@ def test_forward(model, batch, decoder_input_ids):
             ),
         )
     else:
-        torch.testing.assert_close(
-            outputs.logits.sum(0).sum(0),
-            torch.tensor(
-                [
-                    -1.6000000221574846e25,
-                    55.51424789428711,
-                    -4.326529026031494,
-                    -7.456439971923828,
-                    -9.119050979614258,
-                    -2.5258233547210693,
-                    26.22917938232422,
-                    -1.6000000530901656e33,
-                    15.16575813293457,
-                    53.140113830566406,
-                    51.56929016113281,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -1.6000000530901656e33,
-                ]
-            ),
-        )
+        raise ValueError(f"Unknown config: {config}")
 
 
 def test_forward_with_labels(model, batch, config):
@@ -313,9 +315,9 @@ def test_forward_with_labels(model, batch, config):
     outputs = model(**inputs, **targets_without_constraints)
     loss = outputs.loss
     if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(3.8818745613098145))
+        torch.testing.assert_close(loss, torch.tensor(2.361185073852539))
     elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
-        torch.testing.assert_close(loss, torch.tensor(4.203524112701416))
+        torch.testing.assert_close(loss, torch.tensor(2.332946538925171))
     else:
         raise ValueError(f"Unknown config: {config}")
 
@@ -328,9 +330,9 @@ def test_forward_with_labels_and_constraints(model, batch_with_constraints, conf
     outputs = model(**inputs, **targets)
     loss = outputs.loss
     if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(6.277325630187988))
+        torch.testing.assert_close(loss, torch.tensor(4.684823513031006))
     elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
-        torch.testing.assert_close(loss, torch.tensor(6.574540138244629))
+        torch.testing.assert_close(loss, torch.tensor(4.658721446990967))
     else:
         raise ValueError(f"Unknown model type {type(model.model)}")
 
@@ -541,24 +543,24 @@ def test_generate(model, batch, empty_decoder_input_ids, config):
     torch.manual_seed(42)
     outputs = model.generate(**inputs)
     if config == {}:
-        assert outputs.shape == (batch_size, 12)
+        assert outputs.shape == (batch_size, 20)  # note that 20 is the model.config.max_length
         torch.testing.assert_close(
             outputs,
             torch.tensor(
                 [
-                    [0, 8, 9, 10, 10, 12, 13, 10, 12, 12, 15, 1],
-                    [0, 8, 9, 9, 9, 8, 9, 6, 6, 6, 10, 1],
+                    [0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+                    [0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
                 ]
             ),
         )
     elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
-        assert outputs.shape == (batch_size, 12)
+        assert outputs.shape == (batch_size, 20)  # note that 20 is the model.config.max_length
         torch.testing.assert_close(
             outputs,
             torch.tensor(
                 [
-                    [0, 8, 9, 10, 12, 13, 10, 12, 12, 13, 15, 1],
-                    [0, 8, 8, 8, 9, 9, 9, 8, 9, 8, 10, 1],
+                    [0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+                    [0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
                 ]
             ),
         )
@@ -569,10 +571,10 @@ def test_generate(model, batch, empty_decoder_input_ids, config):
 def test_head_named_params(model):
     parameter_shapes = {name: tuple(param.shape) for name, param in model.head_named_params()}
     assert parameter_shapes == {
-        "pointer_head.encoder_mlp.0.bias": (1024,),
-        "pointer_head.encoder_mlp.0.weight": (1024, 1024),
-        "pointer_head.encoder_mlp.3.bias": (1024,),
-        "pointer_head.encoder_mlp.3.weight": (1024, 1024),
+        "pointer_head.encoder_mlp.0.bias": (24,),
+        "pointer_head.encoder_mlp.0.weight": (24, 24),
+        "pointer_head.encoder_mlp.3.bias": (24,),
+        "pointer_head.encoder_mlp.3.weight": (24, 24),
     }
 
 
@@ -580,203 +582,43 @@ def test_encoder_only_named_params(model):
     parameter_shapes = {
         name: tuple(param.shape) for name, param in model.encoder_only_named_params()
     }
-    assert len(parameter_shapes) == 195
+    assert len(parameter_shapes) == 35
     assert parameter_shapes == {
-        "model.encoder.embed_positions.weight": (1026, 1024),
-        "model.encoder.layers.0.self_attn.k_proj.weight": (1024, 1024),
-        "model.encoder.layers.0.self_attn.k_proj.bias": (1024,),
-        "model.encoder.layers.0.self_attn.v_proj.weight": (1024, 1024),
-        "model.encoder.layers.0.self_attn.v_proj.bias": (1024,),
-        "model.encoder.layers.0.self_attn.q_proj.weight": (1024, 1024),
-        "model.encoder.layers.0.self_attn.q_proj.bias": (1024,),
-        "model.encoder.layers.0.self_attn.out_proj.weight": (1024, 1024),
-        "model.encoder.layers.0.self_attn.out_proj.bias": (1024,),
-        "model.encoder.layers.0.self_attn_layer_norm.weight": (1024,),
-        "model.encoder.layers.0.self_attn_layer_norm.bias": (1024,),
-        "model.encoder.layers.0.fc1.weight": (4096, 1024),
-        "model.encoder.layers.0.fc1.bias": (4096,),
-        "model.encoder.layers.0.fc2.weight": (1024, 4096),
-        "model.encoder.layers.0.fc2.bias": (1024,),
-        "model.encoder.layers.0.final_layer_norm.weight": (1024,),
-        "model.encoder.layers.0.final_layer_norm.bias": (1024,),
-        "model.encoder.layers.1.self_attn.k_proj.weight": (1024, 1024),
-        "model.encoder.layers.1.self_attn.k_proj.bias": (1024,),
-        "model.encoder.layers.1.self_attn.v_proj.weight": (1024, 1024),
-        "model.encoder.layers.1.self_attn.v_proj.bias": (1024,),
-        "model.encoder.layers.1.self_attn.q_proj.weight": (1024, 1024),
-        "model.encoder.layers.1.self_attn.q_proj.bias": (1024,),
-        "model.encoder.layers.1.self_attn.out_proj.weight": (1024, 1024),
-        "model.encoder.layers.1.self_attn.out_proj.bias": (1024,),
-        "model.encoder.layers.1.self_attn_layer_norm.weight": (1024,),
-        "model.encoder.layers.1.self_attn_layer_norm.bias": (1024,),
-        "model.encoder.layers.1.fc1.weight": (4096, 1024),
-        "model.encoder.layers.1.fc1.bias": (4096,),
-        "model.encoder.layers.1.fc2.weight": (1024, 4096),
-        "model.encoder.layers.1.fc2.bias": (1024,),
-        "model.encoder.layers.1.final_layer_norm.weight": (1024,),
-        "model.encoder.layers.1.final_layer_norm.bias": (1024,),
-        "model.encoder.layers.2.self_attn.k_proj.weight": (1024, 1024),
-        "model.encoder.layers.2.self_attn.k_proj.bias": (1024,),
-        "model.encoder.layers.2.self_attn.v_proj.weight": (1024, 1024),
-        "model.encoder.layers.2.self_attn.v_proj.bias": (1024,),
-        "model.encoder.layers.2.self_attn.q_proj.weight": (1024, 1024),
-        "model.encoder.layers.2.self_attn.q_proj.bias": (1024,),
-        "model.encoder.layers.2.self_attn.out_proj.weight": (1024, 1024),
-        "model.encoder.layers.2.self_attn.out_proj.bias": (1024,),
-        "model.encoder.layers.2.self_attn_layer_norm.weight": (1024,),
-        "model.encoder.layers.2.self_attn_layer_norm.bias": (1024,),
-        "model.encoder.layers.2.fc1.weight": (4096, 1024),
-        "model.encoder.layers.2.fc1.bias": (4096,),
-        "model.encoder.layers.2.fc2.weight": (1024, 4096),
-        "model.encoder.layers.2.fc2.bias": (1024,),
-        "model.encoder.layers.2.final_layer_norm.weight": (1024,),
-        "model.encoder.layers.2.final_layer_norm.bias": (1024,),
-        "model.encoder.layers.3.self_attn.k_proj.weight": (1024, 1024),
-        "model.encoder.layers.3.self_attn.k_proj.bias": (1024,),
-        "model.encoder.layers.3.self_attn.v_proj.weight": (1024, 1024),
-        "model.encoder.layers.3.self_attn.v_proj.bias": (1024,),
-        "model.encoder.layers.3.self_attn.q_proj.weight": (1024, 1024),
-        "model.encoder.layers.3.self_attn.q_proj.bias": (1024,),
-        "model.encoder.layers.3.self_attn.out_proj.weight": (1024, 1024),
-        "model.encoder.layers.3.self_attn.out_proj.bias": (1024,),
-        "model.encoder.layers.3.self_attn_layer_norm.weight": (1024,),
-        "model.encoder.layers.3.self_attn_layer_norm.bias": (1024,),
-        "model.encoder.layers.3.fc1.weight": (4096, 1024),
-        "model.encoder.layers.3.fc1.bias": (4096,),
-        "model.encoder.layers.3.fc2.weight": (1024, 4096),
-        "model.encoder.layers.3.fc2.bias": (1024,),
-        "model.encoder.layers.3.final_layer_norm.weight": (1024,),
-        "model.encoder.layers.3.final_layer_norm.bias": (1024,),
-        "model.encoder.layers.4.self_attn.k_proj.weight": (1024, 1024),
-        "model.encoder.layers.4.self_attn.k_proj.bias": (1024,),
-        "model.encoder.layers.4.self_attn.v_proj.weight": (1024, 1024),
-        "model.encoder.layers.4.self_attn.v_proj.bias": (1024,),
-        "model.encoder.layers.4.self_attn.q_proj.weight": (1024, 1024),
-        "model.encoder.layers.4.self_attn.q_proj.bias": (1024,),
-        "model.encoder.layers.4.self_attn.out_proj.weight": (1024, 1024),
-        "model.encoder.layers.4.self_attn.out_proj.bias": (1024,),
-        "model.encoder.layers.4.self_attn_layer_norm.weight": (1024,),
-        "model.encoder.layers.4.self_attn_layer_norm.bias": (1024,),
-        "model.encoder.layers.4.fc1.weight": (4096, 1024),
-        "model.encoder.layers.4.fc1.bias": (4096,),
-        "model.encoder.layers.4.fc2.weight": (1024, 4096),
-        "model.encoder.layers.4.fc2.bias": (1024,),
-        "model.encoder.layers.4.final_layer_norm.weight": (1024,),
-        "model.encoder.layers.4.final_layer_norm.bias": (1024,),
-        "model.encoder.layers.5.self_attn.k_proj.weight": (1024, 1024),
-        "model.encoder.layers.5.self_attn.k_proj.bias": (1024,),
-        "model.encoder.layers.5.self_attn.v_proj.weight": (1024, 1024),
-        "model.encoder.layers.5.self_attn.v_proj.bias": (1024,),
-        "model.encoder.layers.5.self_attn.q_proj.weight": (1024, 1024),
-        "model.encoder.layers.5.self_attn.q_proj.bias": (1024,),
-        "model.encoder.layers.5.self_attn.out_proj.weight": (1024, 1024),
-        "model.encoder.layers.5.self_attn.out_proj.bias": (1024,),
-        "model.encoder.layers.5.self_attn_layer_norm.weight": (1024,),
-        "model.encoder.layers.5.self_attn_layer_norm.bias": (1024,),
-        "model.encoder.layers.5.fc1.weight": (4096, 1024),
-        "model.encoder.layers.5.fc1.bias": (4096,),
-        "model.encoder.layers.5.fc2.weight": (1024, 4096),
-        "model.encoder.layers.5.fc2.bias": (1024,),
-        "model.encoder.layers.5.final_layer_norm.weight": (1024,),
-        "model.encoder.layers.5.final_layer_norm.bias": (1024,),
-        "model.encoder.layers.6.self_attn.k_proj.weight": (1024, 1024),
-        "model.encoder.layers.6.self_attn.k_proj.bias": (1024,),
-        "model.encoder.layers.6.self_attn.v_proj.weight": (1024, 1024),
-        "model.encoder.layers.6.self_attn.v_proj.bias": (1024,),
-        "model.encoder.layers.6.self_attn.q_proj.weight": (1024, 1024),
-        "model.encoder.layers.6.self_attn.q_proj.bias": (1024,),
-        "model.encoder.layers.6.self_attn.out_proj.weight": (1024, 1024),
-        "model.encoder.layers.6.self_attn.out_proj.bias": (1024,),
-        "model.encoder.layers.6.self_attn_layer_norm.weight": (1024,),
-        "model.encoder.layers.6.self_attn_layer_norm.bias": (1024,),
-        "model.encoder.layers.6.fc1.weight": (4096, 1024),
-        "model.encoder.layers.6.fc1.bias": (4096,),
-        "model.encoder.layers.6.fc2.weight": (1024, 4096),
-        "model.encoder.layers.6.fc2.bias": (1024,),
-        "model.encoder.layers.6.final_layer_norm.weight": (1024,),
-        "model.encoder.layers.6.final_layer_norm.bias": (1024,),
-        "model.encoder.layers.7.self_attn.k_proj.weight": (1024, 1024),
-        "model.encoder.layers.7.self_attn.k_proj.bias": (1024,),
-        "model.encoder.layers.7.self_attn.v_proj.weight": (1024, 1024),
-        "model.encoder.layers.7.self_attn.v_proj.bias": (1024,),
-        "model.encoder.layers.7.self_attn.q_proj.weight": (1024, 1024),
-        "model.encoder.layers.7.self_attn.q_proj.bias": (1024,),
-        "model.encoder.layers.7.self_attn.out_proj.weight": (1024, 1024),
-        "model.encoder.layers.7.self_attn.out_proj.bias": (1024,),
-        "model.encoder.layers.7.self_attn_layer_norm.weight": (1024,),
-        "model.encoder.layers.7.self_attn_layer_norm.bias": (1024,),
-        "model.encoder.layers.7.fc1.weight": (4096, 1024),
-        "model.encoder.layers.7.fc1.bias": (4096,),
-        "model.encoder.layers.7.fc2.weight": (1024, 4096),
-        "model.encoder.layers.7.fc2.bias": (1024,),
-        "model.encoder.layers.7.final_layer_norm.weight": (1024,),
-        "model.encoder.layers.7.final_layer_norm.bias": (1024,),
-        "model.encoder.layers.8.self_attn.k_proj.weight": (1024, 1024),
-        "model.encoder.layers.8.self_attn.k_proj.bias": (1024,),
-        "model.encoder.layers.8.self_attn.v_proj.weight": (1024, 1024),
-        "model.encoder.layers.8.self_attn.v_proj.bias": (1024,),
-        "model.encoder.layers.8.self_attn.q_proj.weight": (1024, 1024),
-        "model.encoder.layers.8.self_attn.q_proj.bias": (1024,),
-        "model.encoder.layers.8.self_attn.out_proj.weight": (1024, 1024),
-        "model.encoder.layers.8.self_attn.out_proj.bias": (1024,),
-        "model.encoder.layers.8.self_attn_layer_norm.weight": (1024,),
-        "model.encoder.layers.8.self_attn_layer_norm.bias": (1024,),
-        "model.encoder.layers.8.fc1.weight": (4096, 1024),
-        "model.encoder.layers.8.fc1.bias": (4096,),
-        "model.encoder.layers.8.fc2.weight": (1024, 4096),
-        "model.encoder.layers.8.fc2.bias": (1024,),
-        "model.encoder.layers.8.final_layer_norm.weight": (1024,),
-        "model.encoder.layers.8.final_layer_norm.bias": (1024,),
-        "model.encoder.layers.9.self_attn.k_proj.weight": (1024, 1024),
-        "model.encoder.layers.9.self_attn.k_proj.bias": (1024,),
-        "model.encoder.layers.9.self_attn.v_proj.weight": (1024, 1024),
-        "model.encoder.layers.9.self_attn.v_proj.bias": (1024,),
-        "model.encoder.layers.9.self_attn.q_proj.weight": (1024, 1024),
-        "model.encoder.layers.9.self_attn.q_proj.bias": (1024,),
-        "model.encoder.layers.9.self_attn.out_proj.weight": (1024, 1024),
-        "model.encoder.layers.9.self_attn.out_proj.bias": (1024,),
-        "model.encoder.layers.9.self_attn_layer_norm.weight": (1024,),
-        "model.encoder.layers.9.self_attn_layer_norm.bias": (1024,),
-        "model.encoder.layers.9.fc1.weight": (4096, 1024),
-        "model.encoder.layers.9.fc1.bias": (4096,),
-        "model.encoder.layers.9.fc2.weight": (1024, 4096),
-        "model.encoder.layers.9.fc2.bias": (1024,),
-        "model.encoder.layers.9.final_layer_norm.weight": (1024,),
-        "model.encoder.layers.9.final_layer_norm.bias": (1024,),
-        "model.encoder.layers.10.self_attn.k_proj.weight": (1024, 1024),
-        "model.encoder.layers.10.self_attn.k_proj.bias": (1024,),
-        "model.encoder.layers.10.self_attn.v_proj.weight": (1024, 1024),
-        "model.encoder.layers.10.self_attn.v_proj.bias": (1024,),
-        "model.encoder.layers.10.self_attn.q_proj.weight": (1024, 1024),
-        "model.encoder.layers.10.self_attn.q_proj.bias": (1024,),
-        "model.encoder.layers.10.self_attn.out_proj.weight": (1024, 1024),
-        "model.encoder.layers.10.self_attn.out_proj.bias": (1024,),
-        "model.encoder.layers.10.self_attn_layer_norm.weight": (1024,),
-        "model.encoder.layers.10.self_attn_layer_norm.bias": (1024,),
-        "model.encoder.layers.10.fc1.weight": (4096, 1024),
-        "model.encoder.layers.10.fc1.bias": (4096,),
-        "model.encoder.layers.10.fc2.weight": (1024, 4096),
-        "model.encoder.layers.10.fc2.bias": (1024,),
-        "model.encoder.layers.10.final_layer_norm.weight": (1024,),
-        "model.encoder.layers.10.final_layer_norm.bias": (1024,),
-        "model.encoder.layers.11.self_attn.k_proj.weight": (1024, 1024),
-        "model.encoder.layers.11.self_attn.k_proj.bias": (1024,),
-        "model.encoder.layers.11.self_attn.v_proj.weight": (1024, 1024),
-        "model.encoder.layers.11.self_attn.v_proj.bias": (1024,),
-        "model.encoder.layers.11.self_attn.q_proj.weight": (1024, 1024),
-        "model.encoder.layers.11.self_attn.q_proj.bias": (1024,),
-        "model.encoder.layers.11.self_attn.out_proj.weight": (1024, 1024),
-        "model.encoder.layers.11.self_attn.out_proj.bias": (1024,),
-        "model.encoder.layers.11.self_attn_layer_norm.weight": (1024,),
-        "model.encoder.layers.11.self_attn_layer_norm.bias": (1024,),
-        "model.encoder.layers.11.fc1.weight": (4096, 1024),
-        "model.encoder.layers.11.fc1.bias": (4096,),
-        "model.encoder.layers.11.fc2.weight": (1024, 4096),
-        "model.encoder.layers.11.fc2.bias": (1024,),
-        "model.encoder.layers.11.final_layer_norm.weight": (1024,),
-        "model.encoder.layers.11.final_layer_norm.bias": (1024,),
-        "model.encoder.layernorm_embedding.weight": (1024,),
-        "model.encoder.layernorm_embedding.bias": (1024,),
+        "model.encoder.embed_positions.weight": (1026, 24),
+        "model.encoder.layernorm_embedding.bias": (24,),
+        "model.encoder.layernorm_embedding.weight": (24,),
+        "model.encoder.layers.0.fc1.bias": (16,),
+        "model.encoder.layers.0.fc1.weight": (16, 24),
+        "model.encoder.layers.0.fc2.bias": (24,),
+        "model.encoder.layers.0.fc2.weight": (24, 16),
+        "model.encoder.layers.0.final_layer_norm.bias": (24,),
+        "model.encoder.layers.0.final_layer_norm.weight": (24,),
+        "model.encoder.layers.0.self_attn.k_proj.bias": (24,),
+        "model.encoder.layers.0.self_attn.k_proj.weight": (24, 24),
+        "model.encoder.layers.0.self_attn.out_proj.bias": (24,),
+        "model.encoder.layers.0.self_attn.out_proj.weight": (24, 24),
+        "model.encoder.layers.0.self_attn.q_proj.bias": (24,),
+        "model.encoder.layers.0.self_attn.q_proj.weight": (24, 24),
+        "model.encoder.layers.0.self_attn.v_proj.bias": (24,),
+        "model.encoder.layers.0.self_attn.v_proj.weight": (24, 24),
+        "model.encoder.layers.0.self_attn_layer_norm.bias": (24,),
+        "model.encoder.layers.0.self_attn_layer_norm.weight": (24,),
+        "model.encoder.layers.1.fc1.bias": (16,),
+        "model.encoder.layers.1.fc1.weight": (16, 24),
+        "model.encoder.layers.1.fc2.bias": (24,),
+        "model.encoder.layers.1.fc2.weight": (24, 16),
+        "model.encoder.layers.1.final_layer_norm.bias": (24,),
+        "model.encoder.layers.1.final_layer_norm.weight": (24,),
+        "model.encoder.layers.1.self_attn.k_proj.bias": (24,),
+        "model.encoder.layers.1.self_attn.k_proj.weight": (24, 24),
+        "model.encoder.layers.1.self_attn.out_proj.bias": (24,),
+        "model.encoder.layers.1.self_attn.out_proj.weight": (24, 24),
+        "model.encoder.layers.1.self_attn.q_proj.bias": (24,),
+        "model.encoder.layers.1.self_attn.q_proj.weight": (24, 24),
+        "model.encoder.layers.1.self_attn.v_proj.bias": (24,),
+        "model.encoder.layers.1.self_attn.v_proj.weight": (24, 24),
+        "model.encoder.layers.1.self_attn_layer_norm.bias": (24,),
+        "model.encoder.layers.1.self_attn_layer_norm.weight": (24,),
     }
 
 
@@ -784,37 +626,63 @@ def test_decoder_only_named_params(model):
     parameter_shapes = {
         name: tuple(param.shape) for name, param in model.decoder_only_named_params()
     }
-    assert len(parameter_shapes) == 29
+    assert len(parameter_shapes) == 55
     assert parameter_shapes == {
-        "model.decoder.embed_positions.weight": (1026, 1024),
-        "model.decoder.layers.0.self_attn.k_proj.weight": (1024, 1024),
-        "model.decoder.layers.0.self_attn.k_proj.bias": (1024,),
-        "model.decoder.layers.0.self_attn.v_proj.weight": (1024, 1024),
-        "model.decoder.layers.0.self_attn.v_proj.bias": (1024,),
-        "model.decoder.layers.0.self_attn.q_proj.weight": (1024, 1024),
-        "model.decoder.layers.0.self_attn.q_proj.bias": (1024,),
-        "model.decoder.layers.0.self_attn.out_proj.weight": (1024, 1024),
-        "model.decoder.layers.0.self_attn.out_proj.bias": (1024,),
-        "model.decoder.layers.0.self_attn_layer_norm.weight": (1024,),
-        "model.decoder.layers.0.self_attn_layer_norm.bias": (1024,),
-        "model.decoder.layers.0.encoder_attn.k_proj.weight": (1024, 1024),
-        "model.decoder.layers.0.encoder_attn.k_proj.bias": (1024,),
-        "model.decoder.layers.0.encoder_attn.v_proj.weight": (1024, 1024),
-        "model.decoder.layers.0.encoder_attn.v_proj.bias": (1024,),
-        "model.decoder.layers.0.encoder_attn.q_proj.weight": (1024, 1024),
-        "model.decoder.layers.0.encoder_attn.q_proj.bias": (1024,),
-        "model.decoder.layers.0.encoder_attn.out_proj.weight": (1024, 1024),
-        "model.decoder.layers.0.encoder_attn.out_proj.bias": (1024,),
-        "model.decoder.layers.0.encoder_attn_layer_norm.weight": (1024,),
-        "model.decoder.layers.0.encoder_attn_layer_norm.bias": (1024,),
-        "model.decoder.layers.0.fc1.weight": (4096, 1024),
-        "model.decoder.layers.0.fc1.bias": (4096,),
-        "model.decoder.layers.0.fc2.weight": (1024, 4096),
-        "model.decoder.layers.0.fc2.bias": (1024,),
-        "model.decoder.layers.0.final_layer_norm.weight": (1024,),
-        "model.decoder.layers.0.final_layer_norm.bias": (1024,),
-        "model.decoder.layernorm_embedding.weight": (1024,),
-        "model.decoder.layernorm_embedding.bias": (1024,),
+        "model.decoder.embed_positions.weight": (1026, 24),
+        "model.decoder.layernorm_embedding.bias": (24,),
+        "model.decoder.layernorm_embedding.weight": (24,),
+        "model.decoder.layers.0.encoder_attn.k_proj.bias": (24,),
+        "model.decoder.layers.0.encoder_attn.k_proj.weight": (24, 24),
+        "model.decoder.layers.0.encoder_attn.out_proj.bias": (24,),
+        "model.decoder.layers.0.encoder_attn.out_proj.weight": (24, 24),
+        "model.decoder.layers.0.encoder_attn.q_proj.bias": (24,),
+        "model.decoder.layers.0.encoder_attn.q_proj.weight": (24, 24),
+        "model.decoder.layers.0.encoder_attn.v_proj.bias": (24,),
+        "model.decoder.layers.0.encoder_attn.v_proj.weight": (24, 24),
+        "model.decoder.layers.0.encoder_attn_layer_norm.bias": (24,),
+        "model.decoder.layers.0.encoder_attn_layer_norm.weight": (24,),
+        "model.decoder.layers.0.fc1.bias": (16,),
+        "model.decoder.layers.0.fc1.weight": (16, 24),
+        "model.decoder.layers.0.fc2.bias": (24,),
+        "model.decoder.layers.0.fc2.weight": (24, 16),
+        "model.decoder.layers.0.final_layer_norm.bias": (24,),
+        "model.decoder.layers.0.final_layer_norm.weight": (24,),
+        "model.decoder.layers.0.self_attn.k_proj.bias": (24,),
+        "model.decoder.layers.0.self_attn.k_proj.weight": (24, 24),
+        "model.decoder.layers.0.self_attn.out_proj.bias": (24,),
+        "model.decoder.layers.0.self_attn.out_proj.weight": (24, 24),
+        "model.decoder.layers.0.self_attn.q_proj.bias": (24,),
+        "model.decoder.layers.0.self_attn.q_proj.weight": (24, 24),
+        "model.decoder.layers.0.self_attn.v_proj.bias": (24,),
+        "model.decoder.layers.0.self_attn.v_proj.weight": (24, 24),
+        "model.decoder.layers.0.self_attn_layer_norm.bias": (24,),
+        "model.decoder.layers.0.self_attn_layer_norm.weight": (24,),
+        "model.decoder.layers.1.encoder_attn.k_proj.bias": (24,),
+        "model.decoder.layers.1.encoder_attn.k_proj.weight": (24, 24),
+        "model.decoder.layers.1.encoder_attn.out_proj.bias": (24,),
+        "model.decoder.layers.1.encoder_attn.out_proj.weight": (24, 24),
+        "model.decoder.layers.1.encoder_attn.q_proj.bias": (24,),
+        "model.decoder.layers.1.encoder_attn.q_proj.weight": (24, 24),
+        "model.decoder.layers.1.encoder_attn.v_proj.bias": (24,),
+        "model.decoder.layers.1.encoder_attn.v_proj.weight": (24, 24),
+        "model.decoder.layers.1.encoder_attn_layer_norm.bias": (24,),
+        "model.decoder.layers.1.encoder_attn_layer_norm.weight": (24,),
+        "model.decoder.layers.1.fc1.bias": (16,),
+        "model.decoder.layers.1.fc1.weight": (16, 24),
+        "model.decoder.layers.1.fc2.bias": (24,),
+        "model.decoder.layers.1.fc2.weight": (24, 16),
+        "model.decoder.layers.1.final_layer_norm.bias": (24,),
+        "model.decoder.layers.1.final_layer_norm.weight": (24,),
+        "model.decoder.layers.1.self_attn.k_proj.bias": (24,),
+        "model.decoder.layers.1.self_attn.k_proj.weight": (24, 24),
+        "model.decoder.layers.1.self_attn.out_proj.bias": (24,),
+        "model.decoder.layers.1.self_attn.out_proj.weight": (24, 24),
+        "model.decoder.layers.1.self_attn.q_proj.bias": (24,),
+        "model.decoder.layers.1.self_attn.q_proj.weight": (24, 24),
+        "model.decoder.layers.1.self_attn.v_proj.bias": (24,),
+        "model.decoder.layers.1.self_attn.v_proj.weight": (24, 24),
+        "model.decoder.layers.1.self_attn_layer_norm.bias": (24,),
+        "model.decoder.layers.1.self_attn_layer_norm.weight": (24,),
     }
 
 
@@ -823,14 +691,14 @@ def test_encoder_decoder_shared_named_params(model):
         name: tuple(param.shape) for name, param in model.encoder_decoder_shared_named_params()
     }
     assert len(parameter_shapes) == 1
-    assert parameter_shapes == {"model.shared.weight": (50270, 1024)}
+    assert parameter_shapes == {"model.shared.weight": (50270, 24)}
 
 
 def test_base_model_named_params(model):
     parameter_shapes = {
         name: tuple(param.shape) for name, param in model.base_model_named_params()
     }
-    assert len(parameter_shapes) == 225
+    assert len(parameter_shapes) == 91
     encoder_only_parameter_shapes = {
         name: tuple(param.shape) for name, param in model.encoder_only_named_params()
     }
@@ -875,10 +743,38 @@ def test_configure_optimizer(model):
     all_optimized_parameters = set()
     for param_group in optimizer.param_groups:
         all_optimized_parameters.update(set(param_group["params"]))
-    assert len(all_optimized_parameters) == 229
+    assert len(all_optimized_parameters) > 0
     # check that all model parameters are covered
     all_model_parameters = {param for name, param in model.named_parameters()}
     assert all_optimized_parameters == all_model_parameters
+
+
+# note that this is only used for the tests below which are skipped because
+# they are a bit slow and primarily meant to show how beam search works
+@pytest.fixture(scope="module")
+def pretrained_model() -> BartAsPointerNetwork:
+    torch.random.manual_seed(42)
+    model = BartAsPointerNetwork.from_pretrained(
+        "sshleifer/distilbart-xsum-12-1",
+        # label id space
+        bos_token_id=0,  # taskmodule.bos_id,
+        eos_token_id=1,  # taskmodule.eos_id,
+        pad_token_id=1,  # taskmodule.eos_id,
+        # target token id space
+        target_token_ids=[0, 2, 50266, 50269, 50268, 50265, 50267],  # taskmodule.target_token_ids,
+        # mapping to better initialize the label embedding weights
+        # taken from taskmodule.label_embedding_weight_mapping
+        embedding_weight_mapping={
+            50266: [39763],
+            50269: [10166],
+            50268: [5970],
+            50265: [45260],
+            50267: [354, 1215, 9006],
+        },
+        decoder_position_id_pattern=[0, 0, 1, 0, 0, 1, 1],
+    )
+
+    return model
 
 
 ARTICLE_TO_SUMMARIZE = (
@@ -889,7 +785,8 @@ ARTICLE_TO_SUMMARIZE = (
 
 
 @pytest.mark.skip("This is just a showcase of how beam search works")
-def test_bart_pointer_network_beam_search(model, taskmodule):
+def test_bart_pointer_network_beam_search(pretrained_model, taskmodule):
+    model = pretrained_model
     encoder_input_str = ARTICLE_TO_SUMMARIZE  # "translate English to German: How old are you?"
     encoder_input_tokenized = taskmodule.tokenizer(encoder_input_str, return_tensors="pt")
 
@@ -905,6 +802,7 @@ def test_bart_pointer_network_beam_search(model, taskmodule):
     encoder_attention_mask = encoder_input_tokenized.attention_mask.repeat_interleave(
         num_beams, dim=0
     )
+    torch.manual_seed(42)
     encoder_outputs = encoder(encoder_input_ids, return_dict=True)
     model_kwargs = {
         "encoder_outputs": encoder_outputs,
@@ -926,19 +824,21 @@ def test_bart_pointer_network_beam_search(model, taskmodule):
         ]
     )
 
+    torch.manual_seed(42)
     outputs = model.beam_search(
         decoder_input_ids,
         beam_scorer,
         logits_processor=logits_processor,
         pad_token_id=model.config.pad_token_id,
         eos_token_id=model.config.eos_token_id,
+        max_length=20,
         **model_kwargs,
     )
 
     torch.testing.assert_close(
         outputs,
         torch.tensor(
-            [[0, 28, 41, 35, 33, 36, 17, 33, 36, 17, 33, 36, 17, 33, 36, 17, 33, 36, 37, 1]]
+            [[0, 10, 30, 44, 45, 15, 16, 17, 33, 15, 16, 17, 33, 33, 33, 35, 33, 35, 33, 35]]
         ),
     )
 
@@ -949,10 +849,12 @@ def test_bart_pointer_network_beam_search(model, taskmodule):
 
 
 @pytest.mark.skip("This is just a showcase of how beam search with scores works")
-def test_bart_pointer_network_generate_with_scores(model, taskmodule):
+def test_bart_pointer_network_generate_with_scores(pretrained_model, taskmodule):
+    model = pretrained_model
     encoder_input_str = ARTICLE_TO_SUMMARIZE  # "translate English to German: How old are you?"
     inputs = taskmodule.tokenizer(encoder_input_str, max_length=1024, return_tensors="pt")
 
+    torch.manual_seed(42)
     outputs = model.generate(
         inputs["input_ids"],
         num_beams=3,
@@ -962,11 +864,11 @@ def test_bart_pointer_network_generate_with_scores(model, taskmodule):
         output_scores=True,
     )
     assert isinstance(outputs, BeamSearchEncoderDecoderOutput)
-    torch.testing.assert_close(outputs.sequences_scores, torch.tensor([-6.784079074859619]))
+    torch.testing.assert_close(outputs.sequences_scores, torch.tensor([-7.1258721351623535]))
     torch.testing.assert_close(
         outputs.sequences,
         torch.tensor(
-            [[0, 28, 41, 35, 33, 36, 17, 48, 36, 17, 33, 55, 35, 33, 17, 48, 55, 35, 48, 36]]
+            [[0, 10, 30, 44, 45, 15, 16, 17, 33, 15, 16, 35, 33, 15, 35, 41, 35, 33, 33, 33]]
         ),
     )
 
