@@ -92,7 +92,8 @@ def test_prepare_decoder_input_ids(use_attention_mask):
     )
 
     prepared_decoder_input_ids = pointer_head.prepare_decoder_input_ids(
-        input_ids=input_ids, encoder_input_ids=encoder_input_ids, attention_mask=attention_mask
+        input_ids=input_ids,
+        encoder_input_ids=encoder_input_ids,
     )
     assert prepared_decoder_input_ids is not None
     assert prepared_decoder_input_ids.shape == input_ids.shape
@@ -136,10 +137,10 @@ def test_prepare_decoder_input_ids_out_of_bounds():
 
 
 @pytest.mark.parametrize(
-    "use_attention_mask,increase_position_ids_per_record",
-    [(True, True), (True, False), (False, True), (False, False)],
+    "increase_position_ids_per_record",
+    [True, False],
 )
-def test_prepare_decoder_position_ids(use_attention_mask, increase_position_ids_per_record):
+def test_prepare_decoder_position_ids(increase_position_ids_per_record):
     pointer_head = get_pointer_head(
         increase_position_ids_per_record=increase_position_ids_per_record
     )
@@ -151,46 +152,26 @@ def test_prepare_decoder_position_ids(use_attention_mask, increase_position_ids_
             [0, 3, 9, 1, 2, 2],
         ]
     ).to(torch.long)
-    attention_mask = (
-        torch.tensor(
-            [
-                [1, 1, 1, 1, 1, 1],
-                [1, 1, 1, 1, 0, 0],
-            ]
-        ).to(torch.long)
-        if use_attention_mask
-        else None
-    )
 
     prepared_decoder_position_ids = pointer_head.prepare_decoder_position_ids(
-        input_ids=input_ids, attention_mask=attention_mask
+        input_ids=input_ids,
+        # the input_ids are in the target space, so we provide pointer_head.pad_id as the pad_token_id
+        pad_input_id=pointer_head.pad_id,
     )
     assert prepared_decoder_position_ids is not None
     assert prepared_decoder_position_ids.shape == input_ids.shape
     if not increase_position_ids_per_record:
-        if use_attention_mask:
-            assert prepared_decoder_position_ids.tolist() == [
-                [0, 2, 3, 3, 4, 2],
-                [0, 2, 3, 3, 1, 1],
-            ]
-        else:
-            assert prepared_decoder_position_ids.tolist() == [
-                [0, 2, 3, 3, 4, 2],
-                [0, 2, 3, 3, 4, 2],
-            ]
+        assert prepared_decoder_position_ids.tolist() == [
+            [0, 2, 3, 3, 4, 2],
+            [0, 2, 3, 3, 1, 1],
+        ]
     else:
         # the position ids (except for position-bos=0 and position-pad=1) get increased by 3 per record
         # (which has length 4)
-        if use_attention_mask:
-            assert prepared_decoder_position_ids.tolist() == [
-                [0, 2, 3, 3, 4, 5],
-                [0, 2, 3, 3, 1, 1],
-            ]
-        else:
-            assert prepared_decoder_position_ids.tolist() == [
-                [0, 2, 3, 3, 4, 5],
-                [0, 2, 3, 3, 4, 5],
-            ]
+        assert prepared_decoder_position_ids.tolist() == [
+            [0, 2, 3, 3, 4, 5],
+            [0, 2, 3, 3, 1, 1],
+        ]
 
 
 def test_prepare_decoder_inputs():
@@ -209,20 +190,14 @@ def test_prepare_decoder_inputs():
             [0, 3, 9, 1, 2, 2],
         ]
     ).to(torch.long)
-    attention_mask = torch.tensor(
-        [
-            [1, 1, 1, 1, 1, 1],
-            [1, 1, 1, 1, 0, 0],
-        ]
-    ).to(torch.long)
 
     decoder_inputs = pointer_head.prepare_decoder_inputs(
-        input_ids=input_ids, encoder_input_ids=encoder_input_ids, attention_mask=attention_mask
+        input_ids=input_ids,
+        encoder_input_ids=encoder_input_ids,
     )
-    assert set(decoder_inputs.keys()) == {"input_ids", "position_ids", "attention_mask"}
+    assert set(decoder_inputs.keys()) == {"input_ids", "position_ids"}
     assert decoder_inputs["input_ids"].shape == input_ids.shape
     assert decoder_inputs["position_ids"].shape == input_ids.shape
-    assert decoder_inputs["attention_mask"].shape == input_ids.shape
     # to recap, the target2token_id mapping is (bos, eos, pad, 3 x label ids)
     torch.testing.assert_allclose(
         pointer_head.target2token_id, torch.tensor([100, 101, 102, 110, 111, 112])
@@ -238,10 +213,6 @@ def test_prepare_decoder_inputs():
     assert decoder_inputs["position_ids"].tolist() == [
         [0, 2, 3, 3, 4, 2],
         [0, 2, 3, 3, 1, 1],
-    ]
-    assert decoder_inputs["attention_mask"].tolist() == [
-        [1, 1, 1, 1, 1, 1],
-        [1, 1, 1, 1, 0, 0],
     ]
 
 

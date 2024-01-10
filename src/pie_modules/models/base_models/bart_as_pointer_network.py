@@ -249,7 +249,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         # this adjusts the input_ids and, if available, the position_ids
         decoder_inputs = self.pointer_head.prepare_decoder_inputs(
             input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
+            # in the case of generation (with past_key_values) the position_ids are already prepared
             position_ids=decoder_position_ids,
             encoder_input_ids=input_ids,
         )
@@ -322,9 +322,12 @@ class BartAsPointerNetwork(BartPreTrainedModel):
     ):
         result = {}
         if self.pointer_head.use_prepared_position_ids:
+            # we need to prepare the position ids for the decoder here, because later we do not have the full
+            # input_ids anymore
             result["decoder_position_ids"] = self.pointer_head.prepare_decoder_position_ids(
                 input_ids=decoder_input_ids,
-                attention_mask=decoder_attention_mask,
+                # the input_ids are in the target space, so we provide pointer_head.pad_id as the pad_token_id
+                pad_input_id=self.pointer_head.pad_id,
             )
 
         # cut decoder_input_ids if past_key_values is used

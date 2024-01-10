@@ -114,8 +114,7 @@ class PointerHead(torch.nn.Module):
         self,
         input_ids: torch.LongTensor,
         encoder_input_ids: torch.LongTensor,
-        attention_mask: Optional[torch.LongTensor] = None,
-    ):
+    ) -> torch.LongTensor:
         mapping_token_mask = input_ids.lt(self.pointer_offset)
         mapped_tokens = input_ids.masked_fill(input_ids.ge(self.pointer_offset), 0)
         tag_mapped_tokens = self.target2token_id[mapped_tokens]
@@ -133,20 +132,22 @@ class PointerHead(torch.nn.Module):
 
         word_mapped_tokens = encoder_input_ids.gather(index=encoder_input_ids_index, dim=1)
 
-        decoder_input_ids = torch.where(mapping_token_mask, tag_mapped_tokens, word_mapped_tokens)
+        decoder_input_ids = torch.where(
+            mapping_token_mask, tag_mapped_tokens, word_mapped_tokens
+        ).to(torch.long)
 
-        # TODO: it looks like that is not required because the pad id gets automatically mapped to the pad token id
-        # during training, the attention mask is available
-        if attention_mask is not None:
-            decoder_input_ids = decoder_input_ids.masked_fill(
-                ~attention_mask.bool(), self.pad_token_id
-            )
+        # Note: we do not need to explicitly handle the padding (via a decoder attention mask) because
+        # it gets automatically mapped to the pad token id
 
         return decoder_input_ids
 
     def prepare_decoder_position_ids(
-        self, input_ids: torch.LongTensor, attention_mask: Optional[torch.LongTensor] = None
-    ):
+        self,
+        input_ids: torch.LongTensor,
+        # will be used to create the padding mask from the input_ids. Needs to be provided because
+        # the input_ids may be in token space or target space.
+        pad_input_id: int,
+    ) -> torch.LongTensor:
         bsz, tokens_len = input_ids.size()
         pattern_len = len(self.decoder_position_id_pattern)
         # the number of full and partly records. note that tokens_len includes the bos token
@@ -172,33 +173,31 @@ class PointerHead(torch.nn.Module):
         all_position_ids = torch.cat([start_pos, position_ids + 2], dim=-1)
         all_position_ids_truncated = all_position_ids[:bsz, :tokens_len]
 
-        # during training, the attention mask is not None
-        if attention_mask is not None:
-            # pad with pad_position_id=1
-            return all_position_ids_truncated.masked_fill(~attention_mask.bool(), 1)
-        else:
-            return all_position_ids_truncated
+        # mask the padding tokens
+        mask_invalid = input_ids.eq(pad_input_id)
+        all_position_ids_truncated_masked = all_position_ids_truncated.masked_fill(mask_invalid, 1)
+
+        return all_position_ids_truncated_masked
 
     def prepare_decoder_inputs(
         self,
         input_ids: torch.LongTensor,
         encoder_input_ids: torch.LongTensor,
-        attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        **kwargs,
     ) -> Dict[str, torch.Tensor]:
-        inputs = {"attention_mask": attention_mask, **kwargs}
+        inputs = {}
         if self.use_prepared_position_ids:
             if position_ids is None:
                 position_ids = self.prepare_decoder_position_ids(
-                    input_ids=input_ids, attention_mask=attention_mask
+                    # the input_ids are in the target space, so we provide pointer_head.pad_id as the pad_token_id
+                    input_ids=input_ids,
+                    pad_input_id=self.pad_id,
                 )
             inputs["position_ids"] = position_ids
 
         inputs["input_ids"] = self.prepare_decoder_input_ids(
             input_ids=input_ids,
             encoder_input_ids=encoder_input_ids,
-            attention_mask=attention_mask,
         )
         return inputs
 
