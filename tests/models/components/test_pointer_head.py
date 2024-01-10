@@ -50,10 +50,10 @@ def test_overwrite_embeddings_with_mapping():
     pointer_head.overwrite_embeddings_with_mapping()
     assert pointer_head.embeddings is not None
     assert not torch.equal(pointer_head.embeddings.weight, original_embeddings_weight)
-    torch.testing.assert_allclose(
+    torch.testing.assert_close(
         pointer_head.embeddings.weight[110], original_embeddings_weight[[20, 21]].mean(dim=0)
     )
-    torch.testing.assert_allclose(
+    torch.testing.assert_close(
         pointer_head.embeddings.weight[111], original_embeddings_weight[[30]].mean(dim=0)
     )
 
@@ -98,7 +98,7 @@ def test_prepare_decoder_input_ids(use_attention_mask):
     assert prepared_decoder_input_ids is not None
     assert prepared_decoder_input_ids.shape == input_ids.shape
     # to recap, the target2token_id mapping is (bos, eos, pad, 3 x label ids)
-    torch.testing.assert_allclose(
+    torch.testing.assert_close(
         pointer_head.target2token_id, torch.tensor([100, 101, 102, 110, 111, 112])
     )
     # 3 labels + bos / pad
@@ -199,7 +199,7 @@ def test_prepare_decoder_inputs():
     assert decoder_inputs["input_ids"].shape == input_ids.shape
     assert decoder_inputs["position_ids"].shape == input_ids.shape
     # to recap, the target2token_id mapping is (bos, eos, pad, 3 x label ids)
-    torch.testing.assert_allclose(
+    torch.testing.assert_close(
         pointer_head.target2token_id, torch.tensor([100, 101, 102, 110, 111, 112])
     )
     # 3 labels + bos / pad
@@ -256,7 +256,7 @@ def test_forward():
     assert logits is not None
     # shape: (batch_size=2, target_sequence_length=4, num_targets+num_offsets=6+5==11)
     assert logits.shape == (2, 4, 11)
-    torch.testing.assert_allclose(
+    torch.testing.assert_close(
         logits,
         torch.tensor(
             [
@@ -470,7 +470,7 @@ def test_forward_with_labels(with_constraints):
         # embeddings.weight, 2 x (encoder_mlp.weight, encoder_mlp.bias)
         assert len(gradients) == 5
         # embeddings.weight (just check entries for special tokens and labels)
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             gradients[0][100:113],
             torch.tensor(
                 [
@@ -491,7 +491,7 @@ def test_forward_with_labels(with_constraints):
             ),
         )
         # first encoder_mlp.weight
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             gradients[1],
             torch.tensor(
                 [
@@ -502,12 +502,12 @@ def test_forward_with_labels(with_constraints):
             ),
         )
         # first encoder_mlp.bias
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             gradients[2],
             torch.tensor([-0.0006180311902426183, -0.023118967190384865, -0.024205176159739494]),
         )
         # second encoder_mlp.weight
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             gradients[3],
             torch.tensor(
                 [
@@ -518,7 +518,7 @@ def test_forward_with_labels(with_constraints):
             ),
         )
         # second encoder_mlp.bias
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             gradients[4],
             torch.tensor([-0.030467912554740906, -0.045307278633117676, 0.06145985424518585]),
         )
@@ -526,7 +526,7 @@ def test_forward_with_labels(with_constraints):
         # embeddings.weight, 2 x (encoder_mlp.weight, encoder_mlp.bias), 2 x (constraints_encoder_mlp.weight, constraints_encoder_mlp.bias)
         assert len(gradients) == 9
         # embeddings.weight (just check entries for special tokens and labels)
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             gradients[0][100:113],
             torch.tensor(
                 [
@@ -547,7 +547,7 @@ def test_forward_with_labels(with_constraints):
             ),
         )
         # first encoder_mlp.weight
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             gradients[1],
             torch.tensor(
                 [
@@ -558,12 +558,12 @@ def test_forward_with_labels(with_constraints):
             ),
         )
         # first encoder_mlp.bias
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             gradients[2],
             torch.tensor([0.003317170077934861, -0.021803036332130432, -0.023893579840660095]),
         )
         # second encoder_mlp.weight
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             gradients[3],
             torch.tensor(
                 [
@@ -574,12 +574,12 @@ def test_forward_with_labels(with_constraints):
             ),
         )
         # second encoder_mlp.bias
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             gradients[4],
             torch.tensor([-0.046919066458940506, -0.05197446048259735, 0.05252313241362572]),
         )
         # first constraints_encoder_mlp.weight
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             gradients[5],
             torch.tensor(
                 [
@@ -590,12 +590,12 @@ def test_forward_with_labels(with_constraints):
             ),
         )
         # first constraints_encoder_mlp.bias
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             gradients[6],
             torch.tensor([0.05254765599966049, -0.0024578727316111326, 0.005047726910561323]),
         )
         # second constraints_encoder_mlp.weight
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             gradients[7],
             torch.tensor(
                 [
@@ -606,7 +606,7 @@ def test_forward_with_labels(with_constraints):
             ),
         )
         # second constraints_encoder_mlp.bias
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             gradients[8],
             torch.tensor([0.016296036541461945, -0.00018996000289916992, 0.05888192355632782]),
         )
