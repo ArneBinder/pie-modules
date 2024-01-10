@@ -755,14 +755,14 @@ def test_configure_model_metric():
         "exact_encoding_matches": 1.0,
         "decoding_errors": {"correct": 1.0, "all": 0.0},
         "labeled_spans": {
-            "content": {"recall": 100.0, "precision": 100.0, "f1": 100.0},
-            "person": {"recall": 100.0, "precision": 100.0, "f1": 100.0},
-            "topic": {"recall": 100.0, "precision": 100.0, "f1": 100.0},
-            "micro": {"recall": 100.0, "precision": 100.0, "f1": 100.0},
+            "content": {"recall": 1.0, "precision": 1.0, "f1": 1.0},
+            "person": {"recall": 1.0, "precision": 1.0, "f1": 1.0},
+            "topic": {"recall": 1.0, "precision": 1.0, "f1": 1.0},
+            "micro": {"recall": 1.0, "precision": 1.0, "f1": 1.0},
         },
         "binary_relations": {
-            "is_about": {"recall": 100.0, "precision": 100.0, "f1": 100.0},
-            "micro": {"recall": 100.0, "precision": 100.0, "f1": 100.0},
+            "is_about": {"recall": 1.0, "precision": 1.0, "f1": 1.0},
+            "micro": {"recall": 1.0, "precision": 1.0, "f1": 1.0},
         },
     }
     torch.random.manual_seed(42)
@@ -780,14 +780,14 @@ def test_configure_model_metric():
         "exact_encoding_matches": 0.5,
         "decoding_errors": {"correct": 0.5, "len": 0.25, "order": 0.25, "all": 0.5},
         "labeled_spans": {
-            "content": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
-            "person": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
-            "topic": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
-            "micro": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
+            "person": {"recall": 0.5, "precision": 1.0, "f1": 0.6667},
+            "topic": {"recall": 0.5, "precision": 1.0, "f1": 0.6667},
+            "content": {"recall": 0.5, "precision": 1.0, "f1": 0.6667},
+            "micro": {"recall": 0.5, "precision": 1.0, "f1": 0.6667},
         },
         "binary_relations": {
-            "is_about": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
-            "micro": {"recall": 50.0, "precision": 100.0, "f1": 66.6667},
+            "is_about": {"recall": 0.5, "precision": 1.0, "f1": 0.6667},
+            "micro": {"recall": 0.5, "precision": 1.0, "f1": 0.6667},
         },
     }
 
