@@ -242,12 +242,15 @@ class PointerHead(torch.nn.Module):
         gen_scores = torch.einsum("blh,bnh->bln", last_hidden_state, input_embed)
         avg_word_scores = (gen_scores + word_scores) / 2
 
-        # TODO: what exactly does this mask? Masking special tokens? use special_token_mask instead?
-        mask = encoder_attention_mask.eq(0)
-        mask = mask.unsqueeze(1)
-        # TODO: what are 2 and 1 (for ge)? Note that 2 is the eos_token_id of Bart.
-        mask = mask.__or__(encoder_input_ids.eq(2).cumsum(dim=1).ge(1).unsqueeze(1))
-        avg_word_scores = avg_word_scores.masked_fill(mask, -1e32)
+        # never point to the special tokens (bos and eos) and the padding in the encoder input
+        bos_token_id = self.target2token_id[self.bos_id]
+        eos_token_id = self.target2token_id[self.eos_id]
+        mask_invalid = (
+            encoder_attention_mask.eq(0)
+            | encoder_input_ids.eq(bos_token_id)
+            | encoder_input_ids.eq(eos_token_id)
+        )
+        avg_word_scores = avg_word_scores.masked_fill(mask_invalid.unsqueeze(1), -1e32)
 
         # Note: the remaining row in logits contains the score for the bos token which should be never generated!
         logits[:, :, self.eos_id : self.eos_id + 1] = eos_scores

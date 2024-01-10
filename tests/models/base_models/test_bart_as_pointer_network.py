@@ -201,42 +201,42 @@ def test_forward(model, batch, decoder_input_ids):
     assert outputs.logits is not None
     # shape: (batch_size, output_seq_len, target_size=num_target_ids+num_offsets)
     assert outputs.logits.shape == (2, 8, 17)
+    # check exact values only for the first sequence output
     torch.testing.assert_close(
-        # check only the first sequence output
         outputs.logits[:, 0, :],
         torch.tensor(
             [
                 [
                     -1.0000000138484279e24,
                     3.682220935821533,
-                    -0.9326803088188171,
-                    -0.22636914253234863,
-                    -0.48131969571113586,
-                    0.19212311506271362,
-                    0.909582257270813,
-                    -0.26033997535705566,
-                    4.807479381561279,
-                    1.8076038360595703,
-                    1.1034351587295532,
-                    -0.13411812484264374,
-                    1.15517258644104,
-                    0.4741376042366028,
-                    -0.458639532327652,
-                    2.8401029109954834,
+                    -0.9326803684234619,
+                    -0.2263697385787964,
+                    -0.48132020235061646,
+                    0.19212239980697632,
+                    0.9095813632011414,
+                    -1.0000000331813535e32,
+                    4.807478904724121,
+                    1.807602882385254,
+                    1.1034345626831055,
+                    -0.13411815464496613,
+                    1.1551722288131714,
+                    0.4741371273994446,
+                    -0.45863986015319824,
+                    2.8401033878326416,
                     -1.0000000331813535e32,
                 ],
                 [
                     -1.0000000138484279e24,
                     3.8057942390441895,
-                    -1.143894076347351,
-                    -0.827788233757019,
-                    -0.21552489697933197,
-                    -0.2897048890590668,
-                    0.34937697649002075,
-                    -0.6374335289001465,
-                    3.0700652599334717,
-                    1.6204571723937988,
-                    3.234084367752075,
+                    -1.1438947916030884,
+                    -0.8277881741523743,
+                    -0.21552562713623047,
+                    -0.2897053360939026,
+                    0.3493768572807312,
+                    -1.0000000331813535e32,
+                    3.0700643062591553,
+                    1.6204582452774048,
+                    3.234086036682129,
                     -1.0000000331813535e32,
                     -1.0000000331813535e32,
                     -1.0000000331813535e32,
@@ -247,6 +247,57 @@ def test_forward(model, batch, decoder_input_ids):
             ]
         ),
     )
+    # check the sum of all logits
+    if model.pointer_head.use_prepared_position_ids:
+        torch.testing.assert_close(
+            outputs.logits.sum(0).sum(0),
+            torch.tensor(
+                [
+                    -1.6000000221574846e25,
+                    55.108062744140625,
+                    -6.472843647003174,
+                    -6.713191509246826,
+                    -7.203713893890381,
+                    -3.5198893547058105,
+                    25.30033302307129,
+                    -1.6000000530901656e33,
+                    19.98822021484375,
+                    47.84223937988281,
+                    55.134300231933594,
+                    -8.000000265450828e32,
+                    -8.000000265450828e32,
+                    -8.000000265450828e32,
+                    -8.000000265450828e32,
+                    -8.000000265450828e32,
+                    -1.6000000530901656e33,
+                ]
+            ),
+        )
+    else:
+        torch.testing.assert_close(
+            outputs.logits.sum(0).sum(0),
+            torch.tensor(
+                [
+                    -1.6000000221574846e25,
+                    55.51424789428711,
+                    -4.326529026031494,
+                    -7.456439971923828,
+                    -9.119050979614258,
+                    -2.5258233547210693,
+                    26.22917938232422,
+                    -1.6000000530901656e33,
+                    15.16575813293457,
+                    53.140113830566406,
+                    51.56929016113281,
+                    -8.000000265450828e32,
+                    -8.000000265450828e32,
+                    -8.000000265450828e32,
+                    -8.000000265450828e32,
+                    -8.000000265450828e32,
+                    -1.6000000530901656e33,
+                ]
+            ),
+        )
 
 
 def test_forward_with_labels(model, batch):
@@ -260,9 +311,9 @@ def test_forward_with_labels(model, batch):
     outputs = model(**inputs, **targets_without_constraints)
     loss = outputs.loss
     if isinstance(model.model, BartModel):
-        torch.testing.assert_close(loss, torch.tensor(3.883049488067627))
+        torch.testing.assert_close(loss, torch.tensor(3.8818745613098145))
     elif isinstance(model.model, BartModelWithDecoderPositionIds):
-        torch.testing.assert_close(loss, torch.tensor(4.204827308654785))
+        torch.testing.assert_close(loss, torch.tensor(4.203524112701416))
     else:
         raise ValueError(f"Unknown model type {type(model.model)}")
 
@@ -275,9 +326,9 @@ def test_forward_with_labels_and_constraints(model, batch_with_constraints):
     outputs = model(**inputs, **targets)
     loss = outputs.loss
     if isinstance(model.model, BartModel):
-        torch.testing.assert_close(loss, torch.tensor(6.278500556945801))
+        torch.testing.assert_close(loss, torch.tensor(6.277325630187988))
     elif isinstance(model.model, BartModelWithDecoderPositionIds):
-        torch.testing.assert_close(loss, torch.tensor(6.575843334197998))
+        torch.testing.assert_close(loss, torch.tensor(6.574540138244629))
     else:
         raise ValueError(f"Unknown model type {type(model.model)}")
 
