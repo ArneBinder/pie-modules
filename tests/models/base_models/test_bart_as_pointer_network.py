@@ -104,12 +104,14 @@ def model(config) -> BartAsPointerNetwork:
     return model
 
 
-def test_model(model):
+def test_model(model, config):
     assert isinstance(model, BartAsPointerNetwork)
-    if model.config.decoder_position_id_pattern is None:
+    if config == {}:
         assert isinstance(model.model, BartModel)
-    else:
+    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
         assert isinstance(model.model, BartModelWithDecoderPositionIds)
+    else:
+        raise ValueError(f"Unknown config: {config}")
 
 
 @pytest.fixture(scope="module")
@@ -300,7 +302,7 @@ def test_forward(model, batch, decoder_input_ids):
         )
 
 
-def test_forward_with_labels(model, batch):
+def test_forward_with_labels(model, batch, config):
     inputs, targets = batch
     targets_without_constraints = {
         key: value for key, value in targets.items() if key != "constraints"
@@ -310,24 +312,24 @@ def test_forward_with_labels(model, batch):
     torch.manual_seed(42)
     outputs = model(**inputs, **targets_without_constraints)
     loss = outputs.loss
-    if isinstance(model.model, BartModel):
+    if config == {}:
         torch.testing.assert_close(loss, torch.tensor(3.8818745613098145))
-    elif isinstance(model.model, BartModelWithDecoderPositionIds):
+    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
         torch.testing.assert_close(loss, torch.tensor(4.203524112701416))
     else:
-        raise ValueError(f"Unknown model type {type(model.model)}")
+        raise ValueError(f"Unknown config: {config}")
 
 
-def test_forward_with_labels_and_constraints(model, batch_with_constraints):
+def test_forward_with_labels_and_constraints(model, batch_with_constraints, config):
     inputs, targets = batch_with_constraints
     assert set(inputs) == {"input_ids", "attention_mask"}
     assert set(targets) == {"labels", "decoder_attention_mask", "constraints"}
     torch.manual_seed(42)
     outputs = model(**inputs, **targets)
     loss = outputs.loss
-    if isinstance(model.model, BartModel):
+    if config == {}:
         torch.testing.assert_close(loss, torch.tensor(6.277325630187988))
-    elif isinstance(model.model, BartModelWithDecoderPositionIds):
+    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
         torch.testing.assert_close(loss, torch.tensor(6.574540138244629))
     else:
         raise ValueError(f"Unknown model type {type(model.model)}")
@@ -409,6 +411,7 @@ def test_prepare_inputs_for_generation(
     empty_decoder_input_ids,
     batch,
     encoder_outputs,
+    config,
 ):
     result = model.prepare_inputs_for_generation(
         decoder_input_ids=empty_decoder_input_ids, **prepared_encoder_decoder_kwargs_for_generation
@@ -425,7 +428,7 @@ def test_prepare_inputs_for_generation(
         "decoder_head_mask",
         "cross_attn_head_mask",
     }
-    if isinstance(model.model, BartModelWithDecoderPositionIds):
+    if model.pointer_head.use_prepared_position_ids:
         result_keys.add("decoder_position_ids")
     assert set(result) == result_keys
     torch.testing.assert_close(
@@ -450,8 +453,12 @@ def test_prepare_inputs_for_generation(
     assert result["head_mask"] is None
     assert result["decoder_head_mask"] is None
     assert result["cross_attn_head_mask"] is None
-    if "decoder_position_ids" in result:
+    if config == {}:
+        assert "decoder_position_ids" not in result
+    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
         torch.testing.assert_close(result["decoder_position_ids"], torch.tensor([[0], [0]]))
+    else:
+        raise ValueError(f"Unknown config: {config}")
 
 
 def test_prepare_inputs_for_generation_with_past_key_values(
@@ -459,6 +466,7 @@ def test_prepare_inputs_for_generation_with_past_key_values(
     prepared_encoder_decoder_kwargs_for_generation,
     batch,
     encoder_outputs,
+    config,
 ):
     # shallow copy to avoid changing the original dict
     kwargs = dict(prepared_encoder_decoder_kwargs_for_generation)
@@ -490,12 +498,12 @@ def test_prepare_inputs_for_generation_with_past_key_values(
     )
 
     result = model.prepare_inputs_for_generation(past_key_values=dummy_past_key_values, **kwargs)
-    if isinstance(model.model, BartModel):
+    if config == {}:
         assert len(result) == 10
-    elif isinstance(model.model, BartModelWithDecoderPositionIds):
+    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
         assert len(result) == 11
     else:
-        raise ValueError(f"Unknown model type {type(model.model)}")
+        raise ValueError(f"Unknown config: {config}")
     torch.testing.assert_close(
         result["input_ids"],
         batch[0]["input_ids"],
@@ -527,12 +535,12 @@ def test_prepare_inputs_for_generation_with_past_key_values(
         )
 
 
-def test_generate(model, batch, empty_decoder_input_ids):
+def test_generate(model, batch, empty_decoder_input_ids, config):
     inputs, targets = batch
     batch_size, seq_len = inputs["input_ids"].shape
     torch.manual_seed(42)
     outputs = model.generate(**inputs)
-    if isinstance(model.model, BartModel):
+    if config == {}:
         assert outputs.shape == (batch_size, 12)
         torch.testing.assert_close(
             outputs,
@@ -543,7 +551,7 @@ def test_generate(model, batch, empty_decoder_input_ids):
                 ]
             ),
         )
-    elif isinstance(model.model, BartModelWithDecoderPositionIds):
+    elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
         assert outputs.shape == (batch_size, 12)
         torch.testing.assert_close(
             outputs,
@@ -555,7 +563,7 @@ def test_generate(model, batch, empty_decoder_input_ids):
             ),
         )
     else:
-        raise ValueError(f"Unknown model type {type(model.model)}")
+        raise ValueError(f"Unknown config: {config}")
 
 
 def test_head_named_params(model):
