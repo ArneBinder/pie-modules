@@ -248,7 +248,7 @@ class PointerHead(torch.nn.Module):
         avg_word_scores = avg_word_scores.masked_fill(mask_invalid.unsqueeze(1), -1e32)
 
         # Note: the remaining row in logits contains the score for the bos token which should be never generated!
-        logits[:, :, self.eos_id : self.eos_id + 1] = eos_scores
+        logits[:, :, [self.eos_id]] = eos_scores
         logits[:, :, self.label_ids] = label_scores
         logits[:, :, self.pointer_offset :] = avg_word_scores
 
