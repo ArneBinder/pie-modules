@@ -270,14 +270,15 @@ class TokenClassificationTaskModule(TaskModuleType):
             raise ValueError(
                 "'labels' must be set before calling encode_target(). Was prepare() called on the taskmodule?"
             )
-        for span in tokenized_document.labeled_spans:
+        sorted_spans = sorted(tokenized_document.labeled_spans, key=lambda s: (s.start, s.end))
+        for span in sorted_spans:
             if span.label not in self.labels:
                 continue
             start = span.start
             end = span.end
             if any(tag != "O" for tag in tag_sequence[start:end]):
                 logger.warning(f"tag already assigned (current span has an overlap: {span}).")
-                return None
+                continue
 
             tag_sequence[start] = f"B-{span.label}"
             for j in range(start + 1, end):

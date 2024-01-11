@@ -334,6 +334,36 @@ def test_task_encodings(task_encodings, taskmodule, config):
         raise ValueError(f"unknown config: {config}")
 
 
+def test_encode_targets_with_overlap(caplog):
+    # setup taskmodule
+    taskmodule = TokenClassificationTaskModule(
+        tokenizer_name_or_path="bert-base-uncased", labels=["LOC", "PER"]
+    )
+    taskmodule.post_prepare()
+
+    # create a document with overlapping entities
+    doc = TextDocumentWithLabeledSpans(
+        text="Alice loves reading books. Bob enjoys playing soccer."
+    )
+    doc.labeled_spans.append(LabeledSpan(start=0, end=5, label="PER"))
+    doc.labeled_spans.append(LabeledSpan(start=27, end=30, label="PER"))
+    doc.labeled_spans.append(LabeledSpan(start=27, end=37, label="PER"))
+    assert str(doc.labeled_spans[0]) == "Alice"
+    assert str(doc.labeled_spans[1]) == "Bob"
+    assert str(doc.labeled_spans[2]) == "Bob enjoys"
+
+    # encode the document
+    with caplog.at_level(logging.WARNING):
+        task_encodings = taskmodule.encode([doc], encode_target=True)
+    assert len(caplog.records) == 1
+    assert (
+        caplog.messages[0]
+        == "tag already assigned (current span has an overlap: ('bob', 'enjoys'))."
+    )
+    assert len(task_encodings) == 1
+    assert task_encodings[0].targets == [-100, 3, 0, 0, 0, 0, 3, 0, 0, 0, 0, -100]
+
+
 @pytest.fixture(scope="module")
 def task_encodings_for_batch(task_encodings, config):
     # just take everything we have
