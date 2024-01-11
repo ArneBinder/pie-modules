@@ -242,14 +242,9 @@ class PointerHead(torch.nn.Module):
         gen_scores = torch.einsum("blh,bnh->bln", last_hidden_state, input_embed)
         avg_word_scores = (gen_scores + word_scores) / 2
 
-        # never point to the special tokens (bos and eos) and the padding in the encoder input
-        bos_token_id = self.target2token_id[self.bos_id]
-        eos_token_id = self.target2token_id[self.eos_id]
-        mask_invalid = (
-            encoder_attention_mask.eq(0)
-            | encoder_input_ids.eq(bos_token_id)
-            | encoder_input_ids.eq(eos_token_id)
-        )
+        # never point to the padding or the eos token in the encoder input
+        # TODO: why not excluding the bos token? seems to give worse results, but not tested extensively
+        mask_invalid = encoder_attention_mask.eq(0) | encoder_input_ids.eq(self.eos_token_id)
         avg_word_scores = avg_word_scores.masked_fill(mask_invalid.unsqueeze(1), -1e32)
 
         # Note: the remaining row in logits contains the score for the bos token which should be never generated!

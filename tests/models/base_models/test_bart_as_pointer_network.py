@@ -216,7 +216,7 @@ def test_forward(model, batch, decoder_input_ids, config):
                     0.042530909180641174,
                     0.10081343352794647,
                     -0.07145103812217712,
-                    -1.0000000331813535e32,
+                    0.1258169263601303,
                     -0.08469001948833466,
                     0.09224237501621246,
                     0.022736266255378723,
@@ -235,7 +235,7 @@ def test_forward(model, batch, decoder_input_ids, config):
                     0.04273711144924164,
                     0.10071950405836105,
                     -0.07135685533285141,
-                    -1.0000000331813535e32,
+                    0.12565924227237701,
                     0.06317455321550369,
                     0.06436678022146225,
                     -0.07508281618356705,
@@ -262,7 +262,7 @@ def test_forward(model, batch, decoder_input_ids, config):
                     0.1837124079465866,
                     1.3070943355560303,
                     -0.12108190357685089,
-                    -1.6000000530901656e33,
+                    0.625571072101593,
                     -0.12742891907691956,
                     0.6052249073982239,
                     -0.4059778153896332,
@@ -287,7 +287,7 @@ def test_forward(model, batch, decoder_input_ids, config):
                     -0.3760949671268463,
                     0.7738710641860962,
                     -0.10904453694820404,
-                    -1.6000000530901656e33,
+                    0.6459492444992065,
                     -0.013624418526887894,
                     0.48998790979385376,
                     -0.5045579075813293,
@@ -315,9 +315,9 @@ def test_forward_with_labels(model, batch, config):
     outputs = model(**inputs, **targets_without_constraints)
     loss = outputs.loss
     if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(2.361185073852539))
+        torch.testing.assert_close(loss, torch.tensor(2.4492502212524414))
     elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
-        torch.testing.assert_close(loss, torch.tensor(2.332946538925171))
+        torch.testing.assert_close(loss, torch.tensor(2.421541690826416))
     else:
         raise ValueError(f"Unknown config: {config}")
 
@@ -330,9 +330,9 @@ def test_forward_with_labels_and_constraints(model, batch_with_constraints, conf
     outputs = model(**inputs, **targets)
     loss = outputs.loss
     if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(4.684823513031006))
+        torch.testing.assert_close(loss, torch.tensor(4.772888660430908))
     elif config == {"decoder_position_id_pattern": [0, 0, 1, 0, 0, 1, 1]}:
-        torch.testing.assert_close(loss, torch.tensor(4.658721446990967))
+        torch.testing.assert_close(loss, torch.tensor(4.747316360473633))
     else:
         raise ValueError(f"Unknown model type {type(model.model)}")
 
@@ -749,8 +749,8 @@ def test_configure_optimizer(model):
     assert all_optimized_parameters == all_model_parameters
 
 
-# note that this is only used for the tests below which are skipped because
-# they are a bit slow and primarily meant to show how beam search works
+# note that this is only used for the tests below which are marked as slow
+# and are primarily meant to show how beam search works
 @pytest.fixture(scope="module")
 def pretrained_model() -> BartAsPointerNetwork:
     torch.random.manual_seed(42)
@@ -784,7 +784,7 @@ ARTICLE_TO_SUMMARIZE = (
 )
 
 
-@pytest.mark.skip("This is just a showcase of how beam search works")
+@pytest.mark.slow
 def test_bart_pointer_network_beam_search(pretrained_model, taskmodule):
     model = pretrained_model
     encoder_input_str = ARTICLE_TO_SUMMARIZE  # "translate English to German: How old are you?"
@@ -848,7 +848,7 @@ def test_bart_pointer_network_beam_search(pretrained_model, taskmodule):
     # ]
 
 
-@pytest.mark.skip("This is just a showcase of how beam search with scores works")
+@pytest.mark.slow
 def test_bart_pointer_network_generate_with_scores(pretrained_model, taskmodule):
     model = pretrained_model
     encoder_input_str = ARTICLE_TO_SUMMARIZE  # "translate English to German: How old are you?"
@@ -864,7 +864,7 @@ def test_bart_pointer_network_generate_with_scores(pretrained_model, taskmodule)
         output_scores=True,
     )
     assert isinstance(outputs, BeamSearchEncoderDecoderOutput)
-    torch.testing.assert_close(outputs.sequences_scores, torch.tensor([-7.1258721351623535]))
+    torch.testing.assert_close(outputs.sequences_scores, torch.tensor([-7.126733303070068]))
     torch.testing.assert_close(
         outputs.sequences,
         torch.tensor(
