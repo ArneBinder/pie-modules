@@ -278,7 +278,7 @@ class TokenClassificationTaskModule(TaskModuleType):
             end = span.end
             if any(tag != "O" for tag in tag_sequence[start:end]):
                 logger.warning(f"tag already assigned (current span has an overlap: {span}).")
-                return None
+                continue
 
             tag_sequence[start] = f"B-{span.label}"
             for j in range(start + 1, end):

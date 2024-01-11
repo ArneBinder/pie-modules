@@ -355,12 +355,13 @@ def test_encode_targets_with_overlap(caplog):
     # encode the document
     with caplog.at_level(logging.WARNING):
         task_encodings = taskmodule.encode([doc], encode_target=True)
-    assert len(task_encodings) == 0
     assert len(caplog.records) == 1
     assert (
         caplog.messages[0]
         == "tag already assigned (current span has an overlap: ('bob', 'enjoys'))."
     )
+    assert len(task_encodings) == 1
+    assert task_encodings[0].targets == [-100, 3, 0, 0, 0, 0, 3, 0, 0, 0, 0, -100]
 
 
 @pytest.fixture(scope="module")
