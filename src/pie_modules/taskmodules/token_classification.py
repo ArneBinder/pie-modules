@@ -270,7 +270,8 @@ class TokenClassificationTaskModule(TaskModuleType):
             raise ValueError(
                 "'labels' must be set before calling encode_target(). Was prepare() called on the taskmodule?"
             )
-        for span in tokenized_document.labeled_spans:
+        sorted_spans = sorted(tokenized_document.labeled_spans, key=lambda s: (s.start, s.end))
+        for span in sorted_spans:
             if span.label not in self.labels:
                 continue
             start = span.start
