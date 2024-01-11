@@ -647,8 +647,25 @@ def test_tokenize_document_partition(text_document, tokenizer):
 
 def test_tokenize_document_with_slow_tokenizer():
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased", use_fast=False)
-    text_document = TextBasedDocument(text="Hello World")
+    text_document = TextBasedDocument(text="Alice has a cat. Bob has a dog.")
 
     tokenized_docs = tokenize_document(
         text_document, tokenizer=tokenizer, result_document_type=TokenBasedDocument
     )
+    assert len(tokenized_docs) == 1
+
+
+def test_tokenize_document_with_slow_tokenizer_and_windowing():
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased", use_fast=False)
+    text_document = TextBasedDocument(text="Alice has a cat. Bob has a dog.")
+
+    tokenized_docs = tokenize_document(
+        text_document,
+        tokenizer=tokenizer,
+        result_document_type=TokenBasedDocument,
+        max_length=5,
+        return_overflowing_tokens=True,
+    )
+    assert (
+        len(tokenized_docs) == 3
+    )  # the input text gets tokenized into 12 tokens and max_length is 5
