@@ -643,3 +643,12 @@ def test_tokenize_document_partition(text_document, tokenizer):
         (str(rel.head), rel.label, str(rel.tail)) for rel in tokenized_doc.relations
     ]
     assert relation_tuples == [("('it',)", "per:founder", "('O',)")]
+
+
+def test_tokenize_document_with_slow_tokenizer():
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased", use_fast=False)
+    text_document = TextBasedDocument(text="Hello World")
+
+    tokenized_docs = tokenize_document(
+        text_document, tokenizer=tokenizer, result_document_type=TokenBasedDocument
+    )
