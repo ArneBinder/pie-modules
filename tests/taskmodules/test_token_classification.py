@@ -12,6 +12,7 @@ from pytorch_ie.documents import (
     TextDocumentWithLabeledSpans,
     TextDocumentWithLabeledSpansAndLabeledPartitions,
 )
+from torchmetrics.classification import MulticlassF1Score
 from transformers import BatchEncoding
 
 from pie_modules.taskmodules import TokenClassificationTaskModule
@@ -492,187 +493,110 @@ def model_output(config, batch, taskmodule):
 
 
 @pytest.fixture(scope="module")
-def unbatched_outputs(taskmodule, model_output):
-    return taskmodule.unbatch_output(model_output)
+def unbatched_outputs(taskmodule, batch):
+    inputs, targets = batch
+    return taskmodule.unbatch_output(targets)
 
 
 def test_unbatched_output(unbatched_outputs, config):
     assert unbatched_outputs is not None
 
-    result = [
-        {
-            "tags": unbatched_output["tags"],
-            "probabilities": unbatched_output["probabilities"].round(3).tolist(),
-        }
-        for unbatched_output in unbatched_outputs
-    ]
-
-    # Based on the config, perform assertions for each unbatched output
     if config == CONFIG_DEFAULT:
-        assert result == [
-            {
-                "tags": ["O", "B-LOC", "I-LOC", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 1.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 1.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
-            {
-                "tags": ["O", "B-PER", "O", "O", "O", "O", "B-PER", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
+        assert len(unbatched_outputs) == 2
+        torch.testing.assert_close(
+            unbatched_outputs[0], torch.tensor([-100, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, -100])
+        )
+        torch.testing.assert_close(
+            unbatched_outputs[1], torch.tensor([-100, 3, 0, 0, 0, 0, 3, 0, 0, 0, 0, -100])
+        )
+    elif config == CONFIG_MAX_WINDOW_WITH_STRIDE:
+        assert len(unbatched_outputs) == 4
+        torch.testing.assert_close(
+            unbatched_outputs[0], torch.tensor([-100, 1, 2, 0, 0, 0, 0, -100])
+        )
+        torch.testing.assert_close(
+            unbatched_outputs[1], torch.tensor([-100, 0, 0, 0, 0, 0, 0, -100])
+        )
+        torch.testing.assert_close(
+            unbatched_outputs[2], torch.tensor([-100, 3, 0, 0, 0, 0, 3, -100])
+        )
+        torch.testing.assert_close(
+            unbatched_outputs[3], torch.tensor([-100, 0, 3, 0, 0, 0, 0, -100])
+        )
+    elif config == CONFIG_MAX_WINDOW:
+        assert len(unbatched_outputs) == 4
+        torch.testing.assert_close(
+            unbatched_outputs[0], torch.tensor([-100, 1, 2, 0, 0, 0, 0, -100])
+        )
+        torch.testing.assert_close(
+            unbatched_outputs[1], torch.tensor([-100, 0, 0, 0, 0, -100, -100, -100])
+        )
+        torch.testing.assert_close(
+            unbatched_outputs[2], torch.tensor([-100, 3, 0, 0, 0, 0, 3, -100])
+        )
+        torch.testing.assert_close(
+            unbatched_outputs[3], torch.tensor([-100, 0, 0, 0, 0, -100, -100, -100])
+        )
+    elif config == CONFIG_PARTITIONS:
+        assert len(unbatched_outputs) == 1
+        torch.testing.assert_close(unbatched_outputs[0], torch.tensor([-100, 3, 0, 0, 0, 0, -100]))
+    else:
+        raise ValueError(f"unknown config: {config}")
+
+
+def test_decode_annotations(taskmodule, unbatched_outputs, config):
+    annotations = []
+    for unbatched_output in unbatched_outputs:
+        decoded_annotations = taskmodule.decode_annotations(unbatched_output)
+        assert set(decoded_annotations.keys()) == {"labeled_spans"}
+        # Sort the annotations in each document by start and end position and label
+        annotations.append(
+            sorted(
+                decoded_annotations["labeled_spans"],
+                key=lambda labeled_span: (
+                    labeled_span.start,
+                    labeled_span.end,
+                    labeled_span.label,
+                ),
+            )
+        )
+
+    # Check based on the config
+    if config == CONFIG_DEFAULT:
+        assert annotations == [
+            [LabeledSpan(start=1, end=3, label="LOC")],
+            [
+                LabeledSpan(start=1, end=2, label="PER"),
+                LabeledSpan(start=6, end=7, label="PER"),
+            ],
         ]
 
     elif config == CONFIG_MAX_WINDOW_WITH_STRIDE:
-        assert result == [
-            {
-                "tags": ["O", "B-LOC", "I-LOC", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 1.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 1.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
-            {
-                "tags": ["O", "O", "O", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
-            {
-                "tags": ["O", "B-PER", "O", "O", "O", "O", "B-PER", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
-            {
-                "tags": ["O", "O", "B-PER", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
+        # We get two annotations for Bob because the window overlaps with the previous one.
+        # This is not a problem because annotations get de-duplicated during serialization.
+        assert annotations == [
+            [LabeledSpan(start=1, end=3, label="LOC", score=1.0)],
+            [],
+            [
+                LabeledSpan(start=1, end=2, label="PER", score=1.0),
+                LabeledSpan(start=6, end=7, label="PER", score=1.0),
+            ],
+            [LabeledSpan(start=2, end=3, label="PER", score=1.0)],
         ]
 
     elif config == CONFIG_MAX_WINDOW:
-        assert result == [
-            {
-                "tags": ["O", "B-LOC", "I-LOC", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 1.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 1.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
-            {
-                "tags": ["O", "O", "O", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
-            {
-                "tags": ["O", "B-PER", "O", "O", "O", "O", "B-PER", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
-            {
-                "tags": ["O", "O", "O", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
+        assert annotations == [
+            [LabeledSpan(start=1, end=3, label="LOC", score=1.0)],
+            [],
+            [
+                LabeledSpan(start=1, end=2, label="PER", score=1.0),
+                LabeledSpan(start=6, end=7, label="PER", score=1.0),
+            ],
+            [],
         ]
 
     elif config == CONFIG_PARTITIONS:
-        assert result == [
-            {
-                "tags": ["O", "B-PER", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            }
-        ]
+        assert annotations == [[LabeledSpan(start=1, end=2, label="PER", score=1.0)]]
 
     else:
         raise ValueError(f"unknown config: {config}")
@@ -791,3 +715,45 @@ def test_document_type_with_non_default_span_and_partition_annotation(caplog):
         "type (TextDocumentWithLabeledSpansAndLabeledPartitions) for auto-conversion because "
         "this has the bespoken default value as layer name(s) instead of the provided one(s)."
     )
+
+
+def test_configure_model_metric(documents):
+    taskmodule = TokenClassificationTaskModule(
+        tokenizer_name_or_path="bert-base-uncased",
+        span_annotation="entities",
+        labels=["LOC", "PER"],
+    )
+    taskmodule.post_prepare()
+
+    metric = taskmodule.configure_model_metric(stage="test")
+    assert isinstance(metric, MulticlassF1Score)
+    assert metric.metric_state == {
+        "tp": torch.tensor([0]),
+        "fp": torch.tensor([0]),
+        "tn": torch.tensor([0]),
+        "fn": torch.tensor([0]),
+    }
+    values = metric.compute()
+    torch.testing.assert_close(values, torch.tensor(0.0))
+
+    batch = taskmodule.collate(taskmodule.encode(documents, encode_target=True))
+    targets = batch[1]
+    metric(targets, targets)
+    assert metric.metric_state == {
+        "fn": torch.tensor([0]),
+        "fp": torch.tensor([0]),
+        "tn": torch.tensor([80]),
+        "tp": torch.tensor([20]),
+    }
+    values = metric.compute()
+    torch.testing.assert_close(values, torch.tensor(1.0))
+
+    metric(targets, torch.ones_like(targets))
+    assert metric.metric_state == {
+        "tp": torch.tensor([21]),
+        "fp": torch.tensor([23]),
+        "tn": torch.tensor([153]),
+        "fn": torch.tensor([23]),
+    }
+    values = metric.compute()
+    torch.testing.assert_close(values, torch.tensor(0.47727271914482117))

@@ -23,7 +23,6 @@ from typing import (
 )
 
 import torch
-import torch.nn.functional as F
 from pytorch_ie import AnnotationLayer
 from pytorch_ie.annotations import LabeledSpan
 from pytorch_ie.core import TaskEncoding, TaskModule
@@ -32,12 +31,9 @@ from pytorch_ie.documents import (
     TextDocumentWithLabeledSpans,
     TextDocumentWithLabeledSpansAndLabeledPartitions,
 )
-from pytorch_ie.models.transformer_token_classification import (
-    ModelOutputType,
-    ModelStepInputType,
-)
 from pytorch_ie.utils.span import bio_tags_to_spans
 from tokenizers import Encoding
+from torchmetrics import F1Score, Metric
 from transformers import AutoTokenizer
 from typing_extensions import TypeAlias
 
@@ -59,7 +55,12 @@ TaskEncodingType: TypeAlias = TaskEncoding[
     InputEncodingType,
     TargetEncodingType,
 ]
-TaskOutputType: TypeAlias = Dict[str, Any]
+ModelStepInputType: TypeAlias = Tuple[
+    Dict[str, torch.LongTensor],
+    Optional[torch.LongTensor],
+]
+ModelOutputType: TypeAlias = torch.LongTensor
+TaskOutputType: TypeAlias = torch.LongTensor
 
 TaskModuleType: TypeAlias = TaskModule[
     DocumentType,
@@ -312,11 +313,20 @@ class TokenClassificationTaskModule(TaskModuleType):
         return inputs, targets
 
     def unbatch_output(self, model_output: ModelOutputType) -> Sequence[TaskOutputType]:
-        logits = model_output["logits"]
-        probabilities = F.softmax(logits, dim=-1).detach().cpu().numpy()
-        indices = torch.argmax(logits, dim=-1).detach().cpu().numpy()
-        tags = [[self.id_to_label[e] for e in b] for b in indices]
-        return [{"tags": t, "probabilities": p} for t, p in zip(tags, probabilities)]
+        return [labels for labels in model_output.detach().cpu()]
+
+    def decode_annotations(self, labels: torch.LongTensor) -> Dict[str, Sequence[LabeledSpan]]:
+        tag_sequence = [
+            "O" if tag_id == self.label_pad_token_id else self.id_to_label[tag_id]
+            for tag_id in labels.tolist()
+        ]
+        labeled_spans: List[LabeledSpan] = []
+        for label, (start, end_inclusive) in bio_tags_to_spans(
+            tag_sequence, include_ill_formed=self.include_ill_formed_predictions
+        ):
+            labeled_span = LabeledSpan(label=label, start=start, end=end_inclusive + 1)
+            labeled_spans.append(labeled_span)
+        return {"labeled_spans": labeled_spans}
 
     def create_annotations_from_output(
         self,
@@ -324,21 +334,14 @@ class TokenClassificationTaskModule(TaskModuleType):
         task_output: TaskOutputType,
     ) -> Iterator[Tuple[str, LabeledSpan]]:
         tokenized_document = task_encoding.metadata["tokenized_document"]
-        special_tokens_mask = tokenized_document.metadata["tokenizer_encoding"].special_tokens_mask
-
-        tag_sequence = [
-            "O" if is_special_token else tag
-            for tag, is_special_token in zip(task_output["tags"], special_tokens_mask)
-        ]
+        decoded_annotations = self.decode_annotations(task_output)
 
         # Note: token_based_document_to_text_based() does not yet consider predictions, so we need to clear
         # the main annotations and attach the predictions to that
-        tokenized_document.labeled_spans.clear()
-        for label, (start, end_inclusive) in bio_tags_to_spans(
-            tag_sequence, include_ill_formed=self.include_ill_formed_predictions
-        ):
-            token_span_annotation = LabeledSpan(label=label, start=start, end=end_inclusive + 1)
-            tokenized_document.labeled_spans.append(token_span_annotation)
+        for layer_name, annotations in decoded_annotations.items():
+            tokenized_document[layer_name].clear()
+            for annotation in annotations:
+                tokenized_document[layer_name].append(annotation)
 
         # we can not use self.document_type here because that may be None if self.span_annotation or
         # self.partition_annotation is not the default value
@@ -356,3 +359,10 @@ class TokenClassificationTaskModule(TaskModuleType):
         for span in untokenized_document.labeled_spans:
             # need to copy the span because it can be attached to only one document
             yield self.span_annotation, span.copy()
+
+    def configure_model_metric(self, stage: str) -> Metric:
+        return F1Score(
+            num_classes=len(self.label_to_id),
+            ignore_index=self.label_pad_token_id,
+            task="multiclass",
+        )
