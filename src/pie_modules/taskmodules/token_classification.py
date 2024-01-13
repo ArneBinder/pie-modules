@@ -370,6 +370,6 @@ class TokenClassificationTaskModule(TaskModuleType):
     def configure_model_metric(self, stage: str) -> Metric:
         return F1Score(
             num_classes=len(self.label_to_id),
-            ignore_index=self.label_pad_id,
             task="multiclass",
+            average="macro",
         )

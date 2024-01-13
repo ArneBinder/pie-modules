@@ -731,33 +731,31 @@ def test_configure_model_metric(documents):
 
     metric = taskmodule.configure_model_metric(stage="test")
     assert isinstance(metric, MulticlassF1Score)
-    assert metric.metric_state == {
-        "tp": torch.tensor([0]),
-        "fp": torch.tensor([0]),
-        "tn": torch.tensor([0]),
-        "fn": torch.tensor([0]),
-    }
+    assert set(metric.metric_state) == {"tp", "fp", "tn", "fn"}
+    torch.testing.assert_close(metric.metric_state["tp"], torch.tensor([0, 0, 0, 0, 0]))
+    torch.testing.assert_close(metric.metric_state["fp"], torch.tensor([0, 0, 0, 0, 0]))
+    torch.testing.assert_close(metric.metric_state["tn"], torch.tensor([0, 0, 0, 0, 0]))
+    torch.testing.assert_close(metric.metric_state["fn"], torch.tensor([0, 0, 0, 0, 0]))
     values = metric.compute()
     torch.testing.assert_close(values, torch.tensor(0.0))
 
     batch = taskmodule.collate(taskmodule.encode(documents, encode_target=True))
     targets = batch[1]
-    metric(targets, targets)
-    assert metric.metric_state == {
-        "fn": torch.tensor([0]),
-        "fp": torch.tensor([0]),
-        "tn": torch.tensor([80]),
-        "tp": torch.tensor([20]),
-    }
+    targets_valid = targets[targets != taskmodule.label_pad_id]
+    metric(targets_valid, targets_valid)
+    assert set(metric.metric_state) == {"tp", "fp", "tn", "fn"}
+    torch.testing.assert_close(metric.metric_state["tp"], torch.tensor([16, 1, 1, 2, 0]))
+    torch.testing.assert_close(metric.metric_state["fp"], torch.tensor([0, 0, 0, 0, 0]))
+    torch.testing.assert_close(metric.metric_state["tn"], torch.tensor([4, 19, 19, 18, 20]))
+    torch.testing.assert_close(metric.metric_state["fn"], torch.tensor([0, 0, 0, 0, 0]))
     values = metric.compute()
     torch.testing.assert_close(values, torch.tensor(1.0))
 
-    metric(targets, torch.ones_like(targets))
-    assert metric.metric_state == {
-        "tp": torch.tensor([21]),
-        "fp": torch.tensor([23]),
-        "tn": torch.tensor([153]),
-        "fn": torch.tensor([23]),
-    }
+    metric(targets_valid, torch.ones_like(targets_valid))
+    assert set(metric.metric_state) == {"tp", "fp", "tn", "fn"}
+    torch.testing.assert_close(metric.metric_state["tp"], torch.tensor([16, 2, 1, 2, 0]))
+    torch.testing.assert_close(metric.metric_state["fp"], torch.tensor([16, 0, 1, 2, 0]))
+    torch.testing.assert_close(metric.metric_state["tn"], torch.tensor([8, 19, 38, 36, 40]))
+    torch.testing.assert_close(metric.metric_state["fn"], torch.tensor([0, 19, 0, 0, 0]))
     values = metric.compute()
-    torch.testing.assert_close(values, torch.tensor(0.47727271914482117))
+    torch.testing.assert_close(values, torch.tensor(0.5434783101081848))
