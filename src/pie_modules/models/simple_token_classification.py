@@ -110,19 +110,16 @@ class SimpleTokenClassificationModel(
 
         metric = self.metrics.get(stage, None)
         if metric is not None:
-            decoded_tags = self.decode(
+            predicted_tags = self.decode(
                 logits=output.logits,
                 attention_mask=inputs["attention_mask"],
                 special_tokens_mask=inputs["special_tokens_mask"],
             )
-            metric(decoded_tags, targets)
-            self.log(
-                f"metric/{type(metric)}/{stage}",
-                metric,
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-            )
+            # TODO: do not do this here, but in the metric (current approach works just for token wise F1)
+            mask = targets != self.label_pad_id
+            predicted_tags_valid = predicted_tags[mask]
+            targets_valid = targets[mask]
+            metric(predicted_tags_valid, targets_valid)
 
         return loss
 
