@@ -118,6 +118,7 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         self.metrics = {}
         if taskmodule_config is not None:
             self.taskmodule = AutoTaskModule.from_config(taskmodule_config)
+            self.taskmodule.post_prepare()
             for stage in [TRAINING, VALIDATION, TEST]:
                 stage_metric = self.taskmodule.configure_model_metric(stage=stage)
                 if stage_metric is not None:
