@@ -149,5 +149,27 @@ class SimpleTokenClassificationModel(
         inputs, targets = batch
         return self.predict(inputs=inputs)
 
+    def on_train_epoch_end(self) -> None:
+        self._on_epoch_end(stage=TRAINING)
+
+    def on_validation_epoch_end(self) -> None:
+        self._on_epoch_end(stage=VALIDATION)
+
+    def on_test_epoch_end(self) -> None:
+        self._on_epoch_end(stage=TEST)
+
+    def _on_epoch_end(self, stage: str) -> None:
+        metric = self.metrics.get(stage, None)
+        if metric is not None:
+            value = metric.compute()
+            self.log(
+                f"metric/{type(metric)}/{stage}",
+                value,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+            metric.reset()
+
     def configure_optimizers(self) -> OptimizerLRScheduler:
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
