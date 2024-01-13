@@ -161,7 +161,7 @@ class SimpleTokenClassificationModel(
         if metric is not None:
             value = metric.compute()
             self.log(
-                f"metric/{type(metric)}/{stage}",
+                f"metric/{type(metric).__name__}/{stage}",
                 value,
                 on_step=False,
                 on_epoch=True,
