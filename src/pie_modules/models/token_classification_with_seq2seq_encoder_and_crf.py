@@ -19,6 +19,7 @@ from transformers.modeling_outputs import TokenClassifierOutput
 from typing_extensions import TypeAlias
 
 from .components.seq2seq_encoder import build_seq2seq_encoder
+from .interface import RequiresTaskmoduleConfig
 
 ModelInputsType: TypeAlias = BatchEncoding
 ModelTargetsType: TypeAlias = LongTensor
@@ -46,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 @PyTorchIEModel.register()
 class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
-    PyTorchIEModel, RequiresNumClasses, RequiresModelNameOrPath
+    PyTorchIEModel, RequiresNumClasses, RequiresModelNameOrPath, RequiresTaskmoduleConfig
 ):
     def __init__(
         self,
