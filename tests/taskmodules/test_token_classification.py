@@ -372,7 +372,7 @@ def task_encodings_for_batch(task_encodings, config):
 
 
 @pytest.fixture(scope="module")
-def batch(taskmodule, task_encodings_for_batch, config):
+def batch(taskmodule, task_encodings_for_batch, config) -> BatchEncoding:
     return taskmodule.collate(task_encodings_for_batch)
 
 
@@ -381,10 +381,11 @@ def test_collate(batch, config):
     assert len(batch) == 2
     inputs, targets = batch
 
-    assert set(inputs.data) == {"input_ids", "attention_mask"}
+    assert set(inputs.data) == {"input_ids", "attention_mask", "special_tokens_mask"}
     input_ids_list = inputs.input_ids.tolist()
     attention_mask_list = inputs.attention_mask.tolist()
     targets_list = targets.tolist()
+    special_tokens_mask_list = inputs.special_tokens_mask.tolist()
 
     # If config is empty
     if config == CONFIG_DEFAULT:
@@ -399,6 +400,10 @@ def test_collate(batch, config):
         assert targets_list == [
             [-100, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, -100],
             [-100, 3, 0, 0, 0, 0, 3, 0, 0, 0, 0, -100],
+        ]
+        assert special_tokens_mask_list == [
+            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
         ]
 
     # If config has the specified values (max_window=8, window_overlap=2)
@@ -442,12 +447,19 @@ def test_collate(batch, config):
             [-100, 3, 0, 0, 0, 0, 3, -100],
             [-100, 0, 0, 0, 0, -100, -100, -100],
         ]
+        assert special_tokens_mask_list == [
+            [1, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 0, 0, 0, 1, 1, 1],
+            [1, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 0, 0, 0, 1, 1, 1],
+        ]
 
     # If config has the specified value (partition_annotation=sentences)
     elif config == CONFIG_PARTITIONS:
         assert input_ids_list == [[101, 3960, 15646, 2652, 4715, 1012, 102]]
         assert attention_mask_list == [[1, 1, 1, 1, 1, 1, 1]]
         assert targets_list == [[-100, 3, 0, 0, 0, 0, -100]]
+        assert special_tokens_mask_list == [[1, 0, 0, 0, 0, 0, 1]]
 
     else:
         raise ValueError(f"unknown config: {config}")
@@ -456,6 +468,7 @@ def test_collate(batch, config):
         data={
             "input_ids": torch.tensor(input_ids_list, dtype=torch.int64),
             "attention_mask": torch.tensor(attention_mask_list, dtype=torch.int64),
+            "special_tokens_mask": torch.tensor(special_tokens_mask_list, dtype=torch.int64),
         }
     )
     assert set(inputs.data) == set(inputs_expected.data)
@@ -478,24 +491,15 @@ def real_model_output(batch, taskmodule):
 
 
 @pytest.fixture(scope="module")
-def model_output(config, batch, taskmodule):
+def model_output(config, batch, taskmodule) -> torch.LongTensor:
     # create "perfect" output from targets
     targets = batch[1].clone()
-    targets[targets == -100] = 0
-    one_hot_targets = (
-        torch.nn.functional.one_hot(targets, num_classes=len(taskmodule.label_to_id)).float()
-        * 0.99
-        + 0.005
-    )
-    # convert to logits (logit = log(p/(1-p)))
-    logits = torch.log(one_hot_targets / (1 - one_hot_targets))
-    return {"logits": logits}
+    return targets
 
 
 @pytest.fixture(scope="module")
-def unbatched_outputs(taskmodule, batch):
-    inputs, targets = batch
-    return taskmodule.unbatch_output(targets)
+def unbatched_outputs(taskmodule, model_output):
+    return taskmodule.unbatch_output(model_output)
 
 
 def test_unbatched_output(unbatched_outputs, config):

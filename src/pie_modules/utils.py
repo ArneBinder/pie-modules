@@ -23,3 +23,7 @@ def resolve_type(
             f"but got {dt}"
         )
     return dt
+
+
+def list_of_dicts2dict_of_lists(list_of_dicts: list[dict]) -> dict[str, list]:
+    return {k: [d[k] for d in list_of_dicts] for k in list_of_dicts[0].keys()}

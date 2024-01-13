@@ -20,13 +20,13 @@ from typing_extensions import TypeAlias
 
 from .components.seq2seq_encoder import build_seq2seq_encoder
 
-ModelBatchEncodingType: TypeAlias = BatchEncoding
-ModelBatchOutputType: TypeAlias = Dict[str, Any]
-
-StepBatchEncodingType: TypeAlias = Tuple[
-    Dict[str, Tensor],
-    Optional[Tensor],
+ModelInputsType: TypeAlias = BatchEncoding
+ModelTargetsType: TypeAlias = LongTensor
+ModelStepInputType: TypeAlias = Tuple[
+    ModelInputsType,
+    Optional[ModelTargetsType],
 ]
+ModelOutputType: TypeAlias = LongTensor
 
 HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE = {
     "bert": "hidden_dropout_prob",
@@ -128,11 +128,14 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
                     )
 
     def decode(
-        self, logits: FloatTensor, attention_mask: Optional[LongTensor] = None
+        self,
+        logits: FloatTensor,
+        attention_mask: LongTensor,
+        special_tokens_mask: LongTensor,
     ) -> LongTensor:
-        mask_bool = attention_mask.to(torch.bool) if attention_mask is not None else None
+        attention_mask_bool = attention_mask.to(torch.bool)
         if self.crf is not None:
-            decoded_tags = self.crf.decode(emissions=logits, mask=mask_bool)
+            decoded_tags = self.crf.decode(emissions=logits, mask=attention_mask_bool)
             # pad the decoded tags to the length of the logits to have the same shape as when not using the crf
             seq_len = logits.shape[1]
             padded_tags = [
@@ -142,15 +145,18 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         else:
             # get the max index for each token from the logits
             tags_tensor = torch.argmax(logits, dim=-1).to(torch.long)
-        if mask_bool is not None:
-            # mask out the padding tokens
-            tags_tensor = tags_tensor.masked_fill(~mask_bool, self.label_pad_id)
+        # set the padding and special tokens to the label_pad_id
+        mask = attention_mask_bool & ~special_tokens_mask.to(torch.bool)
+        tags_tensor = tags_tensor.masked_fill(~mask, self.label_pad_id)
         return tags_tensor
 
     def forward(
-        self, inputs: ModelBatchEncodingType, labels: Optional[LongTensor] = None
+        self, inputs: ModelInputsType, labels: Optional[LongTensor] = None
     ) -> TokenClassifierOutput:
-        outputs = self.model(**inputs)
+        inputs_without_special_tokens_mask = {
+            k: v for k, v in inputs.items() if k != "special_tokens_mask"
+        }
+        outputs = self.model(**inputs_without_special_tokens_mask)
         sequence_output = outputs[0]
 
         if self.seq2seq_encoder is not None:
@@ -189,7 +195,7 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
             attentions=outputs.attentions,
         )
 
-    def step(self, stage: str, batch: StepBatchEncodingType) -> FloatTensor:
+    def step(self, stage: str, batch: ModelStepInputType) -> FloatTensor:
         inputs, targets = batch
         assert targets is not None, "targets have to be available for training"
 
@@ -209,7 +215,9 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         metric = self.metrics.get(stage, None)
         if metric is not None:
             predicted_tags = self.decode(
-                logits=output.logits, attention_mask=inputs.get("attention_mask", None)
+                logits=output.logits,
+                attention_mask=inputs["attention_mask"],
+                special_tokens_mask=inputs["special_tokens_mask"],
             )
             metric = self.metrics[stage]
             metric(predicted_tags, targets)
@@ -223,24 +231,26 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
 
         return loss
 
-    def training_step(self, batch: StepBatchEncodingType, batch_idx: int) -> FloatTensor:
+    def training_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
         return self.step(stage=TRAINING, batch=batch)
 
-    def validation_step(self, batch: StepBatchEncodingType, batch_idx: int) -> FloatTensor:
+    def validation_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
         return self.step(stage=VALIDATION, batch=batch)
 
-    def test_step(self, batch: StepBatchEncodingType, batch_idx: int) -> FloatTensor:
+    def test_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
         return self.step(stage=TEST, batch=batch)
 
-    def predict(self, inputs: Any, **kwargs) -> LongTensor:
+    def predict(self, inputs: ModelInputsType, **kwargs) -> LongTensor:
         output = self(inputs)
         predicted_tags = self.decode(
-            logits=output.logits, attention_mask=inputs.get("attention_mask", None)
+            logits=output.logits,
+            attention_mask=inputs["attention_mask"],
+            special_tokens_mask=inputs["special_tokens_mask"],
         )
         return predicted_tags
 
     def predict_step(
-        self, batch: StepBatchEncodingType, batch_idx: int, dataloader_idx: int
+        self, batch: ModelStepInputType, batch_idx: int, dataloader_idx: int
     ) -> LongTensor:
         inputs, targets = batch
         return self.predict(inputs=inputs)

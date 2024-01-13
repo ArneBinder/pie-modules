@@ -20,6 +20,28 @@ def config(config_str):
     return CONFIG_DICT[config_str]
 
 
+@pytest.mark.skip(reason="Only to recreate the batch if taskmodule has changed")
+def test_batch(documents, batch):
+    from pie_modules.taskmodules import TokenClassificationTaskModule
+
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = TokenClassificationTaskModule(
+        span_annotation="entities",
+        tokenizer_name_or_path=tokenizer_name_or_path,
+    )
+    taskmodule.prepare(documents)
+    encodings = taskmodule.encode(documents, encode_target=True)
+    # just take the first 4 encodings
+    batch_from_documents = taskmodule.collate(encodings[:4])
+
+    inputs, targets = batch
+    inputs_from_documents, targets_from_documents = batch_from_documents
+    assert set(inputs) == set(inputs_from_documents)
+    torch.testing.assert_close(inputs["input_ids"], inputs_from_documents["input_ids"])
+    torch.testing.assert_close(inputs["attention_mask"], inputs_from_documents["attention_mask"])
+    torch.testing.assert_close(targets, targets_from_documents)
+
+
 @pytest.fixture
 def batch():
     inputs = {
@@ -37,6 +59,14 @@ def batch():
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ]
+        ),
+        "special_tokens_mask": torch.tensor(
+            [
+                [1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             ]
         ),
     }
@@ -230,10 +260,10 @@ def test_predict_and_predict_step(model, batch, config, test_step):
         predictions,
         torch.tensor(
             [
-                [3, 3, 3, 4, 3, 3, -100, -100, -100, -100, -100, -100],
-                [3, 3, 3, 2, 0, 2, 2, 2, 3, 3, -100, -100],
-                [3, 3, 2, 2, 3, 3, 2, 3, 3, -100, -100, -100],
-                [3, 3, 4, 3, 2, 3, 2, 3, 3, 2, 3, 3],
+                [-100, 3, 3, 4, 3, -100, -100, -100, -100, -100, -100, -100],
+                [-100, 3, 3, 2, 0, 2, 2, 2, 3, -100, -100, -100],
+                [-100, 3, 2, 2, 3, 3, 2, 3, -100, -100, -100, -100],
+                [-100, 3, 4, 3, 2, 3, 2, 3, 3, 2, 3, -100],
             ]
         ),
     )

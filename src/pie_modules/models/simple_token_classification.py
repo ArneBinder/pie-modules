@@ -72,16 +72,25 @@ class SimpleTokenClassificationModel(
     def forward(
         self, inputs: ModelInputsType, labels: Optional[torch.LongTensor] = None
     ) -> TokenClassifierOutput:
-        return self.model(labels=labels, **inputs)
+        inputs_without_special_tokens_mask = {
+            k: v for k, v in inputs.items() if k != "special_tokens_mask"
+        }
+        return self.model(labels=labels, **inputs_without_special_tokens_mask)
 
     def decode(
-        self, logits: FloatTensor, attention_mask: Optional[LongTensor] = None
+        self,
+        logits: FloatTensor,
+        attention_mask: LongTensor,
+        special_tokens_mask: LongTensor,
     ) -> LongTensor:
         # get the max index for each token from the logits
         tags_tensor = torch.argmax(logits, dim=-1).to(torch.long)
-        if attention_mask is not None:
-            # mask out the padding and special tokens
-            tags_tensor = tags_tensor.masked_fill(attention_mask == 0, self.label_pad_id)
+
+        # mask out the padding and special tokens
+        tags_tensor = tags_tensor.masked_fill(attention_mask == 0, self.label_pad_id)
+
+        # mask out the special tokens
+        tags_tensor = tags_tensor.masked_fill(special_tokens_mask == 1, self.label_pad_id)
         return tags_tensor
 
     def step(
@@ -101,7 +110,9 @@ class SimpleTokenClassificationModel(
         metric = self.metrics.get(stage, None)
         if metric is not None:
             decoded_tags = self.decode(
-                logits=output.logits, attention_mask=inputs.get("attention_mask", None)
+                logits=output.logits,
+                attention_mask=inputs["attention_mask"],
+                special_tokens_mask=inputs["special_tokens_mask"],
             )
             metric(decoded_tags, targets)
             self.log(
@@ -123,10 +134,12 @@ class SimpleTokenClassificationModel(
     def test_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
         return self.step(stage=TEST, batch=batch)
 
-    def predict(self, inputs: Any, **kwargs) -> ModelOutputType:
+    def predict(self, inputs: ModelInputsType, **kwargs) -> ModelOutputType:
         output = self(inputs)
         predicted_tags = self.decode(
-            logits=output.logits, attention_mask=inputs.get("attention_mask", None)
+            logits=output.logits,
+            attention_mask=inputs["attention_mask"],
+            special_tokens_mask=inputs["special_tokens_mask"],
         )
         return predicted_tags
 

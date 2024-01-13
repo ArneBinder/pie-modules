@@ -45,6 +45,7 @@ from pie_modules.documents import (
     TokenDocumentWithLabeledSpans,
     TokenDocumentWithLabeledSpansAndLabeledPartitions,
 )
+from pie_modules.utils import list_of_dicts2dict_of_lists
 
 DocumentType: TypeAlias = TextDocument
 
@@ -104,7 +105,7 @@ class TokenClassificationTaskModule(TaskModuleType):
         span_annotation: Name of the annotation layer that contains the labeled spans. Default: "labeled_spans".
         partition_annotation: Name of the annotation layer that contains the labeled partitions. If provided, the
             text is tokenized individually per partition. Default: None.
-        label_pad_token_id: ID of the padding tag label. The model should ignore this for training. Default: -100.
+        label_pad_id: ID of the padding tag label. The model should ignore this for training. Default: -100.
         labels: List of labels to use. If not provided, the labels are collected from the data during the prepare()
             step. Default: None.
         include_ill_formed_predictions: Whether to include ill-formed predictions in the output. If False, the
@@ -122,7 +123,7 @@ class TokenClassificationTaskModule(TaskModuleType):
         tokenizer_name_or_path: str,
         span_annotation: str = "labeled_spans",
         partition_annotation: Optional[str] = None,
-        label_pad_token_id: int = -100,
+        label_pad_id: int = -100,
         labels: Optional[List[str]] = None,
         max_window: Optional[int] = None,
         window_overlap: int = 0,
@@ -155,7 +156,7 @@ class TokenClassificationTaskModule(TaskModuleType):
         self.span_annotation = span_annotation
         self.partition_annotation = partition_annotation
         self.labels = labels
-        self.label_pad_token_id = label_pad_token_id
+        self.label_pad_id = label_pad_id
         self.include_ill_formed_predictions = include_ill_formed_predictions
         self.tokenize_kwargs = tokenize_kwargs or {}
         self.pad_kwargs = pad_kwargs or {}
@@ -286,16 +287,22 @@ class TokenClassificationTaskModule(TaskModuleType):
                 tag_sequence[j] = f"I-{span.label}"
 
         targets = [
-            self.label_to_id[tag] if tag is not None else self.label_pad_token_id
-            for tag in tag_sequence
+            self.label_to_id[tag] if tag is not None else self.label_pad_id for tag in tag_sequence
         ]
 
         return targets
 
     def collate(self, task_encodings: Sequence[TaskEncodingType]) -> ModelStepInputType:
-        input_ids = [task_encoding.inputs.ids for task_encoding in task_encodings]
+        input_encodings = [
+            {
+                "input_ids": task_encoding.inputs.ids,
+                "attention_mask": task_encoding.inputs.attention_mask,
+                "special_tokens_mask": task_encoding.inputs.special_tokens_mask,
+            }
+            for task_encoding in task_encodings
+        ]
         inputs = self.tokenizer.pad(
-            {"input_ids": input_ids}, return_tensors="pt", **self.pad_kwargs
+            list_of_dicts2dict_of_lists(input_encodings), return_tensors="pt", **self.pad_kwargs
         )
 
         if not task_encodings[0].has_targets:
@@ -308,7 +315,7 @@ class TokenClassificationTaskModule(TaskModuleType):
 
         # set the padding label to the label_pad_token_id
         pad_mask = inputs["input_ids"] == self.tokenizer.pad_token_id
-        targets[pad_mask] = self.label_pad_token_id
+        targets[pad_mask] = self.label_pad_id
 
         return inputs, targets
 
@@ -317,7 +324,7 @@ class TokenClassificationTaskModule(TaskModuleType):
 
     def decode_annotations(self, labels: torch.LongTensor) -> Dict[str, Sequence[LabeledSpan]]:
         tag_sequence = [
-            "O" if tag_id == self.label_pad_token_id else self.id_to_label[tag_id]
+            "O" if tag_id == self.label_pad_id else self.id_to_label[tag_id]
             for tag_id in labels.tolist()
         ]
         labeled_spans: List[LabeledSpan] = []
@@ -363,6 +370,6 @@ class TokenClassificationTaskModule(TaskModuleType):
     def configure_model_metric(self, stage: str) -> Metric:
         return F1Score(
             num_classes=len(self.label_to_id),
-            ignore_index=self.label_pad_token_id,
+            ignore_index=self.label_pad_id,
             task="multiclass",
         )

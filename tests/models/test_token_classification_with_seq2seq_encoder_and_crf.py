@@ -1,14 +1,14 @@
 import pytest
 import torch
 import transformers
-from pytorch_ie.taskmodules import TransformerTokenClassificationTaskModule
+from pytorch_lightning import Trainer
 from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
 
 from pie_modules.models import TokenClassificationModelWithSeq2SeqEncoderAndCrf
-from pie_modules.models.components.seq2seq_encoder import RNN_TYPE2CLASS
 from pie_modules.models.token_classification_with_seq2seq_encoder_and_crf import (
     HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE,
 )
+from pie_modules.taskmodules import TokenClassificationTaskModule
 from tests import _config_to_str
 
 CONFIGS = [{}, {"use_crf": False}]
@@ -28,8 +28,8 @@ def config(config_str):
 @pytest.mark.skip(reason="Only to recreate the batch if taskmodule has changed")
 def test_batch(documents, batch):
     tokenizer_name_or_path = "bert-base-cased"
-    taskmodule = TransformerTokenClassificationTaskModule(
-        entity_annotation="entities",
+    taskmodule = TokenClassificationTaskModule(
+        span_annotation="entities",
         tokenizer_name_or_path=tokenizer_name_or_path,
     )
     taskmodule.prepare(documents)
@@ -60,6 +60,14 @@ def batch():
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ]
+        ),
+        "special_tokens_mask": torch.tensor(
+            [
+                [1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             ]
         ),
     }
@@ -151,79 +159,27 @@ def get_model(
 
 @pytest.fixture
 def model(monkeypatch, batch, config) -> TokenClassificationModelWithSeq2SeqEncoderAndCrf:
-    inputs, targets = batch
     seq2seq_dict = {
         "type": "linear",
         "out_features": 10,
     }
-    model = get_model(
-        monkeypatch=monkeypatch,
-        model_type="bert",
-        batch_size=inputs["input_ids"].shape[0],
-        seq_len=inputs["input_ids"].shape[1],
-        num_classes=int(torch.max(targets) + 1),
+    torch.manual_seed(42)
+    model = TokenClassificationModelWithSeq2SeqEncoderAndCrf(
+        model_name_or_path="prajjwal1/bert-tiny",
+        num_classes=5,
         seq2seq_encoder=seq2seq_dict,
         **config,
     )
     return model
 
 
-@pytest.mark.parametrize(
-    "model_type", list(HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE) + ["unknown"]
-)
-def test_config_model_classifier_dropout(monkeypatch, model_type):
-    if model_type in HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE:
-        model = get_model(
-            monkeypatch=monkeypatch,
-            model_type=model_type,
-            batch_size=4,
-            seq_len=10,
-            num_classes=5,
-        )
-        assert model is not None
-        assert isinstance(model, TokenClassificationModelWithSeq2SeqEncoderAndCrf)
-    else:
-        with pytest.raises(ValueError):
-            model = get_model(
-                monkeypatch=monkeypatch,
-                model_type=model_type,
-                batch_size=4,
-                seq_len=10,
-                num_classes=5,
-            )
-
-
-@pytest.mark.parametrize("seq2seq_enc_type", list(RNN_TYPE2CLASS))
-def test_seq2seq_classification_head(monkeypatch, seq2seq_enc_type):
-    seq2seq_dict = {
-        "type": seq2seq_enc_type,
-        "hidden_size": 10,
-    }
-    model = get_model(
-        monkeypatch,
-        model_type="bert",
-        batch_size=4,
-        seq_len=10,
-        num_classes=5,
-        freeze_base_model=True,
-        seq2seq_encoder=seq2seq_dict,
-    )
-
-    assert model is not None
-    assert isinstance(model, TokenClassificationModelWithSeq2SeqEncoderAndCrf)
-    assert isinstance(model.seq2seq_encoder.rnn, RNN_TYPE2CLASS[seq2seq_enc_type])
-
-
 def test_freeze_base_model(monkeypatch):
-    model = get_model(
-        monkeypatch,
-        model_type="bert",
-        batch_size=4,
-        seq_len=10,
+    model = TokenClassificationModelWithSeq2SeqEncoderAndCrf(
+        model_name_or_path="prajjwal1/bert-tiny",
         num_classes=5,
-        add_dummy_linear=True,
         freeze_base_model=True,
     )
+
     base_model_params = dict(model.model.named_parameters(prefix="model"))
     assert len(base_model_params) > 0
     for param in base_model_params.values():
@@ -236,15 +192,10 @@ def test_freeze_base_model(monkeypatch):
         assert param.requires_grad
 
 
-def test_tune_base_model(monkeypatch):
-    model = get_model(
-        monkeypatch,
-        model_type="bert",
-        batch_size=4,
-        seq_len=10,
+def test_tune_base_model():
+    model = TokenClassificationModelWithSeq2SeqEncoderAndCrf(
+        model_name_or_path="prajjwal1/bert-tiny",
         num_classes=5,
-        add_dummy_linear=True,
-        freeze_base_model=False,
     )
     base_model_params = dict(model.model.named_parameters(prefix="model"))
     assert len(base_model_params) > 0
@@ -275,88 +226,88 @@ def test_forward(batch, model):
         torch.tensor(
             [
                 [
-                    0.5665707588195801,
-                    -0.2936006188392639,
-                    0.6836847066879272,
-                    -0.8939268589019775,
-                    0.07820314168930054,
+                    0.2983264923095703,
+                    0.2825356125831604,
+                    0.07071954011917114,
+                    0.18499699234962463,
+                    0.33343958854675293,
                 ],
                 [
-                    0.24385401606559753,
-                    -0.16216063499450684,
-                    0.603381872177124,
-                    -0.9981566667556763,
-                    0.18869800865650177,
+                    0.040096089243888855,
+                    0.30112865567207336,
+                    -0.04935203492641449,
+                    0.21017718315124512,
+                    0.09015939384698868,
                 ],
                 [
-                    0.4842372238636017,
-                    -0.08902332186698914,
-                    0.3403770625591278,
-                    -0.6819748878479004,
-                    0.08253003656864166,
+                    0.06823589652776718,
+                    0.10778219252824783,
+                    -0.15539433062076569,
+                    0.5013774633407593,
+                    -0.40293776988983154,
                 ],
                 [
-                    0.04966197907924652,
-                    -0.32139256596565247,
-                    0.5452693700790405,
-                    -1.0789272785186768,
-                    0.019466541707515717,
+                    -0.056031033396720886,
+                    0.5694245100021362,
+                    0.4017048478126526,
+                    0.057996511459350586,
+                    -0.05365113914012909,
                 ],
                 [
-                    0.2986313998699188,
-                    -0.24962571263313293,
-                    0.5462854504585266,
-                    -0.9566639065742493,
-                    0.11756543815135956,
+                    -0.03769463300704956,
+                    0.4193854331970215,
+                    0.27049922943115234,
+                    0.1521742194890976,
+                    0.30935269594192505,
                 ],
                 [
-                    0.48104530572891235,
-                    -0.06864413619041443,
-                    0.5099285840988159,
-                    -0.8464795351028442,
-                    -0.02686941623687744,
+                    0.24729765951633453,
+                    0.20631808042526245,
+                    0.15089815855026245,
+                    0.567837119102478,
+                    -0.2030831128358841,
                 ],
                 [
-                    0.2378637194633484,
-                    -0.04355515539646149,
-                    0.40335217118263245,
-                    -0.8488281965255737,
-                    0.15444552898406982,
+                    0.21842727065086365,
+                    0.01828605681657791,
+                    0.2380525916814804,
+                    0.2717846930027008,
+                    0.32562902569770813,
                 ],
                 [
-                    0.20840872824192047,
-                    -0.2112131416797638,
-                    0.46829894185066223,
-                    -0.744867742061615,
-                    0.25981956720352173,
+                    0.09538321942090988,
+                    0.2377324104309082,
+                    -0.03270860016345978,
+                    0.26029419898986816,
+                    0.13534477353096008,
                 ],
                 [
-                    0.232809916138649,
-                    0.0795224979519844,
-                    0.3929428160190582,
-                    -0.7533693313598633,
-                    0.2106921672821045,
+                    -0.0025518983602523804,
+                    0.11825758963823318,
+                    0.039080917835235596,
+                    0.3058757483959198,
+                    -0.08563672006130219,
                 ],
                 [
-                    0.1851186901330948,
-                    -0.1450422704219818,
-                    0.2970556616783142,
-                    -0.7189601063728333,
-                    0.19078847765922546,
+                    -0.022532835602760315,
+                    0.05094567686319351,
+                    0.006704658269882202,
+                    0.37255239486694336,
+                    -0.16184081137180328,
                 ],
                 [
-                    0.48274922370910645,
-                    0.11437579989433289,
-                    0.3290281593799591,
-                    -0.5824930667877197,
-                    0.22612173855304718,
+                    0.08076323568820953,
+                    -0.08618196099996567,
+                    -0.021112561225891113,
+                    0.4702887535095215,
+                    -0.24479801952838898,
                 ],
                 [
-                    0.2992321252822876,
-                    -0.10336627066135406,
-                    0.3752039670944214,
-                    -0.7740738391876221,
-                    0.2034076750278473,
+                    0.08460880815982819,
+                    -0.12512007355690002,
+                    -0.25200968980789185,
+                    0.48507219552993774,
+                    -0.17945758998394012,
                 ],
             ]
         ),
@@ -368,32 +319,32 @@ def test_forward(batch, model):
         torch.tensor(
             [
                 [
-                    3.770183563232422,
-                    -1.4937254190444946,
-                    5.494809150695801,
-                    -9.878721237182617,
-                    1.7048689126968384,
+                    1.0143283605575562,
+                    2.100494146347046,
+                    0.6670827269554138,
+                    3.8404273986816406,
+                    -0.1374797224998474,
                 ],
                 [
-                    4.664599418640137,
-                    -0.9193091988563538,
-                    5.376185417175293,
-                    -8.726889610290527,
-                    1.5600370168685913,
+                    4.008062839508057,
+                    -5.860606670379639,
+                    4.935301303863525,
+                    6.916836261749268,
+                    1.7625821828842163,
                 ],
                 [
-                    4.443399906158447,
-                    -0.6660721302032471,
-                    5.095791816711426,
-                    -8.66091537475586,
-                    2.086989402770996,
+                    2.8068482875823975,
+                    -7.062673091888428,
+                    4.238302707672119,
+                    8.642420768737793,
+                    0.19193750619888306,
                 ],
                 [
-                    4.494462013244629,
-                    -0.5705814957618713,
-                    6.037875175476074,
-                    -8.867290496826172,
-                    1.831087589263916,
+                    0.5242522358894348,
+                    -3.213310480117798,
+                    4.6281819343566895,
+                    7.656630992889404,
+                    -0.40581274032592773,
                 ],
             ]
         ),
@@ -405,9 +356,9 @@ def test_step(batch, model, config):
     loss = model.step("train", batch)
     assert loss is not None
     if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(56.7139))
+        torch.testing.assert_close(loss, torch.tensor(59.975791931152344))
     elif config == {"use_crf": False}:
-        torch.testing.assert_close(loss, torch.tensor(1.570178747177124))
+        torch.testing.assert_close(loss, torch.tensor(1.6528030633926392))
     else:
         raise ValueError(f"Unknown config: {config}")
 
@@ -416,9 +367,9 @@ def test_training_step(batch, model, config):
     loss = model.training_step(batch, batch_idx=0)
     assert loss is not None
     if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(56.78658676147461))
+        torch.testing.assert_close(loss, torch.tensor(59.42658996582031))
     elif config == {"use_crf": False}:
-        torch.testing.assert_close(loss, torch.tensor(1.5575151443481445))
+        torch.testing.assert_close(loss, torch.tensor(1.6708829402923584))
     else:
         raise ValueError(f"Unknown config: {config}")
 
@@ -429,9 +380,9 @@ def test_training_step_without_attention_mask(batch, model, config):
     loss = model.training_step(batch=(inputs_without_attention_mask, targets), batch_idx=0)
     assert loss is not None
     if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(72.02947235107422))
+        torch.testing.assert_close(loss, torch.tensor(77.98155975341797))
     elif config == {"use_crf": False}:
-        torch.testing.assert_close(loss, torch.tensor(1.5575151443481445))
+        torch.testing.assert_close(loss, torch.tensor(1.6701185703277588))
     else:
         raise ValueError(f"Unknown config: {config}")
 
@@ -440,9 +391,9 @@ def test_validation_step(batch, model, config):
     loss = model.validation_step(batch, batch_idx=0)
     assert loss is not None
     if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(56.78658676147461))
+        torch.testing.assert_close(loss, torch.tensor(59.42658996582031))
     elif config == {"use_crf": False}:
-        torch.testing.assert_close(loss, torch.tensor(1.5575151443481445))
+        torch.testing.assert_close(loss, torch.tensor(1.6708829402923584))
     else:
         raise ValueError(f"Unknown config: {config}")
 
@@ -451,9 +402,9 @@ def test_test_step(batch, model, config):
     loss = model.test_step(batch, batch_idx=0)
     assert loss is not None
     if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(56.78658676147461))
+        torch.testing.assert_close(loss, torch.tensor(59.42658996582031))
     elif config == {"use_crf": False}:
-        torch.testing.assert_close(loss, torch.tensor(1.5575151443481445))
+        torch.testing.assert_close(loss, torch.tensor(1.6708829402923584))
     else:
         raise ValueError(f"Unknown config: {config}")
 
@@ -471,10 +422,10 @@ def test_predict_and_predict_step(model, batch, config, test_step):
             predictions,
             torch.tensor(
                 [
-                    [2, 2, 0, 2, 2, 2, -100, -100, -100, -100, -100, -100],
-                    [2, 0, 2, 2, 0, 2, 2, 2, 0, 2, -100, -100],
-                    [2, 0, 2, 0, 2, 0, 2, 0, 2, -100, -100, -100],
-                    [2, 0, 2, 2, 0, 2, 0, 2, 0, 2, 0, 2],
+                    [-100, 1, 3, 1, 1, -100, -100, -100, -100, -100, -100, -100],
+                    [-100, 3, 4, 4, 0, 3, 3, 3, 2, -100, -100, -100],
+                    [-100, 3, 4, 3, 3, 3, 3, 3, -100, -100, -100, -100],
+                    [-100, 3, 2, 4, 3, 3, 3, 3, 3, 3, 3, -100],
                 ]
             ),
         )
@@ -483,44 +434,10 @@ def test_predict_and_predict_step(model, batch, config, test_step):
             predictions,
             torch.tensor(
                 [
-                    [2, 2, 0, 2, 2, 2, -100, -100, -100, -100, -100, -100],
-                    [0, 0, 2, 2, 0, 2, 2, 2, 2, 2, -100, -100],
-                    [2, 2, 2, 0, 2, 2, 0, 0, 0, -100, -100, -100],
-                    [0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
-                ]
-            ),
-        )
-    else:
-        raise ValueError(f"Unknown config: {config}")
-
-
-def test_predict_without_attention_mask(model, batch, config):
-    inputs, targets = batch
-    inputs_without_attention_mask = {k: v for k, v in inputs.items() if k != "attention_mask"}
-    torch.manual_seed(42)
-    predictions = model.predict(inputs_without_attention_mask)
-    assert predictions.shape == targets.shape
-    if config == {}:
-        torch.testing.assert_close(
-            predictions,
-            torch.tensor(
-                [
-                    [2, 2, 0, 2, 2, 0, 2, 2, 2, 2, 0, 2],
-                    [2, 0, 2, 2, 0, 2, 2, 2, 0, 2, 0, 2],
-                    [2, 0, 2, 0, 2, 2, 0, 2, 0, 2, 0, 2],
-                    [2, 0, 2, 2, 0, 2, 0, 2, 0, 2, 0, 2],
-                ]
-            ),
-        )
-    elif config == {"use_crf": False}:
-        torch.testing.assert_close(
-            predictions,
-            torch.tensor(
-                [
-                    [2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 0, 2],
-                    [0, 0, 2, 2, 0, 2, 2, 2, 2, 2, 0, 2],
-                    [2, 2, 2, 0, 2, 2, 0, 0, 0, 2, 2, 2],
-                    [0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+                    [-100, 1, 3, 1, 1, -100, -100, -100, -100, -100, -100, -100],
+                    [-100, 3, 4, 3, 3, 3, 3, 3, 2, -100, -100, -100],
+                    [-100, 3, 4, 3, 3, 3, 3, 3, -100, -100, -100, -100],
+                    [-100, 3, 2, 4, 3, 3, 3, 3, 3, 2, 3, -100],
                 ]
             ),
         )
@@ -529,37 +446,45 @@ def test_predict_without_attention_mask(model, batch, config):
 
 
 def test_configure_optimizers(model):
-    optimizer = model.configure_optimizers()
-    assert optimizer is not None
+    model.trainer = Trainer(max_epochs=10)
+    optimizer_and_schedular = model.configure_optimizers()
+    assert optimizer_and_schedular is not None
+    optimizers, schedulers = optimizer_and_schedular
+
+    assert len(optimizers) == 1
+    optimizer = optimizers[0]
     assert isinstance(optimizer, torch.optim.AdamW)
     assert optimizer.defaults["lr"] == 1e-05
     assert optimizer.defaults["weight_decay"] == 0.01
     assert optimizer.defaults["eps"] == 1e-08
 
+    assert len(schedulers) == 1
+    scheduler = schedulers[0]
+    assert isinstance(scheduler["scheduler"], torch.optim.lr_scheduler.LambdaLR)
+
 
 def test_configure_optimizers_with_task_learning_rate(monkeypatch):
-    model = get_model(
-        monkeypatch=monkeypatch,
-        model_type="bert",
-        batch_size=4,
-        seq_len=10,
+    model = TokenClassificationModelWithSeq2SeqEncoderAndCrf(
+        model_name_or_path="prajjwal1/bert-tiny",
         num_classes=5,
-        add_dummy_linear=True,
-        task_learning_rate=0.1,
+        warmup_proportion=0.0,
+        task_learning_rate=1e-4,
     )
     optimizer = model.configure_optimizers()
     assert optimizer is not None
     assert isinstance(optimizer, torch.optim.AdamW)
     assert len(optimizer.param_groups) == 2
+    # check that all parameters are in the optimizer
+    assert set(optimizer.param_groups[0]["params"]) | set(
+        optimizer.param_groups[1]["params"]
+    ) == set(model.parameters())
+
+    # base model parameters
     param_group = optimizer.param_groups[0]
     assert param_group["lr"] == 1e-05
-    # the dummy linear from the mock base model has 2 parameters
-    assert len(param_group["params"]) == 2
-    assert param_group["params"][0].shape == torch.Size([99, 10])
-    assert param_group["params"][1].shape == torch.Size([99])
+    assert len(param_group["params"]) == 39
+
+    # task parameters
     param_group = optimizer.param_groups[1]
-    assert param_group["lr"] == 0.1
-    # the classifier head has 5 parameters
+    assert param_group["lr"] == 1e-04
     assert len(param_group["params"]) == 5
-    assert param_group["params"][0].shape == torch.Size([5, 10])
-    assert param_group["params"][1].shape == torch.Size([5])
