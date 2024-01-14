@@ -6,8 +6,7 @@ from pytorch_ie import AutoTaskModule
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
-from torch import FloatTensor, LongTensor, Tensor, nn
-from torch.nn import CrossEntropyLoss
+from torch import FloatTensor, LongTensor, nn
 from torchcrf import CRF
 from transformers import (
     AutoConfig,
@@ -115,9 +114,11 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
 
         self.crf = CRF(num_tags=num_classes, batch_first=True) if use_crf else None
 
-        self.metrics = {}
+        # todo: use metric_val, metric_test, metric_train and remove _on_epoch_end()
+        self.metrics = nn.ModuleDict()
         if taskmodule_config is not None:
             self.taskmodule = AutoTaskModule.from_config(taskmodule_config)
+            # TODO: remove this once this is done in `TaskModule._from_config()`
             self.taskmodule.post_prepare()
             for stage in [TRAINING, VALIDATION, TEST]:
                 stage_metric = self.taskmodule.configure_model_metric(stage=stage)
@@ -187,7 +188,7 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
                 log_likelihood = self.crf(emissions=logits, tags=labels_valid, mask=mask_bool)
                 loss = -log_likelihood
             else:
-                loss_fct = CrossEntropyLoss(ignore_index=self.label_pad_id)
+                loss_fct = nn.CrossEntropyLoss(ignore_index=self.label_pad_id)
                 loss = loss_fct(logits.view(-1, self.num_classes), labels.view(-1))
 
         return TokenClassifierOutput(
@@ -214,8 +215,8 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
             sync_dist=True,
         )
 
-        metric = self.metrics.get(stage, None)
-        if metric is not None:
+        if stage in self.metrics:
+            metric = self.metrics[stage]
             predicted_tags = self.decode(
                 logits=output.logits,
                 attention_mask=inputs["attention_mask"],
@@ -263,8 +264,8 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         self._on_epoch_end(stage=TEST)
 
     def _on_epoch_end(self, stage: str) -> None:
-        metric = self.metrics.get(stage, None)
-        if metric is not None:
+        if stage in self.metrics:
+            metric = self.metrics[stage]
             value = metric.compute()
             self.log(
                 f"metric/{type(metric).__name__}/{stage}",

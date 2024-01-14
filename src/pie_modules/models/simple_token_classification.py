@@ -6,7 +6,7 @@ from pytorch_ie import AutoTaskModule
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
-from torch import FloatTensor, LongTensor
+from torch import FloatTensor, LongTensor, nn
 from transformers import AutoConfig, AutoModelForTokenClassification, BatchEncoding
 from transformers.modeling_outputs import TokenClassifierOutput
 from typing_extensions import TypeAlias
@@ -56,9 +56,11 @@ class SimpleTokenClassificationModel(
                 model_name_or_path, config=config
             )
 
-        self.metrics = {}
+        # todo: use metric_val, metric_test, metric_train and remove _on_epoch_end()
+        self.metrics = nn.ModuleDict()
         if taskmodule_config is not None:
             self.taskmodule = AutoTaskModule.from_config(taskmodule_config)
+            # TODO: remove this once this is done in `TaskModule._from_config()`
             self.taskmodule.post_prepare()
             for stage in [TRAINING, VALIDATION, TEST]:
                 stage_metric = self.taskmodule.configure_model_metric(stage=stage)
@@ -108,8 +110,8 @@ class SimpleTokenClassificationModel(
         # show loss on each step only during training
         self.log(f"{stage}/loss", loss, on_step=(stage == TRAINING), on_epoch=True, prog_bar=True)
 
-        metric = self.metrics.get(stage, None)
-        if metric is not None:
+        if stage in self.metrics:
+            metric = self.metrics[stage]
             predicted_tags = self.decode(
                 logits=output.logits,
                 attention_mask=inputs["attention_mask"],
@@ -157,8 +159,8 @@ class SimpleTokenClassificationModel(
         self._on_epoch_end(stage=TEST)
 
     def _on_epoch_end(self, stage: str) -> None:
-        metric = self.metrics.get(stage, None)
-        if metric is not None:
+        if stage in self.metrics:
+            metric = self.metrics[stage]
             value = metric.compute()
             self.log(
                 f"metric/{type(metric).__name__}/{stage}",
