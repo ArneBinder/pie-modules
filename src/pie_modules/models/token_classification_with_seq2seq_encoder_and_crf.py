@@ -257,17 +257,16 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         return self.predict(inputs=inputs)
 
     def on_train_epoch_end(self) -> None:
-        self._on_epoch_end(stage=TRAINING)
+        self._on_epoch_end(stage=TRAINING, metric=self.metric_train)
 
     def on_validation_epoch_end(self) -> None:
-        self._on_epoch_end(stage=VALIDATION)
+        self._on_epoch_end(stage=VALIDATION, metric=self.metric_val)
 
     def on_test_epoch_end(self) -> None:
-        self._on_epoch_end(stage=TEST)
+        self._on_epoch_end(stage=TEST, metric=self.metric_test)
 
-    def _on_epoch_end(self, stage: str) -> None:
-        if stage in self.metrics:
-            metric = self.metrics[stage]
+    def _on_epoch_end(self, stage: str, metric: Optional[Metric] = None) -> None:
+        if metric is not None:
             value = metric.compute()
             self.log(
                 f"metric/{type(metric).__name__}/{stage}",
