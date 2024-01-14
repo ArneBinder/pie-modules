@@ -7,6 +7,7 @@ from pytorch_ie.core import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch import FloatTensor, LongTensor, nn
+from torchmetrics import Metric
 from transformers import AutoConfig, AutoModelForTokenClassification, BatchEncoding
 from transformers.modeling_outputs import TokenClassifierOutput
 from typing_extensions import TypeAlias
@@ -56,8 +57,8 @@ class SimpleTokenClassificationModel(
                 model_name_or_path, config=config
             )
 
-        # todo: use metric_val, metric_test, metric_train and remove _on_epoch_end()
-        self.metrics = nn.ModuleDict()
+        for stage in [TRAINING, VALIDATION, TEST]:
+            setattr(self, f"metric_{stage}", None)
         if taskmodule_config is not None:
             self.taskmodule = AutoTaskModule.from_config(taskmodule_config)
             # TODO: remove this once this is done in `TaskModule._from_config()`
@@ -65,7 +66,7 @@ class SimpleTokenClassificationModel(
             for stage in [TRAINING, VALIDATION, TEST]:
                 stage_metric = self.taskmodule.configure_model_metric(stage=stage)
                 if stage_metric is not None:
-                    self.metrics[stage] = stage_metric
+                    setattr(self, f"metric_{stage}", stage_metric)
                 else:
                     logger.warning(
                         f"The taskmodule {self.taskmodule.__class__.__name__} does not define a metric for stage "
@@ -100,6 +101,7 @@ class SimpleTokenClassificationModel(
         self,
         stage: str,
         batch: ModelStepInputType,
+        metric: Optional[Metric] = None,
     ) -> FloatTensor:
         inputs, targets = batch
         assert targets is not None, "targets has to be available for training"
@@ -110,8 +112,7 @@ class SimpleTokenClassificationModel(
         # show loss on each step only during training
         self.log(f"{stage}/loss", loss, on_step=(stage == TRAINING), on_epoch=True, prog_bar=True)
 
-        if stage in self.metrics:
-            metric = self.metrics[stage]
+        if metric is not None:
             predicted_tags = self.decode(
                 logits=output.logits,
                 attention_mask=inputs["attention_mask"],
@@ -126,13 +127,13 @@ class SimpleTokenClassificationModel(
         return loss
 
     def training_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
-        return self.step(stage=TRAINING, batch=batch)
+        return self.step(stage=TRAINING, batch=batch, metric=self.metric_train)
 
     def validation_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
-        return self.step(stage=VALIDATION, batch=batch)
+        return self.step(stage=VALIDATION, batch=batch, metric=self.metric_val)
 
     def test_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
-        return self.step(stage=TEST, batch=batch)
+        return self.step(stage=TEST, batch=batch, metric=self.metric_test)
 
     def predict(self, inputs: ModelInputsType, **kwargs) -> ModelOutputType:
         output = self(inputs)
