@@ -230,6 +230,14 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
             targets_valid = targets[mask]
             metric(predicted_tags_valid, targets_valid)
 
+            self.log(
+                f"metric/{type(metric).__name__}/{stage}",
+                metric,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+
         return loss
 
     def training_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
@@ -255,27 +263,6 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
     ) -> LongTensor:
         inputs, targets = batch
         return self.predict(inputs=inputs)
-
-    def on_train_epoch_end(self) -> None:
-        self._on_epoch_end(stage=TRAINING, metric=self.metric_train)
-
-    def on_validation_epoch_end(self) -> None:
-        self._on_epoch_end(stage=VALIDATION, metric=self.metric_val)
-
-    def on_test_epoch_end(self) -> None:
-        self._on_epoch_end(stage=TEST, metric=self.metric_test)
-
-    def _on_epoch_end(self, stage: str, metric: Optional[Metric] = None) -> None:
-        if metric is not None:
-            value = metric.compute()
-            self.log(
-                f"metric/{type(metric).__name__}/{stage}",
-                value,
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-            )
-            metric.reset()
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
         if self.task_learning_rate is not None:
