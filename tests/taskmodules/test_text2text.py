@@ -208,48 +208,45 @@ def test_configure_model_metrics(taskmodule):
     assert metric is not None
     values = metric.compute()
     keys = {
-        "rouge2_fmeasure",
-        "rougeL_recall",
-        "rouge1_precision",
-        "rouge1_recall",
-        "rouge2_recall",
-        "rougeL_precision",
-        "rouge1_fmeasure",
-        "rougeLsum_recall",
-        "rougeLsum_precision",
-        "rougeL_fmeasure",
-        "rouge2_precision",
-        "rougeLsum_fmeasure",
+        "metric/rougeL_fmeasure/validation",
+        "metric/rouge2_fmeasure/validation",
+        "metric/rougeL_recall/validation",
+        "metric/rougeLsum_fmeasure/validation",
+        "metric/rougeLsum_recall/validation",
+        "metric/rouge2_recall/validation",
+        "metric/rouge1_precision/validation",
+        "metric/rouge1_fmeasure/validation",
+        "metric/rougeLsum_precision/validation",
+        "metric/rouge1_recall/validation",
+        "metric/rougeL_precision/validation",
+        "metric/rouge2_precision/validation",
     }
+
     assert set(values) == keys
     assert all(torch.isnan(value) for value in values.values())
 
     labels = torch.tensor([[3, 9, 1708, 1, 0], [3, 9, 1200, 1708, 1]])
-    metric.update(predictions=labels, targets=labels)
-    assert set(metric.metric_state) == keys
-    assert all(
-        value == [torch.tensor(1.0), torch.tensor(1.0)] for value in metric.metric_state.values()
-    )
+    metric(prediction=labels, target=labels)
     values = metric.compute()
     assert set(values) == keys
     assert all(value == torch.tensor(1.0) for value in values.values())
 
     random_labels = torch.tensor([[875, 885, 112, 289, 769], [270, 583, 970, 114, 71]])
-    metric.update(predictions=random_labels, targets=labels)
+    metric(prediction=random_labels, target=labels)
     values = metric.compute()
     assert {k: v.item() for k, v in values.items()} == {
-        "rouge1_fmeasure": 0.5625,
-        "rouge1_precision": 0.550000011920929,
-        "rouge1_recall": 0.5833333134651184,
-        "rouge2_fmeasure": 0.5,
-        "rouge2_precision": 0.5,
-        "rouge2_recall": 0.5,
-        "rougeL_fmeasure": 0.5625,
-        "rougeL_precision": 0.550000011920929,
-        "rougeL_recall": 0.5833333134651184,
-        "rougeLsum_fmeasure": 0.5625,
-        "rougeLsum_precision": 0.550000011920929,
-        "rougeLsum_recall": 0.5833333134651184,
+        "metric/rouge1_fmeasure/validation": 0.5625,
+        "metric/rouge1_precision/validation": 0.550000011920929,
+        "metric/rouge1_recall/validation": 0.5833333134651184,
+        "metric/rouge2_fmeasure/validation": 0.5,
+        "metric/rouge2_precision/validation": 0.5,
+        "metric/rouge2_recall/validation": 0.5,
+        "metric/rougeL_fmeasure/validation": 0.5625,
+        "metric/rougeL_precision/validation": 0.550000011920929,
+        "metric/rougeL_recall/validation": 0.5833333134651184,
+        "metric/rougeLsum_fmeasure/validation": 0.5625,
+        "metric/rougeLsum_precision/validation": 0.550000011920929,
+        "metric/rougeLsum_recall/validation": 0.5833333134651184,
     }
 
 

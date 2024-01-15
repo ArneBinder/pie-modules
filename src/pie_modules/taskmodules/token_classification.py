@@ -33,7 +33,7 @@ from pytorch_ie.documents import (
 )
 from pytorch_ie.utils.span import bio_tags_to_spans
 from tokenizers import Encoding
-from torchmetrics import F1Score, Metric
+from torchmetrics import F1Score, MetricCollection
 from transformers import AutoTokenizer
 from typing_extensions import TypeAlias
 
@@ -368,7 +368,7 @@ class TokenClassificationTaskModule(TaskModuleType):
             # need to copy the span because it can be attached to only one document
             yield self.span_annotation, span.copy()
 
-    def configure_model_metric(self, stage: str) -> Metric:
+    def configure_model_metric(self, stage: str) -> MetricCollection:
         def remove_label_pad_ids(labels: torch.LongTensor) -> torch.LongTensor:
             # remove the special tokens and padding from the predicted / target labels
             # because the label_pad_id is usually not a valid index (e.g. -100)
@@ -385,4 +385,6 @@ class TokenClassificationTaskModule(TaskModuleType):
         return WrappedMetricWithPrepareFunction(
             metric=f1_score,
             prepare_function=remove_label_pad_ids,
+            prefix="metric/",
+            postfix=f"/{stage}",
         )

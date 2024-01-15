@@ -1,51 +1,54 @@
 import logging
-from typing import Any, Callable, Dict, Generic, List, Optional, TypeVar, Union
+from collections import defaultdict
+from typing import Any, Callable, Dict, Generic, TypeVar
 
-from torch import Tensor
-from torchmetrics import Metric
-from torchmetrics.wrappers.abstract import WrapperMetric
+from torchmetrics import Metric, MetricCollection
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
 
-class WrappedMetricWithPrepareFunction(WrapperMetric, Generic[T]):
+class WrappedMetricWithPrepareFunction(MetricCollection, Generic[T]):
     """A wrapper around a metric that can be used with predictions and targets that are need to be
     prepared (e.g. un-batched) before passing them to the metric.
 
     Args:
+        metric: The metric to wrap. It should be a subclass of torchmetrics.Metric.
         prepare_function: A function that prepares the input for the metric. It is called with
             the predictions as well as the targets.
-        metric: The metric to wrap. It should be a subclass of torchmetrics.Metric.
+        prepare_does_unbatch: If True, the prepare_function is expected to return an iterable of
+            individual inputs. This is used to unbatch the input before passing it to the wrapped
+            metric.
     """
 
     def __init__(
         self,
-        prepare_function: Callable[[T], Any],
         metric: Metric,
-        name: Optional[str] = None,
+        prepare_function: Callable[[T], Any],
+        prepare_does_unbatch: bool = False,
         **kwargs,
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(metric, **kwargs)
         self.prepare_function = prepare_function
-        self.metric = metric
-        self.name = name or type(self.metric).__name__
+        self.prepare_does_unbatch = prepare_does_unbatch
 
-    def update(self, predictions: T, targets: T):
-        super().update(predictions, targets)
-
-    def compute(self) -> Any:
-        return self.metric.compute()
-
-    def reset(self) -> None:
-        self.metric.reset()
-
-    @property
-    def metric_state(self) -> Dict[str, Union[List[Tensor], Tensor]]:
-        return self.metric.metric_state
-
-    def forward(self, predictions: T, targets: T) -> Any:
-        prediction_prepared = self.prepare_function(predictions)
-        target_prepared = self.prepare_function(targets)
-        return self.metric.forward(prediction_prepared, target_prepared)
+    def forward(self, prediction: T, target: T) -> Dict[str, Any]:
+        prediction_prepared = self.prepare_function(prediction)
+        target_prepared = self.prepare_function(target)
+        if self.prepare_does_unbatch:
+            if len(prediction_prepared) != len(target_prepared):
+                raise ValueError(
+                    f"Number of prepared predictions ({len(prediction_prepared)}) and targets "
+                    f"({len(target_prepared)}) do not match."
+                )
+            if len(prediction_prepared) == 0:
+                raise ValueError("Empty batch.")
+            results = defaultdict(list)
+            for prediction_str, target_str in zip(prediction_prepared, target_prepared):
+                for k, v in super().forward(prediction_str, target_str).items():
+                    results[k].append(v)
+            mean_results = {k: sum(v) / len(v) for k, v in results.items()}
+            return mean_results
+        else:
+            return super().forward(prediction_prepared, target_prepared)

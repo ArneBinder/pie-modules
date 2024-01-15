@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 from pytorch_ie import AutoTaskModule
@@ -8,7 +8,7 @@ from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClas
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch import FloatTensor, LongTensor, nn
 from torchcrf import CRF
-from torchmetrics import Metric
+from torchmetrics import Metric, MetricCollection
 from transformers import (
     AutoConfig,
     AutoModel,
@@ -203,7 +203,10 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         )
 
     def step(
-        self, stage: str, batch: ModelStepInputType, metric: Optional[Metric] = None
+        self,
+        stage: str,
+        batch: ModelStepInputType,
+        metric: Optional[Union[Metric, MetricCollection]] = None,
     ) -> FloatTensor:
         inputs, targets = batch
         assert targets is not None, "targets have to be available for training"
@@ -229,14 +232,17 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
             )
 
             metric(predicted_tags, targets)
-            metric_name = getattr(metric, "name", None) or type(metric).__name__
-            self.log(
-                f"metric/{metric_name}/{stage}",
-                metric,
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-            )
+            log_kwargs = {"on_step": False, "on_epoch": True, "sync_dist": True}
+            if isinstance(metric, Metric):
+                key = getattr(metric, "name", None) or f"metric/{type(metric).__name__}/{stage}"
+                self.log(key, value=metric, **log_kwargs)
+            elif isinstance(metric, MetricCollection):
+                self.log_dict(metric, **log_kwargs)
+            else:
+                raise ValueError(
+                    f"metric must be an instance of torchmetrics.Metric or torchmetrics.MetricCollection, but is "
+                    f"of type {type(metric)}."
+                )
 
         return loss
 

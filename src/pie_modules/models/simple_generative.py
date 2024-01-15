@@ -8,7 +8,7 @@ from pytorch_ie.auto import AutoTaskModule
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch.optim import Optimizer
-from torchmetrics import Metric
+from torchmetrics import Metric, MetricCollection
 from transformers import PreTrainedModel, get_linear_schedule_with_warmup
 
 from pie_modules.models.interface import RequiresTaskmoduleConfig
@@ -235,7 +235,18 @@ class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
                 # get the indices (these are without the initial bos_ids, see above)
                 prediction = torch.argmax(logits, dim=-1)
             # the format of expected needs to be the same as the format of prediction
-            metric.update(prediction, targets["labels"])
+            metric(prediction, targets["labels"])
+            log_kwargs = {"on_step": False, "on_epoch": True, "sync_dist": True}
+            if isinstance(metric, Metric):
+                key = getattr(metric, "name", None) or f"metric/{type(metric).__name__}/{stage}"
+                self.log(key, value=metric, **log_kwargs)
+            elif isinstance(metric, MetricCollection):
+                self.log_dict(metric, **log_kwargs)
+            else:
+                raise ValueError(
+                    f"metric must be an instance of torchmetrics.Metric or torchmetrics.MetricCollection, but is "
+                    f"of type {type(metric)}."
+                )
 
         return loss
 
@@ -253,27 +264,6 @@ class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
         loss = self.step(batch, stage=STAGE_TEST, batch_idx=batch_idx)
 
         return loss
-
-    def on_train_epoch_end(self) -> None:
-        self._on_epoch_end(stage=STAGE_TRAIN)
-
-    def on_validation_epoch_end(self) -> None:
-        self._on_epoch_end(stage=STAGE_VAL)
-
-    def on_test_epoch_end(self) -> None:
-        self._on_epoch_end(stage=STAGE_TEST)
-
-    def _on_epoch_end(self, stage: str) -> None:
-        if self.metrics is not None:
-            metrics = self.metrics.get(stage, None)
-            if metrics is not None:
-                metric_dict = metrics.compute()
-                metrics.reset()
-                # TODO: consider https://lightning.ai/docs/torchmetrics/stable/pages/overview.html#metriccollection
-                #  and self.log_dict()
-                metric_dict_flat = flatten_dict(d=metric_dict, sep="/")
-                for k, v in metric_dict_flat.items():
-                    self.log(f"metric/{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
         if hasattr(self.model, "configure_optimizer") and callable(self.model.configure_optimizer):

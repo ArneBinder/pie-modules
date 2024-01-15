@@ -6,8 +6,8 @@ from pytorch_ie import AutoTaskModule
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
-from torch import FloatTensor, LongTensor, nn
-from torchmetrics import Metric
+from torch import FloatTensor, LongTensor
+from torchmetrics import Metric, MetricCollection
 from transformers import AutoConfig, AutoModelForTokenClassification, BatchEncoding
 from transformers.modeling_outputs import TokenClassifierOutput
 from typing_extensions import TypeAlias
@@ -130,14 +130,17 @@ class SimpleTokenClassificationModel(
             )
 
             metric(predicted_tags, targets)
-            metric_name = getattr(metric, "name", None) or type(metric).__name__
-            self.log(
-                f"metric/{metric_name}/{stage}",
-                metric,
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-            )
+            log_kwargs = {"on_step": False, "on_epoch": True, "sync_dist": True}
+            if isinstance(metric, Metric):
+                key = getattr(metric, "name", None) or f"metric/{type(metric).__name__}/{stage}"
+                self.log(key, value=metric, **log_kwargs)
+            elif isinstance(metric, MetricCollection):
+                self.log_dict(metric, **log_kwargs)
+            else:
+                raise ValueError(
+                    f"metric must be an instance of torchmetrics.Metric or torchmetrics.MetricCollection, but is "
+                    f"of type {type(metric)}."
+                )
 
         return loss
 

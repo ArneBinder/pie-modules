@@ -1,3 +1,4 @@
+import pytest
 from torchmetrics import Metric
 
 from pie_modules.taskmodules.metrics import WrappedMetricWithPrepareFunction
@@ -21,29 +22,68 @@ class TestMetric(Metric):
 
 def test_metric():
     metric = WrappedMetricWithPrepareFunction(
-        metric=TestMetric(),
-        # just take the first "word" of each input
-        prepare_function=lambda x: x.split()[0],
+        metric=TestMetric(), prepare_function=lambda x: x.split()[0]
     )
+
     assert metric is not None
     assert metric.prepare_function is not None
-    assert metric.metric is not None
 
-    assert metric.compute() == 0.0
-
-    metric.reset()
-    metric(predictions="abc", targets="abc")
-    assert metric.compute() == 1.0
+    assert metric.compute() == {"TestMetric": 0.0}
 
     metric.reset()
-    metric(predictions="abc", targets="def")
-    assert metric.compute() == 0.0
+    metric(prediction="abc", target="abc")
+    assert metric.compute() == {"TestMetric": 1.0}
 
     metric.reset()
-    metric(predictions="abc def", targets="abc xyz")
+    metric(prediction="abc", target="def")
+    assert metric.compute() == {"TestMetric": 0.0}
+
+    metric.reset()
+    metric(prediction="abc def", target="abc xyz")
     # we consider just the first word, so this is still 1.0
-    assert metric.compute() == 1.0
+    assert metric.compute() == {"TestMetric": 1.0}
 
     metric.reset()
-    metric(predictions="abc def", targets="xyz def")
-    assert metric.compute() == 0.0
+    metric(prediction="abc def", target="xyz def")
+    assert metric.compute() == {"TestMetric": 0.0}
+
+
+@pytest.fixture(scope="module")
+def wrapped_metric_with_unbatch_function():
+    # just split the strings to unbatch the inputs
+    return WrappedMetricWithPrepareFunction(
+        metric=TestMetric(), prepare_function=lambda x: x.split(), prepare_does_unbatch=True
+    )
+
+
+def test_wrapped_metric_with_unbatch_function(wrapped_metric_with_unbatch_function):
+    metric = wrapped_metric_with_unbatch_function
+    assert metric is not None
+
+    assert metric.compute() == {"TestMetric": 0.0}
+
+    metric.reset()
+    metric(prediction="abc", target="abc")
+    assert metric.compute() == {"TestMetric": 1.0}
+
+    metric.reset()
+    metric(prediction="abc", target="def")
+    assert metric.compute() == {"TestMetric": 0.0}
+
+    metric.reset()
+    metric(prediction="abc def", target="abc def")
+    assert metric.compute() == {"TestMetric": 1.0}
+
+    metric.reset()
+    metric(prediction="abc def", target="def abc")
+    assert metric.compute() == {"TestMetric": 0.0}
+
+    metric.reset()
+    metric(prediction="abc xyz", target="def xyz")
+    assert metric.compute() == {"TestMetric": 0.5}
+
+
+def test_wrapped_metric_with_unbatch_function_size_mismatch(wrapped_metric_with_unbatch_function):
+    with pytest.raises(ValueError) as excinfo:
+        wrapped_metric_with_unbatch_function(prediction="abc", target="abc def")
+    assert str(excinfo.value) == "Number of prepared predictions (1) and targets (2) do not match."

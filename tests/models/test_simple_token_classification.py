@@ -264,7 +264,7 @@ def test_validation_step(batch, model, config):
     assert loss is not None
     torch.testing.assert_close(loss, torch.tensor(1.676901936531067))
     metric_value = model.metric_val.compute()
-    torch.testing.assert_close(metric_value, torch.tensor(0.04210526496171951))
+    assert metric_value == {"metric/MulticlassF1Score/val": torch.tensor(0.04210526496171951)}
 
 
 def test_test_step(batch, model, config):
@@ -273,7 +273,7 @@ def test_test_step(batch, model, config):
     assert loss is not None
     torch.testing.assert_close(loss, torch.tensor(1.676901936531067))
     metric_value = model.metric_test.compute()
-    torch.testing.assert_close(metric_value, torch.tensor(0.04210526496171951))
+    assert metric_value == {"metric/MulticlassF1Score/test": torch.tensor(0.04210526496171951)}
 
 
 @pytest.mark.parametrize("test_step", [False, True])

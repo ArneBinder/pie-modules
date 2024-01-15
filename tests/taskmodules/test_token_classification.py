@@ -730,37 +730,16 @@ def test_configure_model_metric(documents):
     taskmodule.post_prepare()
 
     metric = taskmodule.configure_model_metric(stage="test")
-    metric_state = {k: v.tolist() for k, v in metric.metric_state.items()}
-    assert metric_state == {
-        "tp": [0, 0, 0, 0, 0],
-        "fp": [0, 0, 0, 0, 0],
-        "tn": [0, 0, 0, 0, 0],
-        "fn": [0, 0, 0, 0, 0],
-    }
     values = metric.compute()
-    torch.testing.assert_close(values, torch.tensor(0.0))
+    assert values == {"metric/MulticlassF1Score/test": torch.tensor(0.0)}
 
     batch = taskmodule.collate(taskmodule.encode(documents, encode_target=True))
     targets = batch[1]
     targets_valid = targets[targets != taskmodule.label_pad_id]
     metric(targets_valid, targets_valid)
-    metric_state = {k: v.tolist() for k, v in metric.metric_state.items()}
-    assert metric_state == {
-        "tp": [16, 1, 1, 2, 0],
-        "fp": [0, 0, 0, 0, 0],
-        "tn": [4, 19, 19, 18, 20],
-        "fn": [0, 0, 0, 0, 0],
-    }
     values = metric.compute()
-    torch.testing.assert_close(values, torch.tensor(1.0))
+    assert values == {"metric/MulticlassF1Score/test": torch.tensor(1.0)}
 
     metric(targets_valid, torch.ones_like(targets_valid))
-    metric_state = {k: v.tolist() for k, v in metric.metric_state.items()}
-    assert metric_state == {
-        "tp": [16, 2, 1, 2, 0],
-        "fp": [16, 0, 1, 2, 0],
-        "tn": [8, 19, 38, 36, 40],
-        "fn": [0, 19, 0, 0, 0],
-    }
     values = metric.compute()
-    torch.testing.assert_close(values, torch.tensor(0.5434783101081848))
+    assert values == {"metric/MulticlassF1Score/test": torch.tensor(0.5434783101081848)}
