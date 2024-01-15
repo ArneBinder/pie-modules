@@ -1,9 +1,8 @@
 import pytest
 import torch
 
-from pie_modules.models.simple_token_classification import (
-    SimpleTokenClassificationModel,
-)
+from pie_modules.models import SimpleTokenClassificationModel
+from pie_modules.taskmodules import TokenClassificationTaskModule
 from tests import _config_to_str
 
 CONFIGS = [{}]
@@ -106,9 +105,14 @@ def batch():
 
 
 @pytest.fixture
-def model(monkeypatch, batch, config) -> SimpleTokenClassificationModel:
+def model(monkeypatch, batch, config, taskmodule_config) -> SimpleTokenClassificationModel:
     torch.manual_seed(42)
-    model = SimpleTokenClassificationModel(model_name_or_path="prajjwal1/bert-tiny", num_classes=5)
+    model = SimpleTokenClassificationModel(
+        model_name_or_path="prajjwal1/bert-tiny",
+        num_classes=5,
+        taskmodule_config=taskmodule_config,
+        metric_stages=["val", "test"],
+    )
     return model
 
 

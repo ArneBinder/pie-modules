@@ -3,6 +3,7 @@ import torch
 from pytorch_lightning import Trainer
 
 from pie_modules.models import TokenClassificationModelWithSeq2SeqEncoderAndCrf
+from pie_modules.taskmodules import TokenClassificationTaskModule
 from tests import _config_to_str
 
 CONFIGS = [{}, {"use_crf": False}]
@@ -103,7 +104,7 @@ def batch():
 
 
 @pytest.fixture
-def model(monkeypatch, batch, config) -> TokenClassificationModelWithSeq2SeqEncoderAndCrf:
+def model(batch, config, taskmodule_config) -> TokenClassificationModelWithSeq2SeqEncoderAndCrf:
     seq2seq_dict = {
         "type": "linear",
         "out_features": 10,
@@ -113,6 +114,8 @@ def model(monkeypatch, batch, config) -> TokenClassificationModelWithSeq2SeqEnco
         model_name_or_path="prajjwal1/bert-tiny",
         num_classes=5,
         seq2seq_encoder=seq2seq_dict,
+        taskmodule_config=taskmodule_config,
+        metric_stages=["val", "test"],
         **config,
     )
     return model

@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 from pytorch_ie import AutoTaskModule
@@ -40,6 +40,7 @@ class SimpleTokenClassificationModel(
         learning_rate: float = 1e-5,
         label_pad_id: int = -100,
         taskmodule_config: Optional[Dict[str, Any]] = None,
+        metric_stages: List[str] = [TRAINING, VALIDATION, TEST],
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -63,7 +64,11 @@ class SimpleTokenClassificationModel(
             self.taskmodule = AutoTaskModule.from_config(taskmodule_config)
             # TODO: remove this once this is done in `TaskModule._from_config()`
             self.taskmodule.post_prepare()
-            for stage in [TRAINING, VALIDATION, TEST]:
+            for stage in metric_stages:
+                if stage not in [TRAINING, VALIDATION, TEST]:
+                    raise ValueError(
+                        f'metric_stages must only contain the values "{TRAINING}", "{VALIDATION}", and "{TEST}".'
+                    )
                 stage_metric = self.taskmodule.configure_model_metric(stage=stage)
                 if stage_metric is not None:
                     setattr(self, f"metric_{stage}", stage_metric)
