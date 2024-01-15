@@ -115,7 +115,7 @@ def model(batch, config, taskmodule_config) -> TokenClassificationModelWithSeq2S
     return model
 
 
-def test_freeze_base_model(monkeypatch):
+def test_freeze_base_model():
     model = TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         model_name_or_path="prajjwal1/bert-tiny",
         num_classes=5,
@@ -405,7 +405,7 @@ def test_configure_optimizers(model):
     assert isinstance(scheduler["scheduler"], torch.optim.lr_scheduler.LambdaLR)
 
 
-def test_configure_optimizers_with_task_learning_rate(monkeypatch):
+def test_configure_optimizers_with_task_learning_rate():
     model = TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         model_name_or_path="prajjwal1/bert-tiny",
         num_classes=5,
