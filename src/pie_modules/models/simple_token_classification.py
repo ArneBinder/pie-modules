@@ -128,14 +128,11 @@ class SimpleTokenClassificationModel(
                 attention_mask=inputs["attention_mask"],
                 special_tokens_mask=inputs["special_tokens_mask"],
             )
-            # TODO: do not do this here, but in the metric (current approach works just for token wise F1)
-            mask = targets != self.label_pad_id
-            predicted_tags_valid = predicted_tags[mask]
-            targets_valid = targets[mask]
-            metric(predicted_tags_valid, targets_valid)
 
+            metric(predicted_tags, targets)
+            metric_name = getattr(metric, "name", None) or type(metric).__name__
             self.log(
-                f"metric/{type(metric).__name__}/{stage}",
+                f"metric/{metric_name}/{stage}",
                 metric,
                 on_step=False,
                 on_epoch=True,

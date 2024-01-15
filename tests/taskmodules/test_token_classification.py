@@ -730,7 +730,6 @@ def test_configure_model_metric(documents):
     taskmodule.post_prepare()
 
     metric = taskmodule.configure_model_metric(stage="test")
-    assert isinstance(metric, MulticlassF1Score)
     metric_state = {k: v.tolist() for k, v in metric.metric_state.items()}
     assert metric_state == {
         "tp": [0, 0, 0, 0, 0],

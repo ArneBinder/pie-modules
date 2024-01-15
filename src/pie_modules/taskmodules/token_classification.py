@@ -45,6 +45,7 @@ from pie_modules.documents import (
     TokenDocumentWithLabeledSpans,
     TokenDocumentWithLabeledSpansAndLabeledPartitions,
 )
+from pie_modules.taskmodules.metrics import WrappedMetricWithPrepareFunction
 from pie_modules.utils import list_of_dicts2dict_of_lists
 
 DocumentType: TypeAlias = TextDocument
@@ -368,8 +369,20 @@ class TokenClassificationTaskModule(TaskModuleType):
             yield self.span_annotation, span.copy()
 
     def configure_model_metric(self, stage: str) -> Metric:
-        return F1Score(
+        def remove_label_pad_ids(labels: torch.LongTensor) -> torch.LongTensor:
+            # remove the special tokens and padding from the predicted / target labels
+            # because the label_pad_id is usually not a valid index (e.g. -100)
+            mask = labels != self.label_pad_id
+            labels_valid = labels[mask]
+            # torch.testing.assert_close(labels, labels_valid)
+            return labels_valid
+
+        f1_score = F1Score(
             num_classes=len(self.label_to_id),
             task="multiclass",
             average="macro",
+        )
+        return WrappedMetricWithPrepareFunction(
+            metric=f1_score,
+            prepare_function=remove_label_pad_ids,
         )
