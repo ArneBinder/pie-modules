@@ -305,6 +305,7 @@ def test_step(batch, model, config):
 
 
 def test_training_step(batch, model, config):
+    assert model.metric_train is None
     loss = model.training_step(batch, batch_idx=0)
     assert loss is not None
     if config == {}:
@@ -329,23 +330,31 @@ def test_training_step_without_attention_mask(batch, model, config):
 
 
 def test_validation_step(batch, model, config):
+    model.metric_val.reset()
     loss = model.validation_step(batch, batch_idx=0)
     assert loss is not None
+    metric_value = model.metric_val.compute()
     if config == {}:
         torch.testing.assert_close(loss, torch.tensor(59.42658996582031))
+        torch.testing.assert_close(metric_value, torch.tensor(0.19285714626312256))
     elif config == {"use_crf": False}:
         torch.testing.assert_close(loss, torch.tensor(1.6708829402923584))
+        torch.testing.assert_close(metric_value, torch.tensor(0.08615384995937347))
     else:
         raise ValueError(f"Unknown config: {config}")
 
 
 def test_test_step(batch, model, config):
+    model.metric_test.reset()
     loss = model.test_step(batch, batch_idx=0)
     assert loss is not None
+    metric_value = model.metric_test.compute()
     if config == {}:
         torch.testing.assert_close(loss, torch.tensor(59.42658996582031))
+        torch.testing.assert_close(metric_value, torch.tensor(0.19285714626312256))
     elif config == {"use_crf": False}:
         torch.testing.assert_close(loss, torch.tensor(1.6708829402923584))
+        torch.testing.assert_close(metric_value, torch.tensor(0.08615384995937347))
     else:
         raise ValueError(f"Unknown config: {config}")
 

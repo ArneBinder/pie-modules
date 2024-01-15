@@ -252,21 +252,28 @@ def test_forward(batch, model):
 
 
 def test_training_step(batch, model, config):
+    assert model.metric_train is None
     loss = model.training_step(batch, batch_idx=0)
     assert loss is not None
     torch.testing.assert_close(loss, torch.tensor(1.676901936531067))
 
 
 def test_validation_step(batch, model, config):
+    model.metric_val.reset()
     loss = model.validation_step(batch, batch_idx=0)
     assert loss is not None
     torch.testing.assert_close(loss, torch.tensor(1.676901936531067))
+    metric_value = model.metric_val.compute()
+    torch.testing.assert_close(metric_value, torch.tensor(0.04210526496171951))
 
 
 def test_test_step(batch, model, config):
+    model.metric_test.reset()
     loss = model.test_step(batch, batch_idx=0)
     assert loss is not None
     torch.testing.assert_close(loss, torch.tensor(1.676901936531067))
+    metric_value = model.metric_test.compute()
+    torch.testing.assert_close(metric_value, torch.tensor(0.04210526496171951))
 
 
 @pytest.mark.parametrize("test_step", [False, True])
