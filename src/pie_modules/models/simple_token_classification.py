@@ -110,7 +110,14 @@ class SimpleTokenClassificationModel(
 
         loss = output.loss
         # show loss on each step only during training
-        self.log(f"{stage}/loss", loss, on_step=(stage == TRAINING), on_epoch=True, prog_bar=True)
+        self.log(
+            f"loss/{stage}",
+            loss,
+            on_step=(stage == TRAINING),
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
+        )
 
         if metric is not None:
             predicted_tags = self.decode(
