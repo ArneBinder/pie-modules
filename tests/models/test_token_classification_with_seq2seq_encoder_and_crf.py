@@ -35,10 +35,7 @@ def taskmodule_config():
     }
 
 
-@pytest.mark.skip(reason="Only to recreate the taskmodule_config if taskmodule has changed")
 def test_taskmodule_config(documents, taskmodule_config):
-    from pie_modules.taskmodules import TokenClassificationTaskModule
-
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = TokenClassificationTaskModule(
         span_annotation="entities",
@@ -48,11 +45,8 @@ def test_taskmodule_config(documents, taskmodule_config):
     assert taskmodule.config == taskmodule_config
 
 
-@pytest.mark.skip(reason="Only to recreate the batch if taskmodule has changed")
 def test_batch(documents, batch, taskmodule_config):
-    from pytorch_ie import AutoTaskModule
-
-    taskmodule = AutoTaskModule.from_config(taskmodule_config)
+    taskmodule = TokenClassificationTaskModule.from_config(taskmodule_config)
     taskmodule.post_prepare()
     encodings = taskmodule.encode(documents, encode_target=True, as_dataset=True)
     batch_from_documents = taskmodule.collate(encodings[:4])
