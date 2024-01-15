@@ -20,8 +20,23 @@ def config(config_str):
     return CONFIG_DICT[config_str]
 
 
-@pytest.mark.skip(reason="Only to recreate the batch if taskmodule has changed")
-def test_batch(documents, batch):
+@pytest.fixture
+def taskmodule_config():
+    return {
+        "taskmodule_type": "TokenClassificationTaskModule",
+        "tokenizer_name_or_path": "bert-base-cased",
+        "span_annotation": "entities",
+        "partition_annotation": None,
+        "label_pad_id": -100,
+        "labels": ["ORG", "PER"],
+        "include_ill_formed_predictions": True,
+        "tokenize_kwargs": {},
+        "pad_kwargs": None,
+    }
+
+
+@pytest.mark.skip(reason="Only to recreate the taskmodule_config if taskmodule has changed")
+def test_taskmodule_config(documents, taskmodule_config):
     from pie_modules.taskmodules import TokenClassificationTaskModule
 
     tokenizer_name_or_path = "bert-base-cased"
@@ -30,6 +45,15 @@ def test_batch(documents, batch):
         tokenizer_name_or_path=tokenizer_name_or_path,
     )
     taskmodule.prepare(documents)
+    assert taskmodule.config == taskmodule_config
+
+
+@pytest.mark.skip(reason="Only to recreate the batch if taskmodule has changed")
+def test_batch(documents, batch, taskmodule_config):
+    from pytorch_ie import AutoTaskModule
+
+    taskmodule = AutoTaskModule.from_config(taskmodule_config)
+    taskmodule.post_prepare()
     encodings = taskmodule.encode(documents, encode_target=True)
     # just take the first 4 encodings
     batch_from_documents = taskmodule.collate(encodings[:4])

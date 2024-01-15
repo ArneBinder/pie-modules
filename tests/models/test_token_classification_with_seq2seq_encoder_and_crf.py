@@ -1,14 +1,8 @@
 import pytest
 import torch
-import transformers
 from pytorch_lightning import Trainer
-from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
 
 from pie_modules.models import TokenClassificationModelWithSeq2SeqEncoderAndCrf
-from pie_modules.models.token_classification_with_seq2seq_encoder_and_crf import (
-    HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE,
-)
-from pie_modules.taskmodules import TokenClassificationTaskModule
 from tests import _config_to_str
 
 CONFIGS = [{}, {"use_crf": False}]
@@ -25,14 +19,40 @@ def config(config_str):
     return CONFIG_DICT[config_str]
 
 
-@pytest.mark.skip(reason="Only to recreate the batch if taskmodule has changed")
-def test_batch(documents, batch):
+@pytest.fixture
+def taskmodule_config():
+    return {
+        "taskmodule_type": "TokenClassificationTaskModule",
+        "tokenizer_name_or_path": "bert-base-cased",
+        "span_annotation": "entities",
+        "partition_annotation": None,
+        "label_pad_id": -100,
+        "labels": ["ORG", "PER"],
+        "include_ill_formed_predictions": True,
+        "tokenize_kwargs": {},
+        "pad_kwargs": None,
+    }
+
+
+@pytest.mark.skip(reason="Only to recreate the taskmodule_config if taskmodule has changed")
+def test_taskmodule_config(documents, taskmodule_config):
+    from pie_modules.taskmodules import TokenClassificationTaskModule
+
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = TokenClassificationTaskModule(
         span_annotation="entities",
         tokenizer_name_or_path=tokenizer_name_or_path,
     )
     taskmodule.prepare(documents)
+    assert taskmodule.config == taskmodule_config
+
+
+@pytest.mark.skip(reason="Only to recreate the batch if taskmodule has changed")
+def test_batch(documents, batch, taskmodule_config):
+    from pytorch_ie import AutoTaskModule
+
+    taskmodule = AutoTaskModule.from_config(taskmodule_config)
+    taskmodule.post_prepare()
     encodings = taskmodule.encode(documents, encode_target=True, as_dataset=True)
     batch_from_documents = taskmodule.collate(encodings[:4])
 
