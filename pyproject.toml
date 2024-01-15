@@ -24,7 +24,9 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.9"
-pytorch-ie = ">=0.29.6,<0.30.0"
+# pytorch-ie = ">=0.29.7,<0.30.0"
+# install pytorch-ie from branch: from_config_post_prepare
+pytorch-ie = {git = "https://github.com/ArneBinder/pytorch-ie.git", branch = "from_config_post_prepare"}
 pytorch-lightning = "^2.1.0"
 torchmetrics = "^1"
 pytorch-crf = ">=0.7.2"

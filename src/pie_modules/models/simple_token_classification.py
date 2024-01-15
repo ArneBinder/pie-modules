@@ -62,8 +62,6 @@ class SimpleTokenClassificationModel(
             setattr(self, f"metric_{stage}", None)
         if taskmodule_config is not None:
             self.taskmodule = AutoTaskModule.from_config(taskmodule_config)
-            # TODO: remove this once this is done in `TaskModule._from_config()`
-            self.taskmodule.post_prepare()
             for stage in metric_stages:
                 if stage not in [TRAINING, VALIDATION, TEST]:
                     raise ValueError(

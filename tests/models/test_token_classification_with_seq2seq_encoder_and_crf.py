@@ -47,7 +47,6 @@ def test_taskmodule_config(documents, taskmodule_config):
 
 def test_batch(documents, batch, taskmodule_config):
     taskmodule = TokenClassificationTaskModule.from_config(taskmodule_config)
-    taskmodule.post_prepare()
     encodings = taskmodule.encode(documents, encode_target=True, as_dataset=True)
     batch_from_documents = taskmodule.collate(encodings[:4])
 
