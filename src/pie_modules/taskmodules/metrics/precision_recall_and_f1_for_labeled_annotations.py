@@ -1,10 +1,12 @@
 import logging
 from collections import Counter
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional, Union
 
 import torch
 from pytorch_ie import Annotation
 from torchmetrics import Metric
+
+from pie_modules.utils import flatten_nested_dict
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +31,13 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
         label_mapping: Optional[Dict[Any, str]] = None,
         key_micro: str = "micro",
         in_percent: bool = False,
+        flatten_result_with_sep: Optional[str] = None,
     ):
         super().__init__()
         self.label_mapping = label_mapping
         self.key_micro = key_micro
         self.in_percent = in_percent
+        self.flatten_result_with_sep = flatten_result_with_sep
         self.add_state("gold", default=[])
         self.add_state("predicted", default=[])
         self.add_state("correct", default=[])
@@ -69,7 +73,7 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
             return self.label_mapping[label]
         return label
 
-    def compute(self) -> Dict[Optional[str], Dict[str, float]]:
+    def compute(self) -> Union[Dict[str, Any], Dict[Optional[str], dict[str, float]]]:
         result: Dict[Optional[str], Dict[str, float]] = {}
 
         # per class
@@ -95,4 +99,7 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
             )
         result[self.key_micro] = overall
 
-        return result
+        if self.flatten_result_with_sep is not None:
+            return flatten_nested_dict(result, sep=self.flatten_result_with_sep)
+        else:
+            return result
