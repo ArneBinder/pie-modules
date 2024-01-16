@@ -23,7 +23,7 @@ from pytorch_ie.core.taskmodule import (
     TaskBatchEncoding,
 )
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
-from torchmetrics import Metric, MetricCollection
+from torchmetrics import Metric
 from transformers import AutoTokenizer, PreTrainedTokenizer
 from typing_extensions import TypeAlias
 
@@ -35,7 +35,7 @@ from pie_modules.document.processing import (
 from pie_modules.utils import resolve_type
 
 from .common import BatchableMixin, get_first_occurrence_index
-from .metrics import WrappedMetricWithPrepareFunction
+from .metrics import WrappedMetricWithUnbatchFunction
 
 logger = logging.getLogger(__name__)
 
@@ -441,10 +441,6 @@ class TextToTextTaskModule(
             ]
             return texts
 
-        return WrappedMetricWithPrepareFunction(
-            metric=self.text_metric_type(),
-            prepare_function=unbatch_and_untokenize,
-            prepare_does_unbatch=True,
-            # prefix="metric/",
-            # postfix=f"/{stage}",
+        return WrappedMetricWithUnbatchFunction(
+            metric=self.text_metric_type(), unbatch_function=unbatch_and_untokenize
         )

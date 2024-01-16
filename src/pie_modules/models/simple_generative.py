@@ -8,7 +8,7 @@ from pytorch_ie.auto import AutoTaskModule
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch.optim import Optimizer
-from torchmetrics import Metric, MetricCollection
+from torchmetrics import Metric
 from transformers import PreTrainedModel, get_linear_schedule_with_warmup
 
 from pie_modules.models.interface import RequiresTaskmoduleConfig
@@ -127,31 +127,43 @@ class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
             )
 
         if taskmodule_config is not None:
-            self.taskmodule = AutoTaskModule.from_config(taskmodule_config)
+            # TODO: use AutoTaskModule.from_config() when it is available
+            self.taskmodule = AutoTaskModule._from_pretrained(
+                model_id="",
+                revision=None,
+                cache_dir=None,
+                force_download=False,
+                proxies=None,
+                resume_download=False,
+                local_files_only=False,
+                token=None,
+                map_location="cpu",
+                strict=False,
+                config=taskmodule_config,
+            )
         else:
             self.taskmodule = None
 
         self.metric_intervals = metric_intervals or {}
-        self.configure_metrics(metric_stages=metric_stages)
+        self.metrics = self.configure_metrics(metric_stages=metric_stages)
 
         self.generation_config = self.configure_generation(**(override_generation_kwargs or {}))
 
-    def configure_metrics(self, metric_stages: List[str]) -> None:
+    def configure_metrics(self, metric_stages: List[str]) -> Dict[str, Metric]:
         if self.taskmodule is not None:
-            for stage in metric_stages:
-                stage_metric = self.taskmodule.configure_model_metric(stage=stage)
-                if stage_metric is not None:
-                    self.set_metric(stage=stage, metric=stage_metric)
-                else:
-                    logger.warning(
-                        f"The taskmodule {self.taskmodule.__class__.__name__} does not define a metric for stage "
-                        f"'{stage}'."
-                    )
+            # get the metrics for the different stages
+            metrics = {
+                stage: self.taskmodule.configure_model_metric(stage) for stage in metric_stages
+            }
+            # keep only the metrics that are not None
+            # NOTE: This is not a ModuleDict, so this will not live on the torch device!
+            return {k: v for k, v in metrics.items() if v is not None}
         else:
             logger.warning(
                 "No taskmodule is available, so no metrics will be created. Please set taskmodule_config to a valid "
                 "taskmodule config to use metrics."
             )
+            return {}
 
     def configure_generation(self, **kwargs) -> Dict[str, Any]:
         if self.taskmodule is not None:
@@ -192,16 +204,8 @@ class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
     def forward(self, inputs, **kwargs):
         return self.model(**inputs, **kwargs)
 
-    def set_metric(self, stage: str, metric: Union[Metric, MetricCollection]) -> None:
-        if stage not in [STAGE_TRAIN, STAGE_VAL, STAGE_TEST]:
-            raise ValueError(
-                f"unknown metric stage: {stage}. metric_stages must only contain the values "
-                f'"{STAGE_TRAIN}", "{STAGE_VAL}", and "{STAGE_TEST}".'
-            )
-        setattr(self, f"metric_{stage}", metric)
-
-    def get_metric(self, stage: str, batch_idx: int) -> Optional[Union[Metric, MetricCollection]]:
-        stage_metrics = getattr(self, f"metric_{stage}", None)
+    def get_metric(self, stage: str, batch_idx: int) -> Optional[Metric]:
+        stage_metrics = self.metrics.get(stage, None)
         metric_interval = self.metric_intervals.get(stage, 1)
         if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
             return stage_metrics
@@ -231,18 +235,7 @@ class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
                 # get the indices (these are without the initial bos_ids, see above)
                 prediction = torch.argmax(logits, dim=-1)
             # the format of expected needs to be the same as the format of prediction
-            metric(prediction, targets["labels"])
-            log_kwargs = {"on_step": False, "on_epoch": True, "sync_dist": True}
-            if isinstance(metric, Metric):
-                key = getattr(metric, "name", None) or f"metric/{type(metric).__name__}/{stage}"
-                self.log(key, value=metric, **log_kwargs)
-            elif isinstance(metric, MetricCollection):
-                self.log_dict(metric, **log_kwargs)
-            else:
-                raise ValueError(
-                    f"metric must be an instance of torchmetrics.Metric or torchmetrics.MetricCollection, but is "
-                    f"of type {type(metric)}."
-                )
+            metric.update(prediction, targets["labels"])
 
         return loss
 
@@ -260,6 +253,27 @@ class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
         loss = self.step(batch, stage=STAGE_TEST, batch_idx=batch_idx)
 
         return loss
+
+    def on_train_epoch_end(self) -> None:
+        self._on_epoch_end(stage=STAGE_TRAIN)
+
+    def on_validation_epoch_end(self) -> None:
+        self._on_epoch_end(stage=STAGE_VAL)
+
+    def on_test_epoch_end(self) -> None:
+        self._on_epoch_end(stage=STAGE_TEST)
+
+    def _on_epoch_end(self, stage: str) -> None:
+        if self.metrics is not None:
+            metrics = self.metrics.get(stage, None)
+            if metrics is not None:
+                metric_dict = metrics.compute()
+                metrics.reset()
+                # TODO: consider https://lightning.ai/docs/torchmetrics/stable/pages/overview.html#metriccollection
+                #  and self.log_dict()
+                metric_dict_flat = flatten_dict(d=metric_dict, sep="/")
+                for k, v in metric_dict_flat.items():
+                    self.log(f"metric/{k}/{stage}", v, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
         if hasattr(self.model, "configure_optimizer") and callable(self.model.configure_optimizer):

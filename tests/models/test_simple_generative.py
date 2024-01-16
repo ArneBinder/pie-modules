@@ -148,6 +148,8 @@ def test_training_step(batch, model):
     assert len(metric_values_float) > 0
     assert all([math.isnan(value) for value in metric_values_float.values()])
 
+    model.on_train_epoch_end()
+
 
 def test_validation_step(batch, model):
     model.eval()
@@ -175,6 +177,8 @@ def test_validation_step(batch, model):
         "rougeLsum_recall": 0.0,
     }
 
+    model.on_validation_epoch_end()
+
 
 def test_test_step(batch, model):
     model.eval()
@@ -201,6 +205,8 @@ def test_test_step(batch, model):
         "rougeLsum_precision": 0.03333333507180214,
         "rougeLsum_recall": 0.1666666716337204,
     }
+
+    model.on_test_epoch_end()
 
 
 def test_predict_step(batch, model):

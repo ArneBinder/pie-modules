@@ -5,3 +5,4 @@ from .wrapped_layer_metrics_with_unbatch_and_decode_with_errors_function import 
     WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction,
 )
 from .wrapped_metric_with_prepare_function import WrappedMetricWithPrepareFunction
+from .wrapped_metric_with_unbatch_function import WrappedMetricWithUnbatchFunction

@@ -208,31 +208,34 @@ def test_configure_model_metrics(taskmodule):
     assert metric is not None
     values = metric.compute()
     keys = {
-        "rougeL_fmeasure",
         "rouge2_fmeasure",
         "rougeL_recall",
         "rouge1_precision",
-        "rougeL_precision",
+        "rouge1_recall",
         "rouge2_recall",
+        "rougeL_precision",
+        "rouge1_fmeasure",
         "rougeLsum_recall",
         "rougeLsum_precision",
+        "rougeL_fmeasure",
         "rouge2_precision",
-        "rouge1_fmeasure",
-        "rouge1_recall",
         "rougeLsum_fmeasure",
     }
-
     assert set(values) == keys
     assert all(torch.isnan(value) for value in values.values())
 
     labels = torch.tensor([[3, 9, 1708, 1, 0], [3, 9, 1200, 1708, 1]])
-    metric(prediction=labels, target=labels)
+    metric.update(predictions=labels, targets=labels)
+    assert set(metric.metric_state) == keys
+    assert all(
+        value == [torch.tensor(1.0), torch.tensor(1.0)] for value in metric.metric_state.values()
+    )
     values = metric.compute()
     assert set(values) == keys
     assert all(value == torch.tensor(1.0) for value in values.values())
 
     random_labels = torch.tensor([[875, 885, 112, 289, 769], [270, 583, 970, 114, 71]])
-    metric(prediction=random_labels, target=labels)
+    metric.update(predictions=random_labels, targets=labels)
     values = metric.compute()
     assert {k: v.item() for k, v in values.items()} == {
         "rouge1_fmeasure": 0.5625,
