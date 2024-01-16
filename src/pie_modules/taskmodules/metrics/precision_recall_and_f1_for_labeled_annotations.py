@@ -1,6 +1,6 @@
 import logging
 from collections import Counter
-from typing import Any, Dict, Iterable, Optional, Union
+from typing import Any, Dict, Iterable, Optional, Sequence, Tuple, Union
 
 import torch
 from pytorch_ie import Annotation
@@ -73,31 +73,36 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
             return self.label_mapping[label]
         return label
 
-    def compute(self) -> Union[Dict[str, Any], Dict[Optional[str], dict[str, float]]]:
-        result: Dict[Optional[str], Dict[str, float]] = {}
-
+    def get_counts(
+        self,
+        gold: Sequence[Annotation],
+        predicted: Sequence[Annotation],
+        correct: Sequence[Annotation],
+    ) -> Dict[Optional[str], Tuple[int, int, int]]:
+        result = {}
         # per class
-        gold_counter = Counter([self.get_label(ann) for idx, ann in self.gold])
-        predicted_counter = Counter([self.get_label(ann) for idx, ann in self.predicted])
-        correct_counter = Counter([self.get_label(ann) for idx, ann in self.correct])
+        gold_counter = Counter([self.get_label(ann) for idx, ann in gold])
+        predicted_counter = Counter([self.get_label(ann) for idx, ann in predicted])
+        correct_counter = Counter([self.get_label(ann) for idx, ann in correct])
         for label in gold_counter.keys() | predicted_counter.keys():
-            n_gold = gold_counter.get(label, 0)
-            n_predicted = predicted_counter.get(label, 0)
-            n_correct = correct_counter.get(label, 0)
-            result[label] = self.get_precision_recall_f1(n_gold, n_predicted, n_correct)
+            if label == self.key_micro:
+                raise ValueError(
+                    f"The key '{self.key_micro}' was used as an annotation label, but it is reserved for "
+                    f"the micro average. You can change which key is used for that with the 'key_micro' argument."
+                )
+            result[label] = (
+                gold_counter.get(label, 0),
+                predicted_counter.get(label, 0),
+                correct_counter.get(label, 0),
+            )
 
         # overall
-        n_gold = len(self.gold)
-        n_predicted = len(self.predicted)
-        n_correct = len(self.correct)
-        overall = self.get_precision_recall_f1(n_gold, n_predicted, n_correct)
+        result[self.key_micro] = (len(gold), len(predicted), len(correct))
+        return result
 
-        if self.key_micro in result:
-            raise ValueError(
-                f"The key '{self.key_micro}' was used as an annotation label, but it is reserved for "
-                f"the micro average. You can change which key is used for that with the 'key_micro' argument."
-            )
-        result[self.key_micro] = overall
+    def compute(self) -> Union[Dict[str, Any], Dict[Optional[str], dict[str, float]]]:
+        counts = self.get_counts(self.gold, self.predicted, self.correct)
+        result = {label: self.get_precision_recall_f1(*counts[label]) for label in counts.keys()}
 
         if self.flatten_result_with_sep is not None:
             return flatten_nested_dict(result, sep=self.flatten_result_with_sep)
