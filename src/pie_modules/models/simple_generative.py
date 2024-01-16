@@ -145,25 +145,26 @@ class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
             self.taskmodule = None
 
         self.metric_intervals = metric_intervals or {}
-        self.metrics = self.configure_metrics(metric_stages=metric_stages)
+        self.configure_metrics(metric_stages=metric_stages)
 
         self.generation_config = self.configure_generation(**(override_generation_kwargs or {}))
 
-    def configure_metrics(self, metric_stages: List[str]) -> Dict[str, Metric]:
+    def configure_metrics(self, metric_stages: List[str]) -> None:
         if self.taskmodule is not None:
-            # get the metrics for the different stages
-            metrics = {
-                stage: self.taskmodule.configure_model_metric(stage) for stage in metric_stages
-            }
-            # keep only the metrics that are not None
-            # NOTE: This is not a ModuleDict, so this will not live on the torch device!
-            return {k: v for k, v in metrics.items() if v is not None}
+            for stage in metric_stages:
+                stage_metric = self.taskmodule.configure_model_metric(stage=stage)
+                if stage_metric is not None:
+                    self.set_metric(stage=stage, metric=stage_metric)
+                else:
+                    logger.warning(
+                        f"The taskmodule {self.taskmodule.__class__.__name__} does not define a metric for stage "
+                        f"'{stage}'."
+                    )
         else:
             logger.warning(
                 "No taskmodule is available, so no metrics will be created. Please set taskmodule_config to a valid "
                 "taskmodule config to use metrics."
             )
-            return {}
 
     def configure_generation(self, **kwargs) -> Dict[str, Any]:
         if self.taskmodule is not None:
@@ -204,8 +205,16 @@ class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
     def forward(self, inputs, **kwargs):
         return self.model(**inputs, **kwargs)
 
-    def get_metric(self, stage: str, batch_idx: int) -> Optional[Metric]:
-        stage_metrics = self.metrics.get(stage, None)
+    def set_metric(self, stage: str, metric: Union[Metric, MetricCollection]) -> None:
+        if stage not in [STAGE_TRAIN, STAGE_VAL, STAGE_TEST]:
+            raise ValueError(
+                f"unknown metric stage: {stage}. metric_stages must only contain the values "
+                f'"{STAGE_TRAIN}", "{STAGE_VAL}", and "{STAGE_TEST}".'
+            )
+        setattr(self, f"metric_{stage}", metric)
+
+    def get_metric(self, stage: str, batch_idx: int) -> Optional[Union[Metric, MetricCollection]]:
+        stage_metrics = getattr(self, f"metric_{stage}", None)
         metric_interval = self.metric_intervals.get(stage, 1)
         if stage_metrics is not None and (batch_idx + 1) % metric_interval == 0:
             return stage_metrics
