@@ -23,7 +23,6 @@ from typing import (
 )
 
 import torch
-from datasets import Metric
 from pytorch_ie import AnnotationLayer
 from pytorch_ie.annotations import LabeledSpan
 from pytorch_ie.core import TaskEncoding, TaskModule
@@ -34,7 +33,7 @@ from pytorch_ie.documents import (
 )
 from pytorch_ie.utils.span import bio_tags_to_spans
 from tokenizers import Encoding
-from torchmetrics import F1Score, MetricCollection
+from torchmetrics import F1Score, Metric, MetricCollection
 from transformers import AutoTokenizer
 from typing_extensions import TypeAlias
 
