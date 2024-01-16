@@ -731,17 +731,38 @@ def test_configure_model_metric(documents):
 
     metric = taskmodule.configure_model_metric(stage="test")
     values = metric.compute()
-    assert values == {"metric/macro/f1/test": torch.tensor(0.0)}
+    assert values == {
+        "metric/micro/test": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+        "metric/token/macro/f1/test": torch.tensor(0.0),
+    }
 
     batch = taskmodule.collate(taskmodule.encode(documents, encode_target=True))
     targets = batch[1]
     metric(targets, targets)
     values = metric.compute()
-    assert values == {"metric/macro/f1/test": torch.tensor(1.0)}
+    assert values == {
+        "metric/LOC/test": {"f1": 1.0, "precision": 1.0, "recall": 1.0},
+        "metric/PER/test": {"f1": 1.0, "precision": 1.0, "recall": 1.0},
+        "metric/micro/test": {"f1": 1.0, "precision": 1.0, "recall": 1.0},
+        "metric/token/macro/f1/test": torch.tensor(1.0),
+    }
 
     predictions = torch.ones_like(targets)
     # we need to set the same padding as in the targets
     predictions[targets == taskmodule.label_pad_id] = taskmodule.label_pad_id
     metric(predictions, targets)
     values = metric.compute()
-    assert values == {"metric/macro/f1/test": torch.tensor(0.5434783101081848)}
+    assert values == {
+        "metric/LOC/test": {
+            "recall": 0.047619047619047616,
+            "precision": 0.5,
+            "f1": 0.08695652173913042,
+        },
+        "metric/PER/test": {"recall": 1.0, "precision": 0.5, "f1": 0.6666666666666666},
+        "metric/micro/test": {
+            "recall": 0.13043478260869565,
+            "precision": 0.5,
+            "f1": 0.20689655172413793,
+        },
+        "metric/token/macro/f1/test": torch.tensor(0.5434783101081848),
+    }

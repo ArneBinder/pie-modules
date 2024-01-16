@@ -264,7 +264,20 @@ def test_validation_step(batch, model, config):
     assert loss is not None
     torch.testing.assert_close(loss, torch.tensor(1.676901936531067))
     metric_value = model.metric_val.compute()
-    assert metric_value == {"metric/macro/f1/val": torch.tensor(0.04210526496171951)}
+    assert metric_value == {
+        "metric/PER/val": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        "metric/ORG/val": {
+            "recall": 0.2857142857142857,
+            "precision": 0.6666666666666666,
+            "f1": 0.4,
+        },
+        "metric/micro/val": {
+            "recall": 0.08695652173913043,
+            "precision": 0.3333333333333333,
+            "f1": 0.13793103448275862,
+        },
+        "metric/token/macro/f1/val": torch.tensor(0.04210526496171951),
+    }
 
 
 def test_test_step(batch, model, config):
@@ -273,7 +286,20 @@ def test_test_step(batch, model, config):
     assert loss is not None
     torch.testing.assert_close(loss, torch.tensor(1.676901936531067))
     metric_value = model.metric_test.compute()
-    assert metric_value == {"metric/macro/f1/test": torch.tensor(0.04210526496171951)}
+    assert metric_value == {
+        "metric/PER/test": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+        "metric/ORG/test": {
+            "recall": 0.2857142857142857,
+            "precision": 0.6666666666666666,
+            "f1": 0.4,
+        },
+        "metric/micro/test": {
+            "recall": 0.08695652173913043,
+            "precision": 0.3333333333333333,
+            "f1": 0.13793103448275862,
+        },
+        "metric/token/macro/f1/test": torch.tensor(0.04210526496171951),
+    }
 
 
 @pytest.mark.parametrize("test_step", [False, True])

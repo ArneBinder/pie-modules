@@ -45,7 +45,10 @@ from pie_modules.documents import (
     TokenDocumentWithLabeledSpans,
     TokenDocumentWithLabeledSpansAndLabeledPartitions,
 )
-from pie_modules.taskmodules.metrics import WrappedMetricWithPrepareFunction
+from pie_modules.taskmodules.metrics import (
+    PrecisionRecallAndF1ForLabeledAnnotations,
+    WrappedMetricWithPrepareFunction,
+)
 from pie_modules.utils import list_of_dicts2dict_of_lists
 
 DocumentType: TypeAlias = TextDocument
@@ -386,8 +389,30 @@ class TokenClassificationTaskModule(TaskModuleType):
             metric=f1_score,
             prepare_function=remove_label_pad_ids,
         )
+
+        def unbatch_and_decode_annotations(
+            model_output: ModelOutputType,
+        ) -> List[Sequence[LabeledSpan]]:
+            task_outputs = self.unbatch_output(model_output)
+            annotations = [
+                self.decode_annotations(task_output)["labeled_spans"]
+                for task_output in task_outputs
+            ]
+            return annotations
+
+        p_r_f1_score = PrecisionRecallAndF1ForLabeledAnnotations()
+        p_r_f1_score_wrapped = WrappedMetricWithPrepareFunction(
+            metric=p_r_f1_score,
+            prepare_function=unbatch_and_decode_annotations,
+            prepare_does_unbatch=True,
+        )
+
         return MetricCollection(
-            {"macro/f1": f1_score_wrapped},
+            {
+                "token/macro/f1": f1_score_wrapped,
+                # TODO: "span" does never appear in the metric key
+                "span": p_r_f1_score_wrapped,
+            },
             prefix="metric/",
             postfix=f"/{stage}",
         )

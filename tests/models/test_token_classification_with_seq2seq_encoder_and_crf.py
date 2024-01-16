@@ -336,10 +336,28 @@ def test_validation_step(batch, model, config):
     metric_value = model.metric_val.compute()
     if config == {}:
         torch.testing.assert_close(loss, torch.tensor(59.42658996582031))
-        assert metric_value == {"metric/macro/f1/val": torch.tensor(0.19285714626312256)}
+        assert metric_value == {
+            "metric/ORG/val": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "metric/PER/val": {
+                "recall": 0.047619047619047616,
+                "precision": 0.3333333333333333,
+                "f1": 0.08333333333333333,
+            },
+            "metric/micro/val": {
+                "recall": 0.041666666666666664,
+                "precision": 0.16666666666666666,
+                "f1": 0.06666666666666667,
+            },
+            "metric/token/macro/f1/val": torch.tensor(0.19285714626312256),
+        }
     elif config == {"use_crf": False}:
         torch.testing.assert_close(loss, torch.tensor(1.6708829402923584))
-        assert metric_value == {"metric/macro/f1/val": torch.tensor(0.08615384995937347)}
+        assert metric_value == {
+            "metric/ORG/val": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+            "metric/PER/val": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+            "metric/micro/val": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+            "metric/token/macro/f1/val": torch.tensor(0.08615384995937347),
+        }
     else:
         raise ValueError(f"Unknown config: {config}")
 
@@ -351,10 +369,28 @@ def test_test_step(batch, model, config):
     metric_value = model.metric_test.compute()
     if config == {}:
         torch.testing.assert_close(loss, torch.tensor(59.42658996582031))
-        assert metric_value == {"metric/macro/f1/test": torch.tensor(0.19285714626312256)}
+        assert metric_value == {
+            "metric/PER/test": {
+                "recall": 0.047619047619047616,
+                "precision": 0.3333333333333333,
+                "f1": 0.08333333333333333,
+            },
+            "metric/ORG/test": {"recall": 0.0, "precision": 0.0, "f1": 0.0},
+            "metric/micro/test": {
+                "recall": 0.041666666666666664,
+                "precision": 0.16666666666666666,
+                "f1": 0.06666666666666667,
+            },
+            "metric/token/macro/f1/test": torch.tensor(0.19285714626312256),
+        }
     elif config == {"use_crf": False}:
         torch.testing.assert_close(loss, torch.tensor(1.6708829402923584))
-        assert metric_value == {"metric/macro/f1/test": torch.tensor(0.08615384995937347)}
+        assert metric_value == {
+            "metric/ORG/test": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+            "metric/PER/test": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+            "metric/micro/test": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+            "metric/token/macro/f1/test": torch.tensor(0.08615384995937347),
+        }
     else:
         raise ValueError(f"Unknown config: {config}")
 
