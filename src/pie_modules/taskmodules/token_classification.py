@@ -400,7 +400,7 @@ class TokenClassificationTaskModule(TaskModuleType):
             ]
             return annotations
 
-        p_r_f1_score = PrecisionRecallAndF1ForLabeledAnnotations()
+        p_r_f1_score = PrecisionRecallAndF1ForLabeledAnnotations(flatten_result_with_sep="/")
         p_r_f1_score_wrapped = WrappedMetricWithPrepareFunction(
             metric=p_r_f1_score,
             prepare_function=unbatch_and_decode_annotations,

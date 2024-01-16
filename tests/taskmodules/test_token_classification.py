@@ -732,7 +732,9 @@ def test_configure_model_metric(documents):
     metric = taskmodule.configure_model_metric(stage="test")
     values = metric.compute()
     assert values == {
-        "metric/micro/test": {"f1": 0.0, "precision": 0.0, "recall": 0.0},
+        "metric/micro/f1/test": 0.0,
+        "metric/micro/precision/test": 0.0,
+        "metric/micro/recall/test": 0.0,
         "metric/token/macro/f1/test": torch.tensor(0.0),
     }
 
@@ -741,9 +743,15 @@ def test_configure_model_metric(documents):
     metric(targets, targets)
     values = metric.compute()
     assert values == {
-        "metric/LOC/test": {"f1": 1.0, "precision": 1.0, "recall": 1.0},
-        "metric/PER/test": {"f1": 1.0, "precision": 1.0, "recall": 1.0},
-        "metric/micro/test": {"f1": 1.0, "precision": 1.0, "recall": 1.0},
+        "metric/LOC/f1/test": 1.0,
+        "metric/LOC/precision/test": 1.0,
+        "metric/LOC/recall/test": 1.0,
+        "metric/PER/f1/test": 1.0,
+        "metric/PER/precision/test": 1.0,
+        "metric/PER/recall/test": 1.0,
+        "metric/micro/f1/test": 1.0,
+        "metric/micro/precision/test": 1.0,
+        "metric/micro/recall/test": 1.0,
         "metric/token/macro/f1/test": torch.tensor(1.0),
     }
 
@@ -753,16 +761,14 @@ def test_configure_model_metric(documents):
     metric(predictions, targets)
     values = metric.compute()
     assert values == {
-        "metric/LOC/test": {
-            "recall": 0.047619047619047616,
-            "precision": 0.5,
-            "f1": 0.08695652173913042,
-        },
-        "metric/PER/test": {"recall": 1.0, "precision": 0.5, "f1": 0.6666666666666666},
-        "metric/micro/test": {
-            "recall": 0.13043478260869565,
-            "precision": 0.5,
-            "f1": 0.20689655172413793,
-        },
+        "metric/LOC/f1/test": 0.08695652173913042,
+        "metric/LOC/precision/test": 0.5,
+        "metric/LOC/recall/test": 0.047619047619047616,
+        "metric/PER/f1/test": 0.6666666666666666,
+        "metric/PER/precision/test": 0.5,
+        "metric/PER/recall/test": 1.0,
+        "metric/micro/f1/test": 0.20689655172413793,
+        "metric/micro/precision/test": 0.5,
+        "metric/micro/recall/test": 0.13043478260869565,
         "metric/token/macro/f1/test": torch.tensor(0.5434783101081848),
     }
