@@ -127,20 +127,7 @@ class SimpleGenerativeModel(PyTorchIEModel, RequiresTaskmoduleConfig):
             )
 
         if taskmodule_config is not None:
-            # TODO: use AutoTaskModule.from_config() when it is available
-            self.taskmodule = AutoTaskModule._from_pretrained(
-                model_id="",
-                revision=None,
-                cache_dir=None,
-                force_download=False,
-                proxies=None,
-                resume_download=False,
-                local_files_only=False,
-                token=None,
-                map_location="cpu",
-                strict=False,
-                config=taskmodule_config,
-            )
+            self.taskmodule = AutoTaskModule.from_config(taskmodule_config)
         else:
             self.taskmodule = None
 
