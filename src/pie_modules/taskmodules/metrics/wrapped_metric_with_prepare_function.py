@@ -1,15 +1,16 @@
 import logging
-from collections import defaultdict
-from typing import Any, Callable, Dict, Generic, TypeVar
+from typing import Any, Callable, Dict, Generic, List, TypeVar, Union
 
-from torchmetrics import Metric, MetricCollection
+from torch import Tensor
+from torchmetrics import Metric
+from torchmetrics.wrappers.abstract import WrapperMetric
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
 
-class WrappedMetricWithPrepareFunction(MetricCollection, Generic[T]):
+class WrappedMetricWithPrepareFunction(WrapperMetric, Generic[T]):
     """A wrapper around a metric that can be used with predictions and targets that are need to be
     prepared (e.g. un-batched) before passing them to the metric.
 
@@ -18,8 +19,8 @@ class WrappedMetricWithPrepareFunction(MetricCollection, Generic[T]):
         prepare_function: A function that prepares the input for the metric. It is called with
             the predictions as well as the targets.
         prepare_does_unbatch: If True, the prepare_function is expected to return an iterable of
-            individual inputs. This is used to unbatch the input before passing it to the wrapped
-            metric.
+            individual inputs. This can be used to un-batch the input before passing it to the
+            wrapped metric.
     """
 
     def __init__(
@@ -29,11 +30,12 @@ class WrappedMetricWithPrepareFunction(MetricCollection, Generic[T]):
         prepare_does_unbatch: bool = False,
         **kwargs,
     ) -> None:
-        super().__init__(metric, **kwargs)
+        super().__init__(**kwargs)
+        self.metric = metric
         self.prepare_function = prepare_function
         self.prepare_does_unbatch = prepare_does_unbatch
 
-    def forward(self, prediction: T, target: T) -> Dict[str, Any]:
+    def forward(self, prediction: T, target: T) -> Any:
         prediction_prepared = self.prepare_function(prediction)
         target_prepared = self.prepare_function(target)
         if self.prepare_does_unbatch:
@@ -44,11 +46,24 @@ class WrappedMetricWithPrepareFunction(MetricCollection, Generic[T]):
                 )
             if len(prediction_prepared) == 0:
                 raise ValueError("Empty batch.")
-            results = defaultdict(list)
+            results = []
             for prediction_str, target_str in zip(prediction_prepared, target_prepared):
-                for k, v in super().forward(prediction_str, target_str).items():
-                    results[k].append(v)
-            mean_results = {k: sum(v) / len(v) for k, v in results.items()}
-            return mean_results
+                current_result = self.metric(prediction_str, target_str)
+                results.append(current_result)
+            return results
         else:
-            return super().forward(prediction_prepared, target_prepared)
+            return self.metric(prediction_prepared, target_prepared)
+
+    def update(self, *_: Any, **__: Any) -> None:
+        """Overwrite to do nothing, because the functionality is handled by the wrapped metric."""
+        raise NotImplementedError
+
+    def compute(self) -> Any:
+        return self.metric.compute()
+
+    def reset(self) -> None:
+        self.metric.reset()
+
+    @property
+    def metric_state(self) -> Dict[str, Union[List[Tensor], Tensor]]:
+        return self.metric.metric_state

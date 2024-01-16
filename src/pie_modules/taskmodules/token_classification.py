@@ -23,6 +23,7 @@ from typing import (
 )
 
 import torch
+from datasets import Metric
 from pytorch_ie import AnnotationLayer
 from pytorch_ie.annotations import LabeledSpan
 from pytorch_ie.core import TaskEncoding, TaskModule
@@ -368,7 +369,7 @@ class TokenClassificationTaskModule(TaskModuleType):
             # need to copy the span because it can be attached to only one document
             yield self.span_annotation, span.copy()
 
-    def configure_model_metric(self, stage: str) -> MetricCollection:
+    def configure_model_metric(self, stage: str) -> Union[Metric, MetricCollection]:
         def remove_label_pad_ids(labels: torch.LongTensor) -> torch.LongTensor:
             # remove the special tokens and padding from the predicted / target labels
             # because the label_pad_id is usually not a valid index (e.g. -100)
@@ -382,9 +383,12 @@ class TokenClassificationTaskModule(TaskModuleType):
             task="multiclass",
             average="macro",
         )
-        return WrappedMetricWithPrepareFunction(
+        f1_score_wrapped = WrappedMetricWithPrepareFunction(
             metric=f1_score,
             prepare_function=remove_label_pad_ids,
+        )
+        return MetricCollection(
+            {"macro/f1": f1_score_wrapped},
             prefix="metric/",
             postfix=f"/{stage}",
         )

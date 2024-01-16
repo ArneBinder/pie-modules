@@ -731,15 +731,15 @@ def test_configure_model_metric(documents):
 
     metric = taskmodule.configure_model_metric(stage="test")
     values = metric.compute()
-    assert values == {"metric/MulticlassF1Score/test": torch.tensor(0.0)}
+    assert values == {"metric/macro/f1/test": torch.tensor(0.0)}
 
     batch = taskmodule.collate(taskmodule.encode(documents, encode_target=True))
     targets = batch[1]
     targets_valid = targets[targets != taskmodule.label_pad_id]
     metric(targets_valid, targets_valid)
     values = metric.compute()
-    assert values == {"metric/MulticlassF1Score/test": torch.tensor(1.0)}
+    assert values == {"metric/macro/f1/test": torch.tensor(1.0)}
 
     metric(targets_valid, torch.ones_like(targets_valid))
     values = metric.compute()
-    assert values == {"metric/MulticlassF1Score/test": torch.tensor(0.5434783101081848)}
+    assert values == {"metric/macro/f1/test": torch.tensor(0.5434783101081848)}

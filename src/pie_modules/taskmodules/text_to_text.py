@@ -427,7 +427,7 @@ class TextToTextTaskModule(
         # it is derived from the Huggingface base model config.json
         return {}
 
-    def configure_model_metric(self, stage: str) -> Optional[MetricCollection]:
+    def configure_model_metric(self, stage: str) -> Optional[Metric]:
         if self.text_metric_type is None:
             return None
 
@@ -445,6 +445,6 @@ class TextToTextTaskModule(
             metric=self.text_metric_type(),
             prepare_function=unbatch_and_untokenize,
             prepare_does_unbatch=True,
-            prefix="metric/",
-            postfix=f"/{stage}",
+            # prefix="metric/",
+            # postfix=f"/{stage}",
         )

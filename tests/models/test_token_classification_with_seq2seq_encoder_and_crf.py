@@ -336,10 +336,10 @@ def test_validation_step(batch, model, config):
     metric_value = model.metric_val.compute()
     if config == {}:
         torch.testing.assert_close(loss, torch.tensor(59.42658996582031))
-        assert metric_value == {"metric/MulticlassF1Score/val": torch.tensor(0.19285714626312256)}
+        assert metric_value == {"metric/macro/f1/val": torch.tensor(0.19285714626312256)}
     elif config == {"use_crf": False}:
         torch.testing.assert_close(loss, torch.tensor(1.6708829402923584))
-        assert metric_value == {"metric/MulticlassF1Score/val": torch.tensor(0.08615384995937347)}
+        assert metric_value == {"metric/macro/f1/val": torch.tensor(0.08615384995937347)}
     else:
         raise ValueError(f"Unknown config: {config}")
 
@@ -351,10 +351,10 @@ def test_test_step(batch, model, config):
     metric_value = model.metric_test.compute()
     if config == {}:
         torch.testing.assert_close(loss, torch.tensor(59.42658996582031))
-        assert metric_value == {"metric/MulticlassF1Score/test": torch.tensor(0.19285714626312256)}
+        assert metric_value == {"metric/macro/f1/test": torch.tensor(0.19285714626312256)}
     elif config == {"use_crf": False}:
         torch.testing.assert_close(loss, torch.tensor(1.6708829402923584))
-        assert metric_value == {"metric/MulticlassF1Score/test": torch.tensor(0.08615384995937347)}
+        assert metric_value == {"metric/macro/f1/test": torch.tensor(0.08615384995937347)}
     else:
         raise ValueError(f"Unknown config: {config}")
 

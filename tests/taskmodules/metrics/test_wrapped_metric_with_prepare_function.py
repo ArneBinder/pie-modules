@@ -28,24 +28,24 @@ def test_metric():
     assert metric is not None
     assert metric.prepare_function is not None
 
-    assert metric.compute() == {"TestMetric": 0.0}
+    assert metric.compute() == 0.0
 
     metric.reset()
     metric(prediction="abc", target="abc")
-    assert metric.compute() == {"TestMetric": 1.0}
+    assert metric.compute() == 1.0
 
     metric.reset()
     metric(prediction="abc", target="def")
-    assert metric.compute() == {"TestMetric": 0.0}
+    assert metric.compute() == 0.0
 
     metric.reset()
     metric(prediction="abc def", target="abc xyz")
     # we consider just the first word, so this is still 1.0
-    assert metric.compute() == {"TestMetric": 1.0}
+    assert metric.compute() == 1.0
 
     metric.reset()
     metric(prediction="abc def", target="xyz def")
-    assert metric.compute() == {"TestMetric": 0.0}
+    assert metric.compute() == 0.0
 
 
 @pytest.fixture(scope="module")
@@ -60,27 +60,27 @@ def test_wrapped_metric_with_unbatch_function(wrapped_metric_with_unbatch_functi
     metric = wrapped_metric_with_unbatch_function
     assert metric is not None
 
-    assert metric.compute() == {"TestMetric": 0.0}
+    assert metric.compute() == 0.0
 
     metric.reset()
     metric(prediction="abc", target="abc")
-    assert metric.compute() == {"TestMetric": 1.0}
+    assert metric.compute() == 1.0
 
     metric.reset()
     metric(prediction="abc", target="def")
-    assert metric.compute() == {"TestMetric": 0.0}
+    assert metric.compute() == 0.0
 
     metric.reset()
     metric(prediction="abc def", target="abc def")
-    assert metric.compute() == {"TestMetric": 1.0}
+    assert metric.compute() == 1.0
 
     metric.reset()
     metric(prediction="abc def", target="def abc")
-    assert metric.compute() == {"TestMetric": 0.0}
+    assert metric.compute() == 0.0
 
     metric.reset()
     metric(prediction="abc xyz", target="def xyz")
-    assert metric.compute() == {"TestMetric": 0.5}
+    assert metric.compute() == 0.5
 
 
 def test_wrapped_metric_with_unbatch_function_size_mismatch(wrapped_metric_with_unbatch_function):

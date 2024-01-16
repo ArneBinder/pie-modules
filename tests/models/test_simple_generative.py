@@ -161,18 +161,18 @@ def test_validation_step(batch, model):
     metric_values = metric.compute()
     metric_values_float = {key: value.item() for key, value in metric_values.items()}
     assert metric_values_float == {
-        "metric/rouge1_fmeasure/val": 0.0,
-        "metric/rouge1_precision/val": 0.0,
-        "metric/rouge1_recall/val": 0.0,
-        "metric/rouge2_fmeasure/val": 0.0,
-        "metric/rouge2_precision/val": 0.0,
-        "metric/rouge2_recall/val": 0.0,
-        "metric/rougeL_fmeasure/val": 0.0,
-        "metric/rougeL_precision/val": 0.0,
-        "metric/rougeL_recall/val": 0.0,
-        "metric/rougeLsum_fmeasure/val": 0.0,
-        "metric/rougeLsum_precision/val": 0.0,
-        "metric/rougeLsum_recall/val": 0.0,
+        "rouge1_fmeasure": 0.0,
+        "rouge1_precision": 0.0,
+        "rouge1_recall": 0.0,
+        "rouge2_fmeasure": 0.0,
+        "rouge2_precision": 0.0,
+        "rouge2_recall": 0.0,
+        "rougeL_fmeasure": 0.0,
+        "rougeL_precision": 0.0,
+        "rougeL_recall": 0.0,
+        "rougeLsum_fmeasure": 0.0,
+        "rougeLsum_precision": 0.0,
+        "rougeLsum_recall": 0.0,
     }
 
 
@@ -188,18 +188,18 @@ def test_test_step(batch, model):
     metric_values = metric.compute()
     metric_values_float = {key: value.item() for key, value in metric_values.items()}
     assert metric_values_float == {
-        "metric/rouge1_fmeasure/test": 0.1111111119389534,
-        "metric/rouge1_precision/test": 0.06666667014360428,
-        "metric/rouge1_recall/test": 0.3333333432674408,
-        "metric/rouge2_fmeasure/test": 0.0,
-        "metric/rouge2_precision/test": 0.0,
-        "metric/rouge2_recall/test": 0.0,
-        "metric/rougeL_fmeasure/test": 0.1111111119389534,
-        "metric/rougeL_precision/test": 0.06666667014360428,
-        "metric/rougeL_recall/test": 0.3333333432674408,
-        "metric/rougeLsum_fmeasure/test": 0.0555555559694767,
-        "metric/rougeLsum_precision/test": 0.03333333507180214,
-        "metric/rougeLsum_recall/test": 0.1666666716337204,
+        "rouge1_fmeasure": 0.1111111119389534,
+        "rouge1_precision": 0.06666667014360428,
+        "rouge1_recall": 0.3333333432674408,
+        "rouge2_fmeasure": 0.0,
+        "rouge2_precision": 0.0,
+        "rouge2_recall": 0.0,
+        "rougeL_fmeasure": 0.1111111119389534,
+        "rougeL_precision": 0.06666667014360428,
+        "rougeL_recall": 0.3333333432674408,
+        "rougeLsum_fmeasure": 0.0555555559694767,
+        "rougeLsum_precision": 0.03333333507180214,
+        "rougeLsum_recall": 0.1666666716337204,
     }
 
 
