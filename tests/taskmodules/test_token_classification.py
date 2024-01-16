@@ -735,11 +735,13 @@ def test_configure_model_metric(documents):
 
     batch = taskmodule.collate(taskmodule.encode(documents, encode_target=True))
     targets = batch[1]
-    targets_valid = targets[targets != taskmodule.label_pad_id]
-    metric(targets_valid, targets_valid)
+    metric(targets, targets)
     values = metric.compute()
     assert values == {"metric/macro/f1/test": torch.tensor(1.0)}
 
-    metric(targets_valid, torch.ones_like(targets_valid))
+    predictions = torch.ones_like(targets)
+    # we need to set the same padding as in the targets
+    predictions[targets == taskmodule.label_pad_id] = taskmodule.label_pad_id
+    metric(predictions, targets)
     values = metric.compute()
     assert values == {"metric/macro/f1/test": torch.tensor(0.5434783101081848)}
