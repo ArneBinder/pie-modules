@@ -305,7 +305,7 @@ def test_step(batch, model, config):
         raise ValueError(f"Unknown config: {config}")
 
 
-def test_training_step(batch, model, config):
+def test_training_step_and_on_epoch_end(batch, model, config):
     assert model.metric_train is None
     loss = model.training_step(batch, batch_idx=0)
     assert loss is not None
@@ -315,6 +315,8 @@ def test_training_step(batch, model, config):
         torch.testing.assert_close(loss, torch.tensor(1.6708829402923584))
     else:
         raise ValueError(f"Unknown config: {config}")
+
+    model.on_train_epoch_end()
 
 
 def test_training_step_without_attention_mask(batch, model, config):
@@ -330,7 +332,7 @@ def test_training_step_without_attention_mask(batch, model, config):
         raise ValueError(f"Unknown config: {config}")
 
 
-def test_validation_step(batch, model, config):
+def test_validation_step_and_on_epoch_end(batch, model, config):
     model.metric_val.reset()
     loss = model.validation_step(batch, batch_idx=0)
     assert loss is not None
@@ -374,8 +376,10 @@ def test_validation_step(batch, model, config):
     else:
         raise ValueError(f"Unknown config: {config}")
 
+    model.on_validation_epoch_end()
 
-def test_test_step(batch, model, config):
+
+def test_test_step_and_on_epoch_end(batch, model, config):
     model.metric_test.reset()
     loss = model.test_step(batch, batch_idx=0)
     assert loss is not None
@@ -418,6 +422,8 @@ def test_test_step(batch, model, config):
         }
     else:
         raise ValueError(f"Unknown config: {config}")
+
+    model.on_test_epoch_end()
 
 
 @pytest.mark.parametrize("test_step", [False, True])

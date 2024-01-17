@@ -252,14 +252,16 @@ def test_forward(batch, model):
     )
 
 
-def test_training_step(batch, model, config):
+def test_training_step_and_on_epoch_end(batch, model, config):
     assert model.metric_train is None
     loss = model.training_step(batch, batch_idx=0)
     assert loss is not None
     torch.testing.assert_close(loss, torch.tensor(1.676901936531067))
 
+    model.on_train_epoch_end()
 
-def test_validation_step(batch, model, config):
+
+def test_validation_step_and_on_epoch_end(batch, model, config):
     model.metric_val.reset()
     loss = model.validation_step(batch, batch_idx=0)
     assert loss is not None
@@ -282,8 +284,10 @@ def test_validation_step(batch, model, config):
         "token/micro/f1": 0.06896551698446274,
     }
 
+    model.on_validation_epoch_end()
 
-def test_test_step(batch, model, config):
+
+def test_test_step_and_on_epoch_end(batch, model, config):
     model.metric_test.reset()
     loss = model.test_step(batch, batch_idx=0)
     assert loss is not None
@@ -305,6 +309,8 @@ def test_test_step(batch, model, config):
         "token/macro/f1": 0.04210526496171951,
         "token/micro/f1": 0.06896551698446274,
     }
+
+    model.on_test_epoch_end()
 
 
 @pytest.mark.parametrize("test_step", [False, True])
