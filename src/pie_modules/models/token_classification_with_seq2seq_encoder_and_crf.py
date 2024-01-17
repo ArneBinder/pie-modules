@@ -230,19 +230,7 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
                 attention_mask=inputs["attention_mask"],
                 special_tokens_mask=inputs["special_tokens_mask"],
             )
-
-            metric(predicted_tags, targets)
-            log_kwargs = {"on_step": False, "on_epoch": True, "sync_dist": True}
-            if isinstance(metric, Metric):
-                key = getattr(metric, "name", None) or f"metric/{type(metric).__name__}/{stage}"
-                self.log(key, value=metric, **log_kwargs)
-            elif isinstance(metric, MetricCollection):
-                self.log_dict(metric, **log_kwargs)
-            else:
-                raise ValueError(
-                    f"metric must be an instance of torchmetrics.Metric or torchmetrics.MetricCollection, but is "
-                    f"of type {type(metric)}."
-                )
+            metric.update(predicted_tags, targets)
 
         return loss
 
@@ -254,6 +242,27 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
 
     def test_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
         return self.step(stage=TEST, batch=batch, metric=self.metric_test)
+
+    def _on_epoch_end(self, stage: str, metric: Optional[Metric] = None) -> None:
+        if metric is not None:
+            values = metric.compute()
+            log_kwargs = {"on_step": False, "on_epoch": True, "sync_dist": True}
+            if isinstance(values, dict):
+                for key, value in values.items():
+                    self.log(f"{key}/{stage}", value, **log_kwargs)
+            else:
+                metric_name = getattr(metric, "name", None) or type(metric).__name__
+                self.log(f"metric/{metric_name}/{stage}", values, **log_kwargs)
+            metric.reset()
+
+    def on_train_epoch_end(self) -> None:
+        self._on_epoch_end(stage=TRAINING, metric=self.metric_train)
+
+    def on_validation_epoch_end(self) -> None:
+        self._on_epoch_end(stage=VALIDATION, metric=self.metric_val)
+
+    def on_test_epoch_end(self) -> None:
+        self._on_epoch_end(stage=TEST, metric=self.metric_test)
 
     def predict(self, inputs: ModelInputsType, **kwargs) -> LongTensor:
         output = self(inputs)

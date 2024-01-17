@@ -7,7 +7,7 @@ from pytorch_ie.core import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch import FloatTensor, LongTensor
-from torchmetrics import Metric, MetricCollection
+from torchmetrics import Metric
 from transformers import AutoConfig, AutoModelForTokenClassification, BatchEncoding
 from transformers.modeling_outputs import TokenClassifierOutput
 from typing_extensions import TypeAlias
