@@ -258,11 +258,17 @@ def test_training_step(batch, model, config):
     torch.testing.assert_close(loss, torch.tensor(1.676901936531067))
 
 
+def get_metric_state(metric, keys=("gold", "predicted", "correct", "idx")):
+    # return {k: getattr(metric, k) for k in keys}
+    return metric.metric_state
+
+
 def test_validation_step(batch, model, config):
     model.metric_val.reset()
     loss = model.validation_step(batch, batch_idx=0)
     assert loss is not None
     torch.testing.assert_close(loss, torch.tensor(1.676901936531067))
+    metric_state = get_metric_state(model.metric_val["span"].metric)
     metric_value = model.metric_val.compute()
     assert metric_value == {
         "metric/PER/recall/val": 0.0,

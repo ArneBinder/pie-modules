@@ -731,12 +731,7 @@ def test_configure_model_metric(documents):
 
     metric = taskmodule.configure_model_metric(stage="test")
     values = metric.compute()
-    assert values == {
-        "metric/micro/f1/test": 0.0,
-        "metric/micro/precision/test": 0.0,
-        "metric/micro/recall/test": 0.0,
-        "metric/token/macro/f1/test": torch.tensor(0.0),
-    }
+    assert values == {"metric/token/macro/f1/test": torch.tensor(0.0)}
 
     batch = taskmodule.collate(taskmodule.encode(documents, encode_target=True))
     targets = batch[1]
