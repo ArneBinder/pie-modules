@@ -54,9 +54,21 @@ class WrappedMetricWithPrepareFunction(WrapperMetric, Generic[T]):
         else:
             return self.metric(prediction_prepared, target_prepared)
 
-    def update(self, *_: Any, **__: Any) -> None:
-        """Overwrite to do nothing, because the functionality is handled by the wrapped metric."""
-        raise NotImplementedError
+    def update(self, prediction: T, target: T) -> None:
+        prediction_prepared = self.prepare_function(prediction)
+        target_prepared = self.prepare_function(target)
+        if self.prepare_does_unbatch:
+            if len(prediction_prepared) != len(target_prepared):
+                raise ValueError(
+                    f"Number of prepared predictions ({len(prediction_prepared)}) and targets "
+                    f"({len(target_prepared)}) do not match."
+                )
+            if len(prediction_prepared) == 0:
+                raise ValueError("Empty batch.")
+            for prediction_str, target_str in zip(prediction_prepared, target_prepared):
+                self.metric.update(prediction_str, target_str)
+        else:
+            self.metric.update(prediction_prepared, target_prepared)
 
     def compute(self) -> Any:
         return self.metric.compute()
