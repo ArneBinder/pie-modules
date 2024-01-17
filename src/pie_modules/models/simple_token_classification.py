@@ -2,7 +2,6 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
-from pytorch_ie import AutoTaskModule
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
@@ -12,7 +11,7 @@ from transformers import AutoConfig, AutoModelForTokenClassification, BatchEncod
 from transformers.modeling_outputs import TokenClassifierOutput
 from typing_extensions import TypeAlias
 
-from pie_modules.models.interface import RequiresTaskmoduleConfig
+from pie_modules.models.mixins import WithMetricsFromTaskModule
 
 ModelInputsType: TypeAlias = BatchEncoding
 ModelTargetsType: TypeAlias = LongTensor
@@ -31,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 @PyTorchIEModel.register()
 class SimpleTokenClassificationModel(
-    PyTorchIEModel, RequiresModelNameOrPath, RequiresNumClasses, RequiresTaskmoduleConfig
+    PyTorchIEModel, RequiresModelNameOrPath, RequiresNumClasses, WithMetricsFromTaskModule
 ):
     def __init__(
         self,
@@ -59,32 +58,6 @@ class SimpleTokenClassificationModel(
             )
         self.setup_metrics(metric_stages=metric_stages, taskmodule_config=taskmodule_config)
 
-    def setup_metrics(
-        self, metric_stages: List[str], taskmodule_config: Optional[Dict[str, Any]] = None
-    ) -> None:
-        for stage in [TRAINING, VALIDATION, TEST]:
-            setattr(self, f"metric_{stage}", None)
-        if taskmodule_config is not None:
-            taskmodule = AutoTaskModule.from_config(taskmodule_config)
-            for stage in metric_stages:
-                if stage not in [TRAINING, VALIDATION, TEST]:
-                    raise ValueError(
-                        f'metric_stages must only contain the values "{TRAINING}", "{VALIDATION}", and "{TEST}".'
-                    )
-                stage_metric = taskmodule.configure_model_metric(stage=stage)
-                if stage_metric is not None:
-                    setattr(self, f"metric_{stage}", stage_metric)
-                else:
-                    logger.warning(
-                        f"The taskmodule {taskmodule.__class__.__name__} does not define a metric for stage "
-                        f"'{stage}'."
-                    )
-        else:
-            logger.warning("No taskmodule_config was provided. Metrics will not be available.")
-
-    def get_metric(self, stage: str) -> Optional[Metric]:
-        return getattr(self, f"metric_{stage}")
-
     def forward(
         self, inputs: ModelInputsType, labels: Optional[torch.LongTensor] = None
     ) -> TokenClassifierOutput:
@@ -109,7 +82,7 @@ class SimpleTokenClassificationModel(
         tags_tensor = tags_tensor.masked_fill(special_tokens_mask == 1, self.label_pad_id)
         return tags_tensor
 
-    def step(
+    def _step(
         self,
         stage: str,
         batch: ModelStepInputType,
@@ -142,13 +115,13 @@ class SimpleTokenClassificationModel(
         return loss
 
     def training_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
-        return self.step(stage=TRAINING, batch=batch, metric=self.get_metric(stage=TRAINING))
+        return self._step(stage=TRAINING, batch=batch, metric=self.get_metric(stage=TRAINING))
 
     def validation_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
-        return self.step(stage=VALIDATION, batch=batch, metric=self.get_metric(stage=VALIDATION))
+        return self._step(stage=VALIDATION, batch=batch, metric=self.get_metric(stage=VALIDATION))
 
     def test_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
-        return self.step(stage=TEST, batch=batch, metric=self.get_metric(stage=TEST))
+        return self._step(stage=TEST, batch=batch, metric=self.get_metric(stage=TEST))
 
     def _on_epoch_end(self, stage: str, metric: Optional[Metric] = None) -> None:
         if metric is not None:

@@ -295,7 +295,7 @@ def test_forward(batch, model):
 
 def test_step(batch, model, config):
     torch.manual_seed(42)
-    loss = model.step("train", batch)
+    loss = model._step("train", batch)
     assert loss is not None
     if config == {}:
         torch.testing.assert_close(loss, torch.tensor(59.975791931152344))
