@@ -249,7 +249,7 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
             log_kwargs = {"on_step": False, "on_epoch": True, "sync_dist": True}
             if isinstance(values, dict):
                 for key, value in values.items():
-                    self.log(f"{key}/{stage}", value, **log_kwargs)
+                    self.log(f"metric/{key}/{stage}", value, **log_kwargs)
             else:
                 metric_name = getattr(metric, "name", None) or type(metric).__name__
                 self.log(f"metric/{metric_name}/{stage}", values, **log_kwargs)

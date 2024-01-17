@@ -380,14 +380,25 @@ class TokenClassificationTaskModule(TaskModuleType):
             # torch.testing.assert_close(labels, labels_valid)
             return labels_valid
 
-        f1_score = F1Score(
-            num_classes=len(self.label_to_id),
-            task="multiclass",
-            average="macro",
-        )
-        f1_score_wrapped = WrappedMetricWithPrepareFunction(
-            metric=f1_score,
-            prepare_function=remove_label_pad_ids,
+        token_scores = MetricCollection(
+            {
+                "token/macro/f1": WrappedMetricWithPrepareFunction(
+                    metric=F1Score(
+                        num_classes=len(self.label_to_id),
+                        task="multiclass",
+                        average="macro",
+                    ),
+                    prepare_function=remove_label_pad_ids,
+                ),
+                "token/micro/f1": WrappedMetricWithPrepareFunction(
+                    metric=F1Score(
+                        num_classes=len(self.label_to_id),
+                        task="multiclass",
+                        average="micro",
+                    ),
+                    prepare_function=remove_label_pad_ids,
+                ),
+            }
         )
 
         def unbatch_and_decode_annotations(
@@ -401,21 +412,13 @@ class TokenClassificationTaskModule(TaskModuleType):
             return annotations
 
         # TODO: enable macro average
-        p_r_f1_score = PrecisionRecallAndF1ForLabeledAnnotations(
-            flatten_result_with_sep="/", key_macro=None
+        span_scores = PrecisionRecallAndF1ForLabeledAnnotations(
+            flatten_result_with_sep="/", key_macro=None, prefix="span/"
         )
-        p_r_f1_score_wrapped = WrappedMetricWithPrepareFunction(
-            metric=p_r_f1_score,
+        span_scores_wrapped = WrappedMetricWithPrepareFunction(
+            metric=span_scores,
             prepare_function=unbatch_and_decode_annotations,
             prepare_does_unbatch=True,
         )
 
-        return MetricCollection(
-            {
-                "token/macro/f1": f1_score_wrapped,
-                # TODO: "span" does never appear in the metric key
-                "span": p_r_f1_score_wrapped,
-            },
-            prefix="metric/",
-            postfix=f"/{stage}",
-        )
+        return MetricCollection([token_scores, span_scores_wrapped])

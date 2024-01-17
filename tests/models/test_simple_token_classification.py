@@ -263,18 +263,19 @@ def test_validation_step(batch, model, config):
     loss = model.validation_step(batch, batch_idx=0)
     assert loss is not None
     torch.testing.assert_close(loss, torch.tensor(1.676901936531067))
-    metric_value = model.metric_val.compute()
-    assert metric_value == {
-        "metric/PER/recall/val": 0.0,
-        "metric/PER/precision/val": 0.0,
-        "metric/PER/f1/val": 0.0,
-        "metric/ORG/recall/val": 0.2857142857142857,
-        "metric/ORG/precision/val": 0.6666666666666666,
-        "metric/ORG/f1/val": 0.4,
-        "metric/micro/recall/val": 0.08695652173913043,
-        "metric/micro/precision/val": 0.3333333333333333,
-        "metric/micro/f1/val": 0.13793103448275862,
-        "metric/token/macro/f1/val": torch.tensor(0.04210526496171951),
+    metric_values = {k: v.item() for k, v in model.metric_val.compute().items()}
+    assert metric_values == {
+        "span/ORG/f1": 0.4000000059604645,
+        "span/ORG/precision": 0.6666666865348816,
+        "span/ORG/recall": 0.2857142984867096,
+        "span/PER/f1": 0.0,
+        "span/PER/precision": 0.0,
+        "span/PER/recall": 0.0,
+        "span/micro/f1": 0.13793103396892548,
+        "span/micro/precision": 0.3333333432674408,
+        "span/micro/recall": 0.08695652335882187,
+        "token/macro/f1": 0.04210526496171951,
+        "token/micro/f1": 0.06896551698446274,
     }
 
 
@@ -283,18 +284,19 @@ def test_test_step(batch, model, config):
     loss = model.test_step(batch, batch_idx=0)
     assert loss is not None
     torch.testing.assert_close(loss, torch.tensor(1.676901936531067))
-    metric_value = model.metric_test.compute()
-    assert metric_value == {
-        "metric/PER/recall/test": 0.0,
-        "metric/PER/precision/test": 0.0,
-        "metric/PER/f1/test": 0.0,
-        "metric/ORG/recall/test": 0.2857142857142857,
-        "metric/ORG/precision/test": 0.6666666666666666,
-        "metric/ORG/f1/test": 0.4,
-        "metric/micro/recall/test": 0.08695652173913043,
-        "metric/micro/precision/test": 0.3333333333333333,
-        "metric/micro/f1/test": 0.13793103448275862,
-        "metric/token/macro/f1/test": torch.tensor(0.04210526496171951),
+    metric_values = {k: v.item() for k, v in model.metric_test.compute().items()}
+    assert metric_values == {
+        "span/ORG/f1": 0.4000000059604645,
+        "span/ORG/precision": 0.6666666865348816,
+        "span/ORG/recall": 0.2857142984867096,
+        "span/PER/f1": 0.0,
+        "span/PER/precision": 0.0,
+        "span/PER/recall": 0.0,
+        "span/micro/f1": 0.13793103396892548,
+        "span/micro/precision": 0.3333333432674408,
+        "span/micro/recall": 0.08695652335882187,
+        "token/macro/f1": 0.04210526496171951,
+        "token/micro/f1": 0.06896551698446274,
     }
 
 

@@ -12,7 +12,7 @@ from pytorch_ie.documents import (
     TextDocumentWithLabeledSpans,
     TextDocumentWithLabeledSpansAndLabeledPartitions,
 )
-from torchmetrics.classification import MulticlassF1Score
+from torch import tensor
 from transformers import BatchEncoding
 
 from pie_modules.taskmodules import TokenClassificationTaskModule
@@ -731,39 +731,42 @@ def test_configure_model_metric(documents):
 
     metric = taskmodule.configure_model_metric(stage="test")
     values = metric.compute()
-    assert values == {"metric/token/macro/f1/test": torch.tensor(0.0)}
+    assert values == {"token/macro/f1": tensor(0.0), "token/micro/f1": tensor(0.0)}
 
     batch = taskmodule.collate(taskmodule.encode(documents, encode_target=True))
     targets = batch[1]
-    metric(targets, targets)
+    metric.update(targets, targets)
     values = metric.compute()
     assert values == {
-        "metric/LOC/f1/test": 1.0,
-        "metric/LOC/precision/test": 1.0,
-        "metric/LOC/recall/test": 1.0,
-        "metric/PER/f1/test": 1.0,
-        "metric/PER/precision/test": 1.0,
-        "metric/PER/recall/test": 1.0,
-        "metric/micro/f1/test": 1.0,
-        "metric/micro/precision/test": 1.0,
-        "metric/micro/recall/test": 1.0,
-        "metric/token/macro/f1/test": torch.tensor(1.0),
+        "span/LOC/f1": tensor(1.0),
+        "span/LOC/precision": tensor(1.0),
+        "span/LOC/recall": tensor(1.0),
+        "span/PER/f1": tensor(1.0),
+        "span/PER/precision": tensor(1.0),
+        "span/PER/recall": tensor(1.0),
+        "span/micro/f1": tensor(1.0),
+        "span/micro/precision": tensor(1.0),
+        "span/micro/recall": tensor(1.0),
+        "token/macro/f1": tensor(1.0),
+        "token/micro/f1": tensor(1.0),
     }
 
     predictions = torch.ones_like(targets)
     # we need to set the same padding as in the targets
     predictions[targets == taskmodule.label_pad_id] = taskmodule.label_pad_id
-    metric(predictions, targets)
+    metric.update(predictions, targets)
     values = metric.compute()
-    assert values == {
-        "metric/LOC/f1/test": 0.08695652173913042,
-        "metric/LOC/precision/test": 0.5,
-        "metric/LOC/recall/test": 0.047619047619047616,
-        "metric/PER/f1/test": 0.6666666666666666,
-        "metric/PER/precision/test": 0.5,
-        "metric/PER/recall/test": 1.0,
-        "metric/micro/f1/test": 0.20689655172413793,
-        "metric/micro/precision/test": 0.5,
-        "metric/micro/recall/test": 0.13043478260869565,
-        "metric/token/macro/f1/test": torch.tensor(0.5434783101081848),
+    values_converted = {k: v.item() for k, v in values.items()}
+    assert values_converted == {
+        "token/macro/f1": 0.5434783101081848,
+        "token/micro/f1": 0.5249999761581421,
+        "span/LOC/recall": 0.0476190485060215,
+        "span/LOC/precision": 0.5,
+        "span/LOC/f1": 0.08695652335882187,
+        "span/micro/recall": 0.1304347813129425,
+        "span/micro/precision": 0.5,
+        "span/micro/f1": 0.2068965584039688,
+        "span/PER/recall": 1.0,
+        "span/PER/precision": 0.5,
+        "span/PER/f1": 0.6666666865348816,
     }
