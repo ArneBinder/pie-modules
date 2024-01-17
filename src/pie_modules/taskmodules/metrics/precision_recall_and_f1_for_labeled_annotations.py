@@ -25,6 +25,10 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
         key_micro: The key to use for the micro-average in the metric result dictionary.
         in_percent: Whether to return the results in percent, i.e. values between 0 and 100 instead of
             between 0 and 1.
+        flatten_result_with_sep: If not None, the result dictionary is flattened and the keys of the
+            different nesting levels are concatenated with the given separator.
+        prefix: If not None, the most outer keys of the result dictionary are prefixed with this string.
+        return_recall_and_precision: Whether to return recall and precision in addition to F1.
     """
 
     def __init__(
@@ -34,6 +38,8 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
         key_macro: Optional[str] = "macro",
         in_percent: bool = False,
         flatten_result_with_sep: Optional[str] = None,
+        prefix: Optional[str] = None,
+        return_recall_and_precision: bool = True,
     ):
         super().__init__()
         self.label_mapping = label_mapping
@@ -41,6 +47,8 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
         self.key_macro = key_macro
         self.in_percent = in_percent
         self.flatten_result_with_sep = flatten_result_with_sep
+        self.prefix = prefix
+        self.return_recall_and_precision = return_recall_and_precision
 
     def inc_counts(self, counts: LongTensor, key: Optional[str], prefix: str = "counts_"):
         full_key = prefix
@@ -77,15 +85,16 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
         precision = 0.0 if n_predicted == 0 else (n_correct / n_predicted)
         f1 = 0.0 if recall + precision == 0 else (2 * precision * recall) / (precision + recall)
 
-        if self.in_percent:
-            recall *= 100
-            precision *= 100
-            f1 *= 100
-        return {
-            "recall": torch.tensor(recall).to(self.device),
-            "precision": torch.tensor(precision).to(self.device),
+        result = {
             "f1": torch.tensor(f1).to(self.device),
         }
+        if self.return_recall_and_precision:
+            result["recall"] = torch.tensor(recall).to(self.device)
+            result["precision"] = torch.tensor(precision).to(self.device)
+
+        if self.in_percent:
+            result = {k: v * 100 for k, v in result.items()}
+        return result
 
     def get_label(self, annotation: Annotation) -> Optional[str]:
         label: Optional[str] = getattr(annotation, "label", None)
@@ -133,10 +142,14 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
                 k: v for k, v in result.items() if self.key_micro is None or k != self.key_micro
             }
             if len(result_without_micro) > 0:
+                sub_keys = list(result_without_micro.values())[0].keys()
                 result[self.key_macro] = {
                     k: torch.stack([v[k] for v in result_without_micro.values()]).mean()
-                    for k in ["precision", "recall", "f1"]
+                    for k in sub_keys
                 }
+
+        if self.prefix is not None:
+            result = {f"{self.prefix}{k}": v for k, v in result.items()}
 
         if self.flatten_result_with_sep is not None:
             return flatten_nested_dict(result, sep=self.flatten_result_with_sep)
