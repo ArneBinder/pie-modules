@@ -31,6 +31,7 @@ def taskmodule_config():
         "include_ill_formed_predictions": True,
         "tokenize_kwargs": {},
         "pad_kwargs": None,
+        "log_precision_recall_metrics": True,
     }
 
 

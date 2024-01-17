@@ -134,6 +134,7 @@ class TokenClassificationTaskModule(TaskModuleType):
         include_ill_formed_predictions: bool = True,
         tokenize_kwargs: Optional[Dict[str, Any]] = None,
         pad_kwargs: Optional[Dict[str, Any]] = None,
+        log_precision_recall_metrics: bool = True,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -164,6 +165,7 @@ class TokenClassificationTaskModule(TaskModuleType):
         self.include_ill_formed_predictions = include_ill_formed_predictions
         self.tokenize_kwargs = tokenize_kwargs or {}
         self.pad_kwargs = pad_kwargs or {}
+        self.log_precision_recall_metrics = log_precision_recall_metrics
 
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
 
@@ -412,7 +414,9 @@ class TokenClassificationTaskModule(TaskModuleType):
             return annotations
 
         span_scores = PrecisionRecallAndF1ForLabeledAnnotations(
-            flatten_result_with_sep="/", prefix="span/"
+            flatten_result_with_sep="/",
+            prefix="span/",
+            return_recall_and_precision=self.log_precision_recall_metrics,
         )
         span_scores_wrapped = WrappedMetricWithPrepareFunction(
             metric=span_scores,
