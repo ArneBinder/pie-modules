@@ -411,9 +411,8 @@ class TokenClassificationTaskModule(TaskModuleType):
             ]
             return annotations
 
-        # TODO: enable macro average
         span_scores = PrecisionRecallAndF1ForLabeledAnnotations(
-            flatten_result_with_sep="/", key_macro=None, prefix="span/"
+            flatten_result_with_sep="/", prefix="span/"
         )
         span_scores_wrapped = WrappedMetricWithPrepareFunction(
             metric=span_scores,
