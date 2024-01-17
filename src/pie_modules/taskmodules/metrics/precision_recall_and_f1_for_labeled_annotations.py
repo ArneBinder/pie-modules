@@ -81,16 +81,15 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
         n_gold = n_gold_predicted_correct[0]
         n_predicted = n_gold_predicted_correct[1]
         n_correct = n_gold_predicted_correct[2]
-        recall = 0.0 if n_gold == 0 else (n_correct / n_gold)
-        precision = 0.0 if n_predicted == 0 else (n_correct / n_predicted)
-        f1 = 0.0 if recall + precision == 0 else (2 * precision * recall) / (precision + recall)
+        zero = torch.tensor(0.0).to(self.device)
+        recall = zero if n_gold == 0 else (n_correct / n_gold)
+        precision = zero if n_predicted == 0 else (n_correct / n_predicted)
+        f1 = zero if recall + precision == 0 else (2 * precision * recall) / (precision + recall)
 
-        result = {
-            "f1": torch.tensor(f1).to(self.device),
-        }
+        result = {"f1": f1}
         if self.return_recall_and_precision:
-            result["recall"] = torch.tensor(recall).to(self.device)
-            result["precision"] = torch.tensor(precision).to(self.device)
+            result["recall"] = recall
+            result["precision"] = precision
 
         if self.in_percent:
             result = {k: v * 100 for k, v in result.items()}
