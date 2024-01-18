@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from pie_modules.models import SimpleTokenClassificationModel
-from pie_modules.taskmodules import TokenClassificationTaskModule
+from pie_modules.taskmodules import LabeledSpanExtractionByTokenClassificationTaskModule
 from tests import _config_to_str
 
 CONFIGS = [{}]
@@ -22,14 +22,14 @@ def config(config_str):
 @pytest.fixture
 def taskmodule_config():
     return {
-        "taskmodule_type": "TokenClassificationTaskModule",
+        "taskmodule_type": "LabeledSpanExtractionByTokenClassificationTaskModule",
         "tokenizer_name_or_path": "bert-base-cased",
         "span_annotation": "entities",
         "partition_annotation": None,
         "label_pad_id": -100,
         "labels": ["ORG", "PER"],
         "include_ill_formed_predictions": True,
-        "tokenize_kwargs": {},
+        "tokenize_kwargs": None,
         "pad_kwargs": None,
         "log_precision_recall_metrics": True,
     }
@@ -37,7 +37,7 @@ def taskmodule_config():
 
 def test_taskmodule_config(documents, taskmodule_config):
     tokenizer_name_or_path = "bert-base-cased"
-    taskmodule = TokenClassificationTaskModule(
+    taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule(
         span_annotation="entities",
         tokenizer_name_or_path=tokenizer_name_or_path,
     )
@@ -46,7 +46,9 @@ def test_taskmodule_config(documents, taskmodule_config):
 
 
 def test_batch(documents, batch, taskmodule_config):
-    taskmodule = TokenClassificationTaskModule.from_config(taskmodule_config)
+    taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule.from_config(
+        taskmodule_config
+    )
     encodings = taskmodule.encode(documents, encode_target=True)
     # just take the first 4 encodings
     batch_from_documents = taskmodule.collate(encodings[:4])

@@ -23,7 +23,7 @@ Available models:
 Available taskmodules:
 
 - [RETextClassificationWithIndicesTaskModule](src/pie_modules/taskmodules/re_text_classification_with_indices.py)
-- [TokenClassificationTaskModule](src/pie_modules/taskmodules/token_classification.py)
+- [LabeledSpanExtractionByTokenClassificationTaskModule](src/pie_modules/taskmodules/labeled_span_extraction_by_token_classification.py)
 - [ExtractiveQuestionAnsweringTaskModule](src/pie_modules/taskmodules/extractive_question_answering.py)
 - [TextToTextTaskModule](src/pie_modules/taskmodules/text_to_text.py)
 - [PointerNetworkTaskModuleForEnd2EndRE](src/pie_modules/taskmodules/pointer_network_for_end2end_re.py)

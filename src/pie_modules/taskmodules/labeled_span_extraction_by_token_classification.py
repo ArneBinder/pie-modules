@@ -80,7 +80,7 @@ logger = logging.getLogger(__name__)
 
 
 @TaskModule.register()
-class TokenClassificationTaskModule(TaskModuleType):
+class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
     """Taskmodule for span prediction (e.g. NER) as token classification.
 
     This taskmodule expects the input documents to be of TextBasedDocument with an annotation layer of
@@ -110,13 +110,15 @@ class TokenClassificationTaskModule(TaskModuleType):
         partition_annotation: Name of the annotation layer that contains the labeled partitions. If provided, the
             text is tokenized individually per partition. Default: None.
         label_pad_id: ID of the padding tag label. The model should ignore this for training. Default: -100.
-        labels: List of labels to use. If not provided, the labels are collected from the data during the prepare()
-            step. Default: None.
+        labels: List of labels to use. If not provided, the labels are collected from the labeled span annotations
+            in the data during the prepare() step. Default: None.
         include_ill_formed_predictions: Whether to include ill-formed predictions in the output. If False, the
             predictions are corrected to be well-formed. Default: True.
         tokenize_kwargs: Keyword arguments to pass to the tokenizer during tokenization. Default: None.
         pad_kwargs: Keyword arguments to pass to the tokenizer during padding. Note, that this is used to pad the
             token ids *and* the tag ids, if available (i.e. during training or evaluation). Default: None.
+        log_precision_recall_metrics: Whether to log precision and recall metrics (in addition to F1) for the
+            spans. Default: True.
     """
 
     # list of attribute names that need to be set by _prepare()
@@ -129,8 +131,6 @@ class TokenClassificationTaskModule(TaskModuleType):
         partition_annotation: Optional[str] = None,
         label_pad_id: int = -100,
         labels: Optional[List[str]] = None,
-        max_window: Optional[int] = None,
-        window_overlap: int = 0,
         include_ill_formed_predictions: bool = True,
         tokenize_kwargs: Optional[Dict[str, Any]] = None,
         pad_kwargs: Optional[Dict[str, Any]] = None,
@@ -138,25 +138,7 @@ class TokenClassificationTaskModule(TaskModuleType):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-
-        # backwards compatibility
-        tokenize_kwargs = copy.deepcopy(tokenize_kwargs) or {}
-        if max_window is not None:
-            tokenize_kwargs["max_length"] = max_window
-            tokenize_kwargs["return_overflowing_tokens"] = True
-            logger.warning(
-                "The 'max_window' parameter is deprecated and will be removed in a future version. "
-                "Please use the 'tokenize_kwargs[\"max_length\"]' parameter instead."
-            )
-        if window_overlap > 0:
-            tokenize_kwargs["stride"] = window_overlap
-            tokenize_kwargs["return_overflowing_tokens"] = True
-            logger.warning(
-                "The 'window_overlap' parameter is deprecated and will be removed in a future version. "
-                "Please use the 'tokenize_kwargs[\"stride\"]' parameter instead."
-            )
-
-        self.save_hyperparameters(ignore=["max_window", "window_overlap"])
+        self.save_hyperparameters()
 
         self.span_annotation = span_annotation
         self.partition_annotation = partition_annotation
@@ -379,7 +361,6 @@ class TokenClassificationTaskModule(TaskModuleType):
             # because the label_pad_id is usually not a valid index (e.g. -100)
             mask = labels != self.label_pad_id
             labels_valid = labels[mask]
-            # torch.testing.assert_close(labels, labels_valid)
             return labels_valid
 
         token_scores = MetricCollection(

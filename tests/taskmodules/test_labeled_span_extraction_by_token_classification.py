@@ -15,7 +15,7 @@ from pytorch_ie.documents import (
 from torch import tensor
 from transformers import BatchEncoding
 
-from pie_modules.taskmodules import TokenClassificationTaskModule
+from pie_modules.taskmodules import LabeledSpanExtractionByTokenClassificationTaskModule
 
 
 def _config_to_str(cfg: Dict[str, Any]) -> str:
@@ -71,7 +71,7 @@ def unprepared_taskmodule(config):
     - Sets up the task module with a unprepared state for testing purposes.
 
     """
-    return TokenClassificationTaskModule(
+    return LabeledSpanExtractionByTokenClassificationTaskModule(
         tokenizer_name_or_path="bert-base-uncased", span_annotation="entities", **config
     )
 
@@ -130,7 +130,7 @@ def test_prepare(taskmodule):
 
 def test_config(taskmodule):
     config = taskmodule._config()
-    assert config["taskmodule_type"] == "TokenClassificationTaskModule"
+    assert config["taskmodule_type"] == "LabeledSpanExtractionByTokenClassificationTaskModule"
     assert "labels" in config
     assert config["labels"] == ["LOC", "PER"]
 
@@ -337,7 +337,7 @@ def test_task_encodings(task_encodings, taskmodule, config):
 
 def test_encode_targets_with_overlap(caplog):
     # setup taskmodule
-    taskmodule = TokenClassificationTaskModule(
+    taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule(
         tokenizer_name_or_path="bert-base-uncased", labels=["LOC", "PER"]
     )
     taskmodule.post_prepare()
@@ -656,12 +656,14 @@ def test_annotations_from_output(annotations_from_output, config, documents):
 
 
 def test_document_type():
-    taskmodule = TokenClassificationTaskModule(tokenizer_name_or_path="bert-base-uncased")
+    taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule(
+        tokenizer_name_or_path="bert-base-uncased"
+    )
     assert taskmodule.document_type == TextDocumentWithLabeledSpans
 
 
 def test_document_type_with_partitions():
-    taskmodule = TokenClassificationTaskModule(
+    taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule(
         tokenizer_name_or_path="bert-base-uncased", partition_annotation="labeled_partitions"
     )
     assert taskmodule.document_type == TextDocumentWithLabeledSpansAndLabeledPartitions
@@ -669,7 +671,7 @@ def test_document_type_with_partitions():
 
 def test_document_type_with_non_default_span_annotation(caplog):
     with caplog.at_level(logging.WARNING):
-        taskmodule = TokenClassificationTaskModule(
+        taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule(
             tokenizer_name_or_path="bert-base-uncased", span_annotation="entities"
         )
     assert taskmodule.document_type is None
@@ -678,7 +680,7 @@ def test_document_type_with_non_default_span_annotation(caplog):
     assert (
         caplog.records[0].message
         == "span_annotation=entities is not the default value ('labeled_spans'), so the taskmodule "
-        "TokenClassificationTaskModule can not request the usual document type "
+        "LabeledSpanExtractionByTokenClassificationTaskModule can not request the usual document type "
         "(TextDocumentWithLabeledSpans) for auto-conversion because this has the bespoken default value "
         "as layer name(s) instead of the provided one(s)."
     )
@@ -686,7 +688,7 @@ def test_document_type_with_non_default_span_annotation(caplog):
 
 def test_document_type_with_non_default_partition_annotation(caplog):
     with caplog.at_level(logging.WARNING):
-        taskmodule = TokenClassificationTaskModule(
+        taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule(
             tokenizer_name_or_path="bert-base-uncased", partition_annotation="sentences"
         )
     assert taskmodule.document_type is None
@@ -695,7 +697,7 @@ def test_document_type_with_non_default_partition_annotation(caplog):
     assert (
         caplog.records[0].message
         == "partition_annotation=sentences is not the default value ('labeled_partitions'), "
-        "so the taskmodule TokenClassificationTaskModule can not request the usual document type "
+        "so the taskmodule LabeledSpanExtractionByTokenClassificationTaskModule can not request the usual document type "
         "(TextDocumentWithLabeledSpansAndLabeledPartitions) for auto-conversion because this has "
         "the bespoken default value as layer name(s) instead of the provided one(s)."
     )
@@ -703,7 +705,7 @@ def test_document_type_with_non_default_partition_annotation(caplog):
 
 def test_document_type_with_non_default_span_and_partition_annotation(caplog):
     with caplog.at_level(logging.WARNING):
-        taskmodule = TokenClassificationTaskModule(
+        taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule(
             tokenizer_name_or_path="bert-base-uncased",
             span_annotation="entities",
             partition_annotation="sentences",
@@ -715,14 +717,14 @@ def test_document_type_with_non_default_span_and_partition_annotation(caplog):
         caplog.records[0].message
         == "span_annotation=entities is not the default value ('labeled_spans') and "
         "partition_annotation=sentences is not the default value ('labeled_partitions'), "
-        "so the taskmodule TokenClassificationTaskModule can not request the usual document "
+        "so the taskmodule LabeledSpanExtractionByTokenClassificationTaskModule can not request the usual document "
         "type (TextDocumentWithLabeledSpansAndLabeledPartitions) for auto-conversion because "
         "this has the bespoken default value as layer name(s) instead of the provided one(s)."
     )
 
 
 def test_configure_model_metric(documents):
-    taskmodule = TokenClassificationTaskModule(
+    taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule(
         tokenizer_name_or_path="bert-base-uncased",
         span_annotation="entities",
         labels=["LOC", "PER"],
