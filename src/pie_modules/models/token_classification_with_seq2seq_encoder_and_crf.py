@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple
 
 import torch
 from pytorch_ie.core import PyTorchIEModel
@@ -7,7 +7,6 @@ from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClas
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch import FloatTensor, LongTensor, nn
 from torchcrf import CRF
-from torchmetrics import Metric, MetricCollection
 from transformers import (
     AutoConfig,
     AutoModel,
@@ -18,15 +17,15 @@ from transformers.modeling_outputs import TokenClassifierOutput
 from typing_extensions import TypeAlias
 
 from .components.seq2seq_encoder import build_seq2seq_encoder
-from .mixins import WithMetricsFromTaskModule
+from .default_model import DefaultModel
 
-ModelInputType: TypeAlias = BatchEncoding
-ModelTargetType: TypeAlias = LongTensor
-ModelStepInputType: TypeAlias = Tuple[
-    ModelInputType,
-    Optional[ModelTargetType],
-]
-ModelOutputType: TypeAlias = TokenClassifierOutput
+# mode inputs / outputs / targets
+InputType: TypeAlias = BatchEncoding
+OutputType: TypeAlias = TokenClassifierOutput
+TargetType: TypeAlias = LongTensor
+# step inputs / outputs
+StepInputType: TypeAlias = Tuple[InputType, Optional[TargetType]]
+StepOutputType: TypeAlias = FloatTensor
 
 HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE = {
     "bert": "hidden_dropout_prob",
@@ -37,19 +36,14 @@ HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE = {
     "longformer": "hidden_dropout_prob",
 }
 
-TRAINING = "train"
-VALIDATION = "val"
-TEST = "test"
-
 logger = logging.getLogger(__name__)
 
 
 @PyTorchIEModel.register()
 class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
-    PyTorchIEModel,
+    DefaultModel[InputType, OutputType, TargetType, StepOutputType],
     RequiresNumClasses,
     RequiresModelNameOrPath,
-    WithMetricsFromTaskModule[ModelInputType, ModelTargetType, ModelOutputType],
 ):
     def __init__(
         self,
@@ -65,8 +59,6 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         freeze_base_model: bool = False,
         warmup_proportion: float = 0.1,
         seq2seq_encoder: Optional[Dict[str, Any]] = None,
-        taskmodule_config: Optional[Dict[str, Any]] = None,
-        metric_stages: List[str] = [TRAINING, VALIDATION, TEST],
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -118,13 +110,11 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
 
         self.crf = CRF(num_tags=num_classes, batch_first=True) if use_crf else None
 
-        self.setup_metrics(metric_stages=metric_stages, taskmodule_config=taskmodule_config)
-
     def decode(
         self,
-        inputs: ModelInputType,
-        outputs: ModelOutputType,
-    ) -> ModelTargetType:
+        inputs: InputType,
+        outputs: OutputType,
+    ) -> TargetType:
         logits = outputs.logits
         attention_mask = inputs["attention_mask"]
         special_tokens_mask = inputs["special_tokens_mask"]
@@ -146,7 +136,7 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         return tags_tensor
 
     def forward(
-        self, inputs: ModelInputType, targets: Optional[ModelTargetType] = None
+        self, inputs: InputType, targets: Optional[TargetType] = None
     ) -> TokenClassifierOutput:
         inputs_without_special_tokens_mask = {
             k: v for k, v in inputs.items() if k != "special_tokens_mask"
@@ -190,51 +180,6 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def _step(
-        self,
-        stage: str,
-        batch: ModelStepInputType,
-    ) -> FloatTensor:
-        inputs, targets = batch
-        assert targets is not None, "targets have to be available for training"
-
-        output = self(inputs, targets=targets)
-
-        loss = output.loss
-        # show loss on each step only during training
-        self.log(
-            f"loss/{stage}",
-            loss,
-            on_step=(stage == TRAINING),
-            on_epoch=True,
-            prog_bar=True,
-            sync_dist=True,
-        )
-
-        self.update_metric(inputs=inputs, targets=targets, outputs=output, stage=stage)
-
-        return loss
-
-    def training_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
-        return self._step(stage=TRAINING, batch=batch)
-
-    def validation_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
-        return self._step(stage=VALIDATION, batch=batch)
-
-    def test_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
-        return self._step(stage=TEST, batch=batch)
-
-    def predict(self, inputs: ModelInputType, **kwargs) -> LongTensor:
-        output = self(inputs)
-        predicted_tags = self.decode(outputs=output, inputs=inputs)
-        return predicted_tags
-
-    def predict_step(
-        self, batch: ModelStepInputType, batch_idx: int, dataloader_idx: int
-    ) -> LongTensor:
-        inputs, targets = batch
-        return self.predict(inputs=inputs)
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
         if self.task_learning_rate is not None:
