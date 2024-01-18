@@ -20,13 +20,13 @@ from typing_extensions import TypeAlias
 from .components.seq2seq_encoder import build_seq2seq_encoder
 from .mixins import WithMetricsFromTaskModule
 
-ModelInputsType: TypeAlias = BatchEncoding
-ModelTargetsType: TypeAlias = LongTensor
+ModelInputType: TypeAlias = BatchEncoding
+ModelTargetType: TypeAlias = LongTensor
 ModelStepInputType: TypeAlias = Tuple[
-    ModelInputsType,
-    Optional[ModelTargetsType],
+    ModelInputType,
+    Optional[ModelTargetType],
 ]
-ModelOutputType: TypeAlias = LongTensor
+ModelOutputType: TypeAlias = TokenClassifierOutput
 
 HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE = {
     "bert": "hidden_dropout_prob",
@@ -46,7 +46,10 @@ logger = logging.getLogger(__name__)
 
 @PyTorchIEModel.register()
 class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
-    PyTorchIEModel, RequiresNumClasses, RequiresModelNameOrPath, WithMetricsFromTaskModule
+    PyTorchIEModel,
+    RequiresNumClasses,
+    RequiresModelNameOrPath,
+    WithMetricsFromTaskModule[ModelInputType, ModelTargetType, ModelOutputType],
 ):
     def __init__(
         self,
@@ -119,10 +122,12 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
 
     def decode(
         self,
-        logits: FloatTensor,
-        attention_mask: LongTensor,
-        special_tokens_mask: LongTensor,
-    ) -> LongTensor:
+        inputs: ModelInputType,
+        outputs: ModelOutputType,
+    ) -> ModelTargetType:
+        logits = outputs.logits
+        attention_mask = inputs["attention_mask"]
+        special_tokens_mask = inputs["special_tokens_mask"]
         attention_mask_bool = attention_mask.to(torch.bool)
         if self.crf is not None:
             decoded_tags = self.crf.decode(emissions=logits, mask=attention_mask_bool)
@@ -141,7 +146,7 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         return tags_tensor
 
     def forward(
-        self, inputs: ModelInputsType, labels: Optional[LongTensor] = None
+        self, inputs: ModelInputType, targets: Optional[ModelTargetType] = None
     ) -> TokenClassifierOutput:
         inputs_without_special_tokens_mask = {
             k: v for k, v in inputs.items() if k != "special_tokens_mask"
@@ -156,6 +161,7 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         logits = self.classifier(sequence_output)
 
         loss = None
+        labels = targets
         if labels is not None:
             if self.crf is not None:
                 # Overwrite the padding labels with ignore_index. Note that this is different from the
@@ -189,12 +195,11 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         self,
         stage: str,
         batch: ModelStepInputType,
-        metric: Optional[Union[Metric, MetricCollection]] = None,
     ) -> FloatTensor:
         inputs, targets = batch
         assert targets is not None, "targets have to be available for training"
 
-        output = self(inputs, labels=targets)
+        output = self(inputs, targets=targets)
 
         loss = output.loss
         # show loss on each step only during training
@@ -207,53 +212,22 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
             sync_dist=True,
         )
 
-        if metric is not None:
-            predicted_tags = self.decode(
-                logits=output.logits,
-                attention_mask=inputs["attention_mask"],
-                special_tokens_mask=inputs["special_tokens_mask"],
-            )
-            metric.update(predicted_tags, targets)
+        self.update_metric(inputs=inputs, targets=targets, outputs=output, stage=stage)
 
         return loss
 
     def training_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
-        return self._step(stage=TRAINING, batch=batch, metric=self.get_metric(stage=TRAINING))
+        return self._step(stage=TRAINING, batch=batch)
 
     def validation_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
-        return self._step(stage=VALIDATION, batch=batch, metric=self.get_metric(stage=VALIDATION))
+        return self._step(stage=VALIDATION, batch=batch)
 
     def test_step(self, batch: ModelStepInputType, batch_idx: int) -> FloatTensor:
-        return self._step(stage=TEST, batch=batch, metric=self.get_metric(stage=TEST))
+        return self._step(stage=TEST, batch=batch)
 
-    def _on_epoch_end(self, stage: str, metric: Optional[Metric] = None) -> None:
-        if metric is not None:
-            values = metric.compute()
-            log_kwargs = {"on_step": False, "on_epoch": True, "sync_dist": True}
-            if isinstance(values, dict):
-                for key, value in values.items():
-                    self.log(f"metric/{key}/{stage}", value, **log_kwargs)
-            else:
-                metric_name = getattr(metric, "name", None) or type(metric).__name__
-                self.log(f"metric/{metric_name}/{stage}", values, **log_kwargs)
-            metric.reset()
-
-    def on_train_epoch_end(self) -> None:
-        self._on_epoch_end(stage=TRAINING, metric=self.metric_train)
-
-    def on_validation_epoch_end(self) -> None:
-        self._on_epoch_end(stage=VALIDATION, metric=self.metric_val)
-
-    def on_test_epoch_end(self) -> None:
-        self._on_epoch_end(stage=TEST, metric=self.metric_test)
-
-    def predict(self, inputs: ModelInputsType, **kwargs) -> LongTensor:
+    def predict(self, inputs: ModelInputType, **kwargs) -> LongTensor:
         output = self(inputs)
-        predicted_tags = self.decode(
-            logits=output.logits,
-            attention_mask=inputs["attention_mask"],
-            special_tokens_mask=inputs["special_tokens_mask"],
-        )
+        predicted_tags = self.decode(outputs=output, inputs=inputs)
         return predicted_tags
 
     def predict_step(
