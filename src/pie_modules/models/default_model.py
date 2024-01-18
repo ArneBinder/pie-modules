@@ -82,6 +82,11 @@ class DefaultModel(
     def test_step(self, batch: StepInputType, batch_idx: int) -> StepOutputType:
         return self._step(stage=TEST, batch=batch)
 
+    def predict(self, inputs: InputType, **kwargs) -> TargetType:
+        outputs = self(inputs)
+        decoded_outputs = self.decode(inputs=inputs, outputs=outputs)
+        return decoded_outputs
+
     def predict_step(
         self, batch: StepInputType, batch_idx: int, dataloader_idx: int
     ) -> TargetType:

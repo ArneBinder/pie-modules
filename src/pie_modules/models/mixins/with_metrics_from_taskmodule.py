@@ -68,10 +68,10 @@ class WithMetricsFromTaskModule(
     def _set_metric(self, stage: str, metric: Optional[Union[Metric, MetricCollection]]) -> None:
         setattr(self, f"metric_{stage}", metric)
 
+    @abc.abstractmethod
     def predict(self, inputs: InputType, **kwargs) -> TargetType:
-        outputs = self(inputs)
-        decoded_outputs = self.decode(inputs=inputs, outputs=outputs)
-        return decoded_outputs
+        """Predict the target for the given inputs."""
+        pass
 
     @abc.abstractmethod
     def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
