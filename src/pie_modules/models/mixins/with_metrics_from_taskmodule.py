@@ -22,11 +22,28 @@ logger = logging.getLogger(__name__)
 class WithMetricsFromTaskModule(
     LightningModule, RequiresTaskmoduleConfig, Generic[InputType, TargetType, OutputType], abc.ABC
 ):
+    """A mixin for LightningModules that adds metrics from a taskmodule.
+
+    The metrics are added to the LightningModule as attributes with the names metric_{stage} via
+    setup_metrics method, where stage is one of "train", "val", or "test". The metrics are updated
+    with the update_metric method and logged with the on_{stage}_epoch_end methods.
+    """
+
     def setup_metrics(
         self, metric_stages: List[str], taskmodule_config: Optional[Dict[str, Any]] = None
     ) -> None:
+        """Setup metrics for the given stages. If taskmodule_config is provided, the metrics are
+        configured from the taskmodule. Otherwise, no metrics are available.
+
+        Args:
+            metric_stages: The stages for which to setup metrics. Must be one of "train", "val", or
+                "test".
+            taskmodule_config: The config for the taskmodule which can be obtained from the
+                taskmodule.config property.
+        """
+
         for stage in [TRAINING, VALIDATION, TEST]:
-            self.set_metric(stage=stage, metric=None)
+            self._set_metric(stage=stage, metric=None)
         if taskmodule_config is not None:
             taskmodule = AutoTaskModule.from_config(taskmodule_config)
             for stage in metric_stages:
@@ -36,7 +53,7 @@ class WithMetricsFromTaskModule(
                     )
                 metric = taskmodule.configure_model_metric(stage=stage)
                 if metric is not None:
-                    self.set_metric(stage=stage, metric=metric)
+                    self._set_metric(stage=stage, metric=metric)
                 else:
                     logger.warning(
                         f"The taskmodule {taskmodule.__class__.__name__} does not define a metric for stage "
@@ -45,10 +62,10 @@ class WithMetricsFromTaskModule(
         else:
             logger.warning("No taskmodule_config was provided. Metrics will not be available.")
 
-    def get_metric(self, stage: str) -> Optional[Union[Metric, MetricCollection]]:
+    def _get_metric(self, stage: str) -> Optional[Union[Metric, MetricCollection]]:
         return getattr(self, f"metric_{stage}")
 
-    def set_metric(self, stage: str, metric: Optional[Union[Metric, MetricCollection]]) -> None:
+    def _set_metric(self, stage: str, metric: Optional[Union[Metric, MetricCollection]]) -> None:
         setattr(self, f"metric_{stage}", metric)
 
     def predict(self, inputs: InputType, **kwargs) -> TargetType:
@@ -58,6 +75,7 @@ class WithMetricsFromTaskModule(
 
     @abc.abstractmethod
     def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
+        """Decode the outputs of the model into the target format."""
         pass
 
     def update_metric(
@@ -67,7 +85,21 @@ class WithMetricsFromTaskModule(
         targets: TargetType,
         outputs: Optional[OutputType] = None,
     ) -> None:
-        metric = self.get_metric(stage=stage)
+        """Update the metric for the given stage. If outputs is provided, the predictions are
+        decoded from the outputs. Otherwise, the predictions are obtained by directly calling the
+        predict method with the inputs (note that this causes the model to be called a second
+        time). Finally, the metric is updated with the predictions and targets.
+
+        Args:
+            stage: The stage for which to update the metric. Must be one of "train", "val", or "test".
+            inputs: The inputs to the model.
+            targets: The targets for the inputs.
+            outputs: The outputs of the model. They are decoded into predictions if provided. If
+                outputs is None, the predictions are obtained by directly calling the predict method
+                on the inputs.
+        """
+
+        metric = self._get_metric(stage=stage)
         if metric is not None:
             if outputs is not None:
                 predictions = self.decode(inputs=inputs, outputs=outputs)
@@ -76,7 +108,9 @@ class WithMetricsFromTaskModule(
             metric.update(predictions, targets)
 
     def _on_epoch_end(self, stage: str) -> None:
-        metric = self.get_metric(stage=stage)
+        """Log the metric for the given stage and reset it."""
+
+        metric = self._get_metric(stage=stage)
         if metric is not None:
             values = metric.compute()
             log_kwargs = {"on_step": False, "on_epoch": True, "sync_dist": True}
