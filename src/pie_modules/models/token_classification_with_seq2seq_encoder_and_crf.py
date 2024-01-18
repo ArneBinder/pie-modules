@@ -110,11 +110,7 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
 
         self.crf = CRF(num_tags=num_classes, batch_first=True) if use_crf else None
 
-    def decode(
-        self,
-        inputs: InputType,
-        outputs: OutputType,
-    ) -> TargetType:
+    def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
         logits = outputs.logits
         attention_mask = inputs["attention_mask"]
         special_tokens_mask = inputs["special_tokens_mask"]
