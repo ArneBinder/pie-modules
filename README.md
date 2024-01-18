@@ -16,6 +16,7 @@ Available models:
 
 - [SimpleSequenceClassificationModel](src/pie_modules/models/simple_sequence_classification.py)
 - [SequenceClassificationModel](src/pie_modules/models/sequence_classification.py)
+- [SimpleTokenClassificationModel](src/pie_modules/models/simple_token_classification.py)
 - [TokenClassificationModelWithSeq2SeqEncoderAndCrf](src/pie_modules/models/token_classification_with_seq2seq_encoder_and_crf.py)
 - [SimpleExtractiveQuestionAnsweringModel](src/pie_modules/models/simple_extractive_question_answering.py)
 - [SimpleGenerativeModel](src/pie_modules/models/simple_generative.py)
