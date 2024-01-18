@@ -45,17 +45,48 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
     RequiresNumClasses,
     RequiresModelNameOrPath,
 ):
+    """A token classification model that wraps a (pretrained) model loaded with AutoModel from the
+    transformers library. The model can optionally be followed by a seq2seq encoder (e.g. an LSTM).
+    Finally, Conditional Random Fields (CRFs) can be used to decode the predictions.
+
+    The model is trained with a cross-entropy loss function and uses the Adam optimizer.
+
+    Note that for training, the labels for the special tokens (as well as for padding tokens)
+    are expected to have the value label_pad_id (-100 by default, which is the default ignore_index
+    value for the CrossEntropyLoss). The predictions for these tokens are also replaced with
+    label_pad_id to match the training labels for correct metric calculation. Therefore, the model
+    requires the special_tokens_mask and attention_mask (for padding) to be passed as inputs.
+
+    Args:
+        model_name_or_path: The name or path of the (pretrained) transformer model to use.
+        num_classes: The number of classes to predict.
+        learning_rate: The learning rate to use for training.
+        task_learning_rate: The learning rate to use for the task-specific parameters, i.e.
+            for the sequence-to-sequence encoder, classification head, and CRF. If None, the
+            learning_rate is used for all parameters.
+        use_crf: Whether to use a CRF to decode the predictions.
+        label_pad_id: The label id to use for padding labels (at the padding token positions
+            as well as for the special tokens).
+        special_token_label_id: The label id to use for special tokens (e.g. [CLS], [SEP]). This
+            is used to replace the targets for special tokens with the label_pad_id before passing
+            them to the CRF because the CRF does not allow the first token to be masked out.
+        classifier_dropout: The dropout probability to use for the classification head.
+        freeze_base_model: Whether to freeze the base model (i.e. the transformer) during training.
+        warmup_proportion: The proportion of training steps to use for the linear warmup.
+        seq2seq_encoder: A dictionary with the configuration for the seq2seq encoder. If None, no
+            seq2seq encoder is used. See ./components/seq2seq_encoder.py for further information.
+    """
+
     def __init__(
         self,
         model_name_or_path: str,
         num_classes: int,
         learning_rate: float = 1e-5,
         task_learning_rate: Optional[float] = None,
+        use_crf: bool = True,
         label_pad_id: int = -100,
-        ignore_index: Optional[int] = None,
         special_token_label_id: int = 0,
         classifier_dropout: Optional[float] = None,
-        use_crf: bool = True,
         freeze_base_model: bool = False,
         warmup_proportion: float = 0.1,
         seq2seq_encoder: Optional[Dict[str, Any]] = None,
@@ -64,7 +95,6 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         super().__init__(**kwargs)
         self.save_hyperparameters()
 
-        self.ignore_index = ignore_index
         self.special_token_label_id = special_token_label_id
 
         self.learning_rate = learning_rate
