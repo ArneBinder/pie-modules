@@ -122,12 +122,11 @@ def model(batch, config, taskmodule_config) -> TokenClassificationModelWithSeq2S
     return model
 
 
-def test_freeze_base_model(taskmodule_config):
+def test_freeze_base_model():
     model = TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         model_name_or_path="prajjwal1/bert-tiny",
         num_classes=5,
         freeze_base_model=True,
-        taskmodule_config=taskmodule_config,
     )
 
     base_model_params = dict(model.model.named_parameters(prefix="model"))
