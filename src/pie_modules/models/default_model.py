@@ -87,3 +87,12 @@ class DefaultModel(
     ) -> TargetType:
         inputs, targets = batch
         return self.predict(inputs=inputs)
+
+    def on_train_epoch_end(self) -> None:
+        self.log_metric(stage=TRAINING)
+
+    def on_validation_epoch_end(self) -> None:
+        self.log_metric(stage=VALIDATION)
+
+    def on_test_epoch_end(self) -> None:
+        self.log_metric(stage=TEST)

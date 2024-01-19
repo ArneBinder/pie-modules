@@ -122,12 +122,3 @@ class WithMetricsFromTaskModule(
                 self.log(f"metric/{metric_name}/{stage}", values, **log_kwargs)
             if reset:
                 metric.reset()
-
-    def on_train_epoch_end(self) -> None:
-        self.log_metric(stage=TRAINING)
-
-    def on_validation_epoch_end(self) -> None:
-        self.log_metric(stage=VALIDATION)
-
-    def on_test_epoch_end(self) -> None:
-        self.log_metric(stage=TEST)
