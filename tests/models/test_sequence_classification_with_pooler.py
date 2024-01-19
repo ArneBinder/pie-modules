@@ -7,7 +7,7 @@ from torch import LongTensor
 from torch.optim.lr_scheduler import LambdaLR
 from transformers.modeling_outputs import SequenceClassifierOutput
 
-from pie_modules.models import SequenceClassificationModel
+from pie_modules.models import SequenceClassificationModelWithPooler
 
 NUM_CLASSES = 4
 POOLER = "start_tokens"
@@ -216,9 +216,9 @@ def targets() -> Dict[str, LongTensor]:
 
 
 @pytest.fixture
-def model() -> SequenceClassificationModel:
+def model() -> SequenceClassificationModelWithPooler:
     torch.manual_seed(42)
-    result = SequenceClassificationModel(
+    result = SequenceClassificationModelWithPooler(
         model_name_or_path="prajjwal1/bert-tiny",
         num_classes=NUM_CLASSES,
         pooler=POOLER,
@@ -357,7 +357,7 @@ def test_task_named_parameters(model):
 
 
 def test_configure_optimizers_with_warmup():
-    model = SequenceClassificationModel(
+    model = SequenceClassificationModelWithPooler(
         model_name_or_path="prajjwal1/bert-tiny",
         num_classes=NUM_CLASSES,
     )
@@ -381,7 +381,7 @@ def test_configure_optimizers_with_warmup():
 
 
 def test_configure_optimizers_with_task_learning_rate(monkeypatch):
-    model = SequenceClassificationModel(
+    model = SequenceClassificationModelWithPooler(
         model_name_or_path="prajjwal1/bert-tiny",
         num_classes=NUM_CLASSES,
         learning_rate=1e-5,
@@ -409,7 +409,7 @@ def test_configure_optimizers_with_task_learning_rate(monkeypatch):
 
 
 def test_freeze_base_model(monkeypatch, inputs, targets):
-    model = SequenceClassificationModel(
+    model = SequenceClassificationModelWithPooler(
         model_name_or_path="prajjwal1/bert-tiny",
         num_classes=NUM_CLASSES,
         freeze_base_model=True,

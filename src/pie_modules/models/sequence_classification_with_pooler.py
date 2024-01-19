@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 @PyTorchIEModel.register()
-class SequenceClassificationModel(
+class SequenceClassificationModelWithPooler(
     ModelWithBoilerplate[InputType, OutputType, TargetType, StepOutputType],
     RequiresModelNameOrPath,
     RequiresNumClasses,
