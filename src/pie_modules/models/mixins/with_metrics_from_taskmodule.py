@@ -107,7 +107,7 @@ class WithMetricsFromTaskModule(
                 predictions = self.predict(inputs=inputs)
             metric.update(predictions, targets)
 
-    def _on_epoch_end(self, stage: str) -> None:
+    def log_metric(self, stage: str, reset: bool = True) -> None:
         """Log the metric for the given stage and reset it."""
 
         metric = self._get_metric(stage=stage)
@@ -120,13 +120,14 @@ class WithMetricsFromTaskModule(
             else:
                 metric_name = getattr(metric, "name", None) or type(metric).__name__
                 self.log(f"metric/{metric_name}/{stage}", values, **log_kwargs)
-            metric.reset()
+            if reset:
+                metric.reset()
 
     def on_train_epoch_end(self) -> None:
-        self._on_epoch_end(stage=TRAINING)
+        self.log_metric(stage=TRAINING)
 
     def on_validation_epoch_end(self) -> None:
-        self._on_epoch_end(stage=VALIDATION)
+        self.log_metric(stage=VALIDATION)
 
     def on_test_epoch_end(self) -> None:
-        self._on_epoch_end(stage=TEST)
+        self.log_metric(stage=TEST)
