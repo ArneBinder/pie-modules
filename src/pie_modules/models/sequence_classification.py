@@ -1,12 +1,14 @@
 import logging
-from typing import Any, Dict, MutableMapping, Optional, Tuple, Union
+from typing import Any, Dict, Iterator, MutableMapping, Optional, Tuple, Union
 
 import torchmetrics
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
 from torch import Tensor, nn
+from torch.nn import Parameter
 from torch.optim import AdamW
 from transformers import AutoConfig, AutoModel, get_linear_schedule_with_warmup
+from transformers.modeling_outputs import SequenceClassifierOutput
 from typing_extensions import TypeAlias
 
 from .components.pooler import get_pooler_and_output_size
@@ -16,7 +18,7 @@ from .components.pooler import get_pooler_and_output_size
 # for the pooler (these need to be prefixed with "pooler_").
 ModelInputType: TypeAlias = MutableMapping[str, Any]
 # A dict with a single key "logits".
-ModelOutputType: TypeAlias = Dict[str, Tensor]
+ModelOutputType: TypeAlias = SequenceClassifierOutput
 # This contains the input and target tensors for a single training step.
 ModelStepInputType: TypeAlias = Tuple[
     ModelInputType,  # input
@@ -126,7 +128,7 @@ class SequenceClassificationModel(PyTorchIEModel, RequiresModelNameOrPath, Requi
         pooled_output = self.dropout(pooled_output)
 
         logits = self.classifier(pooled_output)
-        return {"logits": logits}
+        return SequenceClassifierOutput(logits=logits)
 
     def step(self, stage: str, batch: ModelStepInputType):
         input_, target = batch
@@ -153,15 +155,27 @@ class SequenceClassificationModel(PyTorchIEModel, RequiresModelNameOrPath, Requi
     def test_step(self, batch: ModelStepInputType, batch_idx: int):
         return self.step(stage=TEST, batch=batch)
 
+    def base_model_named_parameters(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
+        if prefix:
+            prefix = f"{prefix}."
+        return self.model.named_parameters(prefix=f"{prefix}model")
+
+    def task_named_parameters(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
+        if prefix:
+            prefix = f"{prefix}."
+        base_model_parameter_names = dict(self.base_model_named_parameters(prefix=prefix)).keys()
+        for name, param in self.named_parameters(prefix=prefix):
+            if name not in base_model_parameter_names:
+                yield name, param
+
     def configure_optimizers(self):
         if self.task_learning_rate is not None:
-            all_params = dict(self.named_parameters())
-            base_model_params = dict(self.model.named_parameters(prefix="model"))
-            task_params = {k: v for k, v in all_params.items() if k not in base_model_params}
+            base_model_params = (param for name, param in self.base_model_named_parameters())
+            task_params = (param for name, param in self.task_named_parameters())
             optimizer = AdamW(
                 [
-                    {"params": base_model_params.values(), "lr": self.learning_rate},
-                    {"params": task_params.values(), "lr": self.task_learning_rate},
+                    {"params": base_model_params, "lr": self.learning_rate},
+                    {"params": task_params, "lr": self.task_learning_rate},
                 ]
             )
         else:

@@ -1,9 +1,13 @@
 import pytest
 import torch
-import transformers
-from transformers.modeling_outputs import BaseModelOutputWithPooling
+from pytorch_lightning import Trainer
+from torch.optim.lr_scheduler import LambdaLR
+from transformers.modeling_outputs import SequenceClassifierOutput
 
 from pie_modules.models import SequenceClassificationModel
+
+NUM_CLASSES = 4
+POOLER = "start_tokens"
 
 
 @pytest.fixture
@@ -208,362 +212,212 @@ def targets():
     return torch.tensor([0, 1, 2, 3, 1, 2, 3])
 
 
-@pytest.fixture(params=["cls_token", "mention_pooling", "start_tokens"])
-def pooler_type(request):
-    return request.param
-
-
-def get_model(
-    monkeypatch,
-    pooler_type,
-    batch_size,
-    seq_len,
-    num_classes,
-    add_dummy_linear=False,
-    model_type="bert",
-    **model_kwargs,
-):
-    class MockConfig:
-        def __init__(
-            self, hidden_size: int = 10, classifier_dropout: float = 0.1, model_type="bert"
-        ) -> None:
-            self.hidden_size = hidden_size
-            self.model_type = model_type
-            if self.model_type == "distilbert":
-                self.seq_classif_dropout = classifier_dropout
-            elif self.model_type == "albert":
-                self.classifier_dropout_prob = classifier_dropout
-            else:
-                self.classifier_dropout = classifier_dropout
-
-    class MockModel(torch.nn.Module):
-        def __init__(self, batch_size, seq_len, hidden_size, add_dummy_linear) -> None:
-            super().__init__()
-            self.batch_size = batch_size
-            self.seq_len = seq_len
-            self.hidden_size = hidden_size
-            if add_dummy_linear:
-                self.dummy_linear = torch.nn.Linear(self.hidden_size, 99)
-
-        def __call__(self, *args, **kwargs):
-            last_hidden_state = torch.rand(self.batch_size, self.seq_len, self.hidden_size)
-            return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state)
-
-        def resize_token_embeddings(self, new_num_tokens):
-            pass
-
-    hidden_size = 10
-    tokenizer_vocab_size = 30000
-
-    monkeypatch.setattr(
-        transformers.AutoConfig,
-        "from_pretrained",
-        lambda model_name_or_path: MockConfig(
-            hidden_size=hidden_size, classifier_dropout=0.1, model_type=model_type
-        ),
-    )
-    monkeypatch.setattr(
-        transformers.AutoModel,
-        "from_pretrained",
-        lambda model_name_or_path, config: MockModel(
-            batch_size=batch_size,
-            seq_len=seq_len,
-            hidden_size=hidden_size,
-            add_dummy_linear=add_dummy_linear,
-        ),
-    )
-
-    # set seed to make the classifier deterministic
+@pytest.fixture
+def model() -> SequenceClassificationModel:
     torch.manual_seed(42)
     result = SequenceClassificationModel(
-        model_name_or_path="some-model-name",
-        num_classes=num_classes,
-        tokenizer_vocab_size=tokenizer_vocab_size,
-        ignore_index=0,
-        pooler=pooler_type,
-        # disable warmup because it would require a trainer and a datamodule to get the total number of training steps
-        warmup_proportion=0.0,
-        **model_kwargs,
+        model_name_or_path="prajjwal1/bert-tiny",
+        num_classes=NUM_CLASSES,
+        pooler=POOLER,
     )
-    assert not result.is_from_pretrained
-
     return result
 
 
-@pytest.fixture
-def model(monkeypatch, pooler_type, inputs, targets):
-    return get_model(
-        monkeypatch=monkeypatch,
-        pooler_type=pooler_type,
-        batch_size=inputs["input_ids"].shape[0],
-        seq_len=inputs["input_ids"].shape[1],
-        num_classes=int(max(targets) + 1),
-    )
-
-
-def test_forward(inputs, model, pooler_type):
+def test_forward(inputs, model):
     batch_size, seq_len = inputs["input_ids"].shape
     # set seed to make sure the output is deterministic
     torch.manual_seed(42)
-    output = model.forward(inputs)
+    output = model(inputs)
+    assert isinstance(output, SequenceClassifierOutput)
     assert set(output) == {"logits"}
     logits = output["logits"]
 
-    assert logits.shape == (batch_size, 4)
+    assert logits.shape == (batch_size, NUM_CLASSES)
 
-    if pooler_type == "cls_token":
-        torch.testing.assert_close(
-            logits,
-            torch.tensor(
+    torch.testing.assert_close(
+        logits,
+        torch.tensor(
+            [
+                [-0.5805037021636963, 0.12570726871490479, 1.187800407409668, 0.5867480635643005],
+                [-0.5103899836540222, -0.4129180312156677, 1.222808599472046, 0.767367422580719],
                 [
-                    [
-                        1.25642395019531250000,
-                        0.39357030391693115234,
-                        -0.29225713014602661133,
-                        0.79580175876617431641,
-                    ],
-                    [
-                        0.53891825675964355469,
-                        0.34787857532501220703,
-                        -0.24634249508380889893,
-                        0.59947609901428222656,
-                    ],
-                    [
-                        0.74169844388961791992,
-                        0.30519056320190429688,
-                        -0.55728095769882202148,
-                        0.49557113647460937500,
-                    ],
-                    [
-                        0.35605597496032714844,
-                        0.19517414271831512451,
-                        -0.00861304998397827148,
-                        0.65302681922912597656,
-                    ],
-                    [
-                        0.29554772377014160156,
-                        0.71216350793838500977,
-                        -0.62688910961151123047,
-                        0.92307460308074951172,
-                    ],
-                    [
-                        0.67893451452255249023,
-                        0.30236703157424926758,
-                        -0.35009318590164184570,
-                        0.49039006233215332031,
-                    ],
-                    [
-                        0.33092185854911804199,
-                        0.47906285524368286133,
-                        -0.39155155420303344727,
-                        0.57707947492599487305,
-                    ],
-                ]
-            ),
-        )
-    elif pooler_type == "start_tokens":
-        torch.testing.assert_close(
-            logits,
-            torch.tensor(
+                    -0.5193025469779968,
+                    0.007931053638458252,
+                    1.2698432207107544,
+                    0.6175908446311951,
+                ],
                 [
-                    [
-                        0.28744211792945861816,
-                        -0.07656848430633544922,
-                        0.06205615401268005371,
-                        -0.94508385658264160156,
-                    ],
-                    [
-                        0.29196885228157043457,
-                        0.02899619936943054199,
-                        -0.21342960000038146973,
-                        -0.36053514480590820312,
-                    ],
-                    [
-                        0.36177605390548706055,
-                        -0.64715611934661865234,
-                        -0.26786345243453979492,
-                        -0.80762034654617309570,
-                    ],
-                    [
-                        0.42720466852188110352,
-                        -0.25489825010299682617,
-                        -0.19527786970138549805,
-                        -0.49900960922241210938,
-                    ],
-                    [
-                        0.20688854157924652100,
-                        -0.29307979345321655273,
-                        -0.12208836525678634644,
-                        -0.89110243320465087891,
-                    ],
-                    [
-                        0.35013008117675781250,
-                        -0.49105945229530334473,
-                        -0.18206793069839477539,
-                        -1.19002366065979003906,
-                    ],
-                    [
-                        0.31203818321228027344,
-                        -0.37706983089447021484,
-                        0.07198116183280944824,
-                        -0.81837034225463867188,
-                    ],
-                ]
-            ),
-        )
-    elif pooler_type == "mention_pooling":
-        torch.testing.assert_close(
-            logits,
-            torch.tensor(
+                    -0.10545363277196884,
+                    -0.17329390347003937,
+                    1.101582407951355,
+                    0.49733155965805054,
+                ],
                 [
-                    [
-                        0.48370990157127380371,
-                        -0.27870815992355346680,
-                        -0.13999497890472412109,
-                        -0.73714041709899902344,
-                    ],
-                    [
-                        0.54668211936950683594,
-                        -0.29652747511863708496,
-                        -0.26315566897392272949,
-                        -0.95955950021743774414,
-                    ],
-                    [
-                        0.22266633808612823486,
-                        -0.24484989047050476074,
-                        -0.03910681605339050293,
-                        -0.94041651487350463867,
-                    ],
-                    [
-                        0.42026358842849731445,
-                        -0.47725573182106018066,
-                        -0.30766916275024414062,
-                        -0.59111309051513671875,
-                    ],
-                    [
-                        0.23630522191524505615,
-                        -0.29734912514686584473,
-                        -0.30620723962783813477,
-                        -0.75251650810241699219,
-                    ],
-                    [
-                        0.14205220341682434082,
-                        -0.39235562086105346680,
-                        -0.41546288132667541504,
-                        -0.77219748497009277344,
-                    ],
-                    [
-                        0.44709876179695129395,
-                        -0.20209559798240661621,
-                        -0.18925097584724426270,
-                        -0.64976799488067626953,
-                    ],
-                ]
-            ),
-        )
-    else:
-        raise ValueError(f"Unknown pooler type: {pooler_type}")
+                    -0.48656341433525085,
+                    -0.4286993145942688,
+                    1.2574571371078491,
+                    0.7629366517066956,
+                ],
+                [
+                    -0.3718412220478058,
+                    0.09046845138072968,
+                    0.8015384674072266,
+                    0.24329520761966705,
+                ],
+                [-0.20474043488502502, -0.1895218938589096, 0.8438000679016113, 0.441173791885376],
+            ]
+        ),
+    )
 
 
 @pytest.fixture
 def batch(inputs, targets):
-    return (inputs, targets)
-
-
-def test_step(batch, model, pooler_type):
-    # set the seed to make sure the loss is deterministic
-    torch.manual_seed(42)
-    loss = model.step("train", batch)
-    if pooler_type == "cls_token":
-        torch.testing.assert_close(loss, torch.tensor(1.417838096618652))
-    elif pooler_type == "start_tokens":
-        torch.testing.assert_close(loss, torch.tensor(1.498929619789123))
-    elif pooler_type == "mention_pooling":
-        torch.testing.assert_close(loss, torch.tensor(1.489617109298706))
-    else:
-        raise ValueError(f"Unknown pooler type: {pooler_type}")
+    return inputs, targets
 
 
 def test_training_step(batch, model):
+    # set the seed to make sure the loss is deterministic
+    torch.manual_seed(42)
     loss = model.training_step(batch, batch_idx=0)
     assert loss is not None
+    torch.testing.assert_close(loss, torch.tensor(1.6224687099456787))
 
 
 def test_validation_step(batch, model):
+    # set the seed to make sure the loss is deterministic
+    torch.manual_seed(42)
     loss = model.validation_step(batch, batch_idx=0)
     assert loss is not None
+    torch.testing.assert_close(loss, torch.tensor(1.6224687099456787))
 
 
 def test_test_step(batch, model):
+    # set the seed to make sure the loss is deterministic
+    torch.manual_seed(42)
     loss = model.test_step(batch, batch_idx=0)
     assert loss is not None
+    torch.testing.assert_close(loss, torch.tensor(1.6224687099456787))
 
 
-def test_configure_optimizers(model):
-    optimizer = model.configure_optimizers()
+def test_base_model_named_parameters(model):
+    base_model_named_parameters = dict(model.base_model_named_parameters())
+    assert set(base_model_named_parameters) == {
+        "model.pooler.dense.bias",
+        "model.encoder.layer.0.intermediate.dense.weight",
+        "model.encoder.layer.0.intermediate.dense.bias",
+        "model.encoder.layer.1.attention.output.dense.weight",
+        "model.encoder.layer.1.attention.output.LayerNorm.weight",
+        "model.encoder.layer.1.attention.self.query.weight",
+        "model.encoder.layer.1.output.dense.weight",
+        "model.encoder.layer.0.output.dense.bias",
+        "model.encoder.layer.1.intermediate.dense.bias",
+        "model.encoder.layer.1.attention.self.value.bias",
+        "model.encoder.layer.0.attention.output.dense.weight",
+        "model.encoder.layer.0.attention.self.query.bias",
+        "model.encoder.layer.0.attention.self.value.bias",
+        "model.encoder.layer.1.output.dense.bias",
+        "model.encoder.layer.1.attention.self.query.bias",
+        "model.encoder.layer.1.attention.output.LayerNorm.bias",
+        "model.encoder.layer.0.attention.self.query.weight",
+        "model.encoder.layer.0.attention.output.LayerNorm.bias",
+        "model.encoder.layer.0.attention.self.key.bias",
+        "model.encoder.layer.1.intermediate.dense.weight",
+        "model.encoder.layer.1.output.LayerNorm.bias",
+        "model.encoder.layer.1.output.LayerNorm.weight",
+        "model.encoder.layer.0.attention.self.key.weight",
+        "model.encoder.layer.1.attention.output.dense.bias",
+        "model.encoder.layer.0.attention.output.dense.bias",
+        "model.embeddings.LayerNorm.bias",
+        "model.encoder.layer.0.attention.self.value.weight",
+        "model.encoder.layer.0.attention.output.LayerNorm.weight",
+        "model.embeddings.token_type_embeddings.weight",
+        "model.encoder.layer.0.output.LayerNorm.weight",
+        "model.embeddings.position_embeddings.weight",
+        "model.encoder.layer.1.attention.self.key.bias",
+        "model.embeddings.LayerNorm.weight",
+        "model.encoder.layer.0.output.LayerNorm.bias",
+        "model.encoder.layer.1.attention.self.key.weight",
+        "model.pooler.dense.weight",
+        "model.encoder.layer.0.output.dense.weight",
+        "model.embeddings.word_embeddings.weight",
+        "model.encoder.layer.1.attention.self.value.weight",
+    }
+
+
+def test_task_named_parameters(model):
+    task_named_parameters = dict(model.task_named_parameters())
+    assert set(task_named_parameters) == {
+        "classifier.weight",
+        "pooler.pooler.missing_embeddings",
+        "classifier.bias",
+    }
+
+
+def test_configure_optimizers_with_warmup():
+    model = SequenceClassificationModel(
+        model_name_or_path="prajjwal1/bert-tiny",
+        num_classes=NUM_CLASSES,
+    )
+    model.trainer = Trainer(max_epochs=10)
+    optimizers_and_schedulers = model.configure_optimizers()
+    assert len(optimizers_and_schedulers) == 2
+    optimizers, schedulers = optimizers_and_schedulers
+    assert len(optimizers) == 1
+    assert len(schedulers) == 1
+    optimizer = optimizers[0]
     assert optimizer is not None
     assert isinstance(optimizer, torch.optim.AdamW)
     assert optimizer.defaults["lr"] == 1e-05
     assert optimizer.defaults["weight_decay"] == 0.01
     assert optimizer.defaults["eps"] == 1e-08
 
+    scheduler = schedulers[0]
+    assert isinstance(scheduler, dict)
+    assert set(scheduler) == {"scheduler", "interval"}
+    assert isinstance(scheduler["scheduler"], LambdaLR)
+
 
 def test_configure_optimizers_with_task_learning_rate(monkeypatch):
-    model = get_model(
-        monkeypatch=monkeypatch,
-        pooler_type="cls_token",
-        batch_size=7,
-        seq_len=22,
-        num_classes=4,
-        add_dummy_linear=True,
-        task_learning_rate=0.1,
+    model = SequenceClassificationModel(
+        model_name_or_path="prajjwal1/bert-tiny",
+        num_classes=NUM_CLASSES,
+        learning_rate=1e-5,
+        task_learning_rate=1e-3,
+        # disable warmup to make sure the scheduler is not added which would set the learning rate
+        # to 0
+        warmup_proportion=0.0,
     )
     optimizer = model.configure_optimizers()
     assert optimizer is not None
     assert isinstance(optimizer, torch.optim.AdamW)
     assert len(optimizer.param_groups) == 2
+    # base model parameters
     param_group = optimizer.param_groups[0]
-    assert param_group["lr"] == 1e-05
-    # the dummy linear from the mock base model has 2 parameters
-    assert len(param_group["params"]) == 2
-    assert param_group["params"][0].shape == torch.Size([99, 10])
-    assert param_group["params"][1].shape == torch.Size([99])
+    assert len(param_group["params"]) == 39
+    assert param_group["lr"] == 1e-5
+    # classifier head parameters
     param_group = optimizer.param_groups[1]
-    assert param_group["lr"] == 0.1
-    # the classifier head has 2 parameters
     assert len(param_group["params"]) == 2
-    assert param_group["params"][0].shape == torch.Size([4, 10])
-    assert param_group["params"][1].shape == torch.Size([4])
+    assert param_group["lr"] == 1e-3
+    # ensure that all parameters are covered
+    assert set(optimizer.param_groups[0]["params"] + optimizer.param_groups[1]["params"]) == set(
+        model.parameters()
+    )
 
 
 def test_freeze_base_model(monkeypatch, inputs, targets):
-    # set seed to make the classifier deterministic
-    model = get_model(
-        monkeypatch,
-        pooler_type="cls_token",
-        batch_size=7,
-        seq_len=22,
-        num_classes=4,
-        add_dummy_linear=True,
+    model = SequenceClassificationModel(
+        model_name_or_path="prajjwal1/bert-tiny",
+        num_classes=NUM_CLASSES,
         freeze_base_model=True,
+        # disable warmup to make sure the scheduler is not added which would set the learning rate
+        # to 0
+        warmup_proportion=0.0,
     )
-    base_model_params = list(model.model.parameters())
-    # the dummy linear from the mock base model has 2 parameters
-    assert len(base_model_params) == 2
+    base_model_params = [param for name, param in model.base_model_named_parameters()]
+    task_params = [param for name, param in model.task_named_parameters()]
+    assert len(base_model_params) + len(task_params) == len(list(model.parameters()))
     for param in base_model_params:
         assert not param.requires_grad
-
-
-@pytest.mark.parametrize(
-    "model_type", ["bert", "albert", "distilbert", "roberta", "deberta", "electra", "xlm-roberta"]
-)
-def test_config_model_classifier_dropout(monkeypatch, model_type):
-    model = get_model(
-        monkeypatch,
-        pooler_type="cls_token",
-        batch_size=7,
-        seq_len=22,
-        num_classes=4,
-        model_type=model_type,
-    )
-    assert model is not None
+    for param in task_params:
+        assert param.requires_grad
