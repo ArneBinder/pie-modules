@@ -3,10 +3,9 @@ import dataclasses
 import pytest
 from pytorch_ie import AnnotationLayer, annotation_field
 from pytorch_ie.annotations import LabeledSpan, Span
-from pytorch_ie.core import Document
 from pytorch_ie.documents import TextBasedDocument
 
-from pie_modules.utils import flatten_nested_dict, resolve_type
+from pie_modules.utils import flatten_dict, resolve_type
 
 
 @dataclasses.dataclass
@@ -44,5 +43,5 @@ def test_resolve_document_type():
 
 def test_flatten_nested_dict():
     d = {"a": {"b": 1, "c": 2}, "d": 3}
-    assert flatten_nested_dict(d) == {"a/b": 1, "a/c": 2, "d": 3}
-    assert flatten_nested_dict(d, sep=".") == {"a.b": 1, "a.c": 2, "d": 3}
+    assert flatten_dict(d) == {"a/b": 1, "a/c": 2, "d": 3}
+    assert flatten_dict(d, sep=".") == {"a.b": 1, "a.c": 2, "d": 3}

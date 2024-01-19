@@ -16,7 +16,7 @@ from transformers import (
 from transformers.modeling_outputs import TokenClassifierOutput
 from typing_extensions import TypeAlias
 
-from pie_modules.models.common import Model
+from pie_modules.models.common import ModelWithBoilerplate
 from pie_modules.models.components.seq2seq_encoder import build_seq2seq_encoder
 
 # model inputs / outputs / targets
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 @PyTorchIEModel.register()
 class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
-    Model[InputType, OutputType, TargetType, StepOutputType],
+    ModelWithBoilerplate[InputType, OutputType, TargetType, StepOutputType],
     RequiresNumClasses,
     RequiresModelNameOrPath,
 ):

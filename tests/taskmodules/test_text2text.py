@@ -9,6 +9,7 @@ from pie_modules.documents import (
     TextDocumentWithAbstractiveSummary,
     TokenDocumentWithAbstractiveSummary,
 )
+from pie_modules.models.common import VALIDATION
 from pie_modules.taskmodules import TextToTextTaskModule
 from pie_modules.taskmodules.text_to_text import (
     InputEncodingType,
@@ -163,7 +164,7 @@ def test_batch(taskmodule, batch):
 @pytest.fixture(scope="module")
 def unbatched_output(taskmodule, batch) -> Sequence[TaskOutputType]:
     inputs, targets = batch
-    return taskmodule.unbatch_output(targets["labels"])
+    return taskmodule.unbatch_output(targets)
 
 
 def test_unbatched_output(taskmodule, unbatched_output):
@@ -204,7 +205,7 @@ def test_decoded_annotations(taskmodule, decoded_annotations):
 
 
 def test_configure_model_metrics(taskmodule):
-    metric = taskmodule.configure_model_metric(stage="validation")
+    metric = taskmodule.configure_model_metric(stage=VALIDATION)
     assert metric is not None
     values = metric.compute()
     keys = {
@@ -225,7 +226,7 @@ def test_configure_model_metrics(taskmodule):
     assert all(torch.isnan(value) for value in values.values())
 
     labels = torch.tensor([[3, 9, 1708, 1, 0], [3, 9, 1200, 1708, 1]])
-    metric.update(predictions=labels, targets=labels)
+    metric.update(prediction={"labels": labels}, target={"labels": labels})
     assert set(metric.metric_state) == keys
     assert all(
         value == [torch.tensor(1.0), torch.tensor(1.0)] for value in metric.metric_state.values()
@@ -235,7 +236,7 @@ def test_configure_model_metrics(taskmodule):
     assert all(value == torch.tensor(1.0) for value in values.values())
 
     random_labels = torch.tensor([[875, 885, 112, 289, 769], [270, 583, 970, 114, 71]])
-    metric.update(predictions=random_labels, targets=labels)
+    metric.update(prediction={"labels": random_labels}, target={"labels": labels})
     values = metric.compute()
     assert {k: v.item() for k, v in values.items()} == {
         "rouge1_fmeasure": 0.5625,

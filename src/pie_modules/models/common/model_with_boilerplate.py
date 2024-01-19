@@ -1,10 +1,10 @@
-import abc
-from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
+import logging
+from typing import Generic, Optional, Tuple, TypeVar
 
-from pytorch_ie import PyTorchIEModel
 from typing_extensions import TypeAlias
 
-from pie_modules.models.mixins import WithMetricsFromTaskModule
+from .model_with_metrics_from_taskmodule import ModelWithMetricsFromTaskModule
+from .stages import TESTING, TRAINING, VALIDATION
 
 InputType = TypeVar("InputType")
 OutputType = TypeVar("OutputType")
@@ -15,25 +15,18 @@ StepInputType: TypeAlias = Tuple[
 ]
 StepOutputType = TypeVar("StepOutputType")
 
-TRAINING = "train"
-VALIDATION = "val"
-TEST = "test"
+logger = logging.getLogger(__name__)
 
 
-class Model(
-    PyTorchIEModel,
-    WithMetricsFromTaskModule[InputType, TargetType, OutputType],
+class ModelWithBoilerplate(
+    ModelWithMetricsFromTaskModule[InputType, TargetType, OutputType],
     Generic[InputType, OutputType, TargetType, StepOutputType],
-    abc.ABC,
 ):
-    def __init__(
-        self,
-        taskmodule_config: Optional[Dict[str, Any]] = None,
-        metric_stages: List[str] = [TRAINING, VALIDATION, TEST],
-        **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-        self.setup_metrics(metric_stages=metric_stages, taskmodule_config=taskmodule_config)
+    """A PyTorchIEModel that adds boilerplate code for training, validation, and testing.
+
+    Especially, it handles updating the metrics and logging of losses and metric results. Also see
+    ModelWithMetricsFromTaskModule for more details on how metrics are handled.
+    """
 
     def get_loss_from_outputs(self, outputs: OutputType) -> StepOutputType:
         if hasattr(outputs, "loss"):
@@ -65,11 +58,9 @@ class Model(
         assert targets is not None, "targets has to be available for training"
 
         outputs = self(inputs=inputs, targets=targets)
-
-        self.update_metric(inputs=inputs, outputs=outputs, targets=targets, stage=stage)
-
         loss = self.get_loss_from_outputs(outputs=outputs)
         self.log_loss(stage=stage, loss=loss)
+        self.update_metric(inputs=inputs, outputs=outputs, targets=targets, stage=stage)
 
         return loss
 
@@ -80,10 +71,10 @@ class Model(
         return self._step(stage=VALIDATION, batch=batch)
 
     def test_step(self, batch: StepInputType, batch_idx: int) -> StepOutputType:
-        return self._step(stage=TEST, batch=batch)
+        return self._step(stage=TESTING, batch=batch)
 
     def predict_step(
-        self, batch: StepInputType, batch_idx: int, dataloader_idx: int
+        self, batch: StepInputType, batch_idx: int, dataloader_idx: int = 0
     ) -> TargetType:
         inputs, targets = batch
         return self.predict(inputs=inputs)
@@ -95,4 +86,4 @@ class Model(
         self.log_metric(stage=VALIDATION)
 
     def on_test_epoch_end(self) -> None:
-        self.log_metric(stage=TEST)
+        self.log_metric(stage=TESTING)

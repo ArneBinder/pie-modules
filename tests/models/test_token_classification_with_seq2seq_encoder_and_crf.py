@@ -3,6 +3,7 @@ import torch
 from pytorch_lightning import Trainer
 
 from pie_modules.models import TokenClassificationModelWithSeq2SeqEncoderAndCrf
+from pie_modules.models.common import TESTING, TRAINING, VALIDATION
 from pie_modules.taskmodules import LabeledSpanExtractionByTokenClassificationTaskModule
 from tests import _config_to_str
 
@@ -308,7 +309,8 @@ def test_step(batch, model, config):
 
 
 def test_training_step_and_on_epoch_end(batch, model, config):
-    assert model.metric_train is None
+    metric = model._get_metric(TRAINING, batch_idx=0)
+    assert metric is None
     loss = model.training_step(batch, batch_idx=0)
     assert loss is not None
     if config == {}:
@@ -335,10 +337,11 @@ def test_training_step_without_attention_mask(batch, model, config):
 
 
 def test_validation_step_and_on_epoch_end(batch, model, config):
-    model.metric_val.reset()
+    metric = model._get_metric(VALIDATION, batch_idx=0)
+    metric.reset()
     loss = model.validation_step(batch, batch_idx=0)
     assert loss is not None
-    metric_values = {k: v.item() for k, v in model.metric_val.compute().items()}
+    metric_values = {k: v.item() for k, v in metric.compute().items()}
     if config == {}:
         torch.testing.assert_close(loss, torch.tensor(59.42658996582031))
         assert metric_values == {
@@ -382,10 +385,11 @@ def test_validation_step_and_on_epoch_end(batch, model, config):
 
 
 def test_test_step_and_on_epoch_end(batch, model, config):
-    model.metric_test.reset()
+    metric = model._get_metric(TESTING, batch_idx=0)
+    metric.reset()
     loss = model.test_step(batch, batch_idx=0)
     assert loss is not None
-    metric_values = {k: v.item() for k, v in model.metric_test.compute().items()}
+    metric_values = {k: v.item() for k, v in metric.compute().items()}
     if config == {}:
         torch.testing.assert_close(loss, torch.tensor(59.42658996582031))
         assert metric_values == {

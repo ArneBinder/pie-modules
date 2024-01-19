@@ -644,7 +644,7 @@ def test_collate(batch, taskmodule):
 def unbatched_output(taskmodule, batch):
     inputs, targets = batch
     # because the model is trained to reproduce the target tokens, we can just use them as model prediction
-    return taskmodule.unbatch_output(targets["labels"])
+    return taskmodule.unbatch_output(targets)
 
 
 @pytest.fixture()
@@ -747,9 +747,9 @@ def test_configure_model_metric():
         "labeled_spans": {},
     }
 
-    labels = torch.tensor([[14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]])
+    model_output = {"labels": torch.tensor([[14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]])}
     # test with expected == prediction
-    metric.update(labels, labels)
+    metric.update(model_output, model_output)
     values = metric.compute()
     assert values == {
         "exact_encoding_matches": 1.0,
@@ -775,8 +775,8 @@ def test_configure_model_metric():
     labels_random = torch.tensor([random_labels1 + random_labels2])
     metric.reset()
     # test the case where we have mixed results (correct and wrong)
-    metric.update(labels, labels)
-    metric.update(prediction=labels_random, expected=labels)
+    metric.update(model_output, model_output)
+    metric.update(prediction={"labels": labels_random}, expected=model_output)
     values = metric.compute()
     assert values == {
         "exact_encoding_matches": 0.5,

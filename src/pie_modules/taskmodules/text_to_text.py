@@ -35,7 +35,7 @@ from pie_modules.document.processing import (
 from pie_modules.utils import resolve_type
 
 from .common import BatchableMixin, get_first_occurrence_index
-from .metrics import WrappedMetricWithUnbatchFunction
+from .metrics import WrappedMetricWithPrepareFunction
 
 logger = logging.getLogger(__name__)
 
@@ -382,16 +382,17 @@ class TextToTextTaskModule(
         return inputs, targets
 
     def unbatch_output(self, model_output: ModelBatchOutput) -> Sequence[TaskOutputType]:
-        batch_size = model_output.size(0)
+        labels = model_output["labels"]
+        batch_size = labels.size(0)
 
         # We use the position after the first eos token as the seq_len.
         # Note that, if eos_id is not in model_output for a given batch item, the result will be
         # model_output.size(1) + 1 (i.e. seq_len + 1) for that batch item. This is fine, because we use the
         # seq_lengths just to truncate the output and want to keep everything if eos_id is not present.
-        seq_lengths = get_first_occurrence_index(model_output, self.tokenizer.eos_token_id) + 1
+        seq_lengths = get_first_occurrence_index(labels, self.tokenizer.eos_token_id) + 1
 
         result = [
-            TaskOutputType(model_output[i, : seq_lengths[i]].to(device="cpu").tolist())
+            TaskOutputType(labels[i, : seq_lengths[i]].to(device="cpu").tolist())
             for i in range(batch_size)
         ]
         return result
@@ -441,6 +442,8 @@ class TextToTextTaskModule(
             ]
             return texts
 
-        return WrappedMetricWithUnbatchFunction(
-            metric=self.text_metric_type(), unbatch_function=unbatch_and_untokenize
+        return WrappedMetricWithPrepareFunction(
+            metric=self.text_metric_type(),
+            prepare_function=unbatch_and_untokenize,
+            prepare_does_unbatch=True,
         )

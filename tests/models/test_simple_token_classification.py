@@ -2,6 +2,7 @@ import pytest
 import torch
 
 from pie_modules.models import SimpleTokenClassificationModel
+from pie_modules.models.common import TESTING, TRAINING, VALIDATION
 from pie_modules.taskmodules import LabeledSpanExtractionByTokenClassificationTaskModule
 from tests import _config_to_str
 
@@ -255,7 +256,7 @@ def test_forward(batch, model):
 
 
 def test_training_step_and_on_epoch_end(batch, model, config):
-    assert model.metric_train is None
+    assert model._get_metric(TRAINING) is None
     loss = model.training_step(batch, batch_idx=0)
     assert loss is not None
     torch.testing.assert_close(loss, torch.tensor(1.676901936531067))
@@ -264,11 +265,12 @@ def test_training_step_and_on_epoch_end(batch, model, config):
 
 
 def test_validation_step_and_on_epoch_end(batch, model, config):
-    model.metric_val.reset()
+    metric = model._get_metric(VALIDATION)
+    metric.reset()
     loss = model.validation_step(batch, batch_idx=0)
     assert loss is not None
     torch.testing.assert_close(loss, torch.tensor(1.676901936531067))
-    metric_values = {k: v.item() for k, v in model.metric_val.compute().items()}
+    metric_values = {k: v.item() for k, v in metric.compute().items()}
     assert metric_values == {
         "span/ORG/f1": 0.4000000059604645,
         "span/ORG/precision": 0.6666666865348816,
@@ -290,11 +292,12 @@ def test_validation_step_and_on_epoch_end(batch, model, config):
 
 
 def test_test_step_and_on_epoch_end(batch, model, config):
-    model.metric_test.reset()
+    metric = model._get_metric(TESTING)
+    metric.reset()
     loss = model.test_step(batch, batch_idx=0)
     assert loss is not None
     torch.testing.assert_close(loss, torch.tensor(1.676901936531067))
-    metric_values = {k: v.item() for k, v in model.metric_test.compute().items()}
+    metric_values = {k: v.item() for k, v in metric.compute().items()}
     assert metric_values == {
         "span/ORG/f1": 0.4000000059604645,
         "span/ORG/precision": 0.6666666865348816,

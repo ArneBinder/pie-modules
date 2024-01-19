@@ -200,7 +200,7 @@ def test_batch(taskmodule, batch):
 @pytest.fixture(scope="module")
 def unbatched_output(taskmodule, batch) -> Sequence[TaskOutputType]:
     inputs, targets = batch
-    return taskmodule.unbatch_output(targets["labels"])
+    return taskmodule.unbatch_output(targets)
 
 
 def test_unbatched_output(taskmodule, unbatched_output):
