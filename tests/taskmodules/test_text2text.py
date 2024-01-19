@@ -226,7 +226,7 @@ def test_configure_model_metrics(taskmodule):
     assert all(torch.isnan(value) for value in values.values())
 
     labels = torch.tensor([[3, 9, 1708, 1, 0], [3, 9, 1200, 1708, 1]])
-    metric.update(predictions={"labels": labels}, targets={"labels": labels})
+    metric.update(prediction={"labels": labels}, target={"labels": labels})
     assert set(metric.metric_state) == keys
     assert all(
         value == [torch.tensor(1.0), torch.tensor(1.0)] for value in metric.metric_state.values()
@@ -236,7 +236,7 @@ def test_configure_model_metrics(taskmodule):
     assert all(value == torch.tensor(1.0) for value in values.values())
 
     random_labels = torch.tensor([[875, 885, 112, 289, 769], [270, 583, 970, 114, 71]])
-    metric.update(predictions={"labels": random_labels}, targets={"labels": labels})
+    metric.update(prediction={"labels": random_labels}, target={"labels": labels})
     values = metric.compute()
     assert {k: v.item() for k, v in values.items()} == {
         "rouge1_fmeasure": 0.5625,

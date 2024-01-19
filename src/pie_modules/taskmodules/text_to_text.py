@@ -35,7 +35,7 @@ from pie_modules.document.processing import (
 from pie_modules.utils import resolve_type
 
 from .common import BatchableMixin, get_first_occurrence_index
-from .metrics import WrappedMetricWithUnbatchFunction
+from .metrics import WrappedMetricWithPrepareFunction
 
 logger = logging.getLogger(__name__)
 
@@ -442,6 +442,8 @@ class TextToTextTaskModule(
             ]
             return texts
 
-        return WrappedMetricWithUnbatchFunction(
-            metric=self.text_metric_type(), unbatch_function=unbatch_and_untokenize
+        return WrappedMetricWithPrepareFunction(
+            metric=self.text_metric_type(),
+            prepare_function=unbatch_and_untokenize,
+            prepare_does_unbatch=True,
         )
