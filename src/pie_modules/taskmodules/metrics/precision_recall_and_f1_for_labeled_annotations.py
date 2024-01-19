@@ -7,7 +7,7 @@ from pytorch_ie import Annotation
 from torch import LongTensor
 from torchmetrics import Metric
 
-from pie_modules.utils import flatten_nested_dict
+from pie_modules.utils import flatten_dict
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +151,6 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
             result = {f"{self.prefix}{k}": v for k, v in result.items()}
 
         if self.flatten_result_with_sep is not None:
-            return flatten_nested_dict(result, sep=self.flatten_result_with_sep)
+            return flatten_dict(result, sep=self.flatten_result_with_sep)
         else:
             return result
