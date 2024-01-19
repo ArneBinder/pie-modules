@@ -1,34 +1,27 @@
 import logging
 from typing import Any, Dict, Iterator, MutableMapping, Optional, Tuple, Union
 
-import torchmetrics
+import torch
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
-from torch import Tensor, nn
+from torch import FloatTensor, LongTensor, nn
 from torch.nn import Parameter
 from torch.optim import AdamW
 from transformers import AutoConfig, AutoModel, get_linear_schedule_with_warmup
 from transformers.modeling_outputs import SequenceClassifierOutput
 from typing_extensions import TypeAlias
 
+from .common import ModelWithBoilerplate
 from .components.pooler import get_pooler_and_output_size
 
-# The input to the forward method of this model. It is passed to
-# the base transformer model. Can also contain additional arguments
-# for the pooler (these need to be prefixed with "pooler_").
-ModelInputType: TypeAlias = MutableMapping[str, Any]
-# A dict with a single key "logits".
-ModelOutputType: TypeAlias = SequenceClassifierOutput
-# This contains the input and target tensors for a single training step.
-ModelStepInputType: TypeAlias = Tuple[
-    ModelInputType,  # input
-    Optional[Tensor],  # targets
-]
+# model inputs / outputs / targets
+InputType: TypeAlias = MutableMapping[str, LongTensor]
+OutputType: TypeAlias = SequenceClassifierOutput
+TargetType: TypeAlias = MutableMapping[str, LongTensor]
+# step inputs (batch) / outputs (loss)
+StepInputType: TypeAlias = Tuple[InputType, Optional[TargetType]]
+StepOutputType: TypeAlias = FloatTensor
 
-# stage names
-TRAINING = "train"
-VALIDATION = "val"
-TEST = "test"
 
 HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE = {
     "albert": "classifier_dropout_prob",
@@ -39,13 +32,16 @@ logger = logging.getLogger(__name__)
 
 
 @PyTorchIEModel.register()
-class SequenceClassificationModel(PyTorchIEModel, RequiresModelNameOrPath, RequiresNumClasses):
+class SequenceClassificationModel(
+    ModelWithBoilerplate[InputType, OutputType, TargetType, StepOutputType],
+    RequiresModelNameOrPath,
+    RequiresNumClasses,
+):
     def __init__(
         self,
         model_name_or_path: str,
         num_classes: int,
         tokenizer_vocab_size: Optional[int] = None,
-        ignore_index: Optional[int] = None,
         classifier_dropout: Optional[float] = None,
         learning_rate: float = 1e-5,
         task_learning_rate: Optional[float] = None,
@@ -99,18 +95,19 @@ class SequenceClassificationModel(PyTorchIEModel, RequiresModelNameOrPath, Requi
 
         self.loss_fct = nn.BCEWithLogitsLoss() if multi_label else nn.CrossEntropyLoss()
 
-        self.f1 = nn.ModuleDict(
-            {
-                f"stage_{stage}": torchmetrics.F1Score(
-                    num_classes=num_classes,
-                    ignore_index=ignore_index,
-                    task="multilabel" if multi_label else "multiclass",
-                )
-                for stage in [TRAINING, VALIDATION, TEST]
-            }
-        )
+        # TODO: move to taskmodule.configure_model_metric()
+        # self.f1 = nn.ModuleDict(
+        #    {
+        #        f"stage_{stage}": torchmetrics.F1Score(
+        #            num_classes=num_classes,
+        #            ignore_index=ignore_index,
+        #            task="multilabel" if multi_label else "multiclass",
+        #        )
+        #        for stage in [TRAINING, VALIDATION, TEST]
+        #    }
+        # )
 
-    def forward(self, inputs: ModelInputType) -> ModelOutputType:
+    def forward(self, inputs: InputType, targets: Optional[TargetType] = None) -> OutputType:
         pooler_inputs = {}
         model_inputs = {}
         for k, v in inputs.items():
@@ -128,32 +125,18 @@ class SequenceClassificationModel(PyTorchIEModel, RequiresModelNameOrPath, Requi
         pooled_output = self.dropout(pooled_output)
 
         logits = self.classifier(pooled_output)
-        return SequenceClassifierOutput(logits=logits)
 
-    def step(self, stage: str, batch: ModelStepInputType):
-        input_, target = batch
-        assert target is not None, "target has to be available for training"
+        result = {"logits": logits}
+        if targets is not None:
+            labels = targets["labels"]
+            loss = self.loss_fct(logits, labels)
+            result["loss"] = loss
 
-        logits = self(input_)["logits"]
+        return SequenceClassifierOutput(**result)
 
-        loss = self.loss_fct(logits, target)
-
-        self.log(f"{stage}/loss", loss, on_step=(stage == TRAINING), on_epoch=True, prog_bar=True)
-
-        f1 = self.f1[f"stage_{stage}"]
-        f1(logits, target)
-        self.log(f"{stage}/f1", f1, on_step=False, on_epoch=True, prog_bar=True)
-
-        return loss
-
-    def training_step(self, batch: ModelStepInputType, batch_idx: int):
-        return self.step(stage=TRAINING, batch=batch)
-
-    def validation_step(self, batch: ModelStepInputType, batch_idx: int):
-        return self.step(stage=VALIDATION, batch=batch)
-
-    def test_step(self, batch: ModelStepInputType, batch_idx: int):
-        return self.step(stage=TEST, batch=batch)
+    def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
+        labels = torch.argmax(outputs.logits, dim=-1).to(torch.long)
+        return {"labels": labels}
 
     def base_model_named_parameters(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
         if prefix:

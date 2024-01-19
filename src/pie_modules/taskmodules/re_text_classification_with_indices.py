@@ -54,10 +54,7 @@ from transformers.file_utils import PaddingStrategy
 from transformers.tokenization_utils_base import TruncationStrategy
 from typing_extensions import TypeAlias
 
-from pie_modules.models.sequence_classification import (
-    ModelOutputType,
-    ModelStepInputType,
-)
+from pie_modules.models.sequence_classification import OutputType, StepInputType
 
 InputEncodingType: TypeAlias = Dict[str, Any]
 TargetEncodingType: TypeAlias = Sequence[int]
@@ -80,8 +77,8 @@ TaskModuleType: TypeAlias = TaskModule[
     DocumentType,
     InputEncodingType,
     TargetEncodingType,
-    ModelStepInputType,
-    ModelOutputType,
+    StepInputType,
+    OutputType,
     TaskOutputType,
 ]
 
@@ -855,7 +852,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
 
         return target
 
-    def unbatch_output(self, model_output: ModelOutputType) -> Sequence[TaskOutputType]:
+    def unbatch_output(self, model_output: OutputType) -> Sequence[TaskOutputType]:
         logits = model_output["logits"]
 
         output_label_probs = logits.sigmoid() if self.multi_label else logits.softmax(dim=-1)
@@ -929,7 +926,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
             if not (self.add_candidate_relations and label == self.none_label):
                 yield self.relation_annotation, new_annotation
 
-    def collate(self, task_encodings: Sequence[TaskEncodingType]) -> ModelStepInputType:
+    def collate(self, task_encodings: Sequence[TaskEncodingType]) -> StepInputType:
         input_features = [
             {"input_ids": task_encoding.inputs["input_ids"]} for task_encoding in task_encodings
         ]

@@ -1,6 +1,9 @@
+from typing import Dict
+
 import pytest
 import torch
 from pytorch_lightning import Trainer
+from torch import LongTensor
 from torch.optim.lr_scheduler import LambdaLR
 from transformers.modeling_outputs import SequenceClassifierOutput
 
@@ -11,7 +14,7 @@ POOLER = "start_tokens"
 
 
 @pytest.fixture
-def inputs():
+def inputs() -> Dict[str, LongTensor]:
     result_dict = {
         "input_ids": torch.tensor(
             [
@@ -184,7 +187,7 @@ def inputs():
                     102,
                 ],
             ]
-        ),
+        ).to(torch.long),
         "attention_mask": torch.tensor(
             [
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -195,21 +198,21 @@ def inputs():
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             ]
-        ),
+        ).to(torch.long),
         "pooler_start_indices": torch.tensor(
             [[2, 10], [5, 13], [5, 17], [17, 11], [5, 13], [14, 18], [18, 14]]
-        ),
+        ).to(torch.long),
         "pooler_end_indices": torch.tensor(
             [[6, 11], [9, 14], [9, 18], [18, 12], [9, 14], [15, 19], [19, 15]]
-        ),
+        ).to(torch.long),
     }
 
     return result_dict
 
 
 @pytest.fixture
-def targets():
-    return torch.tensor([0, 1, 2, 3, 1, 2, 3])
+def targets() -> Dict[str, LongTensor]:
+    return {"labels": torch.tensor([0, 1, 2, 3, 1, 2, 3]).to(torch.long)}
 
 
 @pytest.fixture
