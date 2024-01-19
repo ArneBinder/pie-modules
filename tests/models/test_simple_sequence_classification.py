@@ -1,12 +1,12 @@
 import pytest
 import torch
-import transformers
-from transformers.modeling_outputs import (
-    BaseModelOutputWithPooling,
-    SequenceClassifierOutputWithPast,
-)
+from pytorch_lightning import Trainer
+from torch.optim.lr_scheduler import LambdaLR
+from transformers.modeling_outputs import SequenceClassifierOutput
 
 from pie_modules.models import SimpleSequenceClassificationModel
+
+NUM_CLASSES = 4
 
 
 @pytest.fixture
@@ -195,12 +195,6 @@ def inputs():
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             ]
         ),
-        "pooler_start_indices": torch.tensor(
-            [[2, 10], [5, 13], [5, 17], [17, 11], [5, 13], [14, 18], [18, 14]]
-        ),
-        "pooler_end_indices": torch.tensor(
-            [[6, 11], [9, 14], [9, 18], [18, 12], [9, 14], [15, 19], [19, 15]]
-        ),
     }
 
     return result_dict
@@ -211,317 +205,239 @@ def targets():
     return torch.tensor([0, 1, 2, 3, 1, 2, 3])
 
 
-@pytest.fixture(params=["cls_token"])  # , "mention_pooling", "start_tokens"])
-def pooler_type(request):
-    return request.param
-
-
-def get_model(
-    monkeypatch,
-    pooler_type,
-    batch_size,
-    seq_len,
-    num_classes,
-    add_dummy_linear=False,
-    model_type="bert",
-    base_model_prefix="dummy_linear",
-    **model_kwargs,
-):
-    class MockConfig:
-        def __init__(
-            self, hidden_size: int = 10, classifier_dropout: float = 0.1, model_type="bert"
-        ) -> None:
-            self.hidden_size = hidden_size
-            self.model_type = model_type
-            if self.model_type == "distilbert":
-                self.seq_classif_dropout = classifier_dropout
-            elif self.model_type == "albert":
-                self.classifier_dropout_prob = classifier_dropout
-            else:
-                self.classifier_dropout = classifier_dropout
-
-    class MockModel(torch.nn.Module):
-        def __init__(
-            self, batch_size, seq_len, hidden_size, num_classes, add_dummy_linear
-        ) -> None:
-            super().__init__()
-            self.batch_size = batch_size
-            self.seq_len = seq_len
-            self.hidden_size = hidden_size
-            self.num_classes = num_classes
-            if add_dummy_linear:
-                self.dummy_linear = torch.nn.Linear(self.hidden_size, 99)
-            self.classifier = torch.nn.Linear(self.hidden_size, self.num_classes)
-
-        def __call__(self, *args, **kwargs):
-            logits = torch.rand(self.batch_size, self.num_classes)
-            loss = torch.rand(1)[0]
-            return SequenceClassifierOutputWithPast(logits=logits, loss=loss)
-
-        def resize_token_embeddings(self, new_num_tokens):
-            pass
-
-    hidden_size = 10
-    tokenizer_vocab_size = 30000
-
-    monkeypatch.setattr(
-        transformers.AutoConfig,
-        "from_pretrained",
-        lambda model_name_or_path: MockConfig(
-            hidden_size=hidden_size, classifier_dropout=0.1, model_type=model_type
-        ),
-    )
-    monkeypatch.setattr(
-        transformers.AutoModelForSequenceClassification,
-        "from_pretrained",
-        lambda model_name_or_path, config: MockModel(
-            batch_size=batch_size,
-            seq_len=seq_len,
-            hidden_size=hidden_size,
-            num_classes=num_classes,
-            add_dummy_linear=add_dummy_linear,
-        ),
-    )
-
-    # set seed to make the classifier deterministic
+@pytest.fixture
+def model() -> SimpleSequenceClassificationModel:
     torch.manual_seed(42)
     result = SimpleSequenceClassificationModel(
-        model_name_or_path="some-model-name",
-        num_classes=num_classes,
-        tokenizer_vocab_size=tokenizer_vocab_size,
-        ignore_index=0,
-        # pooler=pooler_type,
-        # disable warmup because it would require a trainer and a datamodule to get the total number of training steps
-        warmup_proportion=0.0,
-        base_model_prefix=base_model_prefix,
-        **model_kwargs,
+        model_name_or_path="prajjwal1/bert-tiny",
+        num_classes=NUM_CLASSES,
     )
-    assert not result.is_from_pretrained
-
     return result
 
 
-@pytest.fixture
-def model(monkeypatch, pooler_type, inputs, targets):
-    return get_model(
-        monkeypatch=monkeypatch,
-        pooler_type=pooler_type,
-        batch_size=inputs["input_ids"].shape[0],
-        seq_len=inputs["input_ids"].shape[1],
-        num_classes=int(max(targets) + 1),
-    )
-
-
-def test_forward(inputs, model, pooler_type):
+def test_forward(inputs, model):
     batch_size, seq_len = inputs["input_ids"].shape
     # set seed to make sure the output is deterministic
     torch.manual_seed(42)
-    output = model.forward(inputs)
-    assert set(output) == {"logits", "loss"}
+    output = model(inputs)
+    assert isinstance(output, SequenceClassifierOutput)
+    assert set(output) == {"logits"}
     logits = output["logits"]
 
-    assert logits.shape == (batch_size, 4)
+    assert logits.shape == (batch_size, NUM_CLASSES)
 
-    if pooler_type == "cls_token":
-        torch.testing.assert_close(
-            logits,
-            torch.tensor(
+    torch.testing.assert_close(
+        logits,
+        torch.tensor(
+            [
                 [
-                    [
-                        0.8822692632675171,
-                        0.9150039553642273,
-                        0.38286375999450684,
-                        0.9593056440353394,
-                    ],
-                    [
-                        0.3904482126235962,
-                        0.600895345211029,
-                        0.2565724849700928,
-                        0.7936413288116455,
-                    ],
-                    [
-                        0.9407714605331421,
-                        0.13318592309951782,
-                        0.9345980882644653,
-                        0.5935796499252319,
-                    ],
-                    [
-                        0.8694044351577759,
-                        0.5677152872085571,
-                        0.7410940527915955,
-                        0.42940449714660645,
-                    ],
-                    [
-                        0.8854429125785828,
-                        0.5739044547080994,
-                        0.2665800452232361,
-                        0.6274491548538208,
-                    ],
-                    [
-                        0.26963168382644653,
-                        0.4413635730743408,
-                        0.2969208359718323,
-                        0.831685483455658,
-                    ],
-                    [
-                        0.10531491041183472,
-                        0.26949483156204224,
-                        0.3588126301765442,
-                        0.19936376810073853,
-                    ],
-                ]
-            ),
-        )
-    else:
-        raise ValueError(f"Unknown pooler type: {pooler_type}")
+                    -0.0780562311410904,
+                    0.2885679602622986,
+                    -0.1652916818857193,
+                    0.25686803460121155,
+                ],
+                [
+                    -0.07416453957557678,
+                    0.28354859352111816,
+                    -0.18583300709724426,
+                    0.2679266333580017,
+                ],
+                [
+                    -0.07721473276615143,
+                    0.27951815724372864,
+                    -0.18438687920570374,
+                    0.26015764474868774,
+                ],
+                [
+                    -0.07416942715644836,
+                    0.2880846858024597,
+                    -0.18872812390327454,
+                    0.2668967545032501,
+                ],
+                [
+                    -0.06794390082359314,
+                    0.2791520059108734,
+                    -0.18853652477264404,
+                    0.2560432553291321,
+                ],
+                [
+                    -0.06797368824481964,
+                    0.28091782331466675,
+                    -0.18849357962608337,
+                    0.24799709022045135,
+                ],
+                [
+                    -0.06416021287441254,
+                    0.2858850657939911,
+                    -0.19061337411403656,
+                    0.25447627902030945,
+                ],
+            ]
+        ),
+    )
 
 
 @pytest.fixture
 def batch(inputs, targets):
-    return (inputs, targets)
-
-
-def test_step(batch, model, pooler_type):
-    # set the seed to make sure the loss is deterministic
-    torch.manual_seed(42)
-    loss = model.step("train", batch)
-    if pooler_type == "cls_token":
-        torch.testing.assert_close(loss, torch.tensor(0.5471915602684021))
-    else:
-        raise ValueError(f"Unknown pooler type: {pooler_type}")
+    return inputs, targets
 
 
 def test_training_step(batch, model):
+    # set the seed to make sure the loss is deterministic
+    torch.manual_seed(42)
     loss = model.training_step(batch, batch_idx=0)
     assert loss is not None
+    torch.testing.assert_close(loss, torch.tensor(1.3877977132797241))
 
 
 def test_validation_step(batch, model):
+    # set the seed to make sure the loss is deterministic
+    torch.manual_seed(42)
     loss = model.validation_step(batch, batch_idx=0)
     assert loss is not None
+    torch.testing.assert_close(loss, torch.tensor(1.3877977132797241))
 
 
 def test_test_step(batch, model):
+    # set the seed to make sure the loss is deterministic
+    torch.manual_seed(42)
     loss = model.test_step(batch, batch_idx=0)
     assert loss is not None
+    torch.testing.assert_close(loss, torch.tensor(1.3877977132797241))
 
 
-def test_configure_optimizers(model):
-    optimizer = model.configure_optimizers()
+def test_base_model_named_parameters(model):
+    base_model_named_parameters = dict(model.base_model_named_parameters())
+    assert set(base_model_named_parameters) == {
+        "model.bert.pooler.dense.bias",
+        "model.bert.encoder.layer.0.intermediate.dense.weight",
+        "model.bert.encoder.layer.0.intermediate.dense.bias",
+        "model.bert.encoder.layer.1.attention.output.dense.weight",
+        "model.bert.encoder.layer.1.attention.output.LayerNorm.weight",
+        "model.bert.encoder.layer.1.attention.self.query.weight",
+        "model.bert.encoder.layer.1.output.dense.weight",
+        "model.bert.encoder.layer.0.output.dense.bias",
+        "model.bert.encoder.layer.1.intermediate.dense.bias",
+        "model.bert.encoder.layer.1.attention.self.value.bias",
+        "model.bert.encoder.layer.0.attention.output.dense.weight",
+        "model.bert.encoder.layer.0.attention.self.query.bias",
+        "model.bert.encoder.layer.0.attention.self.value.bias",
+        "model.bert.encoder.layer.1.output.dense.bias",
+        "model.bert.encoder.layer.1.attention.self.query.bias",
+        "model.bert.encoder.layer.1.attention.output.LayerNorm.bias",
+        "model.bert.encoder.layer.0.attention.self.query.weight",
+        "model.bert.encoder.layer.0.attention.output.LayerNorm.bias",
+        "model.bert.encoder.layer.0.attention.self.key.bias",
+        "model.bert.encoder.layer.1.intermediate.dense.weight",
+        "model.bert.encoder.layer.1.output.LayerNorm.bias",
+        "model.bert.encoder.layer.1.output.LayerNorm.weight",
+        "model.bert.encoder.layer.0.attention.self.key.weight",
+        "model.bert.encoder.layer.1.attention.output.dense.bias",
+        "model.bert.encoder.layer.0.attention.output.dense.bias",
+        "model.bert.embeddings.LayerNorm.bias",
+        "model.bert.encoder.layer.0.attention.self.value.weight",
+        "model.bert.encoder.layer.0.attention.output.LayerNorm.weight",
+        "model.bert.embeddings.token_type_embeddings.weight",
+        "model.bert.encoder.layer.0.output.LayerNorm.weight",
+        "model.bert.embeddings.position_embeddings.weight",
+        "model.bert.encoder.layer.1.attention.self.key.bias",
+        "model.bert.embeddings.LayerNorm.weight",
+        "model.bert.encoder.layer.0.output.LayerNorm.bias",
+        "model.bert.encoder.layer.1.attention.self.key.weight",
+        "model.bert.pooler.dense.weight",
+        "model.bert.encoder.layer.0.output.dense.weight",
+        "model.bert.embeddings.word_embeddings.weight",
+        "model.bert.encoder.layer.1.attention.self.value.weight",
+    }
+
+
+def test_task_named_parameters(model):
+    task_named_parameters = dict(model.task_named_parameters())
+    assert set(task_named_parameters) == {
+        "model.classifier.weight",
+        "model.classifier.bias",
+    }
+
+
+def test_configure_optimizers_with_warmup():
+    model = SimpleSequenceClassificationModel(
+        model_name_or_path="prajjwal1/bert-tiny",
+        num_classes=NUM_CLASSES,
+    )
+    model.trainer = Trainer(max_epochs=10)
+    optimizers_and_schedulers = model.configure_optimizers()
+    assert len(optimizers_and_schedulers) == 2
+    optimizers, schedulers = optimizers_and_schedulers
+    assert len(optimizers) == 1
+    assert len(schedulers) == 1
+    optimizer = optimizers[0]
     assert optimizer is not None
     assert isinstance(optimizer, torch.optim.AdamW)
     assert optimizer.defaults["lr"] == 1e-05
     assert optimizer.defaults["weight_decay"] == 0.01
     assert optimizer.defaults["eps"] == 1e-08
 
+    scheduler = schedulers[0]
+    assert isinstance(scheduler, dict)
+    assert set(scheduler) == {"scheduler", "interval"}
+    assert isinstance(scheduler["scheduler"], LambdaLR)
+
 
 def test_configure_optimizers_with_task_learning_rate(monkeypatch):
-    model = get_model(
-        monkeypatch=monkeypatch,
-        pooler_type="cls_token",
-        batch_size=7,
-        seq_len=22,
-        num_classes=4,
-        add_dummy_linear=True,
-        task_learning_rate=0.1,
+    model = SimpleSequenceClassificationModel(
+        model_name_or_path="prajjwal1/bert-tiny",
+        num_classes=NUM_CLASSES,
+        learning_rate=1e-5,
+        task_learning_rate=1e-3,
+        # disable warmup to make sure the scheduler is not added which would set the learning rate
+        # to 0
+        warmup_proportion=0.0,
     )
     optimizer = model.configure_optimizers()
     assert optimizer is not None
     assert isinstance(optimizer, torch.optim.AdamW)
     assert len(optimizer.param_groups) == 2
+    # base model parameters
     param_group = optimizer.param_groups[0]
-    assert param_group["lr"] == 1e-05
-    # the dummy linear from the mock base model has 2 parameters
-    assert len(param_group["params"]) == 2
-    assert param_group["params"][0].shape == torch.Size([99, 10])
-    assert param_group["params"][1].shape == torch.Size([99])
+    assert len(param_group["params"]) == 39
+    assert param_group["lr"] == 1e-5
+    # classifier head parameters
     param_group = optimizer.param_groups[1]
-    assert param_group["lr"] == 0.1
-    # the classifier head has 2 parameters
     assert len(param_group["params"]) == 2
-    assert param_group["params"][0].shape == torch.Size([4, 10])
-    assert param_group["params"][1].shape == torch.Size([4])
+    assert param_group["lr"] == 1e-3
+    # ensure that all parameters are covered
+    assert set(optimizer.param_groups[0]["params"] + optimizer.param_groups[1]["params"]) == set(
+        model.parameters()
+    )
 
 
 def test_freeze_base_model(monkeypatch, inputs, targets):
-    # set seed to make the classifier deterministic
-    model = get_model(
-        monkeypatch,
-        pooler_type="cls_token",
-        batch_size=7,
-        seq_len=22,
-        num_classes=4,
-        add_dummy_linear=True,
+    model = SimpleSequenceClassificationModel(
+        model_name_or_path="prajjwal1/bert-tiny",
+        num_classes=NUM_CLASSES,
         freeze_base_model=True,
+        # disable warmup to make sure the scheduler is not added which would set the learning rate
+        # to 0
+        warmup_proportion=0.0,
     )
-    base_model_params = list(model.model.dummy_linear.parameters())
-    task_parameters = list(model.model.classifier.parameters())
-    # the dummy linear from the mock base model has 2 parameters
-    assert len(base_model_params) == 2
+    base_model_params = [param for name, param in model.base_model_named_parameters()]
+    task_params = [param for name, param in model.task_named_parameters()]
+    assert len(base_model_params) + len(task_params) == len(list(model.parameters()))
     for param in base_model_params:
         assert not param.requires_grad
-
-
-@pytest.mark.parametrize(
-    "model_type", ["bert", "albert", "distilbert", "roberta", "deberta", "electra", "xlm-roberta"]
-)
-def test_config_model_classifier_dropout(monkeypatch, model_type):
-    model = get_model(
-        monkeypatch,
-        pooler_type="cls_token",
-        batch_size=7,
-        seq_len=22,
-        num_classes=4,
-        model_type=model_type,
-    )
-    assert model is not None
-
-
-def test_base_model_named_parameters(monkeypatch):
-    model = get_model(
-        monkeypatch,
-        pooler_type="cls_token",
-        batch_size=7,
-        seq_len=22,
-        num_classes=4,
-        add_dummy_linear=True,
-    )
-    base_model_named_parameters = model.base_model_named_parameters()
-    assert len(base_model_named_parameters) == 2
-    assert base_model_named_parameters[0][0] == "model.dummy_linear.weight"
-    assert base_model_named_parameters[1][0] == "model.dummy_linear.bias"
-
-
-def test_base_model_named_parameters_no_prefix(monkeypatch):
-    model = get_model(
-        monkeypatch,
-        pooler_type="cls_token",
-        batch_size=7,
-        seq_len=22,
-        num_classes=4,
-        add_dummy_linear=True,
-        base_model_prefix=None,
-    )
-    with pytest.raises(ValueError) as excinfo:
-        model.base_model_named_parameters()
-    assert (
-        str(excinfo.value) == "base_model_prefix has to be set to select the base model parameters"
-    )
+    for param in task_params:
+        assert param.requires_grad
 
 
 def test_base_model_named_parameters_wrong_prefix(monkeypatch):
-    model = get_model(
-        monkeypatch,
-        pooler_type="cls_token",
-        batch_size=7,
-        seq_len=22,
-        num_classes=4,
-        add_dummy_linear=True,
+    model = SimpleSequenceClassificationModel(
+        model_name_or_path="prajjwal1/bert-tiny",
+        num_classes=NUM_CLASSES,
         base_model_prefix="wrong_prefix",
     )
     with pytest.raises(ValueError) as excinfo:
         model.base_model_named_parameters()
     assert (
         str(excinfo.value)
-        == "No base model parameters found. Is base_model_prefix=wrong_prefix for MockModel correct?"
+        == "Base model with prefix 'wrong_prefix' not found in BertForSequenceClassification"
     )
