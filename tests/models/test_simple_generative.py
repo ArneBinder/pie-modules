@@ -7,7 +7,7 @@ from pytorch_lightning import Trainer
 from torch.optim import Optimizer
 
 from pie_modules.models import SimpleGenerativeModel
-from pie_modules.models.simple_generative import STAGE_TEST, STAGE_VAL
+from pie_modules.models.common import TESTING, VALIDATION
 from pie_modules.taskmodules import TextToTextTaskModule
 
 MODEL_ID = "google/t5-efficient-tiny-nl2"
@@ -26,13 +26,13 @@ def taskmodule():
 
 
 @pytest.fixture(scope="module")
-def model(taskmodule):
+def model(taskmodule) -> SimpleGenerativeModel:
     return SimpleGenerativeModel(
         base_model_type="transformers.AutoModelForSeq2SeqLM",
         base_model_config=dict(pretrained_model_name_or_path=MODEL_ID),
         # only use predictions for metrics in test stage to cover all cases (default is all stages)
-        use_prediction_for_metrics=[STAGE_TEST],
-        taskmodule_config=taskmodule._config(),
+        metric_call_predict=[TESTING],
+        taskmodule_config=taskmodule.config,
         # use a strange learning rate to make sure it is passed through
         learning_rate=13e-3,
         optimizer_type="torch.optim.Adam",
@@ -55,8 +55,8 @@ def test_model_without_taskmodule(caplog):
     assert len(caplog.messages) == 2
     assert (
         caplog.messages[0]
-        == "No taskmodule is available, so no metrics will be created. Please set taskmodule_config to a "
-        "valid taskmodule config to use metrics."
+        == "No taskmodule is available, so no metrics are set up. Please provide a "
+        "taskmodule_config to enable metrics for stages ['train', 'val', 'test']."
     )
     assert (
         caplog.messages[1]
@@ -135,7 +135,7 @@ def test_batch(batch, taskmodule):
 def test_training_step(batch, model):
     model.train()
     torch.manual_seed(42)
-    metric = model.get_metric(STAGE_VAL, batch_idx=0)
+    metric = model._get_metric(VALIDATION, batch_idx=0)
     metric.reset()
     loss = model.training_step(batch, batch_idx=0)
     assert loss is not None
@@ -154,7 +154,7 @@ def test_training_step(batch, model):
 def test_validation_step(batch, model):
     model.eval()
     torch.manual_seed(42)
-    metric = model.get_metric(STAGE_VAL, batch_idx=0)
+    metric = model._get_metric(VALIDATION, batch_idx=0)
     metric.reset()
     loss = model.validation_step(batch, batch_idx=0)
     assert loss is not None
@@ -183,7 +183,7 @@ def test_validation_step(batch, model):
 def test_test_step(batch, model):
     model.eval()
     torch.manual_seed(42)
-    metric = model.get_metric(STAGE_TEST, batch_idx=0)
+    metric = model._get_metric(TESTING, batch_idx=0)
     metric.reset()
     loss = model.test_step(batch, batch_idx=0)
     assert loss is not None
@@ -213,9 +213,10 @@ def test_predict_step(batch, model):
     model.eval()
     torch.manual_seed(42)
     predictions = model.predict_step(batch, batch_idx=0)
-    assert predictions is not None
+    labels = predictions["labels"]
+    assert labels is not None
     torch.testing.assert_close(
-        predictions,
+        labels,
         torch.tensor(
             [
                 [32099, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -245,7 +246,7 @@ def test_predict_step(batch, model):
     )
 
     predicted_tokens = [
-        model.taskmodule.tokenizer.convert_ids_to_tokens(prediction) for prediction in predictions
+        model.taskmodule.tokenizer.convert_ids_to_tokens(label) for label in labels
     ]
     assert predicted_tokens == [
         [

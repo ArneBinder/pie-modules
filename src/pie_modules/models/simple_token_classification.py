@@ -10,7 +10,7 @@ from transformers import AutoConfig, AutoModelForTokenClassification, BatchEncod
 from transformers.modeling_outputs import TokenClassifierOutput
 from typing_extensions import TypeAlias
 
-from pie_modules.models.common import Model
+from pie_modules.models.common import ModelWithBoilerplate
 
 # model inputs / outputs / targets
 InputType: TypeAlias = BatchEncoding
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 @PyTorchIEModel.register()
 class SimpleTokenClassificationModel(
-    Model[InputType, OutputType, TargetType, StepOutputType],
+    ModelWithBoilerplate[InputType, OutputType, TargetType, StepOutputType],
     RequiresModelNameOrPath,
     RequiresNumClasses,
 ):

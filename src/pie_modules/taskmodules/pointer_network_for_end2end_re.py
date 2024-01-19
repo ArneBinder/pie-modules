@@ -237,7 +237,9 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         # remove the first token (bos_token) and use unbatch_output to un-pad the label_ids
         label_ids_without_bos = input_ids[1:]
         if len(label_ids_without_bos) > 0:
-            unpadded_label_ids = self.unbatch_output(label_ids_without_bos.unsqueeze(0))[0].labels
+            unpadded_label_ids = self.unbatch_output(
+                {"labels": label_ids_without_bos.unsqueeze(0)}
+            )[0].labels
         else:
             unpadded_label_ids = []
         _, _, remaining = self.decode_relations(label_ids=unpadded_label_ids)
@@ -794,18 +796,17 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         return inputs, targets
 
     def unbatch_output(self, model_output: ModelBatchOutput) -> Sequence[TaskOutputType]:
-        batch_size = model_output.size(0)
+        labels = model_output["labels"]
+        batch_size = labels.size(0)
 
         # We use the position after the first eos token as the seq_len.
         # Note that, if eos_id is not in model_output for a given batch item, the result will be
         # model_output.size(1) + 1 (i.e. seq_len + 1) for that batch item. This is fine, because we use the
         # seq_lengths just to truncate the output and want to keep everything if eos_id is not present.
-        seq_lengths = get_first_occurrence_index(model_output, self.eos_id) + 1
+        seq_lengths = get_first_occurrence_index(labels, self.eos_id) + 1
 
         result = [
-            LabelsAndOptionalConstraints(
-                model_output[i, : seq_lengths[i]].to(device="cpu").tolist()
-            )
+            LabelsAndOptionalConstraints(labels[i, : seq_lengths[i]].to(device="cpu").tolist())
             for i in range(batch_size)
         ]
         return result
