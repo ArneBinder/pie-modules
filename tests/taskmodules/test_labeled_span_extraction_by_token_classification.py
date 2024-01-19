@@ -12,9 +12,10 @@ from pytorch_ie.documents import (
     TextDocumentWithLabeledSpans,
     TextDocumentWithLabeledSpansAndLabeledPartitions,
 )
+from torch import tensor
 from transformers import BatchEncoding
 
-from pie_modules.taskmodules import TokenClassificationTaskModule
+from pie_modules.taskmodules import LabeledSpanExtractionByTokenClassificationTaskModule
 
 
 def _config_to_str(cfg: Dict[str, Any]) -> str:
@@ -70,7 +71,7 @@ def unprepared_taskmodule(config):
     - Sets up the task module with a unprepared state for testing purposes.
 
     """
-    return TokenClassificationTaskModule(
+    return LabeledSpanExtractionByTokenClassificationTaskModule(
         tokenizer_name_or_path="bert-base-uncased", span_annotation="entities", **config
     )
 
@@ -129,7 +130,7 @@ def test_prepare(taskmodule):
 
 def test_config(taskmodule):
     config = taskmodule._config()
-    assert config["taskmodule_type"] == "TokenClassificationTaskModule"
+    assert config["taskmodule_type"] == "LabeledSpanExtractionByTokenClassificationTaskModule"
     assert "labels" in config
     assert config["labels"] == ["LOC", "PER"]
 
@@ -336,7 +337,7 @@ def test_task_encodings(task_encodings, taskmodule, config):
 
 def test_encode_targets_with_overlap(caplog):
     # setup taskmodule
-    taskmodule = TokenClassificationTaskModule(
+    taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule(
         tokenizer_name_or_path="bert-base-uncased", labels=["LOC", "PER"]
     )
     taskmodule.post_prepare()
@@ -371,7 +372,7 @@ def task_encodings_for_batch(task_encodings, config):
 
 
 @pytest.fixture(scope="module")
-def batch(taskmodule, task_encodings_for_batch, config):
+def batch(taskmodule, task_encodings_for_batch, config) -> BatchEncoding:
     return taskmodule.collate(task_encodings_for_batch)
 
 
@@ -380,10 +381,11 @@ def test_collate(batch, config):
     assert len(batch) == 2
     inputs, targets = batch
 
-    assert set(inputs.data) == {"input_ids", "attention_mask"}
+    assert set(inputs.data) == {"input_ids", "attention_mask", "special_tokens_mask"}
     input_ids_list = inputs.input_ids.tolist()
     attention_mask_list = inputs.attention_mask.tolist()
     targets_list = targets.tolist()
+    special_tokens_mask_list = inputs.special_tokens_mask.tolist()
 
     # If config is empty
     if config == CONFIG_DEFAULT:
@@ -398,6 +400,10 @@ def test_collate(batch, config):
         assert targets_list == [
             [-100, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, -100],
             [-100, 3, 0, 0, 0, 0, 3, 0, 0, 0, 0, -100],
+        ]
+        assert special_tokens_mask_list == [
+            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
         ]
 
     # If config has the specified values (max_window=8, window_overlap=2)
@@ -441,12 +447,19 @@ def test_collate(batch, config):
             [-100, 3, 0, 0, 0, 0, 3, -100],
             [-100, 0, 0, 0, 0, -100, -100, -100],
         ]
+        assert special_tokens_mask_list == [
+            [1, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 0, 0, 0, 1, 1, 1],
+            [1, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 0, 0, 0, 1, 1, 1],
+        ]
 
     # If config has the specified value (partition_annotation=sentences)
     elif config == CONFIG_PARTITIONS:
         assert input_ids_list == [[101, 3960, 15646, 2652, 4715, 1012, 102]]
         assert attention_mask_list == [[1, 1, 1, 1, 1, 1, 1]]
         assert targets_list == [[-100, 3, 0, 0, 0, 0, -100]]
+        assert special_tokens_mask_list == [[1, 0, 0, 0, 0, 0, 1]]
 
     else:
         raise ValueError(f"unknown config: {config}")
@@ -455,6 +468,7 @@ def test_collate(batch, config):
         data={
             "input_ids": torch.tensor(input_ids_list, dtype=torch.int64),
             "attention_mask": torch.tensor(attention_mask_list, dtype=torch.int64),
+            "special_tokens_mask": torch.tensor(special_tokens_mask_list, dtype=torch.int64),
         }
     )
     assert set(inputs.data) == set(inputs_expected.data)
@@ -477,18 +491,10 @@ def real_model_output(batch, taskmodule):
 
 
 @pytest.fixture(scope="module")
-def model_output(config, batch, taskmodule):
+def model_output(config, batch, taskmodule) -> torch.LongTensor:
     # create "perfect" output from targets
     targets = batch[1].clone()
-    targets[targets == -100] = 0
-    one_hot_targets = (
-        torch.nn.functional.one_hot(targets, num_classes=len(taskmodule.label_to_id)).float()
-        * 0.99
-        + 0.005
-    )
-    # convert to logits (logit = log(p/(1-p)))
-    logits = torch.log(one_hot_targets / (1 - one_hot_targets))
-    return {"logits": logits}
+    return targets
 
 
 @pytest.fixture(scope="module")
@@ -499,180 +505,102 @@ def unbatched_outputs(taskmodule, model_output):
 def test_unbatched_output(unbatched_outputs, config):
     assert unbatched_outputs is not None
 
-    result = [
-        {
-            "tags": unbatched_output["tags"],
-            "probabilities": unbatched_output["probabilities"].round(3).tolist(),
-        }
-        for unbatched_output in unbatched_outputs
-    ]
-
-    # Based on the config, perform assertions for each unbatched output
     if config == CONFIG_DEFAULT:
-        assert result == [
-            {
-                "tags": ["O", "B-LOC", "I-LOC", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 1.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 1.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
-            {
-                "tags": ["O", "B-PER", "O", "O", "O", "O", "B-PER", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
+        assert len(unbatched_outputs) == 2
+        torch.testing.assert_close(
+            unbatched_outputs[0], torch.tensor([-100, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, -100])
+        )
+        torch.testing.assert_close(
+            unbatched_outputs[1], torch.tensor([-100, 3, 0, 0, 0, 0, 3, 0, 0, 0, 0, -100])
+        )
+    elif config == CONFIG_MAX_WINDOW_WITH_STRIDE:
+        assert len(unbatched_outputs) == 4
+        torch.testing.assert_close(
+            unbatched_outputs[0], torch.tensor([-100, 1, 2, 0, 0, 0, 0, -100])
+        )
+        torch.testing.assert_close(
+            unbatched_outputs[1], torch.tensor([-100, 0, 0, 0, 0, 0, 0, -100])
+        )
+        torch.testing.assert_close(
+            unbatched_outputs[2], torch.tensor([-100, 3, 0, 0, 0, 0, 3, -100])
+        )
+        torch.testing.assert_close(
+            unbatched_outputs[3], torch.tensor([-100, 0, 3, 0, 0, 0, 0, -100])
+        )
+    elif config == CONFIG_MAX_WINDOW:
+        assert len(unbatched_outputs) == 4
+        torch.testing.assert_close(
+            unbatched_outputs[0], torch.tensor([-100, 1, 2, 0, 0, 0, 0, -100])
+        )
+        torch.testing.assert_close(
+            unbatched_outputs[1], torch.tensor([-100, 0, 0, 0, 0, -100, -100, -100])
+        )
+        torch.testing.assert_close(
+            unbatched_outputs[2], torch.tensor([-100, 3, 0, 0, 0, 0, 3, -100])
+        )
+        torch.testing.assert_close(
+            unbatched_outputs[3], torch.tensor([-100, 0, 0, 0, 0, -100, -100, -100])
+        )
+    elif config == CONFIG_PARTITIONS:
+        assert len(unbatched_outputs) == 1
+        torch.testing.assert_close(unbatched_outputs[0], torch.tensor([-100, 3, 0, 0, 0, 0, -100]))
+    else:
+        raise ValueError(f"unknown config: {config}")
+
+
+def test_decode_annotations(taskmodule, unbatched_outputs, config):
+    annotations = []
+    for unbatched_output in unbatched_outputs:
+        decoded_annotations = taskmodule.decode_annotations(unbatched_output)
+        assert set(decoded_annotations.keys()) == {"labeled_spans"}
+        # Sort the annotations in each document by start and end position and label
+        annotations.append(
+            sorted(
+                decoded_annotations["labeled_spans"],
+                key=lambda labeled_span: (
+                    labeled_span.start,
+                    labeled_span.end,
+                    labeled_span.label,
+                ),
+            )
+        )
+
+    # Check based on the config
+    if config == CONFIG_DEFAULT:
+        assert annotations == [
+            [LabeledSpan(start=1, end=3, label="LOC")],
+            [
+                LabeledSpan(start=1, end=2, label="PER"),
+                LabeledSpan(start=6, end=7, label="PER"),
+            ],
         ]
 
     elif config == CONFIG_MAX_WINDOW_WITH_STRIDE:
-        assert result == [
-            {
-                "tags": ["O", "B-LOC", "I-LOC", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 1.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 1.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
-            {
-                "tags": ["O", "O", "O", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
-            {
-                "tags": ["O", "B-PER", "O", "O", "O", "O", "B-PER", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
-            {
-                "tags": ["O", "O", "B-PER", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
+        # We get two annotations for Bob because the window overlaps with the previous one.
+        # This is not a problem because annotations get de-duplicated during serialization.
+        assert annotations == [
+            [LabeledSpan(start=1, end=3, label="LOC", score=1.0)],
+            [],
+            [
+                LabeledSpan(start=1, end=2, label="PER", score=1.0),
+                LabeledSpan(start=6, end=7, label="PER", score=1.0),
+            ],
+            [LabeledSpan(start=2, end=3, label="PER", score=1.0)],
         ]
 
     elif config == CONFIG_MAX_WINDOW:
-        assert result == [
-            {
-                "tags": ["O", "B-LOC", "I-LOC", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 1.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 1.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
-            {
-                "tags": ["O", "O", "O", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
-            {
-                "tags": ["O", "B-PER", "O", "O", "O", "O", "B-PER", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
-            {
-                "tags": ["O", "O", "O", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            },
+        assert annotations == [
+            [LabeledSpan(start=1, end=3, label="LOC", score=1.0)],
+            [],
+            [
+                LabeledSpan(start=1, end=2, label="PER", score=1.0),
+                LabeledSpan(start=6, end=7, label="PER", score=1.0),
+            ],
+            [],
         ]
 
     elif config == CONFIG_PARTITIONS:
-        assert result == [
-            {
-                "tags": ["O", "B-PER", "O", "O", "O", "O", "O"],
-                "probabilities": [
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            }
-        ]
+        assert annotations == [[LabeledSpan(start=1, end=2, label="PER", score=1.0)]]
 
     else:
         raise ValueError(f"unknown config: {config}")
@@ -728,12 +656,14 @@ def test_annotations_from_output(annotations_from_output, config, documents):
 
 
 def test_document_type():
-    taskmodule = TokenClassificationTaskModule(tokenizer_name_or_path="bert-base-uncased")
+    taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule(
+        tokenizer_name_or_path="bert-base-uncased"
+    )
     assert taskmodule.document_type == TextDocumentWithLabeledSpans
 
 
 def test_document_type_with_partitions():
-    taskmodule = TokenClassificationTaskModule(
+    taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule(
         tokenizer_name_or_path="bert-base-uncased", partition_annotation="labeled_partitions"
     )
     assert taskmodule.document_type == TextDocumentWithLabeledSpansAndLabeledPartitions
@@ -741,7 +671,7 @@ def test_document_type_with_partitions():
 
 def test_document_type_with_non_default_span_annotation(caplog):
     with caplog.at_level(logging.WARNING):
-        taskmodule = TokenClassificationTaskModule(
+        taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule(
             tokenizer_name_or_path="bert-base-uncased", span_annotation="entities"
         )
     assert taskmodule.document_type is None
@@ -750,7 +680,7 @@ def test_document_type_with_non_default_span_annotation(caplog):
     assert (
         caplog.records[0].message
         == "span_annotation=entities is not the default value ('labeled_spans'), so the taskmodule "
-        "TokenClassificationTaskModule can not request the usual document type "
+        "LabeledSpanExtractionByTokenClassificationTaskModule can not request the usual document type "
         "(TextDocumentWithLabeledSpans) for auto-conversion because this has the bespoken default value "
         "as layer name(s) instead of the provided one(s)."
     )
@@ -758,7 +688,7 @@ def test_document_type_with_non_default_span_annotation(caplog):
 
 def test_document_type_with_non_default_partition_annotation(caplog):
     with caplog.at_level(logging.WARNING):
-        taskmodule = TokenClassificationTaskModule(
+        taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule(
             tokenizer_name_or_path="bert-base-uncased", partition_annotation="sentences"
         )
     assert taskmodule.document_type is None
@@ -767,7 +697,7 @@ def test_document_type_with_non_default_partition_annotation(caplog):
     assert (
         caplog.records[0].message
         == "partition_annotation=sentences is not the default value ('labeled_partitions'), "
-        "so the taskmodule TokenClassificationTaskModule can not request the usual document type "
+        "so the taskmodule LabeledSpanExtractionByTokenClassificationTaskModule can not request the usual document type "
         "(TextDocumentWithLabeledSpansAndLabeledPartitions) for auto-conversion because this has "
         "the bespoken default value as layer name(s) instead of the provided one(s)."
     )
@@ -775,7 +705,7 @@ def test_document_type_with_non_default_partition_annotation(caplog):
 
 def test_document_type_with_non_default_span_and_partition_annotation(caplog):
     with caplog.at_level(logging.WARNING):
-        taskmodule = TokenClassificationTaskModule(
+        taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule(
             tokenizer_name_or_path="bert-base-uncased",
             span_annotation="entities",
             partition_annotation="sentences",
@@ -787,7 +717,64 @@ def test_document_type_with_non_default_span_and_partition_annotation(caplog):
         caplog.records[0].message
         == "span_annotation=entities is not the default value ('labeled_spans') and "
         "partition_annotation=sentences is not the default value ('labeled_partitions'), "
-        "so the taskmodule TokenClassificationTaskModule can not request the usual document "
+        "so the taskmodule LabeledSpanExtractionByTokenClassificationTaskModule can not request the usual document "
         "type (TextDocumentWithLabeledSpansAndLabeledPartitions) for auto-conversion because "
         "this has the bespoken default value as layer name(s) instead of the provided one(s)."
     )
+
+
+def test_configure_model_metric(documents):
+    taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule(
+        tokenizer_name_or_path="bert-base-uncased",
+        span_annotation="entities",
+        labels=["LOC", "PER"],
+    )
+    taskmodule.post_prepare()
+
+    metric = taskmodule.configure_model_metric(stage="test")
+    values = metric.compute()
+    assert values == {"token/macro/f1": tensor(0.0), "token/micro/f1": tensor(0.0)}
+
+    batch = taskmodule.collate(taskmodule.encode(documents, encode_target=True))
+    targets = batch[1]
+    metric.update(targets, targets)
+    values = metric.compute()
+    assert values == {
+        "span/LOC/f1": tensor(1.0),
+        "span/LOC/precision": tensor(1.0),
+        "span/LOC/recall": tensor(1.0),
+        "span/PER/f1": tensor(1.0),
+        "span/PER/precision": tensor(1.0),
+        "span/PER/recall": tensor(1.0),
+        "span/macro/f1": tensor(1.0),
+        "span/macro/precision": tensor(1.0),
+        "span/macro/recall": tensor(1.0),
+        "span/micro/f1": tensor(1.0),
+        "span/micro/precision": tensor(1.0),
+        "span/micro/recall": tensor(1.0),
+        "token/macro/f1": tensor(1.0),
+        "token/micro/f1": tensor(1.0),
+    }
+
+    predictions = torch.ones_like(targets)
+    # we need to set the same padding as in the targets
+    predictions[targets == taskmodule.label_pad_id] = taskmodule.label_pad_id
+    metric.update(predictions, targets)
+    values = metric.compute()
+    values_converted = {k: v.item() for k, v in values.items()}
+    assert values_converted == {
+        "token/macro/f1": 0.5434783101081848,
+        "token/micro/f1": 0.5249999761581421,
+        "span/LOC/recall": 0.0476190485060215,
+        "span/LOC/precision": 0.5,
+        "span/LOC/f1": 0.08695652335882187,
+        "span/macro/f1": 0.37681159377098083,
+        "span/macro/precision": 0.5,
+        "span/macro/recall": 0.523809552192688,
+        "span/micro/recall": 0.1304347813129425,
+        "span/micro/precision": 0.5,
+        "span/micro/f1": 0.2068965584039688,
+        "span/PER/recall": 1.0,
+        "span/PER/precision": 0.5,
+        "span/PER/f1": 0.6666666865348816,
+    }

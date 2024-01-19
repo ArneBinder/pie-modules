@@ -23,7 +23,6 @@ from typing import (
 )
 
 import torch
-import torch.nn.functional as F
 from pytorch_ie import AnnotationLayer
 from pytorch_ie.annotations import LabeledSpan
 from pytorch_ie.core import TaskEncoding, TaskModule
@@ -32,12 +31,9 @@ from pytorch_ie.documents import (
     TextDocumentWithLabeledSpans,
     TextDocumentWithLabeledSpansAndLabeledPartitions,
 )
-from pytorch_ie.models.transformer_token_classification import (
-    ModelOutputType,
-    ModelStepInputType,
-)
 from pytorch_ie.utils.span import bio_tags_to_spans
 from tokenizers import Encoding
+from torchmetrics import F1Score, Metric, MetricCollection
 from transformers import AutoTokenizer
 from typing_extensions import TypeAlias
 
@@ -49,6 +45,11 @@ from pie_modules.documents import (
     TokenDocumentWithLabeledSpans,
     TokenDocumentWithLabeledSpansAndLabeledPartitions,
 )
+from pie_modules.taskmodules.metrics import (
+    PrecisionRecallAndF1ForLabeledAnnotations,
+    WrappedMetricWithPrepareFunction,
+)
+from pie_modules.utils import list_of_dicts2dict_of_lists
 
 DocumentType: TypeAlias = TextDocument
 
@@ -59,7 +60,12 @@ TaskEncodingType: TypeAlias = TaskEncoding[
     InputEncodingType,
     TargetEncodingType,
 ]
-TaskOutputType: TypeAlias = Dict[str, Any]
+ModelStepInputType: TypeAlias = Tuple[
+    Dict[str, torch.LongTensor],
+    Optional[torch.LongTensor],
+]
+ModelOutputType: TypeAlias = torch.LongTensor
+TaskOutputType: TypeAlias = torch.LongTensor
 
 TaskModuleType: TypeAlias = TaskModule[
     DocumentType,
@@ -74,7 +80,7 @@ logger = logging.getLogger(__name__)
 
 
 @TaskModule.register()
-class TokenClassificationTaskModule(TaskModuleType):
+class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
     """Taskmodule for span prediction (e.g. NER) as token classification.
 
     This taskmodule expects the input documents to be of TextBasedDocument with an annotation layer of
@@ -103,14 +109,16 @@ class TokenClassificationTaskModule(TaskModuleType):
         span_annotation: Name of the annotation layer that contains the labeled spans. Default: "labeled_spans".
         partition_annotation: Name of the annotation layer that contains the labeled partitions. If provided, the
             text is tokenized individually per partition. Default: None.
-        label_pad_token_id: ID of the padding tag label. The model should ignore this for training. Default: -100.
-        labels: List of labels to use. If not provided, the labels are collected from the data during the prepare()
-            step. Default: None.
+        label_pad_id: ID of the padding tag label. The model should ignore this for training. Default: -100.
+        labels: List of labels to use. If not provided, the labels are collected from the labeled span annotations
+            in the data during the prepare() step. Default: None.
         include_ill_formed_predictions: Whether to include ill-formed predictions in the output. If False, the
             predictions are corrected to be well-formed. Default: True.
         tokenize_kwargs: Keyword arguments to pass to the tokenizer during tokenization. Default: None.
         pad_kwargs: Keyword arguments to pass to the tokenizer during padding. Note, that this is used to pad the
             token ids *and* the tag ids, if available (i.e. during training or evaluation). Default: None.
+        log_precision_recall_metrics: Whether to log precision and recall metrics (in addition to F1) for the
+            spans. Default: True.
     """
 
     # list of attribute names that need to be set by _prepare()
@@ -121,43 +129,25 @@ class TokenClassificationTaskModule(TaskModuleType):
         tokenizer_name_or_path: str,
         span_annotation: str = "labeled_spans",
         partition_annotation: Optional[str] = None,
-        label_pad_token_id: int = -100,
+        label_pad_id: int = -100,
         labels: Optional[List[str]] = None,
-        max_window: Optional[int] = None,
-        window_overlap: int = 0,
         include_ill_formed_predictions: bool = True,
         tokenize_kwargs: Optional[Dict[str, Any]] = None,
         pad_kwargs: Optional[Dict[str, Any]] = None,
+        log_precision_recall_metrics: bool = True,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-
-        # backwards compatibility
-        tokenize_kwargs = copy.deepcopy(tokenize_kwargs) or {}
-        if max_window is not None:
-            tokenize_kwargs["max_length"] = max_window
-            tokenize_kwargs["return_overflowing_tokens"] = True
-            logger.warning(
-                "The 'max_window' parameter is deprecated and will be removed in a future version. "
-                "Please use the 'tokenize_kwargs[\"max_length\"]' parameter instead."
-            )
-        if window_overlap > 0:
-            tokenize_kwargs["stride"] = window_overlap
-            tokenize_kwargs["return_overflowing_tokens"] = True
-            logger.warning(
-                "The 'window_overlap' parameter is deprecated and will be removed in a future version. "
-                "Please use the 'tokenize_kwargs[\"stride\"]' parameter instead."
-            )
-
-        self.save_hyperparameters(ignore=["max_window", "window_overlap"])
+        self.save_hyperparameters()
 
         self.span_annotation = span_annotation
         self.partition_annotation = partition_annotation
         self.labels = labels
-        self.label_pad_token_id = label_pad_token_id
+        self.label_pad_id = label_pad_id
         self.include_ill_formed_predictions = include_ill_formed_predictions
         self.tokenize_kwargs = tokenize_kwargs or {}
         self.pad_kwargs = pad_kwargs or {}
+        self.log_precision_recall_metrics = log_precision_recall_metrics
 
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
 
@@ -285,16 +275,22 @@ class TokenClassificationTaskModule(TaskModuleType):
                 tag_sequence[j] = f"I-{span.label}"
 
         targets = [
-            self.label_to_id[tag] if tag is not None else self.label_pad_token_id
-            for tag in tag_sequence
+            self.label_to_id[tag] if tag is not None else self.label_pad_id for tag in tag_sequence
         ]
 
         return targets
 
     def collate(self, task_encodings: Sequence[TaskEncodingType]) -> ModelStepInputType:
-        input_ids = [task_encoding.inputs.ids for task_encoding in task_encodings]
+        input_encodings = [
+            {
+                "input_ids": task_encoding.inputs.ids,
+                "attention_mask": task_encoding.inputs.attention_mask,
+                "special_tokens_mask": task_encoding.inputs.special_tokens_mask,
+            }
+            for task_encoding in task_encodings
+        ]
         inputs = self.tokenizer.pad(
-            {"input_ids": input_ids}, return_tensors="pt", **self.pad_kwargs
+            list_of_dicts2dict_of_lists(input_encodings), return_tensors="pt", **self.pad_kwargs
         )
 
         if not task_encodings[0].has_targets:
@@ -307,16 +303,25 @@ class TokenClassificationTaskModule(TaskModuleType):
 
         # set the padding label to the label_pad_token_id
         pad_mask = inputs["input_ids"] == self.tokenizer.pad_token_id
-        targets[pad_mask] = self.label_pad_token_id
+        targets[pad_mask] = self.label_pad_id
 
         return inputs, targets
 
     def unbatch_output(self, model_output: ModelOutputType) -> Sequence[TaskOutputType]:
-        logits = model_output["logits"]
-        probabilities = F.softmax(logits, dim=-1).detach().cpu().numpy()
-        indices = torch.argmax(logits, dim=-1).detach().cpu().numpy()
-        tags = [[self.id_to_label[e] for e in b] for b in indices]
-        return [{"tags": t, "probabilities": p} for t, p in zip(tags, probabilities)]
+        return [labels for labels in model_output.detach().cpu()]
+
+    def decode_annotations(self, labels: torch.LongTensor) -> Dict[str, Sequence[LabeledSpan]]:
+        tag_sequence = [
+            "O" if tag_id == self.label_pad_id else self.id_to_label[tag_id]
+            for tag_id in labels.tolist()
+        ]
+        labeled_spans: List[LabeledSpan] = []
+        for label, (start, end_inclusive) in bio_tags_to_spans(
+            tag_sequence, include_ill_formed=self.include_ill_formed_predictions
+        ):
+            labeled_span = LabeledSpan(label=label, start=start, end=end_inclusive + 1)
+            labeled_spans.append(labeled_span)
+        return {"labeled_spans": labeled_spans}
 
     def create_annotations_from_output(
         self,
@@ -324,21 +329,14 @@ class TokenClassificationTaskModule(TaskModuleType):
         task_output: TaskOutputType,
     ) -> Iterator[Tuple[str, LabeledSpan]]:
         tokenized_document = task_encoding.metadata["tokenized_document"]
-        special_tokens_mask = tokenized_document.metadata["tokenizer_encoding"].special_tokens_mask
-
-        tag_sequence = [
-            "O" if is_special_token else tag
-            for tag, is_special_token in zip(task_output["tags"], special_tokens_mask)
-        ]
+        decoded_annotations = self.decode_annotations(task_output)
 
         # Note: token_based_document_to_text_based() does not yet consider predictions, so we need to clear
         # the main annotations and attach the predictions to that
-        tokenized_document.labeled_spans.clear()
-        for label, (start, end_inclusive) in bio_tags_to_spans(
-            tag_sequence, include_ill_formed=self.include_ill_formed_predictions
-        ):
-            token_span_annotation = LabeledSpan(label=label, start=start, end=end_inclusive + 1)
-            tokenized_document.labeled_spans.append(token_span_annotation)
+        for layer_name, annotations in decoded_annotations.items():
+            tokenized_document[layer_name].clear()
+            for annotation in annotations:
+                tokenized_document[layer_name].append(annotation)
 
         # we can not use self.document_type here because that may be None if self.span_annotation or
         # self.partition_annotation is not the default value
@@ -356,3 +354,55 @@ class TokenClassificationTaskModule(TaskModuleType):
         for span in untokenized_document.labeled_spans:
             # need to copy the span because it can be attached to only one document
             yield self.span_annotation, span.copy()
+
+    def configure_model_metric(self, stage: str) -> Union[Metric, MetricCollection]:
+        def remove_label_pad_ids(labels: torch.LongTensor) -> torch.LongTensor:
+            # remove the special tokens and padding from the predicted / target labels
+            # because the label_pad_id is usually not a valid index (e.g. -100)
+            mask = labels != self.label_pad_id
+            labels_valid = labels[mask]
+            return labels_valid
+
+        token_scores = MetricCollection(
+            {
+                "token/macro/f1": WrappedMetricWithPrepareFunction(
+                    metric=F1Score(
+                        num_classes=len(self.label_to_id),
+                        task="multiclass",
+                        average="macro",
+                    ),
+                    prepare_function=remove_label_pad_ids,
+                ),
+                "token/micro/f1": WrappedMetricWithPrepareFunction(
+                    metric=F1Score(
+                        num_classes=len(self.label_to_id),
+                        task="multiclass",
+                        average="micro",
+                    ),
+                    prepare_function=remove_label_pad_ids,
+                ),
+            }
+        )
+
+        def unbatch_and_decode_annotations(
+            model_output: ModelOutputType,
+        ) -> List[Sequence[LabeledSpan]]:
+            task_outputs = self.unbatch_output(model_output)
+            annotations = [
+                self.decode_annotations(task_output)["labeled_spans"]
+                for task_output in task_outputs
+            ]
+            return annotations
+
+        span_scores = PrecisionRecallAndF1ForLabeledAnnotations(
+            flatten_result_with_sep="/",
+            prefix="span/",
+            return_recall_and_precision=self.log_precision_recall_metrics,
+        )
+        span_scores_wrapped = WrappedMetricWithPrepareFunction(
+            metric=span_scores,
+            prepare_function=unbatch_and_decode_annotations,
+            prepare_does_unbatch=True,
+        )
+
+        return MetricCollection([token_scores, span_scores_wrapped])

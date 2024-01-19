@@ -1,11 +1,11 @@
+import logging
 from typing import Any, Dict, Optional, Tuple
 
 import torch
-import torchmetrics
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
-from torch import Tensor, nn
-from torch.nn import CrossEntropyLoss
+from pytorch_lightning.utilities.types import OptimizerLRScheduler
+from torch import FloatTensor, LongTensor, nn
 from torchcrf import CRF
 from transformers import (
     AutoConfig,
@@ -16,15 +16,16 @@ from transformers import (
 from transformers.modeling_outputs import TokenClassifierOutput
 from typing_extensions import TypeAlias
 
-from .components.seq2seq_encoder import build_seq2seq_encoder
+from pie_modules.models.common import Model
+from pie_modules.models.components.seq2seq_encoder import build_seq2seq_encoder
 
-ModelBatchEncodingType: TypeAlias = BatchEncoding
-ModelBatchOutputType: TypeAlias = Dict[str, Any]
-
-StepBatchEncodingType: TypeAlias = Tuple[
-    Dict[str, Tensor],
-    Optional[Tensor],
-]
+# model inputs / outputs / targets
+InputType: TypeAlias = BatchEncoding
+OutputType: TypeAlias = TokenClassifierOutput
+TargetType: TypeAlias = LongTensor
+# step inputs / outputs
+StepInputType: TypeAlias = Tuple[InputType, Optional[TargetType]]
+StepOutputType: TypeAlias = FloatTensor
 
 HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE = {
     "bert": "hidden_dropout_prob",
@@ -35,25 +36,57 @@ HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE = {
     "longformer": "hidden_dropout_prob",
 }
 
-TRAINING = "train"
-VALIDATION = "val"
-TEST = "test"
+logger = logging.getLogger(__name__)
 
 
 @PyTorchIEModel.register()
 class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
-    PyTorchIEModel, RequiresNumClasses, RequiresModelNameOrPath
+    Model[InputType, OutputType, TargetType, StepOutputType],
+    RequiresNumClasses,
+    RequiresModelNameOrPath,
 ):
+    """A token classification model that wraps a (pretrained) model loaded with AutoModel from the
+    transformers library. The model can optionally be followed by a seq2seq encoder (e.g. an LSTM).
+    Finally, Conditional Random Fields (CRFs) can be used to decode the predictions.
+
+    The model is trained with a cross-entropy loss function and uses the Adam optimizer.
+
+    Note that for training, the labels for the special tokens (as well as for padding tokens)
+    are expected to have the value label_pad_id (-100 by default, which is the default ignore_index
+    value for the CrossEntropyLoss). The predictions for these tokens are also replaced with
+    label_pad_id to match the training labels for correct metric calculation. Therefore, the model
+    requires the special_tokens_mask and attention_mask (for padding) to be passed as inputs.
+
+    Args:
+        model_name_or_path: The name or path of the (pretrained) transformer model to use.
+        num_classes: The number of classes to predict.
+        learning_rate: The learning rate to use for training.
+        task_learning_rate: The learning rate to use for the task-specific parameters, i.e.
+            for the sequence-to-sequence encoder, classification head, and CRF. If None, the
+            learning_rate is used for all parameters.
+        use_crf: Whether to use a CRF to decode the predictions.
+        label_pad_id: The label id to use for padding labels (at the padding token positions
+            as well as for the special tokens).
+        special_token_label_id: The label id to use for special tokens (e.g. [CLS], [SEP]). This
+            is used to replace the targets for special tokens with the label_pad_id before passing
+            them to the CRF because the CRF does not allow the first token to be masked out.
+        classifier_dropout: The dropout probability to use for the classification head.
+        freeze_base_model: Whether to freeze the base model (i.e. the transformer) during training.
+        warmup_proportion: The proportion of training steps to use for the linear warmup.
+        seq2seq_encoder: A dictionary with the configuration for the seq2seq encoder. If None, no
+            seq2seq encoder is used. See ./components/seq2seq_encoder.py for further information.
+    """
+
     def __init__(
         self,
         model_name_or_path: str,
         num_classes: int,
         learning_rate: float = 1e-5,
         task_learning_rate: Optional[float] = None,
-        label_pad_token_id: int = -100,
-        ignore_index: int = 0,
-        classifier_dropout: Optional[float] = None,
         use_crf: bool = True,
+        label_pad_id: int = -100,
+        special_token_label_id: int = 0,
+        classifier_dropout: Optional[float] = None,
         freeze_base_model: bool = False,
         warmup_proportion: float = 0.1,
         seq2seq_encoder: Optional[Dict[str, Any]] = None,
@@ -62,12 +95,12 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         super().__init__(**kwargs)
         self.save_hyperparameters()
 
-        self.ignore_index = ignore_index
+        self.special_token_label_id = special_token_label_id
 
         self.learning_rate = learning_rate
         self.warmup_proportion = warmup_proportion
         self.task_learning_rate = task_learning_rate
-        self.label_pad_token_id = label_pad_token_id
+        self.label_pad_id = label_pad_id
         self.num_classes = num_classes
 
         config = AutoConfig.from_pretrained(model_name_or_path)
@@ -98,7 +131,8 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
                 classifier_dropout = getattr(config, classifier_dropout_attr)
             else:
                 raise ValueError(
-                    f"The config {type(config),__name__} loaded from {model_name_or_path} has no attribute {classifier_dropout_attr}"
+                    f"The config {type(config),__name__} loaded from {model_name_or_path} has no attribute "
+                    f"{classifier_dropout_attr}"
                 )
         self.dropout = nn.Dropout(classifier_dropout)
 
@@ -106,19 +140,34 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
 
         self.crf = CRF(num_tags=num_classes, batch_first=True) if use_crf else None
 
-        self.f1 = nn.ModuleDict(
-            {
-                f"stage_{stage}": torchmetrics.F1Score(
-                    num_classes=num_classes, ignore_index=ignore_index, task="multiclass"
-                )
-                for stage in [TRAINING, VALIDATION, TEST]
-            }
-        )
+    def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
+        logits = outputs.logits
+        attention_mask = inputs["attention_mask"]
+        special_tokens_mask = inputs["special_tokens_mask"]
+        attention_mask_bool = attention_mask.to(torch.bool)
+        if self.crf is not None:
+            decoded_tags = self.crf.decode(emissions=logits, mask=attention_mask_bool)
+            # pad the decoded tags to the length of the logits to have the same shape as when not using the crf
+            seq_len = logits.shape[1]
+            padded_tags = [
+                tags + [self.label_pad_id] * (seq_len - len(tags)) for tags in decoded_tags
+            ]
+            tags_tensor = torch.tensor(padded_tags, device=logits.device).to(torch.long)
+        else:
+            # get the max index for each token from the logits
+            tags_tensor = torch.argmax(logits, dim=-1).to(torch.long)
+        # set the padding and special tokens to the label_pad_id
+        mask = attention_mask_bool & ~special_tokens_mask.to(torch.bool)
+        tags_tensor = tags_tensor.masked_fill(~mask, self.label_pad_id)
+        return tags_tensor
 
-    def forward(self, inputs: ModelBatchEncodingType) -> ModelBatchOutputType:
-        labels = inputs.pop("labels", None)
-
-        outputs = self.model(**inputs)
+    def forward(
+        self, inputs: InputType, targets: Optional[TargetType] = None
+    ) -> TokenClassifierOutput:
+        inputs_without_special_tokens_mask = {
+            k: v for k, v in inputs.items() if k != "special_tokens_mask"
+        }
+        outputs = self.model(**inputs_without_special_tokens_mask)
         sequence_output = outputs[0]
 
         if self.seq2seq_encoder is not None:
@@ -128,36 +177,28 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         logits = self.classifier(sequence_output)
 
         loss = None
-        if "attention_mask" in inputs:
-            mask_bool = inputs["attention_mask"].to(torch.bool)
-        else:
-            # the crf expects a bool mask and fails if it is not provided
-            mask_bool = torch.ones_like(logits, dtype=torch.bool, device=logits.device)
+        labels = targets
         if labels is not None:
             if self.crf is not None:
-                # replace the padding labels with the ignore_index (not inplace to mitigate side effects)
-                labels_valid = torch.where(
-                    labels == self.label_pad_token_id,
-                    torch.tensor(self.ignore_index).to(device=logits.device),
-                    labels,
-                )
+                # Overwrite the padding labels with ignore_index. Note that this is different from the
+                # attention_mask, because the attention_mask includes special tokens, whereas the labels
+                # are set to label_pad_id also for special tokens (e.g. [CLS]). We need handle all
+                # occurrences of label_pad_id because usually that index is out of range with respect to
+                # the number of logits in which case the crf would complain. However, we can not simply
+                # pass a mask to the crf that also masks out the special tokens, because the crf does not
+                # allow the first token to be masked out.
+                mask_pad_or_special = labels == self.label_pad_id
+                labels_valid = labels.masked_fill(mask_pad_or_special, self.special_token_label_id)
+                # the crf expects a bool mask
+                if "attention_mask" in inputs:
+                    mask_bool = inputs["attention_mask"].to(torch.bool)
+                else:
+                    mask_bool = None
                 log_likelihood = self.crf(emissions=logits, tags=labels_valid, mask=mask_bool)
                 loss = -log_likelihood
             else:
-                loss_fct = CrossEntropyLoss()
+                loss_fct = nn.CrossEntropyLoss(ignore_index=self.label_pad_id)
                 loss = loss_fct(logits.view(-1, self.num_classes), labels.view(-1))
-
-        if self.crf is not None:
-            decoded_tags = self.crf.decode(emissions=logits, mask=mask_bool)
-            # re-construct the logits from the decoded tags to be compatible with the default taskmodule
-            seq_len = logits.shape[1]
-            padded_tags = [
-                tags + [self.ignore_index] * (seq_len - len(tags)) for tags in decoded_tags
-            ]
-            padded_tags_tensor = torch.tensor(padded_tags, dtype=torch.long, device=logits.device)
-            logits = torch.nn.functional.one_hot(
-                padded_tags_tensor, num_classes=self.num_classes
-            ).to(torch.float)
 
         return TokenClassifierOutput(
             loss=loss,
@@ -166,50 +207,7 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
             attentions=outputs.attentions,
         )
 
-    def step(
-        self,
-        stage: str,
-        batch: StepBatchEncodingType,
-    ):
-        input_, target = batch
-        assert target is not None, "target has to be available for training"
-
-        input_["labels"] = target
-        output = self(input_)
-
-        loss = output.loss
-        # show loss on each step only during training
-        self.log(
-            f"{stage}/loss",
-            loss,
-            on_step=(stage == TRAINING),
-            on_epoch=True,
-            prog_bar=True,
-            sync_dist=True,
-        )
-
-        target_flat = target.view(-1)
-
-        valid_indices = target_flat != self.label_pad_token_id
-        valid_logits = output.logits.view(-1, self.num_classes)[valid_indices]
-        valid_target = target_flat[valid_indices]
-
-        f1 = self.f1[f"stage_{stage}"]
-        f1(valid_logits, valid_target)
-        self.log(f"{stage}/f1", f1, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
-
-        return loss
-
-    def training_step(self, batch: StepBatchEncodingType, batch_idx: int):
-        return self.step(stage=TRAINING, batch=batch)
-
-    def validation_step(self, batch: StepBatchEncodingType, batch_idx: int):
-        return self.step(stage=VALIDATION, batch=batch)
-
-    def test_step(self, batch: StepBatchEncodingType, batch_idx: int):
-        return self.step(stage=TEST, batch=batch)
-
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> OptimizerLRScheduler:
         if self.task_learning_rate is not None:
             all_params = dict(self.named_parameters())
             base_model_params = dict(self.model.named_parameters(prefix="model"))
