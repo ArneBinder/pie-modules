@@ -19,7 +19,7 @@ from typing_extensions import TypeAlias
 from pie_modules.models.common import Model
 from pie_modules.models.components.seq2seq_encoder import build_seq2seq_encoder
 
-# mode inputs / outputs / targets
+# model inputs / outputs / targets
 InputType: TypeAlias = BatchEncoding
 OutputType: TypeAlias = TokenClassifierOutput
 TargetType: TypeAlias = LongTensor

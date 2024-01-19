@@ -12,7 +12,7 @@ from typing_extensions import TypeAlias
 
 from pie_modules.models.common import Model
 
-# mode inputs / outputs / targets
+# model inputs / outputs / targets
 InputType: TypeAlias = BatchEncoding
 OutputType: TypeAlias = TokenClassifierOutput
 TargetType: TypeAlias = LongTensor
