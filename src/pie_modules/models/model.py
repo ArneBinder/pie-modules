@@ -20,7 +20,7 @@ VALIDATION = "val"
 TEST = "test"
 
 
-class DefaultModel(
+class Model(
     PyTorchIEModel,
     WithMetricsFromTaskModule[InputType, TargetType, OutputType],
     Generic[InputType, OutputType, TargetType, StepOutputType],
