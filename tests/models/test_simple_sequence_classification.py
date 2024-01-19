@@ -1,3 +1,5 @@
+from typing import Dict
+
 import pytest
 import torch
 from pytorch_lightning import Trainer
@@ -10,7 +12,7 @@ NUM_CLASSES = 4
 
 
 @pytest.fixture
-def inputs():
+def inputs() -> Dict[str, torch.LongTensor]:
     result_dict = {
         "input_ids": torch.tensor(
             [
@@ -183,7 +185,7 @@ def inputs():
                     102,
                 ],
             ]
-        ),
+        ).to(torch.long),
         "attention_mask": torch.tensor(
             [
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -194,15 +196,15 @@ def inputs():
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             ]
-        ),
+        ).to(torch.long),
     }
 
     return result_dict
 
 
 @pytest.fixture
-def targets():
-    return torch.tensor([0, 1, 2, 3, 1, 2, 3])
+def targets() -> Dict[str, torch.LongTensor]:
+    return {"labels": torch.tensor([0, 1, 2, 3, 1, 2, 3]).to(torch.long)}
 
 
 @pytest.fixture
@@ -215,14 +217,18 @@ def model() -> SimpleSequenceClassificationModel:
     return result
 
 
-def test_forward(inputs, model):
-    batch_size, seq_len = inputs["input_ids"].shape
+@pytest.fixture
+def model_output(model, inputs):
     # set seed to make sure the output is deterministic
     torch.manual_seed(42)
-    output = model(inputs)
-    assert isinstance(output, SequenceClassifierOutput)
-    assert set(output) == {"logits"}
-    logits = output["logits"]
+    return model(inputs)
+
+
+def test_forward(model_output, inputs):
+    batch_size = inputs["input_ids"].shape[0]
+    assert isinstance(model_output, SequenceClassifierOutput)
+    assert set(model_output) == {"logits"}
+    logits = model_output["logits"]
 
     assert logits.shape == (batch_size, NUM_CLASSES)
 
@@ -274,6 +280,18 @@ def test_forward(inputs, model):
                 ],
             ]
         ),
+    )
+
+
+def test_decode(model, model_output, inputs):
+    decoded = model.decode(inputs=inputs, outputs=model_output)
+    assert isinstance(decoded, dict)
+    assert set(decoded) == {"labels"}
+    labels = decoded["labels"]
+    assert labels.shape == (inputs["input_ids"].shape[0],)
+    torch.testing.assert_close(
+        labels,
+        torch.tensor([1, 1, 1, 1, 1, 1, 1]),
     )
 
 
