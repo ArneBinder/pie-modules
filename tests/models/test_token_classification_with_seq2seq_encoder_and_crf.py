@@ -3,11 +3,7 @@ import torch
 from pytorch_lightning import Trainer
 
 from pie_modules.models import TokenClassificationModelWithSeq2SeqEncoderAndCrf
-from pie_modules.models.common.model_with_boilerplate import (
-    TESTING,
-    TRAINING,
-    VALIDATION,
-)
+from pie_modules.models.common import TESTING, TRAINING, VALIDATION
 from pie_modules.taskmodules import LabeledSpanExtractionByTokenClassificationTaskModule
 from tests import _config_to_str
 

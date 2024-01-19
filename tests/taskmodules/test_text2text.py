@@ -9,7 +9,7 @@ from pie_modules.documents import (
     TextDocumentWithAbstractiveSummary,
     TokenDocumentWithAbstractiveSummary,
 )
-from pie_modules.models.common.model_with_boilerplate import VALIDATION
+from pie_modules.models.common import VALIDATION
 from pie_modules.taskmodules import TextToTextTaskModule
 from pie_modules.taskmodules.text_to_text import (
     InputEncodingType,
