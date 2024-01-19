@@ -10,7 +10,7 @@ from transformers import AutoConfig, AutoModelForTokenClassification, BatchEncod
 from transformers.modeling_outputs import TokenClassifierOutput
 from typing_extensions import TypeAlias
 
-from pie_modules.models.model import Model
+from pie_modules.models.common import Model
 
 # mode inputs / outputs / targets
 InputType: TypeAlias = BatchEncoding

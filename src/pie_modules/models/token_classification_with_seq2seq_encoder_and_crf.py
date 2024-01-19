@@ -16,8 +16,8 @@ from transformers import (
 from transformers.modeling_outputs import TokenClassifierOutput
 from typing_extensions import TypeAlias
 
+from pie_modules.models.common import Model
 from pie_modules.models.components.seq2seq_encoder import build_seq2seq_encoder
-from pie_modules.models.model import Model
 
 # mode inputs / outputs / targets
 InputType: TypeAlias = BatchEncoding
