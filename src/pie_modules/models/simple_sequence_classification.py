@@ -91,6 +91,8 @@ class SimpleSequenceClassificationModel(
             raise ValueError(
                 f"Base model with prefix '{self.base_model_prefix}' not found in {type(self.model).__name__}"
             )
+        if prefix:
+            prefix = f"{prefix}."
         return base_model.named_parameters(prefix=f"{prefix}model.{self.base_model_prefix}")
 
     def task_named_parameters(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
