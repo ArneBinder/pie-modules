@@ -4,15 +4,12 @@ from typing import Dict, Generic, List, Optional, Set, TypeVar, Union
 from pytorch_ie import PyTorchIEModel
 from torchmetrics import Metric, MetricCollection
 
-from pie_modules.models.common.has_taskmodule import HasTaskmodule
+from .has_taskmodule import HasTaskmodule
+from .stages import TESTING, TRAINING, VALIDATION
 
 InputType = TypeVar("InputType")
 TargetType = TypeVar("TargetType")
 OutputType = TypeVar("OutputType")
-
-TRAINING = "train"
-VALIDATION = "val"
-TESTING = "test"
 
 logger = logging.getLogger(__name__)
 

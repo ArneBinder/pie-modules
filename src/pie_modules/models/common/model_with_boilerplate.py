@@ -3,12 +3,8 @@ from typing import Generic, Optional, Tuple, TypeVar
 
 from typing_extensions import TypeAlias
 
-from .model_with_metrics_from_taskmodule import (
-    TESTING,
-    TRAINING,
-    VALIDATION,
-    ModelWithMetricsFromTaskModule,
-)
+from .model_with_metrics_from_taskmodule import ModelWithMetricsFromTaskModule
+from .stages import TESTING, TRAINING, VALIDATION
 
 InputType = TypeVar("InputType")
 OutputType = TypeVar("OutputType")
