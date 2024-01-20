@@ -69,21 +69,8 @@ def taskmodule(unprepared_taskmodule, documents):
 @pytest.fixture
 def model_output():
     return {
-        "logits": torch.from_numpy(
-            numpy.log(
-                [
-                    # O, org:founded_by, per:employee_of, per:founder
-                    [0.1, 0.6, 0.1, 0.2],
-                    [0.5, 0.2, 0.2, 0.1],
-                    [0.1, 0.2, 0.6, 0.1],
-                    [0.1, 0.2, 0.2, 0.5],
-                    [0.2, 0.4, 0.3, 0.1],
-                    [0.5, 0.2, 0.2, 0.1],
-                    [0.6, 0.1, 0.2, 0.1],
-                    [0.5, 0.2, 0.2, 0.1],
-                ]
-            )
-        ),
+        "labels": torch.tensor([1, 0, 2, 3, 1, 0, 0, 0]),
+        "probabilities": torch.tensor([0.6, 0.5, 0.6, 0.5, 0.4, 0.5, 0.6, 0.5]),
     }
 
 
@@ -551,7 +538,8 @@ def test_collate(taskmodule, documents, encode_target):
         )
 
     if encode_target:
-        torch.testing.assert_close(targets, torch.tensor([2, 2]))
+        assert set(targets) == {"labels"}
+        torch.testing.assert_close(targets["labels"], torch.tensor([2, 2]))
     else:
         assert targets is None
 
