@@ -73,18 +73,6 @@ class SimpleSequenceClassificationModel(
             for name, param in self.base_model_named_parameters():
                 param.requires_grad = False
 
-        # TODO: move to taskmodule.configure_model_metric()
-        # self.f1 = nn.ModuleDict(
-        #    {
-        #        f"stage_{stage}": torchmetrics.F1Score(
-        #            num_classes=num_classes,
-        #            ignore_index=ignore_index,
-        #            task="multilabel" if multi_label else "multiclass",
-        #        )
-        #        for stage in [TRAINING, VALIDATION, TEST]
-        #    }
-        # )
-
     def base_model_named_parameters(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
         base_model: torch.nn.Module = getattr(self.model, self.base_model_prefix, None)
         if base_model is None:
