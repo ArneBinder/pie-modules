@@ -48,6 +48,7 @@ from pytorch_ie.documents import (
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
 from pytorch_ie.utils.span import get_token_slice, has_overlap, is_contained_in
 from pytorch_ie.utils.window import get_window_around_slice
+from torchmetrics import F1Score, Metric
 from transformers import AutoTokenizer
 from transformers.file_utils import PaddingStrategy
 from transformers.tokenization_utils_base import TruncationStrategy
@@ -59,6 +60,7 @@ from pie_modules.models.simple_sequence_classification import (
 from pie_modules.models.simple_sequence_classification import (
     TargetType as ModelTargetType,
 )
+from pie_modules.taskmodules.metrics import WrappedMetricWithPrepareFunction
 
 InputEncodingType: TypeAlias = Dict[str, Any]
 TargetEncodingType: TypeAlias = Sequence[int]
@@ -962,3 +964,19 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
             targets = targets.flatten()
 
         return inputs, {"labels": targets}
+
+    def configure_model_metric(self, stage: str) -> Metric:
+        if self.labels is None:
+            raise ValueError(
+                "The taskmodule has not been prepared yet, so the labels are not known. "
+                "Please call taskmodule.prepare() before configuring the model metric or "
+                "pass the labels to the taskmodule constructor."
+            )
+        return WrappedMetricWithPrepareFunction(
+            metric=F1Score(
+                num_classes=len(self.labels),
+                average="micro",
+                task="multilabel" if self.multi_label else "multiclass",
+            ),
+            prepare_function=lambda model_output: model_output["labels"],
+        )
