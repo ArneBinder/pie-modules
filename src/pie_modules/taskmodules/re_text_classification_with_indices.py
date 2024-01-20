@@ -54,10 +54,10 @@ from transformers.tokenization_utils_base import TruncationStrategy
 from typing_extensions import TypeAlias
 
 from pie_modules.models.simple_sequence_classification import (
-    OutputType as ModelOutputType,
+    StepInputType as ModelStepInputType,
 )
 from pie_modules.models.simple_sequence_classification import (
-    StepInputType as ModelStepInputType,
+    TargetType as ModelTargetType,
 )
 
 InputEncodingType: TypeAlias = Dict[str, Any]
@@ -82,7 +82,7 @@ TaskModuleType: TypeAlias = TaskModule[
     InputEncodingType,
     TargetEncodingType,
     ModelStepInputType,
-    ModelOutputType,
+    ModelTargetType,
     TaskOutputType,
 ]
 
@@ -856,7 +856,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
 
         return target
 
-    def unbatch_output(self, model_output: ModelOutputType) -> Sequence[TaskOutputType]:
+    def unbatch_output(self, model_output: ModelTargetType) -> Sequence[TaskOutputType]:
         unbatched_output = []
         if self.multi_label:
             raise NotImplementedError
