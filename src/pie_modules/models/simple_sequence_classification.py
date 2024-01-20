@@ -1,5 +1,5 @@
 import logging
-from typing import Iterator, MutableMapping, Optional, Tuple
+from typing import Iterator, MutableMapping, Optional, Tuple, Union
 
 import torch.nn
 from pytorch_ie.core import PyTorchIEModel
@@ -20,7 +20,7 @@ from pie_modules.models.common import ModelWithBoilerplate
 # model inputs / outputs / targets
 InputType: TypeAlias = MutableMapping[str, LongTensor]
 OutputType: TypeAlias = SequenceClassifierOutput
-TargetType: TypeAlias = MutableMapping[str, LongTensor]
+TargetType: TypeAlias = MutableMapping[str, Union[LongTensor, FloatTensor]]
 # step inputs (batch) / outputs (loss)
 StepInputType: TypeAlias = Tuple[InputType, Optional[TargetType]]
 StepOutputType: TypeAlias = FloatTensor
@@ -95,7 +95,8 @@ class SimpleSequenceClassificationModel(
 
     def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
         labels = torch.argmax(outputs.logits, dim=-1).to(torch.long)
-        return {"labels": labels}
+        probabilities = torch.softmax(outputs.logits, dim=-1)
+        return {"labels": labels, "probabilities": probabilities}
 
     def configure_optimizers(self):
         if self.task_learning_rate is not None:

@@ -17,7 +17,7 @@ from .components.pooler import get_pooler_and_output_size
 # model inputs / outputs / targets
 InputType: TypeAlias = MutableMapping[str, LongTensor]
 OutputType: TypeAlias = SequenceClassifierOutput
-TargetType: TypeAlias = MutableMapping[str, LongTensor]
+TargetType: TypeAlias = MutableMapping[str, Union[LongTensor, FloatTensor]]
 # step inputs (batch) / outputs (loss)
 StepInputType: TypeAlias = Tuple[InputType, Optional[TargetType]]
 StepOutputType: TypeAlias = FloatTensor
@@ -124,7 +124,8 @@ class SequenceClassificationModelWithPooler(
 
     def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
         labels = torch.argmax(outputs.logits, dim=-1).to(torch.long)
-        return {"labels": labels}
+        probabilities = torch.softmax(outputs.logits, dim=-1)
+        return {"labels": labels, "probabilities": probabilities}
 
     def base_model_named_parameters(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
         if prefix:

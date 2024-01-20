@@ -864,15 +864,13 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
             raise NotImplementedError
         else:
             label_ids = model_output["labels"].detach().cpu().tolist()
-            if "probabilities" in model_output:
-                probabilities = model_output["probabilities"].detach().cpu().tolist()
-            else:
-                probabilities = None
+            probabilities = model_output["probabilities"].detach().cpu().tolist()
             for batch_idx in range(len(label_ids)):
-                label = self.id_to_label[label_ids[batch_idx]]
-                result: TaskOutputType = {"labels": [label]}
-                if probabilities is not None:
-                    result["probabilities"] = [probabilities[batch_idx]]
+                label_id = label_ids[batch_idx]
+                result: TaskOutputType = {
+                    "labels": [self.id_to_label[label_id]],
+                    "probabilities": [probabilities[batch_idx][label_id]],
+                }
                 unbatched_output.append(result)
 
         return unbatched_output

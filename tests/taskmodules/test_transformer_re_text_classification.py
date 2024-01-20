@@ -70,7 +70,19 @@ def taskmodule(unprepared_taskmodule, documents):
 def model_output():
     return {
         "labels": torch.tensor([1, 0, 2, 3, 1, 0, 0, 0]),
-        "probabilities": torch.tensor([0.6, 0.5, 0.6, 0.5, 0.4, 0.5, 0.6, 0.5]),
+        "probabilities": torch.tensor(
+            [
+                # O, org:founded_by, per:employee_of, per:founder
+                [0.1, 0.6, 0.1, 0.2],
+                [0.5, 0.2, 0.2, 0.1],
+                [0.1, 0.2, 0.6, 0.1],
+                [0.1, 0.2, 0.2, 0.5],
+                [0.2, 0.4, 0.3, 0.1],
+                [0.5, 0.2, 0.2, 0.1],
+                [0.6, 0.1, 0.2, 0.1],
+                [0.5, 0.2, 0.2, 0.1],
+            ]
+        ),
     }
 
 
