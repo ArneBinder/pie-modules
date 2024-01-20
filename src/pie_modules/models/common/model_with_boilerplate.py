@@ -9,10 +9,7 @@ from .stages import TESTING, TRAINING, VALIDATION
 InputType = TypeVar("InputType")
 OutputType = TypeVar("OutputType")
 TargetType = TypeVar("TargetType")
-StepInputType: TypeAlias = Tuple[
-    InputType,
-    Optional[TargetType],
-]
+StepInputType: TypeAlias = Tuple[InputType, TargetType]
 StepOutputType = TypeVar("StepOutputType")
 
 logger = logging.getLogger(__name__)
@@ -49,14 +46,8 @@ class ModelWithBoilerplate(
             sync_dist=True,
         )
 
-    def _step(
-        self,
-        stage: str,
-        batch: StepInputType,
-    ) -> StepOutputType:
+    def _step(self, stage: str, batch: StepInputType) -> StepOutputType:
         inputs, targets = batch
-        assert targets is not None, "targets has to be available for training"
-
         outputs = self(inputs=inputs, targets=targets)
         loss = self.get_loss_from_outputs(outputs=outputs)
         self.log_loss(stage=stage, loss=loss)

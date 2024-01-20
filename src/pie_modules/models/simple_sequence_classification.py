@@ -22,7 +22,7 @@ InputType: TypeAlias = MutableMapping[str, LongTensor]
 OutputType: TypeAlias = SequenceClassifierOutput
 TargetType: TypeAlias = MutableMapping[str, Union[LongTensor, FloatTensor]]
 # step inputs (batch) / outputs (loss)
-StepInputType: TypeAlias = Tuple[InputType, Optional[TargetType]]
+StepInputType: TypeAlias = Tuple[InputType, TargetType]
 StepOutputType: TypeAlias = FloatTensor
 
 

@@ -55,7 +55,7 @@ from transformers.tokenization_utils_base import TruncationStrategy
 from typing_extensions import TypeAlias
 
 from pie_modules.models.simple_sequence_classification import (
-    StepInputType as ModelStepInputType,
+    InputType as ModelInputType,
 )
 from pie_modules.models.simple_sequence_classification import (
     TargetType as ModelTargetType,
@@ -83,7 +83,7 @@ TaskModuleType: TypeAlias = TaskModule[
     DocumentType,
     InputEncodingType,
     TargetEncodingType,
-    ModelStepInputType,
+    Tuple[ModelInputType, Optional[ModelTargetType]],
     ModelTargetType,
     TaskOutputType,
 ]
@@ -929,7 +929,9 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
             if not (self.add_candidate_relations and label == self.none_label):
                 yield self.relation_annotation, new_annotation
 
-    def collate(self, task_encodings: Sequence[TaskEncodingType]) -> ModelStepInputType:
+    def collate(
+        self, task_encodings: Sequence[TaskEncodingType]
+    ) -> Tuple[ModelInputType, Optional[ModelTargetType]]:
         input_features = [
             {"input_ids": task_encoding.inputs["input_ids"]} for task_encoding in task_encodings
         ]

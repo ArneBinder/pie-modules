@@ -23,8 +23,8 @@ from pie_modules.models.components.seq2seq_encoder import build_seq2seq_encoder
 InputType: TypeAlias = BatchEncoding
 OutputType: TypeAlias = TokenClassifierOutput
 TargetType: TypeAlias = LongTensor
-# step inputs / outputs
-StepInputType: TypeAlias = Tuple[InputType, Optional[TargetType]]
+# step inputs (batch) / outputs (loss)
+StepInputType: TypeAlias = Tuple[InputType, TargetType]
 StepOutputType: TypeAlias = FloatTensor
 
 HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE = {
