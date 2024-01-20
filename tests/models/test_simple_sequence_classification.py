@@ -7,6 +7,7 @@ from torch.optim.lr_scheduler import LambdaLR
 from transformers.modeling_outputs import SequenceClassifierOutput
 
 from pie_modules.models import SimpleSequenceClassificationModel
+from pie_modules.models.simple_sequence_classification import OutputType
 
 NUM_CLASSES = 4
 
@@ -218,7 +219,7 @@ def model() -> SimpleSequenceClassificationModel:
 
 
 @pytest.fixture
-def model_output(model, inputs):
+def model_output(model, inputs) -> OutputType:
     # set seed to make sure the output is deterministic
     torch.manual_seed(42)
     return model(inputs)
@@ -286,12 +287,43 @@ def test_forward(model_output, inputs):
 def test_decode(model, model_output, inputs):
     decoded = model.decode(inputs=inputs, outputs=model_output)
     assert isinstance(decoded, dict)
-    assert set(decoded) == {"labels"}
+    assert set(decoded) == {"labels", "probabilities"}
     labels = decoded["labels"]
     assert labels.shape == (inputs["input_ids"].shape[0],)
     torch.testing.assert_close(
         labels,
         torch.tensor([1, 1, 1, 1, 1, 1, 1]),
+    )
+    probabilities = decoded["probabilities"]
+    assert probabilities.shape == (inputs["input_ids"].shape[0], NUM_CLASSES)
+    torch.testing.assert_close(
+        probabilities,
+        torch.tensor(
+            [
+                [
+                    0.21020983159542084,
+                    0.30330243706703186,
+                    0.19264918565750122,
+                    0.2938385605812073,
+                ],
+                [0.21131442487239838, 0.3021913170814514, 0.18898707628250122, 0.2975071966648102],
+                [0.2114931344985962, 0.30215057730674744, 0.1899993121623993, 0.29635706543922424],
+                [
+                    0.21120351552963257,
+                    0.30340734124183655,
+                    0.18834275007247925,
+                    0.29704639315605164,
+                ],
+                [
+                    0.21349377930164337,
+                    0.3020835518836975,
+                    0.18923982977867126,
+                    0.29518282413482666,
+                ],
+                [0.2138788104057312, 0.30317223072052, 0.18959489464759827, 0.2933540642261505],
+                [0.21387633681297302, 0.30351871252059937, 0.18847113847732544, 0.294133722782135],
+            ]
+        ),
     )
 
 

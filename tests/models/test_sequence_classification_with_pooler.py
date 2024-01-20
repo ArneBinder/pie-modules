@@ -8,6 +8,7 @@ from torch.optim.lr_scheduler import LambdaLR
 from transformers.modeling_outputs import SequenceClassifierOutput
 
 from pie_modules.models import SequenceClassificationModelWithPooler
+from pie_modules.models.sequence_classification_with_pooler import OutputType
 
 NUM_CLASSES = 4
 POOLER = "start_tokens"
@@ -226,14 +227,19 @@ def model() -> SequenceClassificationModelWithPooler:
     return result
 
 
-def test_forward(inputs, model):
-    batch_size, seq_len = inputs["input_ids"].shape
+@pytest.fixture
+def model_output(model, inputs) -> OutputType:
     # set seed to make sure the output is deterministic
     torch.manual_seed(42)
-    output = model(inputs)
-    assert isinstance(output, SequenceClassifierOutput)
-    assert set(output) == {"logits"}
-    logits = output["logits"]
+    return model(inputs)
+
+
+def test_forward(model_output, inputs):
+    batch_size, seq_len = inputs["input_ids"].shape
+
+    assert isinstance(model_output, SequenceClassifierOutput)
+    assert set(model_output) == {"logits"}
+    logits = model_output["logits"]
 
     assert logits.shape == (batch_size, NUM_CLASSES)
 
@@ -268,6 +274,54 @@ def test_forward(inputs, model):
                     0.24329520761966705,
                 ],
                 [-0.20474043488502502, -0.1895218938589096, 0.8438000679016113, 0.441173791885376],
+            ]
+        ),
+    )
+
+
+def test_decode(model, model_output, inputs):
+    decoded = model.decode(inputs=inputs, outputs=model_output)
+    assert isinstance(decoded, dict)
+    assert set(decoded) == {"labels", "probabilities"}
+    labels = decoded["labels"]
+    assert labels.shape == (inputs["input_ids"].shape[0],)
+    torch.testing.assert_close(
+        labels,
+        torch.tensor([2, 2, 2, 2, 2, 2, 2]),
+    )
+    probabilities = decoded["probabilities"]
+    assert probabilities.shape == (inputs["input_ids"].shape[0], NUM_CLASSES)
+    torch.testing.assert_close(
+        probabilities,
+        torch.tensor(
+            [
+                [
+                    0.08264221996068954,
+                    0.16745781898498535,
+                    0.48435819149017334,
+                    0.26554182171821594,
+                ],
+                [0.0881081372499466, 0.09712868928909302, 0.498579740524292, 0.3161833882331848],
+                [
+                    0.08477703481912613,
+                    0.14363254606723785,
+                    0.5073344111442566,
+                    0.26425591111183167,
+                ],
+                [
+                    0.14074258506298065,
+                    0.13151122629642487,
+                    0.47058120369911194,
+                    0.25716495513916016,
+                ],
+                [0.08874323219060898, 0.0940297544002533, 0.5076375603675842, 0.3095895051956177],
+                [
+                    0.13036882877349854,
+                    0.20699138939380646,
+                    0.42146939039230347,
+                    0.24117043614387512,
+                ],
+                [0.1475677490234375, 0.1498306840658188, 0.42108210921287537, 0.28151947259902954],
             ]
         ),
     )
