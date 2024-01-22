@@ -47,6 +47,7 @@ class SequenceClassificationModelWithPooler(
         task_learning_rate: Optional[float] = None,
         warmup_proportion: float = 0.1,
         multi_label: bool = False,
+        multi_label_threshold: float = 0.5,
         pooler: Optional[Union[Dict[str, Any], str]] = None,
         freeze_base_model: bool = False,
         **kwargs,
@@ -92,8 +93,9 @@ class SequenceClassificationModelWithPooler(
             input_dim=config.hidden_size,
         )
         self.classifier = nn.Linear(pooler_output_dim, num_classes)
-
-        self.loss_fct = nn.BCEWithLogitsLoss() if multi_label else nn.CrossEntropyLoss()
+        self.multi_label = multi_label
+        self.multi_label_threshold = multi_label_threshold
+        self.loss_fct = nn.BCEWithLogitsLoss() if self.multi_label else nn.CrossEntropyLoss()
 
     def forward(self, inputs: InputType, targets: Optional[TargetType] = None) -> OutputType:
         pooler_inputs = {}
@@ -123,8 +125,12 @@ class SequenceClassificationModelWithPooler(
         return SequenceClassifierOutput(**result)
 
     def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
-        labels = torch.argmax(outputs.logits, dim=-1).to(torch.long)
-        probabilities = torch.softmax(outputs.logits, dim=-1)
+        if not self.multi_label:
+            labels = torch.argmax(outputs.logits, dim=-1).to(torch.long)
+            probabilities = torch.softmax(outputs.logits, dim=-1)
+        else:
+            probabilities = torch.sigmoid(outputs.logits)
+            labels = (probabilities > self.multi_label_threshold).to(torch.long)
         return {"labels": labels, "probabilities": probabilities}
 
     def base_model_named_parameters(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
