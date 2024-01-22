@@ -17,6 +17,7 @@ from pie_modules.taskmodules.re_text_classification_with_indices import (
     inner_span_distance,
     span_distance,
 )
+from pie_modules.utils import flatten_dict
 from tests import _config_to_str
 from tests.conftest import _TABULATE_AVAILABLE, TestDocument
 
@@ -1562,34 +1563,49 @@ def test_configure_model_metric(documents, taskmodule):
 
     metric = taskmodule.configure_model_metric(stage="train")
     assert isinstance(metric, (Metric, MetricCollection))
-
-    assert metric.metric_state == {
-        "tp": torch.tensor([0]),
-        "tn": torch.tensor([0]),
-        "fp": torch.tensor([0]),
-        "fn": torch.tensor([0]),
+    state = {k: v.tolist() for k, v in flatten_dict(metric.metric_state).items()}
+    assert state == {
+        "f1_macro/fn": [0, 0, 0, 0],
+        "f1_macro/fp": [0, 0, 0, 0],
+        "f1_macro/tn": [0, 0, 0, 0],
+        "f1_macro/tp": [0, 0, 0, 0],
+        "f1_micro/fn": [0],
+        "f1_micro/fp": [0],
+        "f1_micro/tn": [0],
+        "f1_micro/tp": [0],
     }
-    assert metric.compute() == torch.tensor(0.0)
+    assert metric.compute() == {"f1_macro": torch.tensor(0.0), "f1_micro": torch.tensor(0.0)}
 
     targets = batch[1]
     metric.update(targets, targets)
-    assert metric.metric_state == {
-        "tp": torch.tensor([7]),
-        "tn": torch.tensor([21]),
-        "fp": torch.tensor([0]),
-        "fn": torch.tensor([0]),
+    state = {k: v.tolist() for k, v in flatten_dict(metric.metric_state).items()}
+    assert state == {
+        "f1_macro/fn": [0, 0, 0, 0],
+        "f1_macro/fp": [0, 0, 0, 0],
+        "f1_macro/tn": [7, 5, 4, 5],
+        "f1_macro/tp": [0, 2, 3, 2],
+        "f1_micro/fn": [0],
+        "f1_micro/fp": [0],
+        "f1_micro/tn": [21],
+        "f1_micro/tp": [7],
     }
-    assert metric.compute() == torch.tensor(1.0)
+    assert metric.compute() == {"f1_macro": torch.tensor(1.0), "f1_micro": torch.tensor(1.0)}
 
     metric.reset()
     torch.testing.assert_close(targets["labels"], torch.tensor([2, 2, 3, 1, 2, 3, 1]))
     # three matches
     random_targets = {"labels": torch.tensor([1, 1, 3, 1, 2, 0, 0])}
     metric.update(random_targets, targets)
-    assert metric.metric_state == {
-        "tp": torch.tensor([3]),
-        "fp": torch.tensor([4]),
-        "tn": torch.tensor([17]),
-        "fn": torch.tensor([4]),
+    state = {k: v.tolist() for k, v in flatten_dict(metric.metric_state).items()}
+    assert state == {
+        "f1_macro/fn": [0, 1, 2, 1],
+        "f1_macro/fp": [2, 2, 0, 0],
+        "f1_macro/tn": [5, 3, 4, 5],
+        "f1_macro/tp": [0, 1, 1, 1],
+        "f1_micro/fn": [4],
+        "f1_micro/fp": [4],
+        "f1_micro/tn": [17],
+        "f1_micro/tp": [3],
     }
-    assert metric.compute() == torch.tensor(0.4285714328289032)
+    values = {k: v.item() for k, v in metric.compute().items()}
+    assert values == {"f1_macro": 0.3916666507720947, "f1_micro": 0.4285714328289032}

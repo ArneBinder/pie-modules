@@ -48,7 +48,7 @@ from pytorch_ie.documents import (
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
 from pytorch_ie.utils.span import get_token_slice, has_overlap, is_contained_in
 from pytorch_ie.utils.window import get_window_around_slice
-from torchmetrics import F1Score, Metric
+from torchmetrics import F1Score, Metric, MetricCollection
 from transformers import AutoTokenizer
 from transformers.file_utils import PaddingStrategy
 from transformers.tokenization_utils_base import TruncationStrategy
@@ -972,12 +972,22 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
                 "Please call taskmodule.prepare(documents) before configuring the model metric "
                 "or pass the labels to the taskmodule constructor an call taskmodule.post_prepare()."
             )
+        # we use the length of label_to_id because that contains the none_label (in contrast to labels)
+        num_classes = len(self.label_to_id)
         return WrappedMetricWithPrepareFunction(
-            metric=F1Score(
-                # we use the length of label_to_id because that contains the none_label (in contrast to labels)
-                num_classes=len(self.label_to_id),
-                average="micro",
-                task="multilabel" if self.multi_label else "multiclass",
+            metric=MetricCollection(
+                {
+                    "f1_micro": F1Score(
+                        num_classes=num_classes,
+                        average="micro",
+                        task="multilabel" if self.multi_label else "multiclass",
+                    ),
+                    "f1_macro": F1Score(
+                        num_classes=num_classes,
+                        average="macro",
+                        task="multilabel" if self.multi_label else "multiclass",
+                    ),
+                }
             ),
             prepare_function=lambda model_output: model_output["labels"],
         )
