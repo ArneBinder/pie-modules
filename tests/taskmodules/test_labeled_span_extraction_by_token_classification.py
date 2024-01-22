@@ -16,6 +16,9 @@ from torch import tensor
 from transformers import BatchEncoding
 
 from pie_modules.taskmodules import LabeledSpanExtractionByTokenClassificationTaskModule
+from pie_modules.taskmodules.labeled_span_extraction_by_token_classification import (
+    ModelOutputType,
+)
 
 
 def _config_to_str(cfg: Dict[str, Any]) -> str:
@@ -384,8 +387,9 @@ def test_collate(batch, config):
     assert set(inputs.data) == {"input_ids", "attention_mask", "special_tokens_mask"}
     input_ids_list = inputs.input_ids.tolist()
     attention_mask_list = inputs.attention_mask.tolist()
-    targets_list = targets.tolist()
     special_tokens_mask_list = inputs.special_tokens_mask.tolist()
+    assert set(targets) == {"labels"}
+    labels_list = targets["labels"].tolist()
 
     # If config is empty
     if config == CONFIG_DEFAULT:
@@ -397,7 +401,7 @@ def test_collate(batch, config):
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         ]
-        assert targets_list == [
+        assert labels_list == [
             [-100, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, -100],
             [-100, 3, 0, 0, 0, 0, 3, 0, 0, 0, 0, -100],
         ]
@@ -420,7 +424,7 @@ def test_collate(batch, config):
             [1, 1, 1, 1, 1, 1, 1, 1],
             [1, 1, 1, 1, 1, 1, 1, 1],
         ]
-        assert targets_list == [
+        assert labels_list == [
             [-100, 1, 2, 0, 0, 0, 0, -100],
             [-100, 0, 0, 0, 0, 0, 0, -100],
             [-100, 3, 0, 0, 0, 0, 3, -100],
@@ -441,7 +445,7 @@ def test_collate(batch, config):
             [1, 1, 1, 1, 1, 1, 1, 1],
             [1, 1, 1, 1, 1, 1, 0, 0],
         ]
-        assert targets_list == [
+        assert labels_list == [
             [-100, 1, 2, 0, 0, 0, 0, -100],
             [-100, 0, 0, 0, 0, -100, -100, -100],
             [-100, 3, 0, 0, 0, 0, 3, -100],
@@ -458,7 +462,7 @@ def test_collate(batch, config):
     elif config == CONFIG_PARTITIONS:
         assert input_ids_list == [[101, 3960, 15646, 2652, 4715, 1012, 102]]
         assert attention_mask_list == [[1, 1, 1, 1, 1, 1, 1]]
-        assert targets_list == [[-100, 3, 0, 0, 0, 0, -100]]
+        assert labels_list == [[-100, 3, 0, 0, 0, 0, -100]]
         assert special_tokens_mask_list == [[1, 0, 0, 0, 0, 0, 1]]
 
     else:
@@ -472,8 +476,8 @@ def test_collate(batch, config):
         }
     )
     assert set(inputs.data) == set(inputs_expected.data)
-    targets_expected = torch.tensor(targets_list, dtype=torch.int64)
-    assert torch.equal(targets, targets_expected)
+    labels_expected = torch.tensor(labels_list, dtype=torch.int64)
+    assert torch.equal(targets["labels"], labels_expected)
 
 
 # This is not used, but can be used to create a batch of task encodings with targets for the unbatched_outputs fixture.
@@ -491,10 +495,18 @@ def real_model_output(batch, taskmodule):
 
 
 @pytest.fixture(scope="module")
-def model_output(config, batch, taskmodule) -> torch.LongTensor:
+def model_output(config, batch, taskmodule) -> ModelOutputType:
     # create "perfect" output from targets
-    targets = batch[1].clone()
-    return targets
+    labels = batch[1]["labels"]
+    num_classes = len(taskmodule.label_to_id)
+    # create one-hot encoding from labels
+    labels_valid = labels.clone()
+    labels_valid[labels_valid == taskmodule.label_pad_id] = taskmodule.label_to_id["O"]
+    # create one-hot encoding from labels, but with 0.9 for the correct labels
+    probabilities = (
+        torch.nn.functional.one_hot(labels_valid, num_classes=num_classes).to(torch.float32) * 0.9
+    )
+    return {"labels": labels, "probabilities": probabilities}
 
 
 @pytest.fixture(scope="module")
@@ -508,42 +520,46 @@ def test_unbatched_output(unbatched_outputs, config):
     if config == CONFIG_DEFAULT:
         assert len(unbatched_outputs) == 2
         torch.testing.assert_close(
-            unbatched_outputs[0], torch.tensor([-100, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, -100])
+            unbatched_outputs[0]["labels"],
+            torch.tensor([-100, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, -100]),
         )
         torch.testing.assert_close(
-            unbatched_outputs[1], torch.tensor([-100, 3, 0, 0, 0, 0, 3, 0, 0, 0, 0, -100])
+            unbatched_outputs[1]["labels"],
+            torch.tensor([-100, 3, 0, 0, 0, 0, 3, 0, 0, 0, 0, -100]),
         )
     elif config == CONFIG_MAX_WINDOW_WITH_STRIDE:
         assert len(unbatched_outputs) == 4
         torch.testing.assert_close(
-            unbatched_outputs[0], torch.tensor([-100, 1, 2, 0, 0, 0, 0, -100])
+            unbatched_outputs[0]["labels"], torch.tensor([-100, 1, 2, 0, 0, 0, 0, -100])
         )
         torch.testing.assert_close(
-            unbatched_outputs[1], torch.tensor([-100, 0, 0, 0, 0, 0, 0, -100])
+            unbatched_outputs[1]["labels"], torch.tensor([-100, 0, 0, 0, 0, 0, 0, -100])
         )
         torch.testing.assert_close(
-            unbatched_outputs[2], torch.tensor([-100, 3, 0, 0, 0, 0, 3, -100])
+            unbatched_outputs[2]["labels"], torch.tensor([-100, 3, 0, 0, 0, 0, 3, -100])
         )
         torch.testing.assert_close(
-            unbatched_outputs[3], torch.tensor([-100, 0, 3, 0, 0, 0, 0, -100])
+            unbatched_outputs[3]["labels"], torch.tensor([-100, 0, 3, 0, 0, 0, 0, -100])
         )
     elif config == CONFIG_MAX_WINDOW:
         assert len(unbatched_outputs) == 4
         torch.testing.assert_close(
-            unbatched_outputs[0], torch.tensor([-100, 1, 2, 0, 0, 0, 0, -100])
+            unbatched_outputs[0]["labels"], torch.tensor([-100, 1, 2, 0, 0, 0, 0, -100])
         )
         torch.testing.assert_close(
-            unbatched_outputs[1], torch.tensor([-100, 0, 0, 0, 0, -100, -100, -100])
+            unbatched_outputs[1]["labels"], torch.tensor([-100, 0, 0, 0, 0, -100, -100, -100])
         )
         torch.testing.assert_close(
-            unbatched_outputs[2], torch.tensor([-100, 3, 0, 0, 0, 0, 3, -100])
+            unbatched_outputs[2]["labels"], torch.tensor([-100, 3, 0, 0, 0, 0, 3, -100])
         )
         torch.testing.assert_close(
-            unbatched_outputs[3], torch.tensor([-100, 0, 0, 0, 0, -100, -100, -100])
+            unbatched_outputs[3]["labels"], torch.tensor([-100, 0, 0, 0, 0, -100, -100, -100])
         )
     elif config == CONFIG_PARTITIONS:
         assert len(unbatched_outputs) == 1
-        torch.testing.assert_close(unbatched_outputs[0], torch.tensor([-100, 3, 0, 0, 0, 0, -100]))
+        torch.testing.assert_close(
+            unbatched_outputs[0]["labels"], torch.tensor([-100, 3, 0, 0, 0, 0, -100])
+        )
     else:
         raise ValueError(f"unknown config: {config}")
 
@@ -579,22 +595,22 @@ def test_decode_annotations(taskmodule, unbatched_outputs, config):
         # We get two annotations for Bob because the window overlaps with the previous one.
         # This is not a problem because annotations get de-duplicated during serialization.
         assert annotations == [
-            [LabeledSpan(start=1, end=3, label="LOC", score=1.0)],
+            [LabeledSpan(start=1, end=3, label="LOC")],
             [],
             [
-                LabeledSpan(start=1, end=2, label="PER", score=1.0),
-                LabeledSpan(start=6, end=7, label="PER", score=1.0),
+                LabeledSpan(start=1, end=2, label="PER"),
+                LabeledSpan(start=6, end=7, label="PER"),
             ],
-            [LabeledSpan(start=2, end=3, label="PER", score=1.0)],
+            [LabeledSpan(start=2, end=3, label="PER")],
         ]
 
     elif config == CONFIG_MAX_WINDOW:
         assert annotations == [
-            [LabeledSpan(start=1, end=3, label="LOC", score=1.0)],
+            [LabeledSpan(start=1, end=3, label="LOC")],
             [],
             [
-                LabeledSpan(start=1, end=2, label="PER", score=1.0),
-                LabeledSpan(start=6, end=7, label="PER", score=1.0),
+                LabeledSpan(start=1, end=2, label="PER"),
+                LabeledSpan(start=6, end=7, label="PER"),
             ],
             [],
         ]
@@ -604,6 +620,11 @@ def test_decode_annotations(taskmodule, unbatched_outputs, config):
 
     else:
         raise ValueError(f"unknown config: {config}")
+
+    # assert that all scores are 0.9
+    for doc_annotations in annotations:
+        for annotation in doc_annotations:
+            assert round(annotation.score, 4) == 0.9
 
 
 @pytest.fixture(scope="module")
@@ -756,10 +777,12 @@ def test_configure_model_metric(documents):
         "token/micro/f1": tensor(1.0),
     }
 
-    predictions = torch.ones_like(targets)
+    target_labels = targets["labels"]
+    predicted_labels = torch.ones_like(target_labels)
     # we need to set the same padding as in the targets
-    predictions[targets == taskmodule.label_pad_id] = taskmodule.label_pad_id
-    metric.update(predictions, targets)
+    predicted_labels[target_labels == taskmodule.label_pad_id] = taskmodule.label_pad_id
+    prediction = {"labels": predicted_labels}
+    metric.update(prediction, targets)
     values = metric.compute()
     values_converted = {k: v.item() for k, v in values.items()}
     assert values_converted == {
