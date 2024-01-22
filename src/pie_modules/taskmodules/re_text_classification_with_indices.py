@@ -24,7 +24,6 @@ from typing import (
     Union,
 )
 
-import numpy as np
 import pandas as pd
 import torch
 from pytorch_ie.annotations import (
@@ -49,15 +48,19 @@ from pytorch_ie.documents import (
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
 from pytorch_ie.utils.span import get_token_slice, has_overlap, is_contained_in
 from pytorch_ie.utils.window import get_window_around_slice
+from torchmetrics import ClasswiseWrapper, F1Score, Metric, MetricCollection
 from transformers import AutoTokenizer
 from transformers.file_utils import PaddingStrategy
 from transformers.tokenization_utils_base import TruncationStrategy
 from typing_extensions import TypeAlias
 
-from pie_modules.models.sequence_classification import (
-    ModelOutputType,
-    ModelStepInputType,
+from pie_modules.models.simple_sequence_classification import (
+    InputType as ModelInputType,
 )
+from pie_modules.models.simple_sequence_classification import (
+    TargetType as ModelTargetType,
+)
+from pie_modules.taskmodules.metrics import WrappedMetricWithPrepareFunction
 
 InputEncodingType: TypeAlias = Dict[str, Any]
 TargetEncodingType: TypeAlias = Sequence[int]
@@ -80,8 +83,8 @@ TaskModuleType: TypeAlias = TaskModule[
     DocumentType,
     InputEncodingType,
     TargetEncodingType,
-    ModelStepInputType,
-    ModelOutputType,
+    Tuple[ModelInputType, Optional[ModelTargetType]],
+    ModelTargetType,
     TaskOutputType,
 ]
 
@@ -855,23 +858,18 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
 
         return target
 
-    def unbatch_output(self, model_output: ModelOutputType) -> Sequence[TaskOutputType]:
-        logits = model_output["logits"]
-
-        output_label_probs = logits.sigmoid() if self.multi_label else logits.softmax(dim=-1)
-        output_label_probs = output_label_probs.detach().cpu().numpy()
-
+    def unbatch_output(self, model_output: ModelTargetType) -> Sequence[TaskOutputType]:
         unbatched_output = []
         if self.multi_label:
             raise NotImplementedError
         else:
-            label_ids = np.argmax(output_label_probs, axis=-1)
-            for batch_idx, label_id in enumerate(label_ids):
-                label = self.id_to_label[label_id]
-                prob = float(output_label_probs[batch_idx, label_id])
+            label_ids = model_output["labels"].detach().cpu().tolist()
+            probabilities = model_output["probabilities"].detach().cpu().tolist()
+            for batch_idx in range(len(label_ids)):
+                label_id = label_ids[batch_idx]
                 result: TaskOutputType = {
-                    "labels": [label],
-                    "probabilities": [prob],
+                    "labels": [self.id_to_label[label_id]],
+                    "probabilities": [probabilities[batch_idx][label_id]],
                 }
                 unbatched_output.append(result)
 
@@ -888,7 +886,9 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
             raise NotImplementedError
         else:
             label = task_output["labels"][0]
-            probability = task_output["probabilities"][0]
+            probability = (
+                task_output["probabilities"][0] if "probabilities" in task_output else 1.0
+            )
             if isinstance(candidate_annotation, BinaryRelation):
                 head = candidate_annotation.head
                 tail = candidate_annotation.tail
@@ -929,12 +929,14 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
             if not (self.add_candidate_relations and label == self.none_label):
                 yield self.relation_annotation, new_annotation
 
-    def collate(self, task_encodings: Sequence[TaskEncodingType]) -> ModelStepInputType:
+    def collate(
+        self, task_encodings: Sequence[TaskEncodingType]
+    ) -> Tuple[ModelInputType, Optional[ModelTargetType]]:
         input_features = [
             {"input_ids": task_encoding.inputs["input_ids"]} for task_encoding in task_encodings
         ]
 
-        inputs: Dict[str, torch.Tensor] = self.tokenizer.pad(
+        inputs: Dict[str, torch.LongTensor] = self.tokenizer.pad(
             input_features,
             padding=self.padding,
             max_length=self.max_length,
@@ -945,10 +947,10 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         if self.add_argument_indices_to_input:
             inputs["pooler_start_indices"] = torch.tensor(
                 [task_encoding.inputs["pooler_start_indices"] for task_encoding in task_encodings]
-            )
+            ).to(torch.long)
             inputs["pooler_end_indices"] = torch.tensor(
                 [task_encoding.inputs["pooler_end_indices"] for task_encoding in task_encodings]
-            )
+            ).to(torch.long)
 
         if not task_encodings[0].has_targets:
             return inputs, None
@@ -961,4 +963,30 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         if not self.multi_label:
             targets = targets.flatten()
 
-        return inputs, targets
+        return inputs, {"labels": targets}
+
+    def configure_model_metric(self, stage: str) -> Metric:
+        if self.label_to_id is None:
+            raise ValueError(
+                "The taskmodule has not been prepared yet, so label_to_id is not known. "
+                "Please call taskmodule.prepare(documents) before configuring the model metric "
+                "or pass the labels to the taskmodule constructor an call taskmodule.post_prepare()."
+            )
+        # we use the length of label_to_id because that contains the none_label (in contrast to labels)
+        labels = [self.id_to_label[i] for i in range(len(self.label_to_id))]
+        num_classes = len(labels)
+        task = "multilabel" if self.multi_label else "multiclass"
+        return WrappedMetricWithPrepareFunction(
+            metric=MetricCollection(
+                {
+                    "micro/f1": F1Score(num_classes=num_classes, task=task, average="micro"),
+                    "macro/f1": F1Score(num_classes=num_classes, task=task, average="macro"),
+                    "f1_per_label": ClasswiseWrapper(
+                        F1Score(num_classes=num_classes, task=task, average=None),
+                        labels=labels,
+                        postfix="/f1",
+                    ),
+                }
+            ),
+            prepare_function=lambda model_output: model_output["labels"],
+        )

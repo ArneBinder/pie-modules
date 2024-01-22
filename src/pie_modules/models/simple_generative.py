@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 InputType: TypeAlias = Dict[str, LongTensor]
 OutputType: TypeAlias = Seq2SeqLMOutput
 TargetType: TypeAlias = Dict[str, LongTensor]
-# step inputs / outputs
-StepInputType: TypeAlias = Tuple[InputType, Optional[TargetType]]
+# step inputs (batch) / outputs (loss)
+StepInputType: TypeAlias = Tuple[InputType, TargetType]
 StepOutputType: TypeAlias = FloatTensor
 
 

@@ -2,7 +2,7 @@ import logging
 from typing import Any, Callable, Dict, Generic, List, TypeVar, Union
 
 from torch import Tensor
-from torchmetrics import Metric
+from torchmetrics import Metric, MetricCollection
 from torchmetrics.wrappers.abstract import WrapperMetric
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ class WrappedMetricWithPrepareFunction(WrapperMetric, Generic[T]):
 
     def __init__(
         self,
-        metric: Metric,
+        metric: Union[Metric, MetricCollection],
         prepare_function: Callable[[T], Any],
         prepare_does_unbatch: bool = False,
         **kwargs,
@@ -78,4 +78,11 @@ class WrappedMetricWithPrepareFunction(WrapperMetric, Generic[T]):
 
     @property
     def metric_state(self) -> Dict[str, Union[List[Tensor], Tensor]]:
-        return self.metric.metric_state
+        if isinstance(self.metric, Metric):
+            return self.metric.metric_state
+        elif isinstance(self.metric, MetricCollection):
+            return {
+                metric_name: metric.metric_state for metric_name, metric in self.metric.items()
+            }
+        else:
+            raise ValueError(f"Unsupported metric type: {type(self.metric)}")

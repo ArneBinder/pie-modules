@@ -16,8 +16,8 @@ from pie_modules.models.common import ModelWithBoilerplate
 InputType: TypeAlias = BatchEncoding
 OutputType: TypeAlias = TokenClassifierOutput
 TargetType: TypeAlias = LongTensor
-# step inputs / outputs
-StepInputType: TypeAlias = Tuple[InputType, Optional[TargetType]]
+# step inputs (batch) / outputs (loss)
+StepInputType: TypeAlias = Tuple[InputType, TargetType]
 StepOutputType: TypeAlias = FloatTensor
 
 

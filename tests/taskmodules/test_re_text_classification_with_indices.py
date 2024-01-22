@@ -3,12 +3,13 @@ import logging
 import re
 from dataclasses import dataclass
 
-import numpy
 import pytest
 import torch
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, NaryRelation
 from pytorch_ie.core import Annotation, AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument, TextDocument
+from torch import tensor
+from torchmetrics import Metric, MetricCollection
 
 from pie_modules.taskmodules import RETextClassificationWithIndicesTaskModule
 from pie_modules.taskmodules.re_text_classification_with_indices import (
@@ -17,6 +18,7 @@ from pie_modules.taskmodules.re_text_classification_with_indices import (
     inner_span_distance,
     span_distance,
 )
+from pie_modules.utils import flatten_dict
 from tests import _config_to_str
 from tests.conftest import _TABULATE_AVAILABLE, TestDocument
 
@@ -69,20 +71,19 @@ def taskmodule(unprepared_taskmodule, documents):
 @pytest.fixture
 def model_output():
     return {
-        "logits": torch.from_numpy(
-            numpy.log(
-                [
-                    # O, org:founded_by, per:employee_of, per:founder
-                    [0.1, 0.6, 0.1, 0.2],
-                    [0.5, 0.2, 0.2, 0.1],
-                    [0.1, 0.2, 0.6, 0.1],
-                    [0.1, 0.2, 0.2, 0.5],
-                    [0.2, 0.4, 0.3, 0.1],
-                    [0.5, 0.2, 0.2, 0.1],
-                    [0.6, 0.1, 0.2, 0.1],
-                    [0.5, 0.2, 0.2, 0.1],
-                ]
-            )
+        "labels": torch.tensor([1, 0, 2, 3, 1, 0, 0, 0]),
+        "probabilities": torch.tensor(
+            [
+                # O, org:founded_by, per:employee_of, per:founder
+                [0.1, 0.6, 0.1, 0.2],
+                [0.5, 0.2, 0.2, 0.1],
+                [0.1, 0.2, 0.6, 0.1],
+                [0.1, 0.2, 0.2, 0.5],
+                [0.2, 0.4, 0.3, 0.1],
+                [0.5, 0.2, 0.2, 0.1],
+                [0.6, 0.1, 0.2, 0.1],
+                [0.5, 0.2, 0.2, 0.1],
+            ]
         ),
     }
 
@@ -274,20 +275,15 @@ def test_encode(taskmodule, documents, encode_target):
             encoding.targets
 
 
-@pytest.mark.parametrize("encode_target", [False, True])
-def test_collate(taskmodule, documents, encode_target):
+@pytest.fixture(scope="module")
+def batch(taskmodule, documents):
     documents = [documents[i] for i in [0, 1, 4]]
+    task_encodings = taskmodule.encode(documents, encode_target=True)
+    return taskmodule.collate(task_encodings[:2])
 
-    encodings = taskmodule.encode(documents, encode_target=encode_target)
 
-    assert len(encodings) == 4
-    if encode_target:
-        assert all([encoding.has_targets for encoding in encodings])
-    else:
-        assert not any([encoding.has_targets for encoding in encodings])
-
-    batch_encoding = taskmodule.collate(encodings[:2])
-    inputs, targets = batch_encoding
+def test_collate(taskmodule, batch):
+    inputs, targets = batch
 
     assert "input_ids" in inputs
     assert "attention_mask" in inputs
@@ -550,10 +546,8 @@ def test_collate(taskmodule, documents, encode_target):
             ),
         )
 
-    if encode_target:
-        torch.testing.assert_close(targets, torch.tensor([2, 2]))
-    else:
-        assert targets is None
+    assert set(targets) == {"labels"}
+    torch.testing.assert_close(targets["labels"], torch.tensor([2, 2]))
 
 
 def test_unbatch_output(taskmodule, model_output):
@@ -775,77 +769,133 @@ def test_encode_with_windowing(documents):
     ]
 
 
-@pytest.fixture(scope="module", params=[False, True])
-def encodings_and_taskmodule_with_argument_indices(request, documents):
+@pytest.fixture(scope="module")
+def taskmodule_with_add_argument_indices(documents):
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
         relation_annotation="relations",
         tokenizer_name_or_path=tokenizer_name_or_path,
-        add_argument_indices_to_input=request.param,
+        add_argument_indices_to_input=True,
     )
 
     assert not taskmodule.is_from_pretrained
     taskmodule.prepare(documents)
-    task_encodings = taskmodule.encode(documents)
+    return taskmodule
+
+
+@pytest.fixture(scope="module")
+def encodings_with_argument_indices(taskmodule_with_add_argument_indices, documents):
+    task_encodings = taskmodule_with_add_argument_indices.encode(documents, encode_target=True)
     assert len(task_encodings) == 7
-    return task_encodings, taskmodule
+    return task_encodings
 
 
-def test_encode_with_add_argument_indices(encodings_and_taskmodule_with_argument_indices):
-    encodings, taskmodule = encodings_and_taskmodule_with_argument_indices
-    if taskmodule.add_argument_indices_to_input:
-        assert all(["pooler_start_indices" in encoding.inputs for encoding in encodings])
-        assert all(["pooler_end_indices" in encoding.inputs for encoding in encodings])
-    else:
-        assert not any(["pooler_start_indices" in encoding.inputs for encoding in encodings])
-        assert not any(["pooler_end_indices" in encoding.inputs for encoding in encodings])
+def test_encode_with_add_argument_indices(encodings_with_argument_indices):
+    encodings = encodings_with_argument_indices
+    assert all(["pooler_start_indices" in encoding.inputs for encoding in encodings])
+    assert all(["pooler_end_indices" in encoding.inputs for encoding in encodings])
+
+    # just check the first and fourth encoding
     encoding = encodings[0]
-    if taskmodule.add_argument_indices_to_input:
-        assert "pooler_start_indices" in encoding.inputs
-        assert "pooler_end_indices" in encoding.inputs
-        assert len(encoding.inputs["pooler_start_indices"]) == 2
-        assert len(encoding.inputs["pooler_end_indices"]) == 2
-        assert encoding.inputs["pooler_start_indices"] == [2, 10]
-        assert encoding.inputs["pooler_end_indices"] == [6, 11]
-
-    else:
-        assert "pooler_start_indices" not in encoding.inputs
-        assert "pooler_end_indices" not in encoding.inputs
-
+    assert "pooler_start_indices" in encoding.inputs
+    assert "pooler_end_indices" in encoding.inputs
+    assert len(encoding.inputs["pooler_start_indices"]) == 2
+    assert len(encoding.inputs["pooler_end_indices"]) == 2
+    assert encoding.inputs["pooler_start_indices"] == [2, 10]
+    assert encoding.inputs["pooler_end_indices"] == [6, 11]
     encoding = encodings[3]
-    if taskmodule.add_argument_indices_to_input:
-        assert "pooler_start_indices" in encoding.inputs
-        assert "pooler_end_indices" in encoding.inputs
-        assert len(encoding.inputs["pooler_start_indices"]) == 2
-        assert len(encoding.inputs["pooler_end_indices"]) == 2
-        assert encoding.inputs["pooler_start_indices"] == [17, 11]
-        assert encoding.inputs["pooler_end_indices"] == [18, 12]
-
-    else:
-        assert "pooler_start_indices" not in encoding.inputs
-        assert "pooler_end_indices" not in encoding.inputs
+    assert "pooler_start_indices" in encoding.inputs
+    assert "pooler_end_indices" in encoding.inputs
+    assert len(encoding.inputs["pooler_start_indices"]) == 2
+    assert len(encoding.inputs["pooler_end_indices"]) == 2
+    assert encoding.inputs["pooler_start_indices"] == [17, 11]
+    assert encoding.inputs["pooler_end_indices"] == [18, 12]
 
 
-def test_collate_with_add_argument_indices(encodings_and_taskmodule_with_argument_indices):
-    encodings, taskmodule = encodings_and_taskmodule_with_argument_indices
-    batch_encoding = taskmodule.collate(encodings[:2])
-    inputs, targets = batch_encoding
+@pytest.fixture(scope="module")
+def batch_with_argument_indices(
+    taskmodule_with_add_argument_indices, encodings_with_argument_indices
+):
+    # just take the first two encodings
+    return taskmodule_with_add_argument_indices.collate(encodings_with_argument_indices[:2])
 
-    assert "input_ids" in inputs
-    assert "attention_mask" in inputs
+
+def test_collate_with_add_argument_indices(batch_with_argument_indices):
+    inputs, targets = batch_with_argument_indices
+
+    assert set(inputs) == {
+        "input_ids",
+        "attention_mask",
+        "pooler_start_indices",
+        "pooler_end_indices",
+    }
+
     assert inputs["input_ids"].shape == inputs["attention_mask"].shape
-    if taskmodule.add_argument_indices_to_input:
-        assert "pooler_start_indices" in inputs
-        assert "pooler_end_indices" in inputs
+    torch.testing.assert_close(
+        inputs["input_ids"],
+        torch.tensor(
+            [
+                [
+                    101,
+                    28998,
+                    13832,
+                    3121,
+                    2340,
+                    138,
+                    28996,
+                    1759,
+                    1120,
+                    28999,
+                    139,
+                    28997,
+                    119,
+                    102,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+                [
+                    101,
+                    1752,
+                    5650,
+                    119,
+                    28998,
+                    13832,
+                    3121,
+                    2340,
+                    144,
+                    28996,
+                    1759,
+                    1120,
+                    28999,
+                    145,
+                    28997,
+                    119,
+                    1262,
+                    1771,
+                    146,
+                    119,
+                    102,
+                ],
+            ]
+        ),
+    )
+    torch.testing.assert_close(
+        inputs["attention_mask"],
+        torch.tensor(
+            [
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ]
+        ),
+    )
 
-        torch.testing.assert_close(
-            inputs["pooler_start_indices"], torch.tensor([[2, 10], [5, 13]])
-        )
-        torch.testing.assert_close(inputs["pooler_end_indices"], torch.tensor([[6, 11], [9, 14]]))
-
-    else:
-        assert "pooler_start_indices" not in inputs
-        assert "pooler_end_indices" not in inputs
+    torch.testing.assert_close(inputs["pooler_start_indices"], torch.tensor([[2, 10], [5, 13]]))
+    torch.testing.assert_close(inputs["pooler_end_indices"], torch.tensor([[6, 11], [9, 14]]))
 
 
 def test_encode_input_multiple_relations_for_same_arguments(caplog):
@@ -1506,3 +1556,78 @@ def test_encode_with_collect_statistics(documents, caplog):
     expected_message += "| available |                2 |                 3 |             2 |\n"
     expected_message += "| used      |                2 |                 3 |             2 |"
     assert caplog.messages[0] == expected_message
+
+
+def test_configure_model_metric(documents, taskmodule):
+    task_encodings = taskmodule.encode(documents, encode_target=True)
+    batch = taskmodule.collate(task_encodings)
+
+    metric = taskmodule.configure_model_metric(stage="train")
+    assert isinstance(metric, (Metric, MetricCollection))
+    state = {k: v.tolist() for k, v in flatten_dict(metric.metric_state).items()}
+    assert state == {
+        "macro/f1/fn": [0, 0, 0, 0],
+        "macro/f1/fp": [0, 0, 0, 0],
+        "macro/f1/tn": [0, 0, 0, 0],
+        "macro/f1/tp": [0, 0, 0, 0],
+        "micro/f1/fn": [0],
+        "micro/f1/fp": [0],
+        "micro/f1/tn": [0],
+        "micro/f1/tp": [0],
+    }
+    assert metric.compute() == {
+        "no_relation/f1": tensor(0.0),
+        "org:founded_by/f1": tensor(0.0),
+        "per:employee_of/f1": tensor(0.0),
+        "per:founder/f1": tensor(0.0),
+        "macro/f1": tensor(0.0),
+        "micro/f1": tensor(0.0),
+    }
+
+    targets = batch[1]
+    metric.update(targets, targets)
+    state = {k: v.tolist() for k, v in flatten_dict(metric.metric_state).items()}
+    assert state == {
+        "macro/f1/fn": [0, 0, 0, 0],
+        "macro/f1/fp": [0, 0, 0, 0],
+        "macro/f1/tn": [7, 5, 4, 5],
+        "macro/f1/tp": [0, 2, 3, 2],
+        "micro/f1/fn": [0],
+        "micro/f1/fp": [0],
+        "micro/f1/tn": [21],
+        "micro/f1/tp": [7],
+    }
+    assert metric.compute() == {
+        "no_relation/f1": tensor(0.0),
+        "org:founded_by/f1": tensor(1.0),
+        "per:employee_of/f1": tensor(1.0),
+        "per:founder/f1": tensor(1.0),
+        "macro/f1": tensor(1.0),
+        "micro/f1": tensor(1.0),
+    }
+
+    metric.reset()
+    torch.testing.assert_close(targets["labels"], torch.tensor([2, 2, 3, 1, 2, 3, 1]))
+    # three matches
+    random_targets = {"labels": torch.tensor([1, 1, 3, 1, 2, 0, 0])}
+    metric.update(random_targets, targets)
+    state = {k: v.tolist() for k, v in flatten_dict(metric.metric_state).items()}
+    assert state == {
+        "macro/f1/fn": [0, 1, 2, 1],
+        "macro/f1/fp": [2, 2, 0, 0],
+        "macro/f1/tn": [5, 3, 4, 5],
+        "macro/f1/tp": [0, 1, 1, 1],
+        "micro/f1/fn": [4],
+        "micro/f1/fp": [4],
+        "micro/f1/tn": [17],
+        "micro/f1/tp": [3],
+    }
+    values = {k: v.item() for k, v in metric.compute().items()}
+    assert values == {
+        "macro/f1": 0.3916666507720947,
+        "micro/f1": 0.4285714328289032,
+        "no_relation/f1": 0.0,
+        "org:founded_by/f1": 0.4000000059604645,
+        "per:employee_of/f1": 0.5,
+        "per:founder/f1": 0.6666666865348816,
+    }

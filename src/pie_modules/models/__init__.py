@@ -1,4 +1,4 @@
-from .sequence_classification import SequenceClassificationModel
+from .sequence_classification_with_pooler import SequenceClassificationModelWithPooler
 from .simple_extractive_question_answering import SimpleExtractiveQuestionAnsweringModel
 from .simple_generative import SimpleGenerativeModel
 from .simple_sequence_classification import SimpleSequenceClassificationModel

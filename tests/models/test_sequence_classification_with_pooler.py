@@ -3,17 +3,19 @@ from typing import Dict
 import pytest
 import torch
 from pytorch_lightning import Trainer
+from torch import LongTensor
 from torch.optim.lr_scheduler import LambdaLR
 from transformers.modeling_outputs import SequenceClassifierOutput
 
-from pie_modules.models import SimpleSequenceClassificationModel
-from pie_modules.models.simple_sequence_classification import OutputType
+from pie_modules.models import SequenceClassificationModelWithPooler
+from pie_modules.models.sequence_classification_with_pooler import OutputType
 
 NUM_CLASSES = 4
+POOLER = "start_tokens"
 
 
 @pytest.fixture
-def inputs() -> Dict[str, torch.LongTensor]:
+def inputs() -> Dict[str, LongTensor]:
     result_dict = {
         "input_ids": torch.tensor(
             [
@@ -198,22 +200,29 @@ def inputs() -> Dict[str, torch.LongTensor]:
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             ]
         ).to(torch.long),
+        "pooler_start_indices": torch.tensor(
+            [[2, 10], [5, 13], [5, 17], [17, 11], [5, 13], [14, 18], [18, 14]]
+        ).to(torch.long),
+        "pooler_end_indices": torch.tensor(
+            [[6, 11], [9, 14], [9, 18], [18, 12], [9, 14], [15, 19], [19, 15]]
+        ).to(torch.long),
     }
 
     return result_dict
 
 
 @pytest.fixture
-def targets() -> Dict[str, torch.LongTensor]:
+def targets() -> Dict[str, LongTensor]:
     return {"labels": torch.tensor([0, 1, 2, 3, 1, 2, 3]).to(torch.long)}
 
 
 @pytest.fixture
-def model() -> SimpleSequenceClassificationModel:
+def model() -> SequenceClassificationModelWithPooler:
     torch.manual_seed(42)
-    result = SimpleSequenceClassificationModel(
+    result = SequenceClassificationModelWithPooler(
         model_name_or_path="prajjwal1/bert-tiny",
         num_classes=NUM_CLASSES,
+        pooler=POOLER,
     )
     return result
 
@@ -226,7 +235,8 @@ def model_output(model, inputs) -> OutputType:
 
 
 def test_forward(model_output, inputs):
-    batch_size = inputs["input_ids"].shape[0]
+    batch_size, seq_len = inputs["input_ids"].shape
+
     assert isinstance(model_output, SequenceClassifierOutput)
     assert set(model_output) == {"logits"}
     logits = model_output["logits"]
@@ -237,48 +247,33 @@ def test_forward(model_output, inputs):
         logits,
         torch.tensor(
             [
+                [-0.5805037021636963, 0.12570726871490479, 1.187800407409668, 0.5867480635643005],
+                [-0.5103899836540222, -0.4129180312156677, 1.222808599472046, 0.767367422580719],
                 [
-                    -0.0780562311410904,
-                    0.2885679602622986,
-                    -0.1652916818857193,
-                    0.25686803460121155,
+                    -0.5193025469779968,
+                    0.007931053638458252,
+                    1.2698432207107544,
+                    0.6175908446311951,
                 ],
                 [
-                    -0.07416453957557678,
-                    0.28354859352111816,
-                    -0.18583300709724426,
-                    0.2679266333580017,
+                    -0.10545363277196884,
+                    -0.17329390347003937,
+                    1.101582407951355,
+                    0.49733155965805054,
                 ],
                 [
-                    -0.07721473276615143,
-                    0.27951815724372864,
-                    -0.18438687920570374,
-                    0.26015764474868774,
+                    -0.48656341433525085,
+                    -0.4286993145942688,
+                    1.2574571371078491,
+                    0.7629366517066956,
                 ],
                 [
-                    -0.07416942715644836,
-                    0.2880846858024597,
-                    -0.18872812390327454,
-                    0.2668967545032501,
+                    -0.3718412220478058,
+                    0.09046845138072968,
+                    0.8015384674072266,
+                    0.24329520761966705,
                 ],
-                [
-                    -0.06794390082359314,
-                    0.2791520059108734,
-                    -0.18853652477264404,
-                    0.2560432553291321,
-                ],
-                [
-                    -0.06797368824481964,
-                    0.28091782331466675,
-                    -0.18849357962608337,
-                    0.24799709022045135,
-                ],
-                [
-                    -0.06416021287441254,
-                    0.2858850657939911,
-                    -0.19061337411403656,
-                    0.25447627902030945,
-                ],
+                [-0.20474043488502502, -0.1895218938589096, 0.8438000679016113, 0.441173791885376],
             ]
         ),
     )
@@ -292,36 +287,66 @@ def test_decode(model, model_output, inputs):
     assert labels.shape == (inputs["input_ids"].shape[0],)
     torch.testing.assert_close(
         labels,
-        torch.tensor([1, 1, 1, 1, 1, 1, 1]),
+        torch.tensor([2, 2, 2, 2, 2, 2, 2]),
     )
     probabilities = decoded["probabilities"]
     assert probabilities.shape == (inputs["input_ids"].shape[0], NUM_CLASSES)
     torch.testing.assert_close(
-        probabilities,
+        probabilities.round(decimals=4),
         torch.tensor(
             [
-                [
-                    0.21020983159542084,
-                    0.30330243706703186,
-                    0.19264918565750122,
-                    0.2938385605812073,
-                ],
-                [0.21131442487239838, 0.3021913170814514, 0.18898707628250122, 0.2975071966648102],
-                [0.2114931344985962, 0.30215057730674744, 0.1899993121623993, 0.29635706543922424],
-                [
-                    0.21120351552963257,
-                    0.30340734124183655,
-                    0.18834275007247925,
-                    0.29704639315605164,
-                ],
-                [
-                    0.21349377930164337,
-                    0.3020835518836975,
-                    0.18923982977867126,
-                    0.29518282413482666,
-                ],
-                [0.2138788104057312, 0.30317223072052, 0.18959489464759827, 0.2933540642261505],
-                [0.21387633681297302, 0.30351871252059937, 0.18847113847732544, 0.294133722782135],
+                [0.0826, 0.1675, 0.4844, 0.2655],
+                [0.0881, 0.0971, 0.4986, 0.3162],
+                [0.0848, 0.1436, 0.5073, 0.2643],
+                [0.1407, 0.1315, 0.4706, 0.2572],
+                [0.0887, 0.0940, 0.5076, 0.3096],
+                [0.1304, 0.2070, 0.4215, 0.2412],
+                [0.1476, 0.1498, 0.4211, 0.2815],
+            ]
+        ),
+    )
+
+
+def test_decode_with_multi_label(model_output, inputs):
+    torch.manual_seed(42)
+    model = SequenceClassificationModelWithPooler(
+        model_name_or_path="prajjwal1/bert-tiny",
+        num_classes=NUM_CLASSES,
+        pooler=POOLER,
+        multi_label=True,
+    )
+    decoded = model.decode(inputs=inputs, outputs=model_output)
+    assert isinstance(decoded, dict)
+    assert set(decoded) == {"labels", "probabilities"}
+    labels = decoded["labels"]
+    assert labels.shape == (inputs["input_ids"].shape[0], NUM_CLASSES)
+    torch.testing.assert_close(
+        labels,
+        torch.tensor(
+            [
+                [0, 1, 1, 1],
+                [0, 0, 1, 1],
+                [0, 1, 1, 1],
+                [0, 0, 1, 1],
+                [0, 0, 1, 1],
+                [0, 1, 1, 1],
+                [0, 0, 1, 1],
+            ]
+        ),
+    )
+    probabilities = decoded["probabilities"]
+    assert probabilities.shape == (inputs["input_ids"].shape[0], NUM_CLASSES)
+    torch.testing.assert_close(
+        probabilities.round(decimals=4),
+        torch.tensor(
+            [
+                [0.3588, 0.5314, 0.7663, 0.6426],
+                [0.3751, 0.3982, 0.7726, 0.6830],
+                [0.3730, 0.5020, 0.7807, 0.6497],
+                [0.4737, 0.4568, 0.7506, 0.6218],
+                [0.3807, 0.3944, 0.7786, 0.6820],
+                [0.4081, 0.5226, 0.6903, 0.5605],
+                [0.4490, 0.4528, 0.6993, 0.6085],
             ]
         ),
     )
@@ -337,7 +362,7 @@ def test_training_step(batch, model):
     torch.manual_seed(42)
     loss = model.training_step(batch, batch_idx=0)
     assert loss is not None
-    torch.testing.assert_close(loss, torch.tensor(1.3877977132797241))
+    torch.testing.assert_close(loss, torch.tensor(1.6224687099456787))
 
 
 def test_validation_step(batch, model):
@@ -345,7 +370,7 @@ def test_validation_step(batch, model):
     torch.manual_seed(42)
     loss = model.validation_step(batch, batch_idx=0)
     assert loss is not None
-    torch.testing.assert_close(loss, torch.tensor(1.3877977132797241))
+    torch.testing.assert_close(loss, torch.tensor(1.6224687099456787))
 
 
 def test_test_step(batch, model):
@@ -353,64 +378,65 @@ def test_test_step(batch, model):
     torch.manual_seed(42)
     loss = model.test_step(batch, batch_idx=0)
     assert loss is not None
-    torch.testing.assert_close(loss, torch.tensor(1.3877977132797241))
+    torch.testing.assert_close(loss, torch.tensor(1.6224687099456787))
 
 
 def test_base_model_named_parameters(model):
     base_model_named_parameters = dict(model.base_model_named_parameters())
     assert set(base_model_named_parameters) == {
-        "model.bert.pooler.dense.bias",
-        "model.bert.encoder.layer.0.intermediate.dense.weight",
-        "model.bert.encoder.layer.0.intermediate.dense.bias",
-        "model.bert.encoder.layer.1.attention.output.dense.weight",
-        "model.bert.encoder.layer.1.attention.output.LayerNorm.weight",
-        "model.bert.encoder.layer.1.attention.self.query.weight",
-        "model.bert.encoder.layer.1.output.dense.weight",
-        "model.bert.encoder.layer.0.output.dense.bias",
-        "model.bert.encoder.layer.1.intermediate.dense.bias",
-        "model.bert.encoder.layer.1.attention.self.value.bias",
-        "model.bert.encoder.layer.0.attention.output.dense.weight",
-        "model.bert.encoder.layer.0.attention.self.query.bias",
-        "model.bert.encoder.layer.0.attention.self.value.bias",
-        "model.bert.encoder.layer.1.output.dense.bias",
-        "model.bert.encoder.layer.1.attention.self.query.bias",
-        "model.bert.encoder.layer.1.attention.output.LayerNorm.bias",
-        "model.bert.encoder.layer.0.attention.self.query.weight",
-        "model.bert.encoder.layer.0.attention.output.LayerNorm.bias",
-        "model.bert.encoder.layer.0.attention.self.key.bias",
-        "model.bert.encoder.layer.1.intermediate.dense.weight",
-        "model.bert.encoder.layer.1.output.LayerNorm.bias",
-        "model.bert.encoder.layer.1.output.LayerNorm.weight",
-        "model.bert.encoder.layer.0.attention.self.key.weight",
-        "model.bert.encoder.layer.1.attention.output.dense.bias",
-        "model.bert.encoder.layer.0.attention.output.dense.bias",
-        "model.bert.embeddings.LayerNorm.bias",
-        "model.bert.encoder.layer.0.attention.self.value.weight",
-        "model.bert.encoder.layer.0.attention.output.LayerNorm.weight",
-        "model.bert.embeddings.token_type_embeddings.weight",
-        "model.bert.encoder.layer.0.output.LayerNorm.weight",
-        "model.bert.embeddings.position_embeddings.weight",
-        "model.bert.encoder.layer.1.attention.self.key.bias",
-        "model.bert.embeddings.LayerNorm.weight",
-        "model.bert.encoder.layer.0.output.LayerNorm.bias",
-        "model.bert.encoder.layer.1.attention.self.key.weight",
-        "model.bert.pooler.dense.weight",
-        "model.bert.encoder.layer.0.output.dense.weight",
-        "model.bert.embeddings.word_embeddings.weight",
-        "model.bert.encoder.layer.1.attention.self.value.weight",
+        "model.pooler.dense.bias",
+        "model.encoder.layer.0.intermediate.dense.weight",
+        "model.encoder.layer.0.intermediate.dense.bias",
+        "model.encoder.layer.1.attention.output.dense.weight",
+        "model.encoder.layer.1.attention.output.LayerNorm.weight",
+        "model.encoder.layer.1.attention.self.query.weight",
+        "model.encoder.layer.1.output.dense.weight",
+        "model.encoder.layer.0.output.dense.bias",
+        "model.encoder.layer.1.intermediate.dense.bias",
+        "model.encoder.layer.1.attention.self.value.bias",
+        "model.encoder.layer.0.attention.output.dense.weight",
+        "model.encoder.layer.0.attention.self.query.bias",
+        "model.encoder.layer.0.attention.self.value.bias",
+        "model.encoder.layer.1.output.dense.bias",
+        "model.encoder.layer.1.attention.self.query.bias",
+        "model.encoder.layer.1.attention.output.LayerNorm.bias",
+        "model.encoder.layer.0.attention.self.query.weight",
+        "model.encoder.layer.0.attention.output.LayerNorm.bias",
+        "model.encoder.layer.0.attention.self.key.bias",
+        "model.encoder.layer.1.intermediate.dense.weight",
+        "model.encoder.layer.1.output.LayerNorm.bias",
+        "model.encoder.layer.1.output.LayerNorm.weight",
+        "model.encoder.layer.0.attention.self.key.weight",
+        "model.encoder.layer.1.attention.output.dense.bias",
+        "model.encoder.layer.0.attention.output.dense.bias",
+        "model.embeddings.LayerNorm.bias",
+        "model.encoder.layer.0.attention.self.value.weight",
+        "model.encoder.layer.0.attention.output.LayerNorm.weight",
+        "model.embeddings.token_type_embeddings.weight",
+        "model.encoder.layer.0.output.LayerNorm.weight",
+        "model.embeddings.position_embeddings.weight",
+        "model.encoder.layer.1.attention.self.key.bias",
+        "model.embeddings.LayerNorm.weight",
+        "model.encoder.layer.0.output.LayerNorm.bias",
+        "model.encoder.layer.1.attention.self.key.weight",
+        "model.pooler.dense.weight",
+        "model.encoder.layer.0.output.dense.weight",
+        "model.embeddings.word_embeddings.weight",
+        "model.encoder.layer.1.attention.self.value.weight",
     }
 
 
 def test_task_named_parameters(model):
     task_named_parameters = dict(model.task_named_parameters())
     assert set(task_named_parameters) == {
-        "model.classifier.weight",
-        "model.classifier.bias",
+        "classifier.weight",
+        "pooler.pooler.missing_embeddings",
+        "classifier.bias",
     }
 
 
 def test_configure_optimizers_with_warmup():
-    model = SimpleSequenceClassificationModel(
+    model = SequenceClassificationModelWithPooler(
         model_name_or_path="prajjwal1/bert-tiny",
         num_classes=NUM_CLASSES,
     )
@@ -434,7 +460,7 @@ def test_configure_optimizers_with_warmup():
 
 
 def test_configure_optimizers_with_task_learning_rate(monkeypatch):
-    model = SimpleSequenceClassificationModel(
+    model = SequenceClassificationModelWithPooler(
         model_name_or_path="prajjwal1/bert-tiny",
         num_classes=NUM_CLASSES,
         learning_rate=1e-5,
@@ -462,7 +488,7 @@ def test_configure_optimizers_with_task_learning_rate(monkeypatch):
 
 
 def test_freeze_base_model(monkeypatch, inputs, targets):
-    model = SimpleSequenceClassificationModel(
+    model = SequenceClassificationModelWithPooler(
         model_name_or_path="prajjwal1/bert-tiny",
         num_classes=NUM_CLASSES,
         freeze_base_model=True,
@@ -477,17 +503,3 @@ def test_freeze_base_model(monkeypatch, inputs, targets):
         assert not param.requires_grad
     for param in task_params:
         assert param.requires_grad
-
-
-def test_base_model_named_parameters_wrong_prefix(monkeypatch):
-    model = SimpleSequenceClassificationModel(
-        model_name_or_path="prajjwal1/bert-tiny",
-        num_classes=NUM_CLASSES,
-        base_model_prefix="wrong_prefix",
-    )
-    with pytest.raises(ValueError) as excinfo:
-        model.base_model_named_parameters()
-    assert (
-        str(excinfo.value)
-        == "Base model with prefix 'wrong_prefix' not found in BertForSequenceClassification"
-    )
