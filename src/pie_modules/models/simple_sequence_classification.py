@@ -35,6 +35,25 @@ class SimpleSequenceClassificationModel(
     RequiresModelNameOrPath,
     RequiresNumClasses,
 ):
+    """A simple sequence classification model. It wraps a HuggingFace
+    AutoModelForSequenceClassification and adds boilerplate code for training and inference.
+
+    Args:
+        model_name_or_path: The name or path of the HuggingFace model to use.
+        num_classes: The number of classes for the classification task.
+        tokenizer_vocab_size: The size of the tokenizer vocabulary. If provided, the model's
+            tokenizer embeddings are resized to this size.
+        learning_rate: The learning rate for the optimizer.
+        task_learning_rate: The learning rate for the task-specific parameters. If None, the
+            learning rate for all parameters is set to `learning_rate`.
+        warmup_proportion: The proportion of steps to warm up the learning rate.
+        freeze_base_model: If True, the base model parameters are frozen.
+        base_model_prefix: The prefix of the base model parameters when using a task_learning_rate
+            or freeze_base_model. If None, the base_model_prefix of the model is used.
+        **kwargs: Additional keyword arguments passed to the parent class,
+            see :class:`ModelWithBoilerplate`.
+    """
+
     def __init__(
         self,
         model_name_or_path: str,
