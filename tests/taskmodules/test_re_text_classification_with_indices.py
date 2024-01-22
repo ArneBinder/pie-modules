@@ -8,6 +8,7 @@ import torch
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, NaryRelation
 from pytorch_ie.core import Annotation, AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument, TextDocument
+from torch import tensor
 from torchmetrics import Metric, MetricCollection
 
 from pie_modules.taskmodules import RETextClassificationWithIndicesTaskModule
@@ -1565,31 +1566,45 @@ def test_configure_model_metric(documents, taskmodule):
     assert isinstance(metric, (Metric, MetricCollection))
     state = {k: v.tolist() for k, v in flatten_dict(metric.metric_state).items()}
     assert state == {
-        "f1_macro/fn": [0, 0, 0, 0],
-        "f1_macro/fp": [0, 0, 0, 0],
-        "f1_macro/tn": [0, 0, 0, 0],
-        "f1_macro/tp": [0, 0, 0, 0],
-        "f1_micro/fn": [0],
-        "f1_micro/fp": [0],
-        "f1_micro/tn": [0],
-        "f1_micro/tp": [0],
+        "macro/f1/fn": [0, 0, 0, 0],
+        "macro/f1/fp": [0, 0, 0, 0],
+        "macro/f1/tn": [0, 0, 0, 0],
+        "macro/f1/tp": [0, 0, 0, 0],
+        "micro/f1/fn": [0],
+        "micro/f1/fp": [0],
+        "micro/f1/tn": [0],
+        "micro/f1/tp": [0],
     }
-    assert metric.compute() == {"f1_macro": torch.tensor(0.0), "f1_micro": torch.tensor(0.0)}
+    assert metric.compute() == {
+        "no_relation/f1": tensor(0.0),
+        "org:founded_by/f1": tensor(0.0),
+        "per:employee_of/f1": tensor(0.0),
+        "per:founder/f1": tensor(0.0),
+        "macro/f1": tensor(0.0),
+        "micro/f1": tensor(0.0),
+    }
 
     targets = batch[1]
     metric.update(targets, targets)
     state = {k: v.tolist() for k, v in flatten_dict(metric.metric_state).items()}
     assert state == {
-        "f1_macro/fn": [0, 0, 0, 0],
-        "f1_macro/fp": [0, 0, 0, 0],
-        "f1_macro/tn": [7, 5, 4, 5],
-        "f1_macro/tp": [0, 2, 3, 2],
-        "f1_micro/fn": [0],
-        "f1_micro/fp": [0],
-        "f1_micro/tn": [21],
-        "f1_micro/tp": [7],
+        "macro/f1/fn": [0, 0, 0, 0],
+        "macro/f1/fp": [0, 0, 0, 0],
+        "macro/f1/tn": [7, 5, 4, 5],
+        "macro/f1/tp": [0, 2, 3, 2],
+        "micro/f1/fn": [0],
+        "micro/f1/fp": [0],
+        "micro/f1/tn": [21],
+        "micro/f1/tp": [7],
     }
-    assert metric.compute() == {"f1_macro": torch.tensor(1.0), "f1_micro": torch.tensor(1.0)}
+    assert metric.compute() == {
+        "no_relation/f1": tensor(0.0),
+        "org:founded_by/f1": tensor(1.0),
+        "per:employee_of/f1": tensor(1.0),
+        "per:founder/f1": tensor(1.0),
+        "macro/f1": tensor(1.0),
+        "micro/f1": tensor(1.0),
+    }
 
     metric.reset()
     torch.testing.assert_close(targets["labels"], torch.tensor([2, 2, 3, 1, 2, 3, 1]))
@@ -1598,14 +1613,21 @@ def test_configure_model_metric(documents, taskmodule):
     metric.update(random_targets, targets)
     state = {k: v.tolist() for k, v in flatten_dict(metric.metric_state).items()}
     assert state == {
-        "f1_macro/fn": [0, 1, 2, 1],
-        "f1_macro/fp": [2, 2, 0, 0],
-        "f1_macro/tn": [5, 3, 4, 5],
-        "f1_macro/tp": [0, 1, 1, 1],
-        "f1_micro/fn": [4],
-        "f1_micro/fp": [4],
-        "f1_micro/tn": [17],
-        "f1_micro/tp": [3],
+        "macro/f1/fn": [0, 1, 2, 1],
+        "macro/f1/fp": [2, 2, 0, 0],
+        "macro/f1/tn": [5, 3, 4, 5],
+        "macro/f1/tp": [0, 1, 1, 1],
+        "micro/f1/fn": [4],
+        "micro/f1/fp": [4],
+        "micro/f1/tn": [17],
+        "micro/f1/tp": [3],
     }
     values = {k: v.item() for k, v in metric.compute().items()}
-    assert values == {"f1_macro": 0.3916666507720947, "f1_micro": 0.4285714328289032}
+    assert values == {
+        "macro/f1": 0.3916666507720947,
+        "micro/f1": 0.4285714328289032,
+        "no_relation/f1": 0.0,
+        "org:founded_by/f1": 0.4000000059604645,
+        "per:employee_of/f1": 0.5,
+        "per:founder/f1": 0.6666666865348816,
+    }
