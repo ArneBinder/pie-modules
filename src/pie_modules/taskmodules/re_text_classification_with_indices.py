@@ -966,15 +966,16 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         return inputs, {"labels": targets}
 
     def configure_model_metric(self, stage: str) -> Metric:
-        if self.labels is None:
+        if self.label_to_id is None:
             raise ValueError(
-                "The taskmodule has not been prepared yet, so the labels are not known. "
-                "Please call taskmodule.prepare() before configuring the model metric or "
-                "pass the labels to the taskmodule constructor."
+                "The taskmodule has not been prepared yet, so label_to_id is not known. "
+                "Please call taskmodule.prepare(documents) before configuring the model metric "
+                "or pass the labels to the taskmodule constructor an call taskmodule.post_prepare()."
             )
         return WrappedMetricWithPrepareFunction(
             metric=F1Score(
-                num_classes=len(self.labels),
+                # we use the length of label_to_id because that contains the none_label (in contrast to labels)
+                num_classes=len(self.label_to_id),
                 average="micro",
                 task="multilabel" if self.multi_label else "multiclass",
             ),

@@ -8,6 +8,7 @@ import torch
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, NaryRelation
 from pytorch_ie.core import Annotation, AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument, TextDocument
+from torchmetrics import Metric, MetricCollection
 
 from pie_modules.taskmodules import RETextClassificationWithIndicesTaskModule
 from pie_modules.taskmodules.re_text_classification_with_indices import (
@@ -1553,3 +1554,42 @@ def test_encode_with_collect_statistics(documents, caplog):
     expected_message += "| available |                2 |                 3 |             2 |\n"
     expected_message += "| used      |                2 |                 3 |             2 |"
     assert caplog.messages[0] == expected_message
+
+
+def test_configure_model_metric(documents, taskmodule):
+    task_encodings = taskmodule.encode(documents, encode_target=True)
+    batch = taskmodule.collate(task_encodings)
+
+    metric = taskmodule.configure_model_metric(stage="train")
+    assert isinstance(metric, (Metric, MetricCollection))
+
+    assert metric.metric_state == {
+        "tp": torch.tensor([0]),
+        "tn": torch.tensor([0]),
+        "fp": torch.tensor([0]),
+        "fn": torch.tensor([0]),
+    }
+    assert metric.compute() == torch.tensor(0.0)
+
+    targets = batch[1]
+    metric.update(targets, targets)
+    assert metric.metric_state == {
+        "tp": torch.tensor([7]),
+        "tn": torch.tensor([21]),
+        "fp": torch.tensor([0]),
+        "fn": torch.tensor([0]),
+    }
+    assert metric.compute() == torch.tensor(1.0)
+
+    metric.reset()
+    torch.testing.assert_close(targets["labels"], torch.tensor([2, 2, 3, 1, 2, 3, 1]))
+    # three matches
+    random_targets = {"labels": torch.tensor([1, 1, 3, 1, 2, 0, 0])}
+    metric.update(random_targets, targets)
+    assert metric.metric_state == {
+        "tp": torch.tensor([3]),
+        "fp": torch.tensor([4]),
+        "tn": torch.tensor([17]),
+        "fn": torch.tensor([4]),
+    }
+    assert metric.compute() == torch.tensor(0.4285714328289032)
