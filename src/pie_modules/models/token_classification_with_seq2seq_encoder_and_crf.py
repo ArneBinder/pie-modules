@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, MutableMapping, Optional, Tuple, Union
 
 import torch
 from pytorch_ie.core import PyTorchIEModel
@@ -22,7 +22,7 @@ from pie_modules.models.components.seq2seq_encoder import build_seq2seq_encoder
 # model inputs / outputs / targets
 InputType: TypeAlias = BatchEncoding
 OutputType: TypeAlias = TokenClassifierOutput
-TargetType: TypeAlias = LongTensor
+TargetType: TypeAlias = MutableMapping[str, Union[LongTensor, FloatTensor]]
 # step inputs (batch) / outputs (loss)
 StepInputType: TypeAlias = Tuple[InputType, TargetType]
 StepOutputType: TypeAlias = FloatTensor
@@ -141,6 +141,7 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         self.crf = CRF(num_tags=num_classes, batch_first=True) if use_crf else None
 
     def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
+        result = {}
         logits = outputs.logits
         attention_mask = inputs["attention_mask"]
         special_tokens_mask = inputs["special_tokens_mask"]
@@ -159,7 +160,12 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         # set the padding and special tokens to the label_pad_id
         mask = attention_mask_bool & ~special_tokens_mask.to(torch.bool)
         tags_tensor = tags_tensor.masked_fill(~mask, self.label_pad_id)
-        return tags_tensor
+
+        result["labels"] = tags_tensor
+        # TODO: is it correct to use this also in the case of the crf?
+        result["probabilities"] = torch.softmax(logits, dim=-1)
+
+        return result
 
     def forward(
         self, inputs: InputType, targets: Optional[TargetType] = None
@@ -177,8 +183,8 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         logits = self.classifier(sequence_output)
 
         loss = None
-        labels = targets
-        if labels is not None:
+        if targets is not None:
+            labels = targets["labels"]
             if self.crf is not None:
                 # Overwrite the padding labels with ignore_index. Note that this is different from the
                 # attention_mask, because the attention_mask includes special tokens, whereas the labels

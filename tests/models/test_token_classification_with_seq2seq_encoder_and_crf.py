@@ -89,14 +89,16 @@ def batch():
             ]
         ),
     }
-    targets = torch.tensor(
-        [
-            [-100, 0, 0, 0, 0, -100, -100, -100, -100, -100, -100, -100],
-            [-100, 3, 4, 4, 4, 0, 0, 1, 0, -100, -100, -100],
-            [-100, 3, 4, 4, 4, 0, 1, 0, -100, -100, -100, -100],
-            [-100, 0, 0, 0, 3, 4, 4, 4, 0, 1, 0, -100],
-        ]
-    )
+    targets = {
+        "labels": torch.tensor(
+            [
+                [-100, 0, 0, 0, 0, -100, -100, -100, -100, -100, -100, -100],
+                [-100, 3, 4, 4, 4, 0, 0, 1, 0, -100, -100, -100],
+                [-100, 3, 4, 4, 4, 0, 1, 0, -100, -100, -100, -100],
+                [-100, 0, 0, 0, 3, 4, 4, 4, 0, 1, 0, -100],
+            ]
+        )
+    }
     return inputs, targets
 
 
@@ -157,7 +159,7 @@ def test_tune_base_model():
 def test_forward(batch, model):
     inputs, targets = batch
     batch_size, seq_len = inputs["input_ids"].shape
-    num_classes = int(torch.max(targets) + 1)
+    num_classes = int(torch.max(targets["labels"]) + 1)
 
     # set seed to make sure the output is deterministic
     torch.manual_seed(42)
@@ -439,10 +441,13 @@ def test_predict_and_predict_step(model, batch, config, test_step):
         predictions = model.predict_step(batch, batch_idx=0, dataloader_idx=0)
     else:
         predictions = model.predict(batch[0])
-    assert predictions.shape == batch[1].shape
+
+    assert set(predictions) == {"labels", "probabilities"}
+    labels = predictions["labels"]
+    probabilities = predictions["probabilities"]
     if config == {}:
         torch.testing.assert_close(
-            predictions,
+            labels,
             torch.tensor(
                 [
                     [-100, 1, 3, 1, 1, -100, -100, -100, -100, -100, -100, -100],
@@ -454,7 +459,7 @@ def test_predict_and_predict_step(model, batch, config, test_step):
         )
     elif config == {"use_crf": False}:
         torch.testing.assert_close(
-            predictions,
+            labels,
             torch.tensor(
                 [
                     [-100, 1, 3, 1, 1, -100, -100, -100, -100, -100, -100, -100],
@@ -466,6 +471,43 @@ def test_predict_and_predict_step(model, batch, config, test_step):
         )
     else:
         raise ValueError(f"Unknown config: {config}")
+
+    assert labels.shape == batch[1]["labels"].shape
+    torch.testing.assert_close(
+        probabilities[:2].round(decimals=4),
+        torch.tensor(
+            [
+                [
+                    [0.2123, 0.2090, 0.1691, 0.1896, 0.2199],
+                    [0.1835, 0.2382, 0.1678, 0.2175, 0.1929],
+                    [0.1997, 0.2078, 0.1597, 0.3080, 0.1247],
+                    [0.1521, 0.2844, 0.2405, 0.1705, 0.1525],
+                    [0.1523, 0.2406, 0.2073, 0.1842, 0.2155],
+                    [0.2048, 0.1966, 0.1860, 0.2822, 0.1305],
+                    [0.1997, 0.1635, 0.2037, 0.2107, 0.2223],
+                    [0.1904, 0.2195, 0.1675, 0.2245, 0.1981],
+                    [0.1834, 0.2070, 0.1912, 0.2497, 0.1688],
+                    [0.1831, 0.1971, 0.1886, 0.2719, 0.1593],
+                    [0.2021, 0.1710, 0.1825, 0.2984, 0.1459],
+                    [0.2090, 0.1694, 0.1492, 0.3119, 0.1605],
+                ],
+                [
+                    [0.1950, 0.1239, 0.2854, 0.2325, 0.1632],
+                    [0.2324, 0.1133, 0.1760, 0.2818, 0.1965],
+                    [0.1906, 0.1211, 0.2027, 0.2170, 0.2687],
+                    [0.2018, 0.1164, 0.2073, 0.2418, 0.2327],
+                    [0.2354, 0.0762, 0.2061, 0.2774, 0.2050],
+                    [0.1968, 0.0876, 0.2437, 0.3027, 0.1693],
+                    [0.2154, 0.0789, 0.2183, 0.3195, 0.1680],
+                    [0.2011, 0.0958, 0.2537, 0.2560, 0.1934],
+                    [0.1979, 0.1001, 0.2898, 0.2209, 0.1913],
+                    [0.2338, 0.0861, 0.2225, 0.3663, 0.0913],
+                    [0.2280, 0.0760, 0.2654, 0.2864, 0.1441],
+                    [0.2413, 0.0705, 0.2240, 0.2984, 0.1658],
+                ],
+            ]
+        ),
+    )
 
 
 def test_configure_optimizers(model):

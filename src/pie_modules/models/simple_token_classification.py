@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Tuple
+from typing import MutableMapping, Optional, Tuple, Union
 
 import torch
 from pytorch_ie.core import PyTorchIEModel
@@ -15,7 +15,7 @@ from pie_modules.models.common import ModelWithBoilerplate
 # model inputs / outputs / targets
 InputType: TypeAlias = BatchEncoding
 OutputType: TypeAlias = TokenClassifierOutput
-TargetType: TypeAlias = LongTensor
+TargetType: TypeAlias = MutableMapping[str, Union[LongTensor, FloatTensor]]
 # step inputs (batch) / outputs (loss)
 StepInputType: TypeAlias = Tuple[InputType, TargetType]
 StepOutputType: TypeAlias = FloatTensor
@@ -76,7 +76,7 @@ class SimpleTokenClassificationModel(
         inputs_without_special_tokens_mask = {
             k: v for k, v in inputs.items() if k != "special_tokens_mask"
         }
-        return self.model(labels=targets, **inputs_without_special_tokens_mask)
+        return self.model(**inputs_without_special_tokens_mask, **(targets or {}))
 
     def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
         # get the max index for each token from the logits
@@ -89,7 +89,9 @@ class SimpleTokenClassificationModel(
         tags_tensor = tags_tensor.masked_fill(
             inputs["special_tokens_mask"] == 1, self.label_pad_id
         )
-        return tags_tensor
+        probabilities = torch.softmax(outputs.logits, dim=-1)
+
+        return {"labels": tags_tensor, "probabilities": probabilities}
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)

@@ -7,7 +7,6 @@ workflow:
     -> Document
 """
 
-import copy
 import logging
 from typing import (
     Any,
@@ -19,6 +18,7 @@ from typing import (
     Set,
     Tuple,
     Type,
+    TypedDict,
     Union,
 )
 
@@ -45,6 +45,8 @@ from pie_modules.documents import (
     TokenDocumentWithLabeledSpans,
     TokenDocumentWithLabeledSpansAndLabeledPartitions,
 )
+from pie_modules.models.simple_token_classification import InputType as ModelInputType
+from pie_modules.models.simple_token_classification import TargetType as ModelTargetType
 from pie_modules.taskmodules.metrics import (
     PrecisionRecallAndF1ForLabeledAnnotations,
     WrappedMetricWithPrepareFunction,
@@ -61,11 +63,16 @@ TaskEncodingType: TypeAlias = TaskEncoding[
     TargetEncodingType,
 ]
 ModelStepInputType: TypeAlias = Tuple[
-    Dict[str, torch.LongTensor],
-    Optional[torch.LongTensor],
+    ModelInputType,
+    Optional[ModelTargetType],
 ]
-ModelOutputType: TypeAlias = torch.LongTensor
-TaskOutputType: TypeAlias = torch.LongTensor
+ModelOutputType: TypeAlias = ModelTargetType
+
+
+class TaskOutputType(TypedDict, total=False):
+    labels: torch.LongTensor
+    probabilities: torch.FloatTensor
+
 
 TaskModuleType: TypeAlias = TaskModule[
     DocumentType,
@@ -305,12 +312,22 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
         pad_mask = inputs["input_ids"] == self.tokenizer.pad_token_id
         targets[pad_mask] = self.label_pad_id
 
-        return inputs, targets
+        return inputs, {"labels": targets}
 
     def unbatch_output(self, model_output: ModelOutputType) -> Sequence[TaskOutputType]:
-        return [labels for labels in model_output.detach().cpu()]
+        labels = model_output["labels"]
+        probabilities = model_output.get("probabilities", None)
+        batch_size = labels.shape[0]
+        task_outputs: List[TaskOutputType] = []
+        for batch_idx in range(batch_size):
+            task_output: TaskOutputType = {"labels": labels[batch_idx]}
+            if probabilities is not None:
+                task_output["probabilities"] = probabilities[batch_idx]
+            task_outputs.append(task_output)
+        return task_outputs
 
-    def decode_annotations(self, labels: torch.LongTensor) -> Dict[str, Sequence[LabeledSpan]]:
+    def decode_annotations(self, encoding: TaskOutputType) -> Dict[str, Sequence[LabeledSpan]]:
+        labels = encoding["labels"]
         tag_sequence = [
             "O" if tag_id == self.label_pad_id else self.id_to_label[tag_id]
             for tag_id in labels.tolist()
@@ -319,7 +336,19 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
         for label, (start, end_inclusive) in bio_tags_to_spans(
             tag_sequence, include_ill_formed=self.include_ill_formed_predictions
         ):
-            labeled_span = LabeledSpan(label=label, start=start, end=end_inclusive + 1)
+            end = end_inclusive + 1
+            # do not set the score if the probabilities are not available
+            annotation_kwargs = {}
+            if encoding.get("probabilities") is not None:
+                span_probabilities = encoding["probabilities"][start:end]
+                span_label_ids = labels[start:end]
+                # get the probabilities at the label indices
+                span_label_probs = torch.stack(
+                    [span_probabilities[i, l] for i, l in enumerate(span_label_ids)]
+                )
+                # use mean probability of the span as score
+                annotation_kwargs["score"] = span_label_probs.mean().item()
+            labeled_span = LabeledSpan(label=label, start=start, end=end, **annotation_kwargs)
             labeled_spans.append(labeled_span)
         return {"labeled_spans": labeled_spans}
 
@@ -356,7 +385,8 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
             yield self.span_annotation, span.copy()
 
     def configure_model_metric(self, stage: str) -> Union[Metric, MetricCollection]:
-        def remove_label_pad_ids(labels: torch.LongTensor) -> torch.LongTensor:
+        def remove_label_pad_ids(model_output: ModelOutputType) -> torch.LongTensor:
+            labels = model_output["labels"]
             # remove the special tokens and padding from the predicted / target labels
             # because the label_pad_id is usually not a valid index (e.g. -100)
             mask = labels != self.label_pad_id
