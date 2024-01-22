@@ -292,36 +292,61 @@ def test_decode(model, model_output, inputs):
     probabilities = decoded["probabilities"]
     assert probabilities.shape == (inputs["input_ids"].shape[0], NUM_CLASSES)
     torch.testing.assert_close(
-        probabilities,
+        probabilities.round(decimals=4),
         torch.tensor(
             [
-                [
-                    0.08264221996068954,
-                    0.16745781898498535,
-                    0.48435819149017334,
-                    0.26554182171821594,
-                ],
-                [0.0881081372499466, 0.09712868928909302, 0.498579740524292, 0.3161833882331848],
-                [
-                    0.08477703481912613,
-                    0.14363254606723785,
-                    0.5073344111442566,
-                    0.26425591111183167,
-                ],
-                [
-                    0.14074258506298065,
-                    0.13151122629642487,
-                    0.47058120369911194,
-                    0.25716495513916016,
-                ],
-                [0.08874323219060898, 0.0940297544002533, 0.5076375603675842, 0.3095895051956177],
-                [
-                    0.13036882877349854,
-                    0.20699138939380646,
-                    0.42146939039230347,
-                    0.24117043614387512,
-                ],
-                [0.1475677490234375, 0.1498306840658188, 0.42108210921287537, 0.28151947259902954],
+                [0.0826, 0.1675, 0.4844, 0.2655],
+                [0.0881, 0.0971, 0.4986, 0.3162],
+                [0.0848, 0.1436, 0.5073, 0.2643],
+                [0.1407, 0.1315, 0.4706, 0.2572],
+                [0.0887, 0.0940, 0.5076, 0.3096],
+                [0.1304, 0.2070, 0.4215, 0.2412],
+                [0.1476, 0.1498, 0.4211, 0.2815],
+            ]
+        ),
+    )
+
+
+def test_decode_with_multi_label(model_output, inputs):
+    torch.manual_seed(42)
+    model = SequenceClassificationModelWithPooler(
+        model_name_or_path="prajjwal1/bert-tiny",
+        num_classes=NUM_CLASSES,
+        pooler=POOLER,
+        multi_label=True,
+    )
+    decoded = model.decode(inputs=inputs, outputs=model_output)
+    assert isinstance(decoded, dict)
+    assert set(decoded) == {"labels", "probabilities"}
+    labels = decoded["labels"]
+    assert labels.shape == (inputs["input_ids"].shape[0], NUM_CLASSES)
+    torch.testing.assert_close(
+        labels,
+        torch.tensor(
+            [
+                [0, 1, 1, 1],
+                [0, 0, 1, 1],
+                [0, 1, 1, 1],
+                [0, 0, 1, 1],
+                [0, 0, 1, 1],
+                [0, 1, 1, 1],
+                [0, 0, 1, 1],
+            ]
+        ),
+    )
+    probabilities = decoded["probabilities"]
+    assert probabilities.shape == (inputs["input_ids"].shape[0], NUM_CLASSES)
+    torch.testing.assert_close(
+        probabilities.round(decimals=4),
+        torch.tensor(
+            [
+                [0.3588, 0.5314, 0.7663, 0.6426],
+                [0.3751, 0.3982, 0.7726, 0.6830],
+                [0.3730, 0.5020, 0.7807, 0.6497],
+                [0.4737, 0.4568, 0.7506, 0.6218],
+                [0.3807, 0.3944, 0.7786, 0.6820],
+                [0.4081, 0.5226, 0.6903, 0.5605],
+                [0.4490, 0.4528, 0.6993, 0.6085],
             ]
         ),
     )

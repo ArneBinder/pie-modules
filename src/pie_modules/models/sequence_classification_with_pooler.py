@@ -37,6 +37,32 @@ class SequenceClassificationModelWithPooler(
     RequiresModelNameOrPath,
     RequiresNumClasses,
 ):
+    """A sequence classification model that uses a pooler to get a representation of the input
+    sequence and then applies a linear classifier to that representation. The pooler can be
+    configured via the `pooler` argument, see :func:`get_pooler_and_output_size` for details.
+
+    Args:
+        model_name_or_path: The name or path of the HuggingFace model to use.
+        num_classes: The number of classes for the classification task.
+        tokenizer_vocab_size: The size of the tokenizer vocabulary. If provided, the model's
+            tokenizer embeddings are resized to this size.
+        classifier_dropout: The dropout probability for the classifier. If not provided, the
+            dropout probability is taken from the Huggingface model config.
+        learning_rate: The learning rate for the optimizer.
+        task_learning_rate: The learning rate for the task-specific parameters. If None, the
+            learning rate for all parameters is set to `learning_rate`.
+        warmup_proportion: The proportion of steps to warm up the learning rate.
+        multi_label: If True, the model is trained as a multi-label classifier.
+        multi_label_threshold: The threshold for the multi-label classifier, i.e. the probability
+            above which a class is predicted.
+        pooler: The pooler configuration. If None, CLS token pooling is used.
+        freeze_base_model: If True, the base model parameters are frozen.
+        base_model_prefix: The prefix of the base model parameters when using a task_learning_rate
+            or freeze_base_model. If None, the base_model_prefix of the model is used.
+        **kwargs: Additional keyword arguments passed to the parent class,
+            see :class:`ModelWithBoilerplate`.
+    """
+
     def __init__(
         self,
         model_name_or_path: str,
