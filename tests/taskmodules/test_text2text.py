@@ -1,3 +1,4 @@
+import pickle
 from typing import Any, Dict, List, Sequence, Tuple
 
 import pytest
@@ -252,6 +253,9 @@ def test_configure_model_metrics(taskmodule):
         "rougeLsum_precision": 0.550000011920929,
         "rougeLsum_recall": 0.5833333134651184,
     }
+
+    # ensure that the metric can be pickled
+    pickle.dumps(metric)
 
 
 def test_configure_model_generation(taskmodule):

@@ -1,4 +1,5 @@
 import logging
+import pickle
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Dict, List
@@ -801,3 +802,6 @@ def test_configure_model_metric(documents):
         "span/PER/precision": 0.5,
         "span/PER/f1": 0.6666666865348816,
     }
+
+    # ensure that the metric can be pickled
+    pickle.dumps(metric)

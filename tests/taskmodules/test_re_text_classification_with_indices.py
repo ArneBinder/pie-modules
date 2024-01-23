@@ -1,5 +1,6 @@
 import dataclasses
 import logging
+import pickle
 import re
 from dataclasses import dataclass
 
@@ -1631,3 +1632,6 @@ def test_configure_model_metric(documents, taskmodule):
         "per:employee_of/f1": 0.5,
         "per:founder/f1": 0.6666666865348816,
     }
+
+    # ensure that the metric can be pickled
+    pickle.dumps(metric)
