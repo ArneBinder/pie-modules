@@ -1,5 +1,6 @@
 import dataclasses
 import logging
+from functools import partial
 from typing import (
     Any,
     Dict,
@@ -62,6 +63,33 @@ TaskEncodingType: TypeAlias = TaskEncoding[
     TargetEncodingType,
 ]
 TaskOutputType: TypeAlias = TargetEncodingType
+
+
+def unbatch_output(model_output: ModelBatchOutput, eos_token_id: int) -> Sequence[TaskOutputType]:
+    labels = model_output["labels"]
+    batch_size = labels.size(0)
+
+    # We use the position after the first eos token as the seq_len.
+    # Note that, if eos_id is not in model_output for a given batch item, the result will be
+    # model_output.size(1) + 1 (i.e. seq_len + 1) for that batch item. This is fine, because we use the
+    # seq_lengths just to truncate the output and want to keep everything if eos_id is not present.
+    seq_lengths = get_first_occurrence_index(labels, eos_token_id) + 1
+
+    result = [
+        TaskOutputType(labels[i, : seq_lengths[i]].to(device="cpu").tolist())
+        for i in range(batch_size)
+    ]
+    return result
+
+
+# we use a custom un-batch function for metrics, because the text metrics such as ROUGEScore metric expects
+# strings for input and target
+def unbatch_and_untokenize(
+    batch: ModelBatchOutput, tokenizer: PreTrainedTokenizer
+) -> Sequence[str]:
+    unbatched = unbatch_output(batch, eos_token_id=tokenizer.eos_token_id)
+    texts = [tokenizer.decode(encoding.labels, skip_special_tokens=True) for encoding in unbatched]
+    return texts
 
 
 @TaskModule.register()
@@ -382,20 +410,7 @@ class TextToTextTaskModule(
         return inputs, targets
 
     def unbatch_output(self, model_output: ModelBatchOutput) -> Sequence[TaskOutputType]:
-        labels = model_output["labels"]
-        batch_size = labels.size(0)
-
-        # We use the position after the first eos token as the seq_len.
-        # Note that, if eos_id is not in model_output for a given batch item, the result will be
-        # model_output.size(1) + 1 (i.e. seq_len + 1) for that batch item. This is fine, because we use the
-        # seq_lengths just to truncate the output and want to keep everything if eos_id is not present.
-        seq_lengths = get_first_occurrence_index(labels, self.tokenizer.eos_token_id) + 1
-
-        result = [
-            TaskOutputType(labels[i, : seq_lengths[i]].to(device="cpu").tolist())
-            for i in range(batch_size)
-        ]
-        return result
+        return unbatch_output(model_output, eos_token_id=self.tokenizer.eos_token_id)
 
     def create_annotations_from_output(
         self,
@@ -432,18 +447,8 @@ class TextToTextTaskModule(
         if self.text_metric_type is None:
             return None
 
-        # we use a custom un-batch function here, because the ROUGEScore metric expects strings for
-        # input and target
-        def unbatch_and_untokenize(batch: ModelBatchOutput) -> Sequence[str]:
-            unbatched = self.unbatch_output(batch)
-            texts = [
-                self.tokenizer.decode(encoding.labels, skip_special_tokens=True)
-                for encoding in unbatched
-            ]
-            return texts
-
         return WrappedMetricWithPrepareFunction(
             metric=self.text_metric_type(),
-            prepare_function=unbatch_and_untokenize,
+            prepare_function=partial(unbatch_and_untokenize, tokenizer=self.tokenizer),
             prepare_does_unbatch=True,
         )
