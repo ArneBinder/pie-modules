@@ -96,57 +96,13 @@ def remove_label_pad_ids(model_output: ModelOutputType, label_pad_id: int) -> to
     return labels_valid
 
 
-def unbatch_output(model_output: ModelOutputType) -> Sequence[TaskOutputType]:
-    labels = model_output["labels"]
-    probabilities = model_output.get("probabilities", None)
-    batch_size = labels.shape[0]
-    task_outputs: List[TaskOutputType] = []
-    for batch_idx in range(batch_size):
-        task_output: TaskOutputType = {"labels": labels[batch_idx]}
-        if probabilities is not None:
-            task_output["probabilities"] = probabilities[batch_idx]
-        task_outputs.append(task_output)
-    return task_outputs
-
-
-def decode_annotations(
-    encoding: TaskOutputType,
-    label_pad_id: int,
-    id_to_label: Dict[int, str],
-    include_ill_formed_predictions: bool,
-) -> Dict[str, Sequence[LabeledSpan]]:
-    labels = encoding["labels"]
-    tag_sequence = [
-        "O" if tag_id == label_pad_id else id_to_label[tag_id] for tag_id in labels.tolist()
-    ]
-    labeled_spans: List[LabeledSpan] = []
-    for label, (start, end_inclusive) in bio_tags_to_spans(
-        tag_sequence, include_ill_formed=include_ill_formed_predictions
-    ):
-        end = end_inclusive + 1
-        # do not set the score if the probabilities are not available
-        annotation_kwargs = {}
-        if encoding.get("probabilities") is not None:
-            span_probabilities = encoding["probabilities"][start:end]
-            span_label_ids = labels[start:end]
-            # get the probabilities at the label indices
-            span_label_probs = torch.stack(
-                [span_probabilities[i, l] for i, l in enumerate(span_label_ids)]
-            )
-            # use mean probability of the span as score
-            annotation_kwargs["score"] = span_label_probs.mean().item()
-        labeled_span = LabeledSpan(label=label, start=start, end=end, **annotation_kwargs)
-        labeled_spans.append(labeled_span)
-    return {"labeled_spans": labeled_spans}
-
-
 def unbatch_and_decode_annotations(
-    model_output: ModelOutputType, **decode_kwargs
+    model_output: ModelOutputType,
+    taskmodule: "LabeledSpanExtractionByTokenClassificationTaskModule",
 ) -> List[Sequence[LabeledSpan]]:
-    task_outputs = unbatch_output(model_output)
+    task_outputs = taskmodule.unbatch_output(model_output)
     annotations = [
-        decode_annotations(task_output, **decode_kwargs)["labeled_spans"]
-        for task_output in task_outputs
+        taskmodule.decode_annotations(task_output)["labeled_spans"] for task_output in task_outputs
     ]
     return annotations
 
@@ -380,15 +336,42 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
         return inputs, {"labels": targets}
 
     def unbatch_output(self, model_output: ModelOutputType) -> Sequence[TaskOutputType]:
-        return unbatch_output(model_output)
+        labels = model_output["labels"]
+        probabilities = model_output.get("probabilities", None)
+        batch_size = labels.shape[0]
+        task_outputs: List[TaskOutputType] = []
+        for batch_idx in range(batch_size):
+            task_output: TaskOutputType = {"labels": labels[batch_idx]}
+            if probabilities is not None:
+                task_output["probabilities"] = probabilities[batch_idx]
+            task_outputs.append(task_output)
+        return task_outputs
 
     def decode_annotations(self, encoding: TaskOutputType) -> Dict[str, Sequence[LabeledSpan]]:
-        return decode_annotations(
-            encoding=encoding,
-            label_pad_id=self.label_pad_id,
-            id_to_label=self.id_to_label,
-            include_ill_formed_predictions=self.include_ill_formed_predictions,
-        )
+        labels = encoding["labels"]
+        tag_sequence = [
+            "O" if tag_id == self.label_pad_id else self.id_to_label[tag_id]
+            for tag_id in labels.tolist()
+        ]
+        labeled_spans: List[LabeledSpan] = []
+        for label, (start, end_inclusive) in bio_tags_to_spans(
+            tag_sequence, include_ill_formed=self.include_ill_formed_predictions
+        ):
+            end = end_inclusive + 1
+            # do not set the score if the probabilities are not available
+            annotation_kwargs = {}
+            if encoding.get("probabilities") is not None:
+                span_probabilities = encoding["probabilities"][start:end]
+                span_label_ids = labels[start:end]
+                # get the probabilities at the label indices
+                span_label_probs = torch.stack(
+                    [span_probabilities[i, l] for i, l in enumerate(span_label_ids)]
+                )
+                # use mean probability of the span as score
+                annotation_kwargs["score"] = span_label_probs.mean().item()
+            labeled_span = LabeledSpan(label=label, start=start, end=end, **annotation_kwargs)
+            labeled_spans.append(labeled_span)
+        return {"labeled_spans": labeled_spans}
 
     def create_annotations_from_output(
         self,
@@ -451,12 +434,7 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
         )
         span_scores_wrapped = WrappedMetricWithPrepareFunction(
             metric=span_scores,
-            prepare_function=partial(
-                unbatch_and_decode_annotations,
-                label_pad_id=self.label_pad_id,
-                id_to_label=self.id_to_label,
-                include_ill_formed_predictions=self.include_ill_formed_predictions,
-            ),
+            prepare_function=partial(unbatch_and_decode_annotations, taskmodule=self),
             prepare_does_unbatch=True,
         )
 

@@ -2,7 +2,7 @@ import dataclasses
 import json
 import logging
 from collections import Counter, defaultdict
-from functools import cmp_to_key, partial
+from functools import cmp_to_key
 from typing import (
     Any,
     Dict,
@@ -92,101 +92,6 @@ def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
     if v1.head.start == v2.head.start:  # v1[0]["from"] == v2[0]["from"]:
         return v1.tail.start - v2.tail.start  # v1[1]["from"] - v2[1]["from"]
     return v1.head.start - v2.head.start  # v1[0]["from"] - v2[0]["from"]
-
-
-def unbatch_output(model_output: ModelBatchOutput, eos_id: int) -> Sequence[TaskOutputType]:
-    labels = model_output["labels"]
-    batch_size = labels.size(0)
-
-    # We use the position after the first eos token as the seq_len.
-    # Note that, if eos_id is not in model_output for a given batch item, the result will be
-    # model_output.size(1) + 1 (i.e. seq_len + 1) for that batch item. This is fine, because we use the
-    # seq_lengths just to truncate the output and want to keep everything if eos_id is not present.
-    seq_lengths = get_first_occurrence_index(labels, eos_id) + 1
-
-    result = [
-        LabelsAndOptionalConstraints(labels[i, : seq_lengths[i]].to(device="cpu").tolist())
-        for i in range(batch_size)
-    ]
-    return result
-
-
-def decode_relations(
-    label_ids: List[int],
-    relation_ids: List[int],
-    none_id: int,
-    relation_encoder_decoder: BinaryRelationEncoderDecoder,
-) -> Tuple[List[BinaryRelation], Dict[str, int], List[int]]:
-    errors: Dict[str, int] = defaultdict(int)
-    encodings = []
-    current_encoding: List[int] = []
-    valid_encoding: BinaryRelation
-    if len(label_ids):
-        for i in label_ids:
-            current_encoding.append(i)
-            # An encoding is complete when it ends with a relation_id
-            # or when it contains a none_id and has a length of 7
-            if i in relation_ids or (i == none_id and len(current_encoding) == 7):
-                # try to decode the current relation encoding
-                try:
-                    valid_encoding = relation_encoder_decoder.decode(encoding=current_encoding)
-                    encodings.append(valid_encoding)
-                    errors[KEY_INVALID_CORRECT] += 1
-                except DecodingException as e:
-                    errors[e.identifier] += 1
-
-                current_encoding = []
-
-    return encodings, dict(errors), current_encoding
-
-
-def decode_annotations(
-    encoding: TaskOutputType,
-    span_layer_name: str,
-    relation_layer_name: str,
-    loop_dummy_relation_name: str,
-    relation_ids: List[int],
-    none_id: int,
-    relation_encoder_decoder: BinaryRelationEncoderDecoder,
-) -> Tuple[Dict[str, Iterable[Annotation]], Dict[str, int]]:
-    decoded_relations, errors, remaining = decode_relations(
-        label_ids=encoding.labels,
-        relation_ids=relation_ids,
-        none_id=none_id,
-        relation_encoder_decoder=relation_encoder_decoder,
-    )
-    relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
-    entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
-    for rel in decoded_relations:
-        head_span = (rel.head.start, rel.head.end)
-        entity_labels[head_span].append(rel.head.label)
-
-        if rel.label != loop_dummy_relation_name:
-            tail_span = (rel.tail.start, rel.tail.end)
-            entity_labels[tail_span].append(rel.tail.label)
-            relation_tuples.append((head_span, tail_span, rel.label))
-        else:
-            assert rel.head == rel.tail
-
-    # It may happen that some spans take part in multiple relations, but got generated with different labels.
-    # In this case, we just create one span and take the most common label.
-    entities: Dict[Tuple[int, int], LabeledSpan] = {}
-    for (start, end), labels in entity_labels.items():
-        c = Counter(labels)
-        # if len(c) > 1:
-        #    logger.warning(f"multiple labels for span, take the most common: {dict(c)}")
-        most_common_label = c.most_common(1)[0][0]
-        entities[(start, end)] = LabeledSpan(start=start, end=end, label=most_common_label)
-
-    entity_layer = list(entities.values())
-    relation_layer = [
-        BinaryRelation(head=entities[head_span], tail=entities[tail_span], label=label)
-        for head_span, tail_span, label in relation_tuples
-    ]
-    return {
-        span_layer_name: entity_layer,
-        relation_layer_name: relation_layer,
-    }, errors
 
 
 @TaskModule.register()
@@ -493,16 +398,8 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         }
 
         return WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(
-            unbatch_function=partial(unbatch_output, eos_id=self.eos_id),
-            decode_layers_with_errors_function=partial(
-                decode_annotations,
-                span_layer_name=self.span_layer_name,
-                relation_layer_name=self.relation_layer_name,
-                loop_dummy_relation_name=self.loop_dummy_relation_name,
-                relation_ids=self.relation_ids,
-                none_id=self.none_id,
-                relation_encoder_decoder=self.relation_encoder_decoder,
-            ),
+            unbatch_function=self.unbatch_output,
+            decode_layers_with_errors_function=self.decode_annotations,
             layer_metrics=layer_metrics,
             error_key_correct=KEY_INVALID_CORRECT,
         )
@@ -623,15 +520,39 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     def decode_annotations(
         self, encoding: TaskOutputType
     ) -> Tuple[Dict[str, Iterable[Annotation]], Dict[str, int]]:
-        return decode_annotations(
-            encoding=encoding,
-            span_layer_name=self.span_layer_name,
-            relation_layer_name=self.relation_layer_name,
-            loop_dummy_relation_name=self.loop_dummy_relation_name,
-            relation_ids=self.relation_ids,
-            none_id=self.none_id,
-            relation_encoder_decoder=self.relation_encoder_decoder,
-        )
+        decoded_relations, errors, remaining = self.decode_relations(label_ids=encoding.labels)
+        relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
+        entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
+        for rel in decoded_relations:
+            head_span = (rel.head.start, rel.head.end)
+            entity_labels[head_span].append(rel.head.label)
+
+            if rel.label != self.loop_dummy_relation_name:
+                tail_span = (rel.tail.start, rel.tail.end)
+                entity_labels[tail_span].append(rel.tail.label)
+                relation_tuples.append((head_span, tail_span, rel.label))
+            else:
+                assert rel.head == rel.tail
+
+        # It may happen that some spans take part in multiple relations, but got generated with different labels.
+        # In this case, we just create one span and take the most common label.
+        entities: Dict[Tuple[int, int], LabeledSpan] = {}
+        for (start, end), labels in entity_labels.items():
+            c = Counter(labels)
+            # if len(c) > 1:
+            #    logger.warning(f"multiple labels for span, take the most common: {dict(c)}")
+            most_common_label = c.most_common(1)[0][0]
+            entities[(start, end)] = LabeledSpan(start=start, end=end, label=most_common_label)
+
+        entity_layer = list(entities.values())
+        relation_layer = [
+            BinaryRelation(head=entities[head_span], tail=entities[tail_span], label=label)
+            for head_span, tail_span, label in relation_tuples
+        ]
+        return {
+            self.span_layer_name: entity_layer,
+            self.relation_layer_name: relation_layer,
+        }, errors
 
     def _build_constraint(
         self,
@@ -875,7 +796,20 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         return inputs, targets
 
     def unbatch_output(self, model_output: ModelBatchOutput) -> Sequence[TaskOutputType]:
-        return unbatch_output(model_output=model_output, eos_id=self.eos_id)
+        labels = model_output["labels"]
+        batch_size = labels.size(0)
+
+        # We use the position after the first eos token as the seq_len.
+        # Note that, if eos_id is not in model_output for a given batch item, the result will be
+        # model_output.size(1) + 1 (i.e. seq_len + 1) for that batch item. This is fine, because we use the
+        # seq_lengths just to truncate the output and want to keep everything if eos_id is not present.
+        seq_lengths = get_first_occurrence_index(labels, self.eos_id) + 1
+
+        result = [
+            LabelsAndOptionalConstraints(labels[i, : seq_lengths[i]].to(device="cpu").tolist())
+            for i in range(batch_size)
+        ]
+        return result
 
     def create_annotations_from_output(
         self,
