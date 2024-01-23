@@ -1,4 +1,5 @@
 import logging
+import pickle
 from dataclasses import asdict, dataclass
 from typing import Dict, List, Set
 
@@ -794,6 +795,9 @@ def test_configure_model_metric():
             "micro": {"recall": 0.5, "precision": 1.0, "f1": 0.6666666865348816},
         },
     }
+
+    # ensure that the metric can be pickled
+    pickle.dumps(metric)
 
 
 def test_configure_model_generation():

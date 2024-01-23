@@ -115,6 +115,12 @@ def model(monkeypatch, batch, config, taskmodule_config) -> SimpleTokenClassific
     return model
 
 
+def test_model_pickleable(model):
+    import pickle
+
+    pickle.dumps(model)
+
+
 def test_forward(batch, model):
     inputs, targets = batch
     batch_size, seq_len = inputs["input_ids"].shape

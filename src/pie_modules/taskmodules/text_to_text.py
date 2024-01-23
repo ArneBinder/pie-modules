@@ -1,5 +1,6 @@
 import dataclasses
 import logging
+from functools import partial
 from typing import (
     Any,
     Dict,
@@ -62,6 +63,19 @@ TaskEncodingType: TypeAlias = TaskEncoding[
     TargetEncodingType,
 ]
 TaskOutputType: TypeAlias = TargetEncodingType
+
+
+# we use a custom un-batch function for metrics, because the text metrics such as ROUGEScore metric expects
+# strings for input and target
+def unbatch_and_untokenize(
+    batch: ModelBatchOutput, taskmodule: "TextToTextTaskModule"
+) -> Sequence[str]:
+    unbatched = taskmodule.unbatch_output(batch)
+    texts = [
+        taskmodule.tokenizer.decode(encoding.labels, skip_special_tokens=True)
+        for encoding in unbatched
+    ]
+    return texts
 
 
 @TaskModule.register()
@@ -432,18 +446,8 @@ class TextToTextTaskModule(
         if self.text_metric_type is None:
             return None
 
-        # we use a custom un-batch function here, because the ROUGEScore metric expects strings for
-        # input and target
-        def unbatch_and_untokenize(batch: ModelBatchOutput) -> Sequence[str]:
-            unbatched = self.unbatch_output(batch)
-            texts = [
-                self.tokenizer.decode(encoding.labels, skip_special_tokens=True)
-                for encoding in unbatched
-            ]
-            return texts
-
         return WrappedMetricWithPrepareFunction(
             metric=self.text_metric_type(),
-            prepare_function=unbatch_and_untokenize,
+            prepare_function=partial(unbatch_and_untokenize, taskmodule=self),
             prepare_does_unbatch=True,
         )

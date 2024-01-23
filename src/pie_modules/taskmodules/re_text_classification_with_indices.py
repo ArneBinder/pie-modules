@@ -48,6 +48,7 @@ from pytorch_ie.documents import (
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
 from pytorch_ie.utils.span import get_token_slice, has_overlap, is_contained_in
 from pytorch_ie.utils.window import get_window_around_slice
+from torch import LongTensor
 from torchmetrics import ClasswiseWrapper, F1Score, Metric, MetricCollection
 from transformers import AutoTokenizer
 from transformers.file_utils import PaddingStrategy
@@ -96,6 +97,10 @@ END = "end"
 
 
 logger = logging.getLogger(__name__)
+
+
+def _get_labels(model_output: ModelTargetType) -> LongTensor:
+    return model_output["labels"]
 
 
 def inner_span_distance(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> int:
@@ -988,5 +993,5 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
                     ),
                 }
             ),
-            prepare_function=lambda model_output: model_output["labels"],
+            prepare_function=_get_labels,
         )

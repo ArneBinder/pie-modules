@@ -45,6 +45,12 @@ def test_model(model):
     assert model.taskmodule is not None
 
 
+def test_model_pickleable(model):
+    import pickle
+
+    pickle.dumps(model)
+
+
 def test_model_without_taskmodule(caplog):
     with caplog.at_level("WARNING"):
         model = SimpleGenerativeModel(

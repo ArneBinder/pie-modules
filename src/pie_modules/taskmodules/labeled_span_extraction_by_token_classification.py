@@ -8,6 +8,7 @@ workflow:
 """
 
 import logging
+from functools import partial
 from typing import (
     Any,
     Dict,
@@ -84,6 +85,26 @@ TaskModuleType: TypeAlias = TaskModule[
 ]
 
 logger = logging.getLogger(__name__)
+
+
+def remove_label_pad_ids(model_output: ModelOutputType, label_pad_id: int) -> torch.LongTensor:
+    labels = model_output["labels"]
+    # remove the special tokens and padding from the predicted / target labels
+    # because the label_pad_id is usually not a valid index (e.g. -100)
+    mask = labels != label_pad_id
+    labels_valid = labels[mask]
+    return labels_valid
+
+
+def unbatch_and_decode_annotations(
+    model_output: ModelOutputType,
+    taskmodule: "LabeledSpanExtractionByTokenClassificationTaskModule",
+) -> List[Sequence[LabeledSpan]]:
+    task_outputs = taskmodule.unbatch_output(model_output)
+    annotations = [
+        taskmodule.decode_annotations(task_output)["labeled_spans"] for task_output in task_outputs
+    ]
+    return annotations
 
 
 @TaskModule.register()
@@ -385,14 +406,6 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
             yield self.span_annotation, span.copy()
 
     def configure_model_metric(self, stage: str) -> Union[Metric, MetricCollection]:
-        def remove_label_pad_ids(model_output: ModelOutputType) -> torch.LongTensor:
-            labels = model_output["labels"]
-            # remove the special tokens and padding from the predicted / target labels
-            # because the label_pad_id is usually not a valid index (e.g. -100)
-            mask = labels != self.label_pad_id
-            labels_valid = labels[mask]
-            return labels_valid
-
         token_scores = MetricCollection(
             {
                 "token/macro/f1": WrappedMetricWithPrepareFunction(
@@ -401,7 +414,7 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
                         task="multiclass",
                         average="macro",
                     ),
-                    prepare_function=remove_label_pad_ids,
+                    prepare_function=partial(remove_label_pad_ids, label_pad_id=self.label_pad_id),
                 ),
                 "token/micro/f1": WrappedMetricWithPrepareFunction(
                     metric=F1Score(
@@ -409,20 +422,10 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
                         task="multiclass",
                         average="micro",
                     ),
-                    prepare_function=remove_label_pad_ids,
+                    prepare_function=partial(remove_label_pad_ids, label_pad_id=self.label_pad_id),
                 ),
             }
         )
-
-        def unbatch_and_decode_annotations(
-            model_output: ModelOutputType,
-        ) -> List[Sequence[LabeledSpan]]:
-            task_outputs = self.unbatch_output(model_output)
-            annotations = [
-                self.decode_annotations(task_output)["labeled_spans"]
-                for task_output in task_outputs
-            ]
-            return annotations
 
         span_scores = PrecisionRecallAndF1ForLabeledAnnotations(
             flatten_result_with_sep="/",
@@ -431,7 +434,7 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
         )
         span_scores_wrapped = WrappedMetricWithPrepareFunction(
             metric=span_scores,
-            prepare_function=unbatch_and_decode_annotations,
+            prepare_function=partial(unbatch_and_decode_annotations, taskmodule=self),
             prepare_does_unbatch=True,
         )
 
