@@ -406,22 +406,19 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
             yield self.span_annotation, span.copy()
 
     def configure_model_metric(self, stage: str) -> Union[Metric, MetricCollection]:
+        common_metric_kwargs = {
+            "num_classes": len(self.label_to_id),
+            "task": "multiclass",
+            "ignore_index": self.label_to_id["O"],
+        }
         token_scores = MetricCollection(
             {
                 "token/macro/f1": WrappedMetricWithPrepareFunction(
-                    metric=F1Score(
-                        num_classes=len(self.label_to_id),
-                        task="multiclass",
-                        average="macro",
-                    ),
+                    metric=F1Score(average="macro", **common_metric_kwargs),
                     prepare_function=partial(remove_label_pad_ids, label_pad_id=self.label_pad_id),
                 ),
                 "token/micro/f1": WrappedMetricWithPrepareFunction(
-                    metric=F1Score(
-                        num_classes=len(self.label_to_id),
-                        task="multiclass",
-                        average="micro",
-                    ),
+                    metric=F1Score(average="micro", **common_metric_kwargs),
                     prepare_function=partial(remove_label_pad_ids, label_pad_id=self.label_pad_id),
                 ),
             }

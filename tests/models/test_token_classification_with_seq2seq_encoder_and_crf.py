@@ -353,8 +353,8 @@ def test_validation_step_and_on_epoch_end(batch, model, config):
     if config == {}:
         torch.testing.assert_close(loss, torch.tensor(59.42658996582031))
         assert metric_values == {
-            "token/macro/f1": 0.19285714626312256,
-            "token/micro/f1": 0.27586206793785095,
+            "token/macro/f1": 0.3919413983821869,
+            "token/micro/f1": 0.5333333611488342,
             "span/PER/f1": 0.0833333358168602,
             "span/PER/recall": 0.0476190485060215,
             "span/PER/precision": 0.3333333432674408,
@@ -371,8 +371,8 @@ def test_validation_step_and_on_epoch_end(batch, model, config):
     elif config == {"use_crf": False}:
         torch.testing.assert_close(loss, torch.tensor(1.6708829402923584))
         assert metric_values == {
-            "token/macro/f1": 0.08615384995937347,
-            "token/micro/f1": 0.13793103396892548,
+            "token/macro/f1": 0.14374999701976776,
+            "token/micro/f1": 0.2666666805744171,
             "span/PER/f1": 0.0,
             "span/PER/recall": 0.0,
             "span/PER/precision": 0.0,
@@ -401,8 +401,8 @@ def test_test_step_and_on_epoch_end(batch, model, config):
     if config == {}:
         torch.testing.assert_close(loss, torch.tensor(59.42658996582031))
         assert metric_values == {
-            "token/macro/f1": 0.19285714626312256,
-            "token/micro/f1": 0.27586206793785095,
+            "token/macro/f1": 0.3919413983821869,
+            "token/micro/f1": 0.5333333611488342,
             "span/ORG/f1": 0.0,
             "span/ORG/recall": 0.0,
             "span/ORG/precision": 0.0,
@@ -419,8 +419,8 @@ def test_test_step_and_on_epoch_end(batch, model, config):
     elif config == {"use_crf": False}:
         torch.testing.assert_close(loss, torch.tensor(1.6708829402923584))
         assert metric_values == {
-            "token/macro/f1": 0.08615384995937347,
-            "token/micro/f1": 0.13793103396892548,
+            "token/macro/f1": 0.14374999701976776,
+            "token/micro/f1": 0.2666666805744171,
             "span/ORG/f1": 0.0,
             "span/ORG/recall": 0.0,
             "span/ORG/precision": 0.0,
