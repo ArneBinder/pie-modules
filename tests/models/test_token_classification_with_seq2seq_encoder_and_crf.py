@@ -120,6 +120,12 @@ def model(batch, config, taskmodule_config) -> TokenClassificationModelWithSeq2S
     return model
 
 
+def test_model_pickleable(model):
+    import pickle
+
+    pickle.dumps(model)
+
+
 def test_freeze_base_model():
     model = TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         model_name_or_path="prajjwal1/bert-tiny",

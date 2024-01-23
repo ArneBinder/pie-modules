@@ -227,6 +227,12 @@ def model() -> SequenceClassificationModelWithPooler:
     return result
 
 
+def test_model_pickleable(model):
+    import pickle
+
+    pickle.dumps(model)
+
+
 @pytest.fixture
 def model_output(model, inputs) -> OutputType:
     # set seed to make sure the output is deterministic
