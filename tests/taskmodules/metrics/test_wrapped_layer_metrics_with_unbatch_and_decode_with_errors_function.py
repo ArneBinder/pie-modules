@@ -2,7 +2,7 @@ import json
 from typing import Any, Dict, Tuple
 
 import pytest
-import torch
+from torch import tensor
 from torchmetrics import Metric
 
 from pie_modules.taskmodules.metrics import (
@@ -55,9 +55,8 @@ def test_wrapped_layer_metrics_with_unbatch_and_decode_with_errors_function(
     assert metric.decode_layers_with_errors_function is not None
     assert metric.layer_metrics is not None
     assert metric.metric_state == {
-        "total": torch.tensor(0),
-        "exact_encoding_matches": torch.tensor(0),
-        "errors": [],
+        "total": tensor(0),
+        "exact_encoding_matches": tensor(0),
     }
 
     values = metric.compute()
@@ -76,9 +75,9 @@ def test_wrapped_layer_metrics_with_unbatch_and_decode_with_errors_function(
         expected=json.dumps({"entities": ["E1"], "relations": ["R1"]}),
     )
     assert metric.metric_state == {
-        "total": torch.tensor(1),
-        "exact_encoding_matches": torch.tensor(1),
-        "errors": [("dummy", 0)],
+        "total": tensor(1),
+        "exact_encoding_matches": tensor(1),
+        "errors_dummy": tensor(0),
     }
     values = metric.compute()
     assert values == {
@@ -100,9 +99,9 @@ def test_wrapped_layer_metrics_with_unbatch_and_decode_with_errors_function(
         + json.dumps({"entities": ["E1"], "relations": ["R2"]}),
     )
     assert metric.metric_state == {
-        "total": torch.tensor(2),
-        "exact_encoding_matches": torch.tensor(1),
-        "errors": [("dummy", 0), ("dummy", 0)],
+        "total": tensor(2),
+        "exact_encoding_matches": tensor(1),
+        "errors_dummy": tensor(0),
     }
     values = metric.compute()
     assert values == {
@@ -119,9 +118,9 @@ def test_wrapped_layer_metrics_with_unbatch_and_decode_with_errors_function(
         expected=json.dumps({"entities": ["E1"], "relations": []}),
     )
     assert metric.metric_state == {
-        "total": torch.tensor(1),
-        "exact_encoding_matches": torch.tensor(0),
-        "errors": [("dummy", 1)],
+        "total": tensor(1),
+        "exact_encoding_matches": tensor(0),
+        "errors_dummy": tensor(1),
     }
     values = metric.compute()
     # In the case on an error, the decoding function returns adict with empty lists for entities and relations.
