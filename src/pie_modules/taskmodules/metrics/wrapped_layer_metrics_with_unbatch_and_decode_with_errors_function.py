@@ -1,17 +1,20 @@
 import logging
-from collections import defaultdict
 from typing import Any, Callable, Dict, Generic, Optional, Sequence, Tuple, TypeVar
 
 import torch
 from torch.nn import ModuleDict
 from torchmetrics import Metric
 
+from .common import MetricWithArbitraryCounts
+
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
 U = TypeVar("U")
 
 
-class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[T, U]):
+class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(
+    MetricWithArbitraryCounts, Generic[T, U]
+):
     """A wrapper around annotation layer metrics that can be used with batched encoded annotations.
 
     Args:
@@ -54,11 +57,10 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
         self.layer_metrics = ModuleDict(layer_metrics)
 
         # total number of encodings
-        self.add_state("total", default=torch.tensor(0))
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
         # this contains the number of examples where the full target sequence was predicted correctly (exact matches)
-        self.add_state("exact_encoding_matches", default=torch.tensor(0))
-        # decoding errors: tuples of (error name, number of errors)
-        self.add_state("errors", default=[])
+        self.add_state("exact_encoding_matches", default=torch.tensor(0), dist_reduce_fx="sum")
+        # note: the error counts are stored via the MetricWithArbitraryCounts base class
 
     def update(self, prediction, expected):
         prediction_list = self.unbatch_function(prediction)
@@ -73,7 +75,8 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
             predicted_layers, predicted_errors = self.decode_layers_with_errors_function(
                 prediction_encoding
             )
-            self.errors.extend(predicted_errors.items())
+            for k, v in predicted_errors.items():
+                self.inc_counts(counts=torch.tensor(v).to(self.device), key=k, prefix="errors_")
 
             for layer_name, metric in self.layer_metrics.items():
                 metric.update(expected_layers[layer_name], predicted_layers[layer_name])
@@ -116,9 +119,7 @@ class WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction(Metric, Generic[
                 self.exact_encoding_matches / self.total if self.total > 0 else 0.0
             )
 
-        errors = defaultdict(int)
-        for k, v in self.errors:
-            errors[k] += v
+        errors = self.get_counts(key_prefix="errors_")
         # if errors contains a "correct" key, use that to normalize, otherwise use the number of training examples
         if self.key_error_correct in errors:
             errors_total = sum(errors.values())

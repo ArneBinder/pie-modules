@@ -5,14 +5,15 @@ from typing import Any, Collection, Dict, Iterable, Optional, Union
 import torch
 from pytorch_ie import Annotation
 from torch import LongTensor
-from torchmetrics import Metric
 
 from pie_modules.utils import flatten_dict
+
+from .common import MetricWithArbitraryCounts
 
 logger = logging.getLogger(__name__)
 
 
-class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
+class PrecisionRecallAndF1ForLabeledAnnotations(MetricWithArbitraryCounts):
     """Computes precision, recall and F1 for labeled annotations. Inputs and targets are lists of
     annotations. True positives are counted as the number of annotations that are the same in both
     inputs and targets calculated as exact matches via set operation, false positives and false
@@ -49,25 +50,6 @@ class PrecisionRecallAndF1ForLabeledAnnotations(Metric):
         self.flatten_result_with_sep = flatten_result_with_sep
         self.prefix = prefix
         self.return_recall_and_precision = return_recall_and_precision
-
-    def inc_counts(self, counts: LongTensor, key: Optional[str], prefix: str = "counts_"):
-        full_key = prefix
-        if key is not None:
-            full_key += key
-
-        if not hasattr(self, full_key):
-            self.add_state(full_key, default=torch.zeros_like(counts), dist_reduce_fx="sum")
-
-        prev_value = getattr(self, full_key)
-        setattr(self, full_key, prev_value + counts)
-
-    def get_counts(self, key_prefix: str = "counts_") -> Dict[Optional[str], LongTensor]:
-        result = {}
-        for k, v in self.metric_state.items():
-            if k.startswith(key_prefix):
-                key = k[len(key_prefix) :] or None
-                result[key] = v
-        return result
 
     def update(self, gold: Iterable[Annotation], predicted: Iterable[Annotation]) -> None:
         # remove duplicates within each list
