@@ -4,6 +4,8 @@ from typing import Dict, Generic, List, Optional, Set, TypeVar, Union
 from pytorch_ie import PyTorchIEModel
 from torchmetrics import Metric, MetricCollection
 
+from pie_modules.utils import flatten_dict
+
 from .has_taskmodule import HasTaskmodule
 from .stages import TESTING, TRAINING, VALIDATION
 
@@ -141,7 +143,8 @@ class ModelWithMetricsFromTaskModule(
             values = metric.compute()
             log_kwargs = {"on_step": False, "on_epoch": True, "sync_dist": True}
             if isinstance(values, dict):
-                for key, value in values.items():
+                values_flat = flatten_dict(values, sep="/")
+                for key, value in values_flat.items():
                     self.log(f"metric/{key}/{stage}", value, **log_kwargs)
             else:
                 metric_name = getattr(metric, "name", None) or type(metric).__name__
