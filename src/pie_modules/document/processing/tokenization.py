@@ -342,7 +342,10 @@ def tokenize_document(
 
     missed_annotations = defaultdict(set)
     if strict_span_conversion or verbose:
-        for annotation_field in doc.annotation_fields():
+        # We check the annotations with respect to the layers of the result_document_type.
+        # Note that the original document may have more layers, but since result documents
+        # are of type result_document_type, we only check the layers of this type.
+        for annotation_field in result_document_type.annotation_fields():
             # do not check the partition layer because the partitions are not required later on
             # and entries get quite probably removed when windowing is applied, so this just pollutes the logs
             if annotation_field.name != partition_layer:
