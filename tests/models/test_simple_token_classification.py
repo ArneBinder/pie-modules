@@ -292,8 +292,8 @@ def test_validation_step_and_on_epoch_end(batch, model, config):
         "span/micro/f1": 0.13793103396892548,
         "span/micro/precision": 0.3333333432674408,
         "span/micro/recall": 0.08695652335882187,
-        "token/macro/f1": 0.04210526496171951,
-        "token/micro/f1": 0.06896551698446274,
+        "token/macro/f1": 0.08888889104127884,
+        "token/micro/f1": 0.13333334028720856,
     }
 
     model.on_validation_epoch_end()
@@ -319,8 +319,8 @@ def test_test_step_and_on_epoch_end(batch, model, config):
         "span/micro/f1": 0.13793103396892548,
         "span/micro/precision": 0.3333333432674408,
         "span/micro/recall": 0.08695652335882187,
-        "token/macro/f1": 0.04210526496171951,
-        "token/micro/f1": 0.06896551698446274,
+        "token/macro/f1": 0.08888889104127884,
+        "token/micro/f1": 0.13333334028720856,
     }
 
     model.on_test_epoch_end()
