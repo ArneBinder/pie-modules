@@ -1,3 +1,4 @@
+from .merge_spans_via_relation import SpansViaRelationMerger
 from .regex_partitioner import RegexPartitioner
 from .relation_argument_sorter import RelationArgumentSorter
 from .text_span_trimmer import TextSpanTrimmer
