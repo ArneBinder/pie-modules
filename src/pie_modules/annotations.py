@@ -1,7 +1,19 @@
 import dataclasses
 from typing import Optional
 
-from pytorch_ie.annotations import Span
+# re-export all annotations from pytorch_ie to have a single entry point
+from pytorch_ie.annotations import (
+    BinaryRelation,
+    Label,
+    LabeledMultiSpan,
+    LabeledSpan,
+    MultiLabel,
+    MultiLabeledBinaryRelation,
+    MultiLabeledMultiSpan,
+    MultiLabeledSpan,
+    NaryRelation,
+    Span,
+)
 from pytorch_ie.core import Annotation
 
 
