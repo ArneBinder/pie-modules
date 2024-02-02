@@ -26,6 +26,7 @@ from pie_modules.annotations import (
     BinaryRelation,
     ExtractiveAnswer,
     GenerativeAnswer,
+    LabeledMultiSpan,
     LabeledSpan,
     Question,
 )
@@ -123,7 +124,7 @@ class TokenDocumentWithAbstractiveSummary(TokenBasedDocument):
 
 @dataclasses.dataclass
 class TextDocumentWithLabeledMultiSpans(TextBasedDocument):
-    labeled_multi_spans: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
+    labeled_multi_spans: AnnotationLayer[LabeledMultiSpan] = annotation_field(target="text")
 
 
 @dataclasses.dataclass
