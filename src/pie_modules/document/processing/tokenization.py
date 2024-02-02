@@ -16,11 +16,11 @@ from typing import (
     Union,
 )
 
-from pytorch_ie.annotations import Span
 from pytorch_ie.core import Annotation
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from transformers import PreTrainedTokenizer
 
+from pie_modules.annotations import MultiSpan, Span
 from pie_modules.utils import resolve_type
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,65 @@ def find_token_offset_mapping(text: str, tokens: Iterable[str]) -> List[Tuple[in
         token_offset_mapping.append((new_start, end))
         start = end
     return token_offset_mapping
+
+
+def char_span_to_token_span(
+    span: Annotation, char_to_token: Callable[[int], Optional[int]]
+) -> Optional[Union[Span, MultiSpan]]:
+    if isinstance(span, Span):
+        start_token_idx = char_to_token(span.start)
+        end_token_idx_inclusive = char_to_token(span.end - 1)
+        if start_token_idx is None or end_token_idx_inclusive is None:
+            return None
+        return span.copy(start=start_token_idx, end=end_token_idx_inclusive + 1)
+    elif isinstance(span, MultiSpan):
+        slices_inclusive_end = [
+            (char_to_token(start), char_to_token(end - 1)) for start, end in span.slices
+        ]
+        if any(start is None or end is None for start, end in slices_inclusive_end):
+            return None
+        return span.copy(
+            slices=tuple(
+                # ignore type because we checked that start and end are not None
+                (start, inclusive_end + 1)  # type: ignore
+                for start, inclusive_end in slices_inclusive_end
+            )
+        )
+    else:
+        raise TypeError(
+            f"can not convert layers that target the text but contain non-span annotations, but found {type(span)}"
+        )
+
+
+def token_span_to_char_span(
+    span: Annotation, token_offset_mapping: List[Tuple[int, int]]
+) -> Optional[Union[Span, MultiSpan]]:
+    if isinstance(span, Span):
+        start_char_idx = token_offset_mapping[span.start][0]
+        end_char_idx = token_offset_mapping[span.end - 1][1]
+        return span.copy(start=start_char_idx, end=end_char_idx)
+    elif isinstance(span, MultiSpan):
+        slices = [
+            (token_offset_mapping[start][0], token_offset_mapping[end - 1][1])
+            for start, end in span.slices
+        ]
+        return span.copy(slices=slices)
+    else:
+        raise TypeError(
+            f"can not convert layers that target the tokens but contain non-span annotations, but found {type(span)}"
+        )
+
+
+def span_sort_key(span: Union[Span, MultiSpan]) -> Tuple[int, ...]:
+    if isinstance(span, Span):
+        return span.start, span.end
+    elif isinstance(span, MultiSpan):
+        result: List[int] = []
+        for start, end in span.slices:
+            result.extend((start, end))
+        return tuple(result)
+    else:
+        raise TypeError(f"can not sort {type(span)}")
 
 
 def text_based_document_to_token_based(
@@ -139,16 +198,9 @@ def text_based_document_to_token_based(
     removed_annotations: Dict[str, Set[int]] = defaultdict(set)
     for text_targeting_layer_name in text_targeting_layers:
         override_annotations[text_targeting_layer_name] = {}
-        char_span: Span
         for char_span in doc[text_targeting_layer_name]:
-            if not isinstance(char_span, Span):
-                raise TypeError(
-                    f"can not convert layers that target the text but contain non-span annotations, "
-                    f"but found {type(char_span)} in layer {text_targeting_layer_name}"
-                )
-            start_token_idx = char_to_token(char_span.start)
-            end_token_idx_inclusive = char_to_token(char_span.end - 1)
-            if start_token_idx is None or end_token_idx_inclusive is None:
+            token_span = char_span_to_token_span(char_span, char_to_token)
+            if token_span is None:
                 if strict_span_conversion:
                     raise ValueError(
                         f'cannot find token span for character span: "{char_span}", text="{doc.text}", '
@@ -160,14 +212,13 @@ def text_based_document_to_token_based(
                             f'cannot find token span for character span "{char_span}", skip it (disable this '
                             f"warning with verbose=False)"
                         )
-                    removed_annotations[text_targeting_layer_name].add(char_span._id)
+                removed_annotations[text_targeting_layer_name].add(char_span._id)
             else:
-                token_span = char_span.copy(start=start_token_idx, end=end_token_idx_inclusive + 1)
                 override_annotations[text_targeting_layer_name][char_span._id] = token_span
                 if added_annotations is not None:
                     added_annotations[text_targeting_layer_name].append(char_span)
         valid_spans = set(override_annotations[text_targeting_layer_name].values())
-        result[text_targeting_layer_name].extend(sorted(valid_spans, key=lambda span: span.start))
+        result[text_targeting_layer_name].extend(sorted(valid_spans, key=span_sort_key))
 
     added_annotations_from_remaining_layers = result.add_all_annotations_from_other(
         doc,
@@ -256,20 +307,12 @@ def token_based_document_to_text_based(
     for token_targeting_layer_name in token_targeting_layers:
         override_annotations[token_targeting_layer_name] = {}
         for token_span in doc[token_targeting_layer_name]:
-            if not isinstance(token_span, Span):
-                raise TypeError(
-                    f"can not convert layers that target the tokens but contain non-span annotations, "
-                    f"but found {type(token_span)} in layer {token_targeting_layer_name}"
-                )
-            start_char_idx = token_offset_mapping[token_span.start][0]
-            end_char_idx = token_offset_mapping[token_span.end - 1][1]
-
-            char_span = token_span.copy(start=start_char_idx, end=end_char_idx)
+            char_span = token_span_to_char_span(token_span, token_offset_mapping)
             override_annotations[token_targeting_layer_name][token_span._id] = char_span
             if added_annotations is not None:
                 added_annotations[token_targeting_layer_name].append(token_span)
         valid_spans = set(override_annotations[token_targeting_layer_name].values())
-        result[token_targeting_layer_name].extend(sorted(valid_spans, key=lambda span: span.start))
+        result[token_targeting_layer_name].extend(sorted(valid_spans, key=span_sort_key))
 
     added_annotations_from_remaining_layers = result.add_all_annotations_from_other(
         doc,
