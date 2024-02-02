@@ -2,11 +2,17 @@ import dataclasses
 from collections import defaultdict
 
 import pytest
-from pytorch_ie.annotations import BinaryRelation, Label, LabeledSpan, Span
 from pytorch_ie.core import AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
+from pie_modules.annotations import (
+    BinaryRelation,
+    Label,
+    LabeledMultiSpan,
+    LabeledSpan,
+    Span,
+)
 from pie_modules.document.processing import (
     text_based_document_to_token_based,
     token_based_document_to_text_based,
@@ -20,6 +26,18 @@ from tests.conftest import TestDocument
 class TokenizedTestDocument(TokenBasedDocument):
     sentences: AnnotationList[Span] = annotation_field(target="tokens")
     entities: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
+    relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+
+
+@dataclasses.dataclass
+class TestDocumentWithMultiSpans(TextBasedDocument):
+    entities: AnnotationList[LabeledMultiSpan] = annotation_field(target="text")
+    relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+
+
+@dataclasses.dataclass
+class TokenizedTestDocumentWithMultiSpans(TokenBasedDocument):
+    entities: AnnotationList[LabeledMultiSpan] = annotation_field(target="tokens")
     relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
 
 
@@ -57,6 +75,40 @@ def _test_text_document(doc):
 
     relation_tuples = [(str(rel.head), rel.label, str(rel.tail)) for rel in doc.relations]
     assert relation_tuples == [("Entity M", "per:employee_of", "N"), ("it", "per:founder", "O")]
+
+
+@pytest.fixture
+def text_document_with_multi_spans():
+    doc = TestDocumentWithMultiSpans(text="First sentence. Entity M works at N. And it founded O.")
+    doc.entities.extend(
+        [
+            LabeledMultiSpan(slices=((16, 22), (23, 24)), label="per"),
+            LabeledMultiSpan(slices=((34, 35),), label="org"),
+            LabeledMultiSpan(slices=((41, 43),), label="per"),
+            LabeledMultiSpan(slices=((52, 53),), label="org"),
+        ]
+    )
+    doc.relations.extend(
+        [
+            BinaryRelation(head=doc.entities[0], tail=doc.entities[1], label="per:employee_of"),
+            BinaryRelation(head=doc.entities[2], tail=doc.entities[3], label="per:founder"),
+        ]
+    )
+    _test_text_document_with_multi_spans(doc)
+    return doc
+
+
+def _test_text_document_with_multi_spans(doc):
+    assert str(doc.entities[0]) == "('Entity', 'M')"
+    assert str(doc.entities[1]) == "('N',)"
+    assert str(doc.entities[2]) == "('it',)"
+    assert str(doc.entities[3]) == "('O',)"
+
+    relation_tuples = [(str(rel.head), rel.label, str(rel.tail)) for rel in doc.relations]
+    assert relation_tuples == [
+        ("('Entity', 'M')", "per:employee_of", "('N',)"),
+        ("('it',)", "per:founder", "('O',)"),
+    ]
 
 
 @pytest.fixture
@@ -123,6 +175,59 @@ def _test_token_document(doc):
     ]
 
 
+@pytest.fixture
+def token_document_with_multi_spans():
+    doc = TokenizedTestDocumentWithMultiSpans(
+        tokens=(
+            "[CLS]",
+            "First",
+            "sentence",
+            ".",
+            "Entity",
+            "M",
+            "works",
+            "at",
+            "N",
+            ".",
+            "And",
+            "it",
+            "founded",
+            "O",
+            ".",
+            "[SEP]",
+        ),
+    )
+    doc.entities.extend(
+        [
+            LabeledMultiSpan(slices=((4, 5), (5, 6)), label="per"),
+            LabeledMultiSpan(slices=((8, 9),), label="org"),
+            LabeledMultiSpan(slices=((11, 12),), label="per"),
+            LabeledMultiSpan(slices=((13, 14),), label="org"),
+        ]
+    )
+    doc.relations.extend(
+        [
+            BinaryRelation(head=doc.entities[0], tail=doc.entities[1], label="per:employee_of"),
+            BinaryRelation(head=doc.entities[2], tail=doc.entities[3], label="per:founder"),
+        ]
+    )
+    _test_token_document_with_multi_spans(doc)
+    return doc
+
+
+def _test_token_document_with_multi_spans(doc):
+    assert str(doc.entities[0]) == "(('Entity',), ('M',))"
+    assert str(doc.entities[1]) == "(('N',),)"
+    assert str(doc.entities[2]) == "(('it',),)"
+    assert str(doc.entities[3]) == "(('O',),)"
+
+    relation_tuples = [(str(rel.head), rel.label, str(rel.tail)) for rel in doc.relations]
+    assert relation_tuples == [
+        ("(('Entity',), ('M',))", "per:employee_of", "(('N',),)"),
+        ("(('it',),)", "per:founder", "(('O',),)"),
+    ]
+
+
 @pytest.fixture(scope="module")
 def tokenizer() -> PreTrainedTokenizer:
     return AutoTokenizer.from_pretrained("bert-base-cased")
@@ -164,6 +269,22 @@ def test_text_based_document_to_token_based(text_document, token_document):
         layer_name = ann_field.name
         assert added_annotations[layer_name] == list(text_document[layer_name])
     _test_token_document(doc)
+
+
+def test_text_based_document_to_token_based_multi_span(
+    text_document_with_multi_spans, token_document_with_multi_spans
+):
+    added_annotations = defaultdict(list)
+    doc = text_based_document_to_token_based(
+        text_document_with_multi_spans,
+        tokens=list(token_document_with_multi_spans.tokens),
+        result_document_type=TokenizedTestDocumentWithMultiSpans,
+        added_annotations=added_annotations,
+    )
+    for ann_field in text_document_with_multi_spans.annotation_fields():
+        layer_name = ann_field.name
+        assert added_annotations[layer_name] == list(text_document_with_multi_spans[layer_name])
+    _test_token_document_with_multi_spans(doc)
 
 
 def test_text_based_document_to_token_based_tokens_from_metadata(text_document, token_document):
@@ -311,7 +432,7 @@ def test_text_based_document_to_token_based_wrong_annotation_type():
     assert (
         str(excinfo.value)
         == "can not convert layers that target the text but contain non-span annotations, "
-        "but found <class 'pytorch_ie.annotations.Label'> in layer wrong_annotations"
+        "but found <class 'pytorch_ie.annotations.Label'>"
     )
 
 
@@ -328,6 +449,23 @@ def test_token_based_document_to_text_based(token_document, text_document):
         assert added_annotations[layer_name] == list(token_document[layer_name])
 
     _test_text_document(result)
+
+
+def test_token_based_document_to_text_based_multi_span(
+    token_document_with_multi_spans, text_document_with_multi_spans
+):
+    added_annotations = defaultdict(list)
+    result = token_based_document_to_text_based(
+        token_document_with_multi_spans,
+        text=text_document_with_multi_spans.text,
+        result_document_type=TestDocumentWithMultiSpans,
+        added_annotations=added_annotations,
+    )
+    for ann_field in token_document_with_multi_spans.annotation_fields():
+        layer_name = ann_field.name
+        assert added_annotations[layer_name] == list(token_document_with_multi_spans[layer_name])
+
+    _test_text_document_with_multi_spans(result)
 
 
 def test_token_based_document_to_text_based_join_tokens_with(text_document, token_document):
@@ -391,7 +529,7 @@ def test_token_based_document_to_text_based_wrong_annotation_type():
     assert (
         str(excinfo.value)
         == "can not convert layers that target the tokens but contain non-span annotations, "
-        "but found <class 'pytorch_ie.annotations.Label'> in layer wrong_annotations"
+        "but found <class 'pytorch_ie.annotations.Label'>"
     )
 
 
