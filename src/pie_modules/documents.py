@@ -1,14 +1,32 @@
 import dataclasses
 
-from pytorch_ie import AnnotationLayer
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan
-from pytorch_ie.core import AnnotationList, annotation_field
-from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
+from pytorch_ie.core import AnnotationLayer, AnnotationList, annotation_field
+
+# re-export all documents from pytorch_ie to have a single entry point
+from pytorch_ie.documents import (
+    TextBasedDocument,
+    TextDocumentWithLabel,
+    TextDocumentWithLabeledPartitions,
+    TextDocumentWithLabeledSpans,
+    TextDocumentWithLabeledSpansAndBinaryRelations,
+    TextDocumentWithLabeledSpansAndLabeledPartitions,
+    TextDocumentWithLabeledSpansAndSentences,
+    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
+    TextDocumentWithMultiLabel,
+    TextDocumentWithSentences,
+    TextDocumentWithSpans,
+    TextDocumentWithSpansAndBinaryRelations,
+    TextDocumentWithSpansAndLabeledPartitions,
+    TextDocumentWithSpansBinaryRelationsAndLabeledPartitions,
+    TokenBasedDocument,
+)
 
 from pie_modules.annotations import (
     AbstractiveSummary,
+    BinaryRelation,
     ExtractiveAnswer,
     GenerativeAnswer,
+    LabeledSpan,
     Question,
 )
 
