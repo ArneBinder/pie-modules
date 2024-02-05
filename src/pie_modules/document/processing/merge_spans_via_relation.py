@@ -102,9 +102,6 @@ class SpansViaRelationMerger:
         create_multi_spans: Whether to create multi spans or not. If `True`, multi spans
             will be created, otherwise single spans that cover the merged spans will be
             created.
-        process_predictions: Whether to process the predictions or not. If `True`, the
-            predictions will be processed, otherwise only the gold annotations will be
-            processed.
         use_predicted_spans: Whether to use the predicted spans or the gold spans when
             processing predictions.
     """
@@ -116,7 +113,6 @@ class SpansViaRelationMerger:
         result_document_type: Union[type[Document], str],
         result_field_mapping: dict[str, str],
         create_multi_spans: bool = True,
-        process_predictions: bool = True,
         use_predicted_spans: bool = True,
     ):
         self.relation_layer = relation_layer
@@ -127,28 +123,26 @@ class SpansViaRelationMerger:
         self.result_field_mapping = result_field_mapping
         self.create_multi_spans = create_multi_spans
         self.use_predicted_spans = use_predicted_spans
-        self.process_predictions = process_predictions
 
     def __call__(self, document: D) -> D:
         relations: AnnotationLayer[BinaryRelation] = document[self.relation_layer]
         spans: AnnotationLayer[LabeledSpan] = document[self.relation_layer].target_layer
 
+        # process gold annotations
         new_gold_spans, new_gold_relations = _merge_spans_via_relation(
             spans=spans,
             relations=relations,
             link_relation_label=self.link_relation_label,
             create_multi_spans=self.create_multi_spans,
         )
-        if self.process_predictions:
-            new_pred_spans, new_pred_relations = _merge_spans_via_relation(
-                spans=spans.predictions if self.use_predicted_spans else spans,
-                relations=relations.predictions,
-                link_relation_label=self.link_relation_label,
-                create_multi_spans=self.create_multi_spans,
-            )
-        else:
-            new_pred_spans = set(spans.predictions.clear())
-            new_pred_relations = set(relations.predictions.clear())
+
+        # process predicted annotations
+        new_pred_spans, new_pred_relations = _merge_spans_via_relation(
+            spans=spans.predictions if self.use_predicted_spans else spans,
+            relations=relations.predictions,
+            link_relation_label=self.link_relation_label,
+            create_multi_spans=self.create_multi_spans,
+        )
 
         result = document.copy(with_annotations=False).as_type(new_type=self.result_document_type)
         span_layer_name = document[self.relation_layer].target_name
@@ -164,7 +158,6 @@ class SpansViaRelationMerger:
             if field_name not in [span_layer_name, self.relation_layer]:
                 for ann in document[field_name]:
                     result[result_field_name].append(ann.copy())
-                if self.process_predictions:
-                    for ann in document[field_name].predictions:
-                        result[result_field_name].predictions.append(ann.copy())
+                for ann in document[field_name].predictions:
+                    result[result_field_name].predictions.append(ann.copy())
         return result
