@@ -89,19 +89,22 @@ class SpansViaRelationMerger:
 
     This processor merges spans based on the relations with a specific label. The spans
     are merged into a single span if they are connected via a relation with the specified
-    label. The processor can be used to merge spans based on predicted or gold relations.
+    label. The processor handles both gold and predicted annotations.
 
     Args:
         relation_layer: The name of the relation layer in the document.
         link_relation_label: The label of the relation that should be used to merge spans.
-        result_document_type: The type of the document to return. This can be a class or
-            a string that can be resolved to a class. The class must be a subclass of
-            `Document`.
-        result_field_mapping: A mapping from the field names in the input document to the
-            field names in the result document.
         create_multi_spans: Whether to create multi spans or not. If `True`, multi spans
             will be created, otherwise single spans that cover the merged spans will be
             created.
+        result_document_type: The type of the document to return. This can be a class or
+            a string that can be resolved to a class. The class must be a subclass of
+            `Document`. Required when `create_multi_spans` is `True`.
+        result_field_mapping: A mapping from the field names in the input document to the
+            field names in the result document. This is used to copy over fields from the
+            input document to the result document. The keys are the field names in the
+            input document and the values are the field names in the result document.
+            Required when `result_document_type` is provided.
         use_predicted_spans: Whether to use the predicted spans or the gold spans when
             processing predictions.
     """
