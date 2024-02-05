@@ -102,10 +102,11 @@ class SpansViaRelationMerger:
         create_multi_spans: Whether to create multi spans or not. If `True`, multi spans
             will be created, otherwise single spans that cover the merged spans will be
             created.
-        use_predicted_spans: Whether to use the predicted spans or the gold spans.
         process_predictions: Whether to process the predictions or not. If `True`, the
             predictions will be processed, otherwise only the gold annotations will be
             processed.
+        use_predicted_spans: Whether to use the predicted spans or the gold spans when
+            processing predictions.
     """
 
     def __init__(
@@ -115,8 +116,8 @@ class SpansViaRelationMerger:
         result_document_type: Union[type[Document], str],
         result_field_mapping: dict[str, str],
         create_multi_spans: bool = True,
-        use_predicted_spans: bool = False,
         process_predictions: bool = True,
+        use_predicted_spans: bool = True,
     ):
         self.relation_layer = relation_layer
         self.link_relation_label = link_relation_label
@@ -146,8 +147,6 @@ class SpansViaRelationMerger:
                 create_multi_spans=self.create_multi_spans,
             )
         else:
-            if self.use_predicted_spans:
-                raise ValueError("cannot use predicted spans without processing predictions")
             new_pred_spans = set(spans.predictions.clear())
             new_pred_relations = set(relations.predictions.clear())
 
