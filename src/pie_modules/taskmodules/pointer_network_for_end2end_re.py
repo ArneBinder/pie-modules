@@ -402,6 +402,10 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     def target_ids(self) -> Set[int]:
         return set(range(self.pointer_offset))
 
+    @property
+    def use_multi_spans(self) -> bool:
+        return issubclass(self.document_type, TextDocumentWithLabeledMultiSpans)
+
     def configure_model_metric(self, stage: Optional[str] = None) -> Optional[Metric]:
         layer_metrics = {
             layer_name: PrecisionRecallAndF1ForLabeledAnnotations()
