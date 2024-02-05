@@ -192,6 +192,7 @@ class BinaryRelationEncoderDecoder(AnnotationEncoderDecoder[BinaryRelation, List
     def decode(
         self, encoding: List[int], metadata: Optional[Dict[str, Any]] = None
     ) -> BinaryRelation:
+        # TODO: adjust for MultiSpans (use label ids to split the input?)
         if len(encoding) != 7:
             raise DecodingLengthException(
                 f"seven values are required to decode as BinaryRelation, but the encoding has length {len(encoding)}",

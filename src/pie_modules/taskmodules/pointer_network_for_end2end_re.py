@@ -34,6 +34,7 @@ from typing_extensions import TypeAlias
 
 # import for backwards compatibility (don't remove!)
 from pie_modules.documents import (
+    TextDocumentWithLabeledMultiSpans,
     TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
 
@@ -87,6 +88,7 @@ KEY_INVALID_CORRECT = "correct"
 
 
 def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
+    # TODO: adjust for MultiSpans
     if not all(isinstance(ann, LabeledSpan) for ann in [v1.head, v1.tail, v2.head, v2.tail]):
         raise Exception(f"expected LabeledSpan, but got: {v1}, {v2}")
     if v1.head.start == v2.head.start:  # v1[0]["from"] == v2[0]["from"]:
@@ -323,6 +325,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             offset=self.pointer_offset, exclusive_end=False
         )
         span_labels = self.labels_per_layer[self.span_layer_name]
+        # TODO: adjust for MultiSpans
         labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
             span_encoder_decoder=span_encoder_decoder,
             # restrict label2id to get better error messages
@@ -432,6 +435,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                 current_encoding.append(i)
                 # An encoding is complete when it ends with a relation_id
                 # or when it contains a none_id and has a length of 7
+                # TODO: adjust for MultiSpans
                 if i in self.relation_ids or (i == self.none_id and len(current_encoding) == 7):
                     # try to decode the current relation encoding
                     try:
@@ -538,6 +542,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         decoded_relations, errors, remaining = self.decode_relations(label_ids=encoding.labels)
         relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
         entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
+        # TODO: adjust for MultiSpans
         for rel in decoded_relations:
             head_span = (rel.head.start, rel.head.end)
             entity_labels[head_span].append(rel.head.label)
@@ -549,6 +554,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             else:
                 assert rel.head == rel.tail
 
+        # TODO: adjust for MultiSpans
         # It may happen that some spans take part in multiple relations, but got generated with different labels.
         # In this case, we just create one span and take the most common label.
         entities: Dict[Tuple[int, int], LabeledSpan] = {}
@@ -559,6 +565,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             most_common_label = c.most_common(1)[0][0]
             entities[(start, end)] = LabeledSpan(start=start, end=end, label=most_common_label)
 
+        # TODO: adjust for MultiSpans
         entity_layer = list(entities.values())
         relation_layer = [
             BinaryRelation(head=entities[head_span], tail=entities[tail_span], label=label)
@@ -643,6 +650,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         input_len: int,
         target_ids: List[int],
     ) -> torch.LongTensor:
+        # TODO: move into BinaryRelationEncoderDecoder
         if not (
             isinstance(self.relation_encoder_decoder, BinaryRelationEncoderDecoder)
             and self.relation_encoder_decoder.mode == "tail_head_label"
