@@ -6,6 +6,7 @@ from pytorch_ie import AnnotationLayer
 from pytorch_ie.core import Document
 
 from pie_modules.annotations import BinaryRelation, LabeledMultiSpan, LabeledSpan
+from pie_modules.utils import resolve_type
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,9 @@ class SpansViaRelationMerger:
     Args:
         relation_layer: The name of the relation layer in the document.
         link_relation_label: The label of the relation that should be used to merge spans.
-        result_document_type: The type of the document to return.
+        result_document_type: The type of the document to return. This can be a class or
+            a string that can be resolved to a class. The class must be a subclass of
+            `Document`.
         result_field_mapping: A mapping from the field names in the input document to the
             field names in the result document.
         create_multi_spans: Whether to create multi spans or not. If `True`, multi spans
@@ -109,7 +112,7 @@ class SpansViaRelationMerger:
         self,
         relation_layer: str,
         link_relation_label: str,
-        result_document_type: type[Document],
+        result_document_type: Union[type[Document], str],
         result_field_mapping: dict[str, str],
         create_multi_spans: bool = True,
         use_predicted_spans: bool = False,
@@ -117,7 +120,9 @@ class SpansViaRelationMerger:
     ):
         self.relation_layer = relation_layer
         self.link_relation_label = link_relation_label
-        self.result_document_type = result_document_type
+        self.result_document_type = resolve_type(
+            result_document_type, expected_super_type=Document
+        )
         self.result_field_mapping = result_field_mapping
         self.create_multi_spans = create_multi_spans
         self.use_predicted_spans = use_predicted_spans
