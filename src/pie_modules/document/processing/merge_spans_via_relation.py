@@ -87,9 +87,9 @@ def _merge_spans_via_relation(
 class SpansViaRelationMerger:
     """Merge spans based on relations.
 
-    This processor merges spans based on the relations with a specific label. The spans
-    are merged into a single span if they are connected via a relation with the specified
-    label. The processor handles both gold and predicted annotations.
+    This processor merges spans based on binary relations. The spans are merged into a
+    single span if they are connected via a relation with the specified link label. The
+    processor handles both gold and predicted annotations.
 
     Args:
         relation_layer: The name of the relation layer in the document.
