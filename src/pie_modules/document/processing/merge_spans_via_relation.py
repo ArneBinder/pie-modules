@@ -1,5 +1,5 @@
 import logging
-from typing import Sequence, Set, Tuple, TypeVar, Union
+from typing import Optional, Sequence, Set, Tuple, TypeVar, Union
 
 import networkx as nx
 from pytorch_ie import AnnotationLayer
@@ -110,18 +110,31 @@ class SpansViaRelationMerger:
         self,
         relation_layer: str,
         link_relation_label: str,
-        result_document_type: Union[type[Document], str],
-        result_field_mapping: dict[str, str],
+        result_document_type: Optional[Union[type[Document], str]] = None,
+        result_field_mapping: Optional[dict[str, str]] = None,
         create_multi_spans: bool = True,
         use_predicted_spans: bool = True,
     ):
         self.relation_layer = relation_layer
         self.link_relation_label = link_relation_label
-        self.result_document_type = resolve_type(
-            result_document_type, expected_super_type=Document
-        )
-        self.result_field_mapping = result_field_mapping
         self.create_multi_spans = create_multi_spans
+        if self.create_multi_spans:
+            if result_document_type is None:
+                raise ValueError(
+                    "result_document_type must be set when create_multi_spans is True"
+                )
+        self.result_document_type: Optional[type[Document]]
+        if result_document_type is not None:
+            if result_field_mapping is None:
+                raise ValueError(
+                    "result_field_mapping must be set when result_document_type is provided"
+                )
+            self.result_document_type = resolve_type(
+                result_document_type, expected_super_type=Document
+            )
+        else:
+            self.result_document_type = None
+        self.result_field_mapping = result_field_mapping or {}
         self.use_predicted_spans = use_predicted_spans
 
     def __call__(self, document: D) -> D:
@@ -144,10 +157,14 @@ class SpansViaRelationMerger:
             create_multi_spans=self.create_multi_spans,
         )
 
-        result = document.copy(with_annotations=False).as_type(new_type=self.result_document_type)
+        result = document.copy(with_annotations=False)
+        if self.result_document_type is not None:
+            result = result.as_type(new_type=self.result_document_type)
         span_layer_name = document[self.relation_layer].target_name
-        result_span_layer_name = self.result_field_mapping[span_layer_name]
-        result_relation_layer_name = self.result_field_mapping[self.relation_layer]
+        result_span_layer_name = self.result_field_mapping.get(span_layer_name, span_layer_name)
+        result_relation_layer_name = self.result_field_mapping.get(
+            self.relation_layer, self.relation_layer
+        )
         result[result_span_layer_name].extend(new_gold_spans)
         result[result_relation_layer_name].extend(new_gold_relations)
         result[result_span_layer_name].predictions.extend(new_pred_spans)
