@@ -65,7 +65,7 @@ jobs:
         run: poetry install --no-interaction
 
       #----------------------------------------------
-      #              run test suite
+      #              run test suite x
       #----------------------------------------------
       - name: Run tests with coverage
         run: |
