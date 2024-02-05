@@ -28,6 +28,8 @@ pytorch-ie = ">=0.29.8,<0.30.0"
 pytorch-lightning = "^2.1.0"
 torchmetrics = "^1"
 pytorch-crf = ">=0.7.2"
+# for SpansViaRelationMerger
+networkx = "^3.0.0"
 # because of BartModelWithDecoderPositionIds
 transformers = "^4.35.0"
 
