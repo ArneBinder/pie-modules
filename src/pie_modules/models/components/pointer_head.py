@@ -157,7 +157,7 @@ class PointerHead(torch.nn.Module):
         if self.increase_position_ids_per_record:
             position_ids_reshaped = position_ids.view(bsz, -1, pattern_len)
             add_shift_pos = (
-                torch.range(0, repeat_num - 1, device=position_ids_reshaped.device)
+                torch.arange(0, repeat_num, device=position_ids_reshaped.device)
                 .repeat(bsz)
                 .view(bsz, -1)
                 .unsqueeze(-1)
