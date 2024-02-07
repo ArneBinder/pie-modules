@@ -5,7 +5,6 @@ from pytorch_ie import Annotation
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 
 from pie_modules.annotations import LabeledMultiSpan
-from pie_modules.taskmodules.common import AnnotationEncoderDecoder
 from pie_modules.taskmodules.common.interfaces import (
     DecodingException,
     GenerativeAnnotationEncoderDecoder,
