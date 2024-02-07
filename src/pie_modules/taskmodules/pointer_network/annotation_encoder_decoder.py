@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from pytorch_ie import Annotation
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 
+from pie_modules.annotations import LabeledMultiSpan
 from pie_modules.taskmodules.common import AnnotationEncoderDecoder
 from pie_modules.taskmodules.common.interfaces import (
     DecodingException,
@@ -276,6 +277,83 @@ class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, 
             remaining = remaining[1:]
         result = LabeledSpan(start=span.start, end=span.end, label=label)
         return result, remaining
+
+
+class LabeledMultiSpanEncoderDecoder(
+    GenerativeAnnotationEncoderDecoder[LabeledMultiSpan, List[int]]
+):
+    def __init__(
+        self,
+        span_encoder_decoder: GenerativeAnnotationEncoderDecoder[Span, List[int]],
+        label2id: Dict[str, int],
+    ):
+        self.span_encoder_decoder = span_encoder_decoder
+        self.label2id = label2id
+        self.id2label = {idx: label for label, idx in self.label2id.items()}
+
+    def encode(
+        self, annotation: LabeledMultiSpan, metadata: Optional[Dict[str, Any]] = None
+    ) -> List[int]:
+        encoding = []
+        for start, end in annotation.slices:
+            encoded_span = self.span_encoder_decoder.encode(
+                annotation=Span(start=start, end=end), metadata=metadata
+            )
+            encoding.extend(encoded_span)
+        encoding.append(self.label2id[annotation.label])
+        return encoding
+
+    def decode(
+        self, encoding: List[int], metadata: Optional[Dict[str, Any]] = None
+    ) -> LabeledMultiSpan:
+        if len(encoding) % 2 != 1:
+            raise DecodingLengthException(
+                f"an odd number of values is required to decode as LabeledMultiSpan, "
+                f"but encoding has length {len(encoding)}",
+                encoding=encoding,
+            )
+        slices = []
+        for i in range(0, len(encoding) - 1, 2):
+            encoded_span = encoding[i : i + 2]
+            span = self.span_encoder_decoder.decode(encoding=encoded_span, metadata=metadata)
+            slices.append((span.start, span.end))
+        label = self.id2label[encoding[-1]]
+        return LabeledMultiSpan(slices=tuple(slices), label=label)
+
+    def parse(
+        self,
+        encoding: List[int],
+        decoded_annotations: List[LabeledMultiSpan],
+        text_length: int,
+    ) -> Tuple[LabeledMultiSpan, List[int]]:
+        decoded_spans = []
+        for ann in decoded_annotations:
+            for start, end in ann.slices:
+                decoded_spans.append(Span(start=start, end=end))
+
+        slices = []
+        remaining = encoding
+        if len(remaining) == 0:
+            raise DecodingIncompleteException(
+                "the encoding has not enough values to decode as LabeledMultiSpan",
+                encoding=remaining,
+                follow_up_candidates=sorted(self.id2label.keys()),
+            )
+        while remaining[0] not in self.id2label:
+            span, remaining = self.span_encoder_decoder.parse(
+                encoding=remaining, decoded_annotations=decoded_spans, text_length=text_length
+            )
+            slices.append((span.start, span.end))
+            decoded_spans.append(span)
+            if len(remaining) == 0:
+                raise DecodingIncompleteException(
+                    "the encoding has not enough values to decode as LabeledMultiSpan",
+                    encoding=remaining,
+                    follow_up_candidates=sorted(self.id2label.keys()),
+                )
+
+        label = self.id2label[remaining[0]]
+        return LabeledMultiSpan(slices=tuple(slices), label=label), remaining[1:]
 
 
 class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRelation, List[int]]):
