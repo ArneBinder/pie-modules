@@ -513,9 +513,33 @@ class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRela
             encoding=remaining, decoded_annotations=decoded_arguments, text_length=text_length
         )
         decoded_arguments.append(first_argument)
-        second_argument, remaining = second_argument_encoder.parse(
-            encoding=remaining, decoded_annotations=decoded_arguments, text_length=text_length
-        )
+        try:
+            second_argument, remaining = second_argument_encoder.parse(
+                encoding=remaining, decoded_annotations=decoded_arguments, text_length=text_length
+            )
+        except DecodingException as e:
+            if self.none_label is not None:
+                none_id = self.label2id[self.none_label]
+                if remaining[0:3] == [none_id] * 3:
+                    second_argument = first_argument
+                    remaining = remaining[3:]
+                elif len(remaining) == 0 and isinstance(e, DecodingIncompleteException):
+                    raise DecodingIncompleteException(
+                        "the encoding has not enough values to decode as BinaryRelation",
+                        encoding=encoding,
+                        follow_up_candidates=sorted(e.follow_up_candidates + [none_id]),
+                    )
+                elif 0 < len(remaining) < 3 and remaining == [none_id] * len(remaining):
+                    raise DecodingIncompleteException(
+                        "the encoding has not enough values to decode as BinaryRelation",
+                        encoding=encoding,
+                        follow_up_candidates=[none_id],
+                    )
+                else:
+                    raise e
+            else:
+                raise e
+
         if label is None:
             if len(remaining) == 0:
                 raise DecodingIncompleteException(
@@ -525,6 +549,14 @@ class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRela
                 )
             label = self.id2label[remaining[0]]
             remaining = remaining[1:]
+
+        if label == self.none_label:
+            if self.loop_dummy_relation_name is None:
+                raise ValueError(
+                    f"loop_dummy_relation_name is not set, but none_label={self.none_label} "
+                    f"was found in decoded encoding: {encoding} (label2id: {self.label2id}))"
+                )
+            label = self.loop_dummy_relation_name
 
         if argument_mode == "head_tail":
             rel = BinaryRelation(head=first_argument, tail=second_argument, label=label)
