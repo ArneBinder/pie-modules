@@ -1,10 +1,14 @@
 import logging
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
+from pytorch_ie import Annotation
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 
 from pie_modules.taskmodules.common import AnnotationEncoderDecoder
-from pie_modules.taskmodules.common.interfaces import DecodingException
+from pie_modules.taskmodules.common.interfaces import (
+    DecodingException,
+    GenerativeAnnotationEncoderDecoder,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +33,18 @@ class DecodingNegativeIndexException(DecodingException[List[int]]):
     identifier = "index"
 
 
-class SpanEncoderDecoder(AnnotationEncoderDecoder[Span, List[int]]):
-    def __init__(self, exclusive_end: bool = True):
+class DecodingIncompleteException(DecodingException[List[int]]):
+    identifier = "incomplete"
+
+    def __init__(self, message: str, encoding: List[int], follow_up_candidates: List[int]):
+        super().__init__(message, encoding)
+        self.follow_up_candidates = follow_up_candidates
+
+
+class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
+    def __init__(self, exclusive_end: bool = True, allow_nested: bool = False):
         self.exclusive_end = exclusive_end
+        self.allow_nested = allow_nested
 
     def encode(self, annotation: Span, metadata: Optional[Dict[str, Any]] = None) -> List[int]:
         end_idx = annotation.end
@@ -60,6 +73,95 @@ class SpanEncoderDecoder(AnnotationEncoderDecoder[Span, List[int]]):
             )
         return Span(start=encoding[0], end=end_idx)
 
+    def parse(
+        self,
+        encoding: List[int],
+        decoded_annotations: List[Span],
+        text_length: int,
+    ) -> Tuple[Span, List[int]]:
+        exclusive_end_offset = 0 if self.exclusive_end else 1
+        # the encoding is incomplete if it is empty, collect follow-up candidate indices
+        if len(encoding) == 0:
+            if self.allow_nested:
+                # everything is allowed
+                follow_up_candidates = list(range(text_length))
+            else:
+                # exclude indices that are already covered by other annotations
+                covered_indices: Set[int] = set()
+                # TODO: correctly incorporate exclusive_end_offset!
+                for ann in decoded_annotations:
+                    covered_indices.update(range(ann.start, ann.end))
+                follow_up_candidates = [
+                    idx for idx in range(text_length) if idx not in covered_indices
+                ]
+            raise DecodingIncompleteException(
+                "the encoding has not enough values to decode as Span",
+                encoding=encoding,
+                follow_up_candidates=follow_up_candidates,
+            )
+        # the encoding is incomplete if it has only one value, collect follow-up candidate indices
+        elif len(encoding) == 1:
+            if self.allow_nested:
+                # exclude spans that overlap other spans, i.e. if encoding[0] is in another span, the next
+                # candidate should be also within this span
+                covering_spans = [
+                    ann for ann in decoded_annotations if ann.start <= encoding[0] < ann.end
+                ]
+                if len(covering_spans) == 0:
+                    # allow all indices outside spans, after the start index
+                    covered_indices = set()
+                    for span in decoded_annotations:
+                        covered_indices = covered_indices.union(set(range(span.start, span.end)))
+
+                    # TODO: correctly incorporate exclusive_end_offset!
+                    follow_up_candidates = [
+                        idx
+                        for idx in range(encoding[0], text_length)
+                        if idx not in covered_indices
+                    ]
+                else:
+                    # allow all indices that are within *all* covering spans, i.e. the smallest covering span,
+                    # and after the start index
+                    covered_indices = set()
+                    for span in covering_spans:
+                        covered_indices = covered_indices.intersection(
+                            set(range(span.start, span.end))
+                        )
+                    # TODO: correctly incorporate exclusive_end_offset!
+                    follow_up_candidates = [idx for idx in covered_indices if idx >= encoding[0]]
+            else:
+                # allow all indices after the start index and before the next span. we add a dummy span to
+                # correctly handle the case where no other spans are present
+                dummy_span = Span(start=text_length, end=text_length + 1)
+                next_span_start = min(
+                    ann.start
+                    for ann in decoded_annotations + [dummy_span]
+                    if ann.start >= encoding[0]
+                )
+                # TODO: correctly incorporate exclusive_end_offset!
+                follow_up_candidates = list(range(encoding[0], next_span_start))
+            raise DecodingIncompleteException(
+                "the encoding has not enough values to decode as Span",
+                encoding=encoding,
+                follow_up_candidates=follow_up_candidates,
+            )
+        # the encoding is complete, decode the span
+        else:
+            end_idx = encoding[1]
+            if not self.exclusive_end:
+                end_idx += 1
+            if end_idx < encoding[0]:
+                raise DecodingOrderException(
+                    f"end index can not be smaller than start index, but got: start={encoding[0]}, "
+                    f"end={end_idx}",
+                    encoding=encoding,
+                )
+            if any(idx < 0 for idx in encoding):
+                raise DecodingNegativeIndexException(
+                    f"indices must be positive, but got: {encoding}", encoding=encoding
+                )
+            return Span(start=encoding[0], end=end_idx), encoding[2:]
+
 
 class SpanEncoderDecoderWithOffset(SpanEncoderDecoder):
     def __init__(self, offset: int, **kwargs):
@@ -74,11 +176,25 @@ class SpanEncoderDecoderWithOffset(SpanEncoderDecoder):
         encoding = [x - self.offset for x in encoding]
         return super().decode(encoding=encoding, metadata=metadata)
 
+    def parse(
+        self,
+        encoding: List[int],
+        decoded_annotations: List[Span],
+        text_length: int,
+    ) -> Tuple[Span, List[int]]:
+        encoding_without_offset = [x - self.offset for x in encoding]
+        span, remaining = super().parse(
+            encoding=encoding_without_offset,
+            decoded_annotations=decoded_annotations,
+            text_length=text_length,
+        )
+        return span, encoding[-len(remaining) :]
 
-class LabeledSpanEncoderDecoder(AnnotationEncoderDecoder[LabeledSpan, List[int]]):
+
+class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, List[int]]):
     def __init__(
         self,
-        span_encoder_decoder: AnnotationEncoderDecoder[Span, List[int]],
+        span_encoder_decoder: GenerativeAnnotationEncoderDecoder[Span, List[int]],
         label2id: Dict[str, int],
         mode: str,
     ):
@@ -123,12 +239,50 @@ class LabeledSpanEncoderDecoder(AnnotationEncoderDecoder[LabeledSpan, List[int]]
         )
         return result
 
+    def parse(
+        self,
+        encoding: List[int],
+        decoded_annotations: List[LabeledSpan],
+        text_length: int,
+    ) -> Tuple[LabeledSpan, List[int]]:
+        if self.mode == "label_indices":
+            if len(encoding) == 0:
+                follow_up_candidates = sorted(self.id2label.keys())
+                raise DecodingIncompleteException(
+                    "the encoding has not enough values to decode as LabeledSpan",
+                    encoding=encoding,
+                    follow_up_candidates=follow_up_candidates,
+                )
+            label = self.id2label[encoding[0]]
+            remaining = encoding[1:]
+        elif self.mode == "indices_label":
+            remaining = encoding
+            label = None
+        else:
+            raise ValueError(f"unknown mode: {self.mode}")
 
-class BinaryRelationEncoderDecoder(AnnotationEncoderDecoder[BinaryRelation, List[int]]):
+        span, remaining = self.span_encoder_decoder.parse(
+            encoding=remaining, decoded_annotations=decoded_annotations, text_length=text_length
+        )
+        if label is None:
+            if len(remaining) == 0:
+                follow_up_candidates = sorted(self.id2label.keys())
+                raise DecodingIncompleteException(
+                    "the encoding has not enough values to decode as LabeledSpan",
+                    encoding=encoding,
+                    follow_up_candidates=follow_up_candidates,
+                )
+            label = self.id2label[remaining[0]]
+            remaining = remaining[1:]
+        result = LabeledSpan(start=span.start, end=span.end, label=label)
+        return result, remaining
+
+
+class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRelation, List[int]]):
     def __init__(
         self,
-        head_encoder_decoder: AnnotationEncoderDecoder[Span, List[int]],
-        tail_encoder_decoder: AnnotationEncoderDecoder[Span, List[int]],
+        head_encoder_decoder: GenerativeAnnotationEncoderDecoder[Annotation, List[int]],
+        tail_encoder_decoder: GenerativeAnnotationEncoderDecoder[Annotation, List[int]],
         label2id: Dict[str, int],
         mode: str,
         loop_dummy_relation_name: Optional[str] = None,
@@ -192,7 +346,6 @@ class BinaryRelationEncoderDecoder(AnnotationEncoderDecoder[BinaryRelation, List
     def decode(
         self, encoding: List[int], metadata: Optional[Dict[str, Any]] = None
     ) -> BinaryRelation:
-        # TODO: adjust for MultiSpans (use label ids to split the input?)
         if len(encoding) != 7:
             raise DecodingLengthException(
                 f"seven values are required to decode as BinaryRelation, but the encoding has length {len(encoding)}",
@@ -242,3 +395,64 @@ class BinaryRelationEncoderDecoder(AnnotationEncoderDecoder[BinaryRelation, List
             rel = BinaryRelation(head=head, tail=tail, label=label)
 
         return rel
+
+    def parse(
+        self,
+        encoding: List[int],
+        decoded_annotations: List[BinaryRelation],
+        text_length: int,
+    ) -> Tuple[BinaryRelation, List[int]]:
+        if self.mode.endswith("_label"):
+            label = None
+            remaining = encoding
+            argument_mode = self.mode[: -len("_label")]
+        elif self.mode.startswith("label_"):
+            if len(encoding) == 0:
+                raise DecodingIncompleteException(
+                    "the encoding has not enough values to decode as BinaryRelation",
+                    encoding=encoding,
+                    follow_up_candidates=sorted(self.id2label.keys()),
+                )
+            label = self.id2label[encoding[0]]
+            remaining = encoding[1:]
+            argument_mode = self.mode[len("label_") :]
+        else:
+            raise ValueError(f"unknown mode: {self.mode}")
+        if argument_mode == "head_tail":
+            first_argument_encoder = self.head_encoder_decoder
+            second_argument_encoder = self.tail_encoder_decoder
+        elif argument_mode == "tail_head":
+            first_argument_encoder = self.tail_encoder_decoder
+            second_argument_encoder = self.head_encoder_decoder
+        else:
+            raise ValueError(f"unknown argument mode: {argument_mode}")
+
+        decoded_arguments = []
+        for rel in decoded_annotations:
+            decoded_arguments.append(rel.head)
+            decoded_arguments.append(rel.tail)
+
+        first_argument, remaining = first_argument_encoder.parse(
+            encoding=remaining, decoded_annotations=decoded_arguments, text_length=text_length
+        )
+        decoded_arguments.append(first_argument)
+        second_argument, remaining = second_argument_encoder.parse(
+            encoding=remaining, decoded_annotations=decoded_arguments, text_length=text_length
+        )
+        if label is None:
+            if len(remaining) == 0:
+                raise DecodingIncompleteException(
+                    "the encoding has not enough values to decode as BinaryRelation",
+                    encoding=encoding,
+                    follow_up_candidates=sorted(self.id2label.keys()),
+                )
+            label = self.id2label[remaining[0]]
+            remaining = remaining[1:]
+
+        if argument_mode == "head_tail":
+            rel = BinaryRelation(head=first_argument, tail=second_argument, label=label)
+        elif argument_mode == "tail_head":
+            rel = BinaryRelation(head=second_argument, tail=first_argument, label=label)
+        else:
+            raise ValueError(f"unknown argument mode: {argument_mode}")
+        return rel, remaining

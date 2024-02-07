@@ -32,3 +32,12 @@ class AnnotationEncoderDecoder(abc.ABC, Generic[A, AE]):
     @abc.abstractmethod
     def decode(self, encoding: AE, metadata: Optional[Dict[str, Any]] = None) -> A:
         pass
+
+
+class GenerativeAnnotationEncoderDecoder(AnnotationEncoderDecoder[A, AE], abc.ABC):
+    """Base class for generative annotation encoders and decoders."""
+
+    @abc.abstractmethod
+    def parse(self, encoding: AE, decoded_annotations: List[A], text_length: int) -> Tuple[A, AE]:
+        """Parse the encoding and return the decoded annotation and the remaining encoding."""
+        pass
