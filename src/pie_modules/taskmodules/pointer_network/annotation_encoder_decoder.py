@@ -281,6 +281,12 @@ class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, 
 class LabeledMultiSpanEncoderDecoder(
     GenerativeAnnotationEncoderDecoder[LabeledMultiSpan, List[int]]
 ):
+    """An encoder-decoder for LabeledMultiSpans.
+
+    To encode a LabeledMultiSpan, the slices (start-end-index-tuples) are encoded in order,
+    followed by the label id. Note that we expect the MultiSpan to have at least one slice.
+    """
+
     def __init__(
         self,
         span_encoder_decoder: GenerativeAnnotationEncoderDecoder[Span, List[int]],
@@ -293,6 +299,8 @@ class LabeledMultiSpanEncoderDecoder(
     def encode(
         self, annotation: LabeledMultiSpan, metadata: Optional[Dict[str, Any]] = None
     ) -> List[int]:
+        if len(annotation.slices) == 0:
+            raise ValueError("LabeledMultiSpan must have at least one span to encode it.")
         encoding = []
         for start, end in annotation.slices:
             encoded_span = self.span_encoder_decoder.encode(
@@ -330,28 +338,37 @@ class LabeledMultiSpanEncoderDecoder(
             for start, end in ann.slices:
                 decoded_spans.append(Span(start=start, end=end))
 
-        slices = []
+        slices: List[Tuple[int, int]] = []
         remaining = encoding
-        if len(remaining) == 0:
-            raise DecodingIncompleteException(
-                "the encoding has not enough values to decode as LabeledMultiSpan",
-                encoding=remaining,
-                follow_up_candidates=sorted(self.id2label.keys()),
-            )
-        while remaining[0] not in self.id2label:
-            span, remaining = self.span_encoder_decoder.parse(
-                encoding=remaining, decoded_annotations=decoded_spans, text_length=text_length
-            )
+        while True:
+            try:
+                span, remaining = self.span_encoder_decoder.parse(
+                    encoding=remaining, decoded_annotations=decoded_spans, text_length=text_length
+                )
+            except DecodingIncompleteException as e:
+                # if the current remaining encoding was empty, but we already have slices,
+                # we need to add the label ids to the follow-up candidates
+                if len(remaining) == 0 and len(slices) > 0:
+                    raise DecodingIncompleteException(
+                        "the encoding has not enough values to decode as LabeledMultiSpan",
+                        encoding=encoding,
+                        follow_up_candidates=sorted(e.follow_up_candidates + list(self.id2label)),
+                    )
+                # otherwise (partial span or empty encoding), we just re-raise the exception
+                else:
+                    raise e
             slices.append((span.start, span.end))
             decoded_spans.append(span)
             if len(remaining) == 0:
                 raise DecodingIncompleteException(
-                    "the encoding has not enough values to decode as LabeledMultiSpan",
-                    encoding=remaining,
-                    follow_up_candidates=sorted(self.id2label.keys()),
+                    "the encoding misses a final label id to decode as LabeledMultiSpan",
+                    encoding=encoding,
+                    follow_up_candidates=sorted(self.id2label),
                 )
+            elif remaining[0] in self.id2label:
+                label = self.id2label[remaining[0]]
+                break
 
-        label = self.id2label[remaining[0]]
         return LabeledMultiSpan(slices=tuple(slices), label=label), remaining[1:]
 
 
