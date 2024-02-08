@@ -33,7 +33,7 @@ class DecodingNegativeIndexException(DecodingException[List[int]]):
     identifier = "index"
 
 
-class DecodingIncompleteException(DecodingException[List[int]]):
+class IncompleteEncodingException(DecodingException[List[int]]):
     identifier = "incomplete"
 
     def __init__(self, message: str, encoding: List[int], follow_up_candidates: List[int]):
@@ -94,7 +94,7 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
                 follow_up_candidates = [
                     idx for idx in range(text_length) if idx not in covered_indices
                 ]
-            raise DecodingIncompleteException(
+            raise IncompleteEncodingException(
                 "the encoding has not enough values to decode as Span",
                 encoding=encoding,
                 follow_up_candidates=follow_up_candidates,
@@ -140,7 +140,7 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
                 )
                 # TODO: correctly incorporate exclusive_end_offset!
                 follow_up_candidates = list(range(encoding[0], next_span_start))
-            raise DecodingIncompleteException(
+            raise IncompleteEncodingException(
                 "the encoding has not enough values to decode as Span",
                 encoding=encoding,
                 follow_up_candidates=follow_up_candidates,
@@ -248,7 +248,7 @@ class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, 
         if self.mode == "label_indices":
             if len(encoding) == 0:
                 follow_up_candidates = sorted(self.id2label.keys())
-                raise DecodingIncompleteException(
+                raise IncompleteEncodingException(
                     "the encoding has not enough values to decode as LabeledSpan",
                     encoding=encoding,
                     follow_up_candidates=follow_up_candidates,
@@ -267,7 +267,7 @@ class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, 
         if label is None:
             if len(remaining) == 0:
                 follow_up_candidates = sorted(self.id2label.keys())
-                raise DecodingIncompleteException(
+                raise IncompleteEncodingException(
                     "the encoding has not enough values to decode as LabeledSpan",
                     encoding=encoding,
                     follow_up_candidates=follow_up_candidates,
@@ -345,11 +345,11 @@ class LabeledMultiSpanEncoderDecoder(
                 span, remaining = self.span_encoder_decoder.parse(
                     encoding=remaining, decoded_annotations=decoded_spans, text_length=text_length
                 )
-            except DecodingIncompleteException as e:
+            except IncompleteEncodingException as e:
                 # if the current remaining encoding was empty, but we already have slices,
                 # we need to add the label ids to the follow-up candidates
                 if len(remaining) == 0 and len(slices) > 0:
-                    raise DecodingIncompleteException(
+                    raise IncompleteEncodingException(
                         "the encoding has not enough values to decode as LabeledMultiSpan",
                         encoding=encoding,
                         follow_up_candidates=sorted(e.follow_up_candidates + list(self.id2label)),
@@ -360,7 +360,7 @@ class LabeledMultiSpanEncoderDecoder(
             slices.append((span.start, span.end))
             decoded_spans.append(span)
             if len(remaining) == 0:
-                raise DecodingIncompleteException(
+                raise IncompleteEncodingException(
                     "the encoding misses a final label id to decode as LabeledMultiSpan",
                     encoding=encoding,
                     follow_up_candidates=sorted(self.id2label),
@@ -502,7 +502,7 @@ class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRela
             argument_mode = self.mode[: -len("_label")]
         elif self.mode.startswith("label_"):
             if len(encoding) == 0:
-                raise DecodingIncompleteException(
+                raise IncompleteEncodingException(
                     "the encoding has not enough values to decode as BinaryRelation",
                     encoding=encoding,
                     follow_up_candidates=sorted(self.id2label.keys()),
@@ -540,14 +540,14 @@ class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRela
                 if remaining[0:3] == [none_id] * 3:
                     second_argument = first_argument
                     remaining = remaining[3:]
-                elif len(remaining) == 0 and isinstance(e, DecodingIncompleteException):
-                    raise DecodingIncompleteException(
+                elif len(remaining) == 0 and isinstance(e, IncompleteEncodingException):
+                    raise IncompleteEncodingException(
                         "the encoding has not enough values to decode as BinaryRelation",
                         encoding=encoding,
                         follow_up_candidates=sorted(e.follow_up_candidates + [none_id]),
                     )
                 elif 0 < len(remaining) < 3 and remaining == [none_id] * len(remaining):
-                    raise DecodingIncompleteException(
+                    raise IncompleteEncodingException(
                         "the encoding has not enough values to decode as BinaryRelation",
                         encoding=encoding,
                         follow_up_candidates=[none_id],
@@ -559,7 +559,7 @@ class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRela
 
         if label is None:
             if len(remaining) == 0:
-                raise DecodingIncompleteException(
+                raise IncompleteEncodingException(
                     "the encoding has not enough values to decode as BinaryRelation",
                     encoding=encoding,
                     follow_up_candidates=sorted(self.id2label.keys()),
