@@ -25,6 +25,10 @@ class DecodingSpanOverlapException(DecodingException[List[int]]):
     identifier = "overlap"
 
 
+class DecodingSpanNestedException(DecodingException[List[int]]):
+    identifier = "nested"
+
+
 class DecodingLabelException(DecodingException[List[int]]):
     identifier = "label"
 
@@ -156,10 +160,28 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
                     f"end={end_idx}",
                     encoding=encoding,
                 )
-            if any(idx < 0 for idx in encoding):
+            if any(idx < 0 for idx in encoding[:2]):
                 raise DecodingNegativeIndexException(
                     f"indices must be positive, but got: {encoding}", encoding=encoding
                 )
+            for ann in decoded_annotations:
+                if (not self.allow_nested) and (
+                    ann.start <= encoding[0] < ann.end or ann.start <= end_idx < ann.end
+                ):
+                    raise DecodingSpanNestedException(
+                        f"the span overlaps with another span: {ann}", encoding=encoding
+                    )
+                else:
+                    if self.allow_nested and (
+                        (ann.start <= encoding[0] < ann.end and not ann.start <= end_idx < ann.end)
+                        or (
+                            not ann.start <= encoding[0] < ann.end
+                            and ann.start <= end_idx < ann.end
+                        )
+                    ):
+                        raise DecodingSpanOverlapException(
+                            f"the span overlaps with another span: {ann}", encoding=encoding
+                        )
             return Span(start=encoding[0], end=end_idx), encoding[2:]
 
 
