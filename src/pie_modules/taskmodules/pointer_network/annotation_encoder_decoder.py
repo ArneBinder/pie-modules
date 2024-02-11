@@ -149,40 +149,41 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
                 encoding=encoding,
                 follow_up_candidates=follow_up_candidates,
             )
-        # the encoding is complete, decode the span
+        # the encoding is complete, try to decode the span
         else:
+            start_idx = encoding[0]
             end_idx = encoding[1]
+            # the end index for Span annotations is exclusive, so we need to add 1 to the end index
             if not self.exclusive_end:
                 end_idx += 1
-            if end_idx < encoding[0]:
+            if end_idx < start_idx:
                 raise DecodingOrderException(
-                    f"end index can not be smaller than start index, but got: start={encoding[0]}, "
+                    f"end index can not be smaller than start index, but got: start={start_idx}, "
                     f"end={end_idx}",
                     encoding=encoding,
                 )
-            if any(idx < 0 for idx in encoding[:2]):
+            if any(idx < 0 for idx in [start_idx, end_idx]):
                 raise DecodingNegativeIndexException(
-                    f"indices must be positive, but got: {encoding}", encoding=encoding
+                    f"indices must be positive, but got: {[start_idx, end_idx]}", encoding=encoding
                 )
             for ann in decoded_annotations:
+                # check for overlapping spans
+                if (ann.start <= start_idx < ann.end and not ann.start <= end_idx < ann.end) or (
+                    not ann.start <= start_idx < ann.end and ann.start <= end_idx < ann.end
+                ):
+                    raise DecodingSpanOverlapException(
+                        f"the encoded span overlaps with another span: {ann}", encoding=encoding
+                    )
+                # check for nested spans
                 if (not self.allow_nested) and (
-                    ann.start <= encoding[0] < ann.end or ann.start <= end_idx < ann.end
+                    ann.start <= start_idx < ann.end or ann.start <= end_idx < ann.end
                 ):
                     raise DecodingSpanNestedException(
-                        f"the span overlaps with another span: {ann}", encoding=encoding
+                        f"the encoded span is nested in another span: {ann}",
+                        encoding=encoding,
                     )
-                else:
-                    if self.allow_nested and (
-                        (ann.start <= encoding[0] < ann.end and not ann.start <= end_idx < ann.end)
-                        or (
-                            not ann.start <= encoding[0] < ann.end
-                            and ann.start <= end_idx < ann.end
-                        )
-                    ):
-                        raise DecodingSpanOverlapException(
-                            f"the span overlaps with another span: {ann}", encoding=encoding
-                        )
-            return Span(start=encoding[0], end=end_idx), encoding[2:]
+
+            return Span(start=start_idx, end=end_idx), encoding[2:]
 
 
 class SpanEncoderDecoderWithOffset(SpanEncoderDecoder):
