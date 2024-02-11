@@ -222,7 +222,7 @@ class SpanEncoderDecoderWithOffset(SpanEncoderDecoder):
 class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, List[int]]):
     def __init__(
         self,
-        span_encoder_decoder: GenerativeAnnotationEncoderDecoder[Span, List[int]],
+        span_encoder_decoder: SpanEncoderDecoderWithOffset,
         label2id: Dict[str, int],
         mode: str,
     ):
@@ -317,7 +317,7 @@ class LabeledMultiSpanEncoderDecoder(
 
     def __init__(
         self,
-        span_encoder_decoder: GenerativeAnnotationEncoderDecoder[Span, List[int]],
+        span_encoder_decoder: SpanEncoderDecoderWithOffset,
         label2id: Dict[str, int],
     ):
         self.span_encoder_decoder = span_encoder_decoder
