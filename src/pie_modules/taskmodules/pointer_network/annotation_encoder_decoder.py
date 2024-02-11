@@ -205,11 +205,17 @@ class SpanEncoderDecoderWithOffset(SpanEncoderDecoder):
         text_length: int,
     ) -> Tuple[Span, List[int]]:
         encoding_without_offset = [x - self.offset for x in encoding]
-        span, remaining = super().parse(
-            encoding=encoding_without_offset,
-            decoded_annotations=decoded_annotations,
-            text_length=text_length,
-        )
+        try:
+            span, remaining = super().parse(
+                encoding=encoding_without_offset,
+                decoded_annotations=decoded_annotations,
+                text_length=text_length,
+            )
+        except IncompleteEncodingException as e:
+            follow_up_candidates = [x + self.offset for x in e.follow_up_candidates]
+            raise IncompleteEncodingException(
+                e.message, encoding=encoding, follow_up_candidates=follow_up_candidates
+            )
         return span, encoding[-len(remaining) :]
 
 
