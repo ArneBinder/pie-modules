@@ -22,6 +22,16 @@ class DecodingException(Exception, Generic[AE], abc.ABC):
         self.encoding = encoding
 
 
+class EncodingException(Exception, Generic[A], abc.ABC):
+    """Exception raised when encoding fails."""
+
+    identifier: str
+
+    def __init__(self, message: str, annotation: A):
+        self.message = message
+        self.annotation = annotation
+
+
 class AnnotationEncoderDecoder(abc.ABC, Generic[A, AE]):
     """Base class for annotation encoders and decoders."""
 
