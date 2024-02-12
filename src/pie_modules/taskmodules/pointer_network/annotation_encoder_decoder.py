@@ -37,12 +37,40 @@ class DecodingNegativeIndexException(DecodingException[List[int]]):
     identifier = "index"
 
 
+class DecodingEmptySpanException(DecodingException[List[int]]):
+    identifier = "empty_span"
+
+
 class IncompleteEncodingException(DecodingException[List[int]]):
     identifier = "incomplete"
 
     def __init__(self, message: str, encoding: List[int], follow_up_candidates: List[int]):
         super().__init__(message, encoding)
         self.follow_up_candidates = follow_up_candidates
+
+
+class EncodingEmptySpanException(EncodingException[Span]):
+    identifier = "empty_span"
+
+
+def spans_have_overlap(span: Span, other_span: Span) -> bool:
+    return (
+        other_span.start <= span.start < other_span.end
+        or other_span.start < span.end <= other_span.end
+    )
+
+
+def span_is_nested_in_other_span(span: Span, other_span: Span) -> bool:
+    return (
+        other_span.start <= span.start < other_span.end
+        and other_span.start < span.end <= other_span.end
+    )
+
+
+def spans_are_nested(span: Span, other_span: Span) -> bool:
+    return span_is_nested_in_other_span(
+        span=span, other_span=other_span
+    ) or span_is_nested_in_other_span(span=other_span, other_span=span)
 
 
 class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
