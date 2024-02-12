@@ -74,6 +74,22 @@ def spans_are_nested(span: Span, other_span: Span) -> bool:
 
 
 class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
+    """An encoder-decoder for Spans.
+
+    This encoder-decoder encodes a Span annotation as a list of two integers, the start and end index
+    of the span. Note that the end index of the Span annotation is exclusive, i.e. the span covers the
+    indices [start, end). However, the end index can be encoded as exclusive or inclusive, depending on
+    the `exclusive_end` parameter. Note that empty spans are not allowed, i.e. the start index must be
+    smaller than the end index.
+
+    Args:
+        exclusive_end (bool, optional): Whether the end index will be encoded as exclusive or inclusive, i.e. the
+            encoded span covers the indices [encoded_start, encoded_end) or [encoded_start, encoded_end].
+            Defaults to True.
+        allow_nested (bool, optional): Whether nested spans are allowed during parsing. If set to False, parsing
+            will raise an exception if a span is completely within another span. Defaults to False.
+    """
+
     def __init__(self, exclusive_end: bool = True, allow_nested: bool = False):
         self.exclusive_end = exclusive_end
         self.allow_nested = allow_nested
