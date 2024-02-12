@@ -315,6 +315,24 @@ def test_span_encoder_decoder_with_offset():
     assert encoder_decoder.decode([2, 3]) == Span(start=1, end=2)
 
 
+def test_span_encoder_decoder_with_offset_parse():
+    """Test the SpanEncoderDecoderWithOffset class."""
+    encoder_decoder = SpanEncoderDecoderWithOffset(offset=1)
+    expected_span = Span(start=1, end=3)
+    remaining_encoding = [3, 4]
+    # encoding of the expected span + remaining encoding
+    encoding = [2, 4] + remaining_encoding
+    assert encoder_decoder.parse(encoding, [], 6) == (expected_span, remaining_encoding)
+
+
+def test_span_encoder_decoder_with_offset_parse_incomplete():
+    encoder_decoder = SpanEncoderDecoderWithOffset(offset=1)
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse([2], [], 6)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    assert excinfo.value.follow_up_candidates == [3, 4, 5, 6, 7]
+
+
 @pytest.mark.parametrize("mode", ["indices_label", "label_indices"])
 def test_labeled_span_encoder_decoder(mode):
     """Test the LabeledSpanEncoderDecoder class."""
