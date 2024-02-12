@@ -95,6 +95,11 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
         self.allow_nested = allow_nested
 
     def encode(self, annotation: Span, metadata: Optional[Dict[str, Any]] = None) -> List[int]:
+        if annotation.start == annotation.end:
+            raise EncodingEmptySpanException(
+                "can not encode empty Span annotations, i.e. where the start index equals the end index",
+                annotation=annotation,
+            )
         end_idx = annotation.end
         if not self.exclusive_end:
             end_idx -= 1
