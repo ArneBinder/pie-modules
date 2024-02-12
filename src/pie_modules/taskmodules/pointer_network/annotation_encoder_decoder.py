@@ -7,6 +7,7 @@ from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 from pie_modules.annotations import LabeledMultiSpan
 from pie_modules.taskmodules.common.interfaces import (
     DecodingException,
+    EncodingException,
     GenerativeAnnotationEncoderDecoder,
 )
 
@@ -136,16 +137,16 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
         # the encoding is incomplete if it is empty, collect follow-up candidate indices
         if len(encoding) == 0:
             if self.allow_nested:
-                # everything is allowed
-                follow_up_candidates = list(range(text_length))
+                # everything is allowed (-1 because we disallow empty spans)
+                follow_up_candidates = list(range(text_length - 1))
             else:
                 # exclude indices that are already covered by other annotations
-                covered_indices: Set[int] = set()
-                # TODO: correctly incorporate exclusive_end_offset!
-                for ann in decoded_annotations:
-                    covered_indices.update(range(ann.start, ann.end))
+                nested_indices: Set[int] = set()
+                for previous_span in decoded_annotations:
+                    nested_indices.update(range(previous_span.start, previous_span.end))
+                # -1 because we disallow empty spans
                 follow_up_candidates = [
-                    idx for idx in range(text_length) if idx not in covered_indices
+                    idx for idx in range(text_length - 1) if idx not in nested_indices
                 ]
             raise IncompleteEncodingException(
                 "the encoding has not enough values to decode as Span",
@@ -162,26 +163,28 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
                 ]
                 if len(covering_spans) == 0:
                     # allow all indices outside spans, after the start index
-                    covered_indices = set()
+                    nested_indices = set()
                     for span in decoded_annotations:
-                        covered_indices = covered_indices.union(set(range(span.start, span.end)))
+                        # -1 because the end is outside the span
+                        nested_indices = nested_indices.union(set(range(span.start, span.end - 1)))
 
-                    # TODO: correctly incorporate exclusive_end_offset!
                     follow_up_candidates = [
-                        idx
+                        idx + 1 - exclusive_end_offset
                         for idx in range(encoding[0], text_length)
-                        if idx not in covered_indices
+                        if idx not in nested_indices
                     ]
                 else:
                     # allow all indices that are within *all* covering spans, i.e. the smallest covering span,
                     # and after the start index
-                    covered_indices = set()
+                    nested_indices = set(range(0, text_length))
                     for span in covering_spans:
-                        covered_indices = covered_indices.intersection(
-                            set(range(span.start, span.end))
+                        # + 1 because we want to include the (exclusive) end index
+                        nested_indices = nested_indices.intersection(
+                            set(range(span.start, span.end + 1))
                         )
-                    # TODO: correctly incorporate exclusive_end_offset!
-                    follow_up_candidates = [idx for idx in covered_indices if idx >= encoding[0]]
+                    follow_up_candidates = [
+                        idx - exclusive_end_offset for idx in nested_indices if idx > encoding[0]
+                    ]
             else:
                 # allow all indices after the start index and before the next span. we add a dummy span to
                 # correctly handle the case where no other spans are present
@@ -189,10 +192,18 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
                 next_span_start = min(
                     ann.start
                     for ann in decoded_annotations + [dummy_span]
-                    if ann.start >= encoding[0]
+                    if encoding[0] <= ann.start
                 )
-                # TODO: correctly incorporate exclusive_end_offset!
-                follow_up_candidates = list(range(encoding[0], next_span_start))
+                # +1 because we disallow empty spans
+                min_index = encoding[0] + 1
+                # +1 because the end index is exclusive
+                max_index_exclusive = next_span_start + 1
+                follow_up_candidates = list(
+                    range(
+                        min_index - exclusive_end_offset,
+                        max_index_exclusive - exclusive_end_offset,
+                    )
+                )
             raise IncompleteEncodingException(
                 "the encoding has not enough values to decode as Span",
                 encoding=encoding,
@@ -205,34 +216,43 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
             # the end index for Span annotations is exclusive, so we need to add 1 to the end index
             if not self.exclusive_end:
                 end_idx += 1
+            if end_idx == start_idx:
+                raise DecodingEmptySpanException(
+                    "end index can not be equal to start index to decode as Span, but got: "
+                    f"start={start_idx}, end={end_idx}",
+                    encoding=encoding,
+                )
             if end_idx < start_idx:
                 raise DecodingOrderException(
-                    f"end index can not be smaller than start index, but got: start={start_idx}, "
-                    f"end={end_idx}",
+                    f"end index can not be smaller than start index, "
+                    f"but got: start={start_idx}, end={end_idx}",
                     encoding=encoding,
                 )
             if any(idx < 0 for idx in [start_idx, end_idx]):
                 raise DecodingNegativeIndexException(
-                    f"indices must be positive, but got: {[start_idx, end_idx]}", encoding=encoding
+                    f"indices must be positive, but got: start={start_idx}, end={end_idx}",
+                    encoding=encoding,
                 )
-            for ann in decoded_annotations:
-                # check for overlapping spans
-                if (ann.start <= start_idx < ann.end and not ann.start <= end_idx < ann.end) or (
-                    not ann.start <= start_idx < ann.end and ann.start <= end_idx < ann.end
-                ):
-                    raise DecodingSpanOverlapException(
-                        f"the encoded span overlaps with another span: {ann}", encoding=encoding
-                    )
-                # check for nested spans
-                if (not self.allow_nested) and (
-                    ann.start <= start_idx < ann.end or ann.start <= end_idx < ann.end
-                ):
-                    raise DecodingSpanNestedException(
-                        f"the encoded span is nested in another span: {ann}",
-                        encoding=encoding,
-                    )
-
-            return Span(start=start_idx, end=end_idx), encoding[2:]
+            # check overlap and nesting with previously decoded spans
+            span = Span(start=start_idx, end=end_idx)
+            for previous_span in decoded_annotations:
+                if spans_have_overlap(span=span, other_span=previous_span):
+                    if spans_are_nested(span=span, other_span=previous_span):
+                        if not self.allow_nested:
+                            raise DecodingSpanNestedException(
+                                f"the encoded span is nested in another span: {previous_span}. "
+                                "You can set allow_nested=True to allow nested spans.",
+                                encoding=encoding,
+                            )
+                        else:
+                            # this is allowed, so we just pass
+                            pass
+                    else:
+                        raise DecodingSpanOverlapException(
+                            f"the encoded span overlaps with another span: {previous_span}",
+                            encoding=encoding,
+                        )
+            return span, encoding[2:]
 
 
 class SpanEncoderDecoderWithOffset(SpanEncoderDecoder):
@@ -262,10 +282,12 @@ class SpanEncoderDecoderWithOffset(SpanEncoderDecoder):
                 text_length=text_length,
             )
         except IncompleteEncodingException as e:
+            # we need to add the offset to the follow-up candidates
             follow_up_candidates = [x + self.offset for x in e.follow_up_candidates]
             raise IncompleteEncodingException(
                 e.message, encoding=encoding, follow_up_candidates=follow_up_candidates
             )
+        # use the original encoding, i.e. with any potential offset, to get the remaining encoding
         return span, encoding[-len(remaining) :]
 
 

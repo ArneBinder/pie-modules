@@ -3,13 +3,20 @@ from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 
 from pie_modules.taskmodules.pointer_network.annotation_encoder_decoder import (
     BinaryRelationEncoderDecoder,
+    DecodingEmptySpanException,
     DecodingLabelException,
     DecodingLengthException,
     DecodingNegativeIndexException,
     DecodingOrderException,
+    DecodingSpanNestedException,
+    DecodingSpanOverlapException,
+    EncodingEmptySpanException,
+    IncompleteEncodingException,
     LabeledSpanEncoderDecoder,
     SpanEncoderDecoder,
     SpanEncoderDecoderWithOffset,
+    spans_are_nested,
+    spans_have_overlap,
 )
 
 
@@ -24,6 +31,16 @@ def test_span_encoder_decoder(exclusive_end):
     else:
         assert encoder_decoder.encode(Span(start=1, end=2)) == [1, 1]
         assert encoder_decoder.decode([1, 1]) == Span(start=1, end=2)
+
+
+def test_span_encoder_decoder_empty_span():
+    encoder_decoder = SpanEncoderDecoder()
+    with pytest.raises(EncodingEmptySpanException) as excinfo:
+        encoder_decoder.encode(Span(start=1, end=1))
+    assert (
+        str(excinfo.value)
+        == "can not encode empty Span annotations, i.e. where the start index equals the end index"
+    )
 
 
 def test_span_encoder_decoder_wrong_length():
@@ -74,6 +91,219 @@ def test_span_encoder_decoder_wrong_offset():
         encoder_decoder.decode([-1, 2])
     assert str(excinfo.value) == "indices must be positive, but got: [-1, 2]"
     assert excinfo.value.identifier == "index"
+
+
+@pytest.mark.parametrize("exclusive_end", [True, False])
+def test_span_encoder_decoder_parse(exclusive_end):
+    encoder_decoder = SpanEncoderDecoder(exclusive_end)
+    if exclusive_end:
+        assert encoder_decoder.parse([1, 2, 3, 4], [], 5) == (Span(start=1, end=2), [3, 4])
+    else:
+        assert encoder_decoder.parse([1, 1, 3, 4], [], 5) == (Span(start=1, end=2), [3, 4])
+
+
+@pytest.mark.parametrize("exclusive_end", [True, False])
+def test_span_encoder_decoder_parse_empty_span(exclusive_end):
+    encoder_decoder = SpanEncoderDecoder(exclusive_end)
+    encoding = [3, 3, 3, 4] if exclusive_end else [3, 2, 3, 4]
+    with pytest.raises(DecodingEmptySpanException) as excinfo:
+        encoder_decoder.parse(encoding, [], 5)
+    assert excinfo.value.identifier == "empty_span"
+    assert (
+        str(excinfo.value)
+        == "end index can not be equal to start index to decode as Span, but got: start=3, end=3"
+    )
+
+
+@pytest.mark.parametrize("exclusive_end", [True, False])
+def test_span_encoder_decoder_parse_wrong_order(exclusive_end):
+    encoder_decoder = SpanEncoderDecoder(exclusive_end)
+    encoding = [3, 2, 3, 4] if exclusive_end else [3, 1, 3, 4]
+    with pytest.raises(DecodingOrderException) as excinfo:
+        encoder_decoder.parse(encoding, [], 5)
+    assert excinfo.value.identifier == "order"
+    assert (
+        str(excinfo.value)
+        == "end index can not be smaller than start index, but got: start=3, end=2"
+    )
+
+
+@pytest.mark.parametrize("exclusive_end", [True, False])
+def test_span_encoder_decoder_parse_negative_index(exclusive_end):
+    encoder_decoder = SpanEncoderDecoder(exclusive_end)
+    encoding = [-1, 2, 3, 4] if exclusive_end else [-1, 1, 3, 4]
+    with pytest.raises(DecodingNegativeIndexException) as excinfo:
+        encoder_decoder.parse(encoding, [], 5)
+    assert excinfo.value.identifier == "index"
+    assert str(excinfo.value) == "indices must be positive, but got: start=-1, end=2"
+
+
+def test_spans_are_nested():
+    # fully nested
+    assert spans_are_nested(Span(start=1, end=4), Span(start=2, end=3))
+    assert spans_are_nested(Span(start=2, end=3), Span(start=1, end=4))
+    # nested with same start
+    assert spans_are_nested(Span(start=1, end=3), Span(start=1, end=2))
+    assert spans_are_nested(Span(start=1, end=2), Span(start=1, end=3))
+    # nested with same end
+    assert spans_are_nested(Span(start=2, end=4), Span(start=3, end=4))
+    assert spans_are_nested(Span(start=3, end=4), Span(start=2, end=4))
+    # nested with same start and end
+    assert spans_are_nested(Span(start=1, end=3), Span(start=1, end=3))
+
+    # not nested
+    assert not spans_are_nested(Span(start=1, end=2), Span(start=3, end=4))
+    # not nested, but touching
+    assert not spans_are_nested(Span(start=1, end=2), Span(start=2, end=3))
+    # not nested, but overlap
+    assert not spans_are_nested(Span(start=1, end=3), Span(start=2, end=4))
+
+
+def test_spans_have_overlap():
+    # overlap, no touching
+    assert spans_have_overlap(Span(start=1, end=3), Span(start=2, end=4))
+    assert spans_have_overlap(Span(start=2, end=4), Span(start=1, end=3))
+    # overlap, same start
+    assert spans_have_overlap(Span(start=1, end=2), Span(start=1, end=3))
+    assert spans_have_overlap(Span(start=1, end=3), Span(start=1, end=2))
+    # overlap, same end
+    assert spans_have_overlap(Span(start=2, end=3), Span(start=1, end=3))
+    assert spans_have_overlap(Span(start=1, end=3), Span(start=2, end=3))
+    # no overlap, not touching
+    assert not spans_have_overlap(Span(start=1, end=2), Span(start=3, end=4))
+    assert not spans_have_overlap(Span(start=3, end=4), Span(start=1, end=2))
+    # no overlap, touching
+    assert not spans_have_overlap(Span(start=1, end=2), Span(start=2, end=3))
+    assert not spans_have_overlap(Span(start=2, end=3), Span(start=1, end=2))
+
+
+@pytest.mark.parametrize("allow_nested", [True, False])
+def test_span_encoder_decoder_parse_with_previous_annotations(allow_nested):
+    encoder_decoder = SpanEncoderDecoder(allow_nested=allow_nested)
+    expected_span = Span(start=1, end=3)
+    remaining_encoding = [3, 4]
+    # encoding of the expected span + remaining encoding
+    encoding = [1, 3] + remaining_encoding
+    other_span = Span(start=3, end=4)
+    nested_span = Span(start=2, end=3)
+    overlapping_span = Span(start=2, end=4)
+    # other_span should not pose a problem in any case
+    assert encoder_decoder.parse(encoding, [other_span], 5) == (expected_span, remaining_encoding)
+    # nested_span should only be allowed if allow_nested=True
+    if allow_nested:
+        assert encoder_decoder.parse(encoding, [nested_span], 5) == (
+            expected_span,
+            remaining_encoding,
+        )
+    else:
+        with pytest.raises(DecodingSpanNestedException) as excinfo:
+            encoder_decoder.parse(encoding, [nested_span], 5)
+        assert (
+            str(excinfo.value) == f"the encoded span is nested in another span: {nested_span}. "
+            f"You can set allow_nested=True to allow nested spans."
+        )
+    # overlapping_span is not allowed in any case
+    with pytest.raises(DecodingSpanOverlapException) as excinfo:
+        encoder_decoder.parse(encoding, [overlapping_span], 5)
+    assert str(excinfo.value) == f"the encoded span overlaps with another span: {overlapping_span}"
+
+
+@pytest.mark.parametrize(
+    "exclusive_end,allow_nested", [(False, False), (False, True), (True, False), (True, True)]
+)
+def test_span_encoder_decoder_parse_incomplete_0(exclusive_end, allow_nested):
+    encoder_decoder = SpanEncoderDecoder(exclusive_end=exclusive_end, allow_nested=allow_nested)
+    # no previous annotations
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse([], [], 6)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    assert excinfo.value.follow_up_candidates == [0, 1, 2, 3, 4]
+    # previous annotation
+    other_span = Span(start=2, end=4)
+    encoded_other_span = encoder_decoder.encode(other_span)
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse([], [other_span], 6)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    if allow_nested:
+        assert excinfo.value.follow_up_candidates == [0, 1, 2, 3, 4]
+    else:
+        if exclusive_end:
+            assert encoded_other_span == [2, 4]
+        else:
+            assert encoded_other_span == [2, 3]
+        # indices 2 and 3 are excluded because they are covered by the other_span
+        assert excinfo.value.follow_up_candidates == [0, 1, 4]
+
+
+@pytest.mark.parametrize(
+    "allow_nested,exclusive_end", [(False, False), (False, True), (True, False), (True, True)]
+)
+def test_span_encoder_decoder_parse_incomplete_1(allow_nested, exclusive_end):
+    encoder_decoder = SpanEncoderDecoder(exclusive_end=exclusive_end, allow_nested=allow_nested)
+    encoding = [1]
+
+    # no previous annotations
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse(encoding, [], 6)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    # we expect an end index, so the follow-up candidates ...
+    if exclusive_end:
+        # are bigger than 1, but smaller still in the range of the text length (equal or smaller than 5)
+        assert excinfo.value.follow_up_candidates == [2, 3, 4, 5, 6]
+    else:
+        # bigger or equal to 1, but smaller still in the range of the text length (smaller than 5)
+        assert excinfo.value.follow_up_candidates == [1, 2, 3, 4, 5]
+
+    # previous annotations
+    # a span before the current start index should not affect the follow-up candidates
+    other_span_before = Span(start=0, end=1)
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse(encoding, [other_span_before], 6)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    if exclusive_end:
+        assert excinfo.value.follow_up_candidates == [2, 3, 4, 5, 6]
+    else:
+        assert excinfo.value.follow_up_candidates == [1, 2, 3, 4, 5]
+
+    # a span after the current start index should limit the follow-up candidates
+    other_span_after = Span(start=2, end=4)
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse(encoding, [other_span_after], 6)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    if allow_nested:
+        if exclusive_end:
+            # 3 as end index is excluded because the resulting span [1, 3)
+            # would have an overlap with the other_span_after
+            assert excinfo.value.follow_up_candidates == [2, 4, 5, 6]
+        else:
+            # 2 as end index is excluded because the resulting span [1, 3)
+            # would have an overlap with the other_span_after
+            assert excinfo.value.follow_up_candidates == [1, 3, 4, 5]
+    else:
+        if exclusive_end:
+            assert excinfo.value.follow_up_candidates == [2]
+        else:
+            assert excinfo.value.follow_up_candidates == [1]
+
+    nesting_span = Span(start=0, end=2)
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse(encoding, [nesting_span], 6)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    if allow_nested:
+        if exclusive_end:
+            # only the span [1, 2) is allowed, so only 2 is a valid follow-up candidate
+            assert excinfo.value.follow_up_candidates == [2]
+        else:
+            # only the span [1, 2) is allowed, so only 1 is a valid follow-up candidate
+            assert excinfo.value.follow_up_candidates == [1]
+    else:
+        # Note: In this case, the start index is already not allowed to be 1.
+        # However, since we handle the case where the start index is not allowed separately,
+        # we just disregard the nesting_span here and return the same follow-up candidates as above.
+        if exclusive_end:
+            assert excinfo.value.follow_up_candidates == [2, 3, 4, 5, 6]
+        else:
+            assert excinfo.value.follow_up_candidates == [1, 2, 3, 4, 5]
 
 
 def test_span_encoder_decoder_with_offset():
