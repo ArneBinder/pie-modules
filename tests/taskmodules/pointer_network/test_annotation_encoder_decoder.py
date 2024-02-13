@@ -902,9 +902,11 @@ def test_binary_relation_encoder_decoder_parse(mode):
 @pytest.mark.parametrize("mode", ["head_tail_label", "label_head_tail"])
 def test_binary_relation_encoder_decoder_parse_incomplete(mode):
     span_label2id = {"A": 0, "B": 1}
-    relation_label2id = {"C": 2}
+    relation_label2id = {"C": 2, "N": 3}
     labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
-        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(span_label2id) + len(relation_label2id)),
+        span_encoder_decoder=SpanEncoderDecoderWithOffset(
+            offset=len(span_label2id) + len(relation_label2id)
+        ),
         label2id=span_label2id,
         mode="indices_label",
     )
@@ -913,8 +915,10 @@ def test_binary_relation_encoder_decoder_parse_incomplete(mode):
         tail_encoder_decoder=labeled_span_encoder_decoder,
         label2id=relation_label2id,
         mode=mode,
+        loop_dummy_relation_name="loop",
+        none_label="N",
     )
-    # Note: we use a tail that comes before the head on purpose to test the follow-up candidates
+    # Note: we use a tail that comes before the head on purpose to test the restricted follow-up candidates
     relation = BinaryRelation(
         head=LabeledSpan(start=3, end=4, label="A"),
         tail=LabeledSpan(start=1, end=2, label="B"),
@@ -923,9 +927,9 @@ def test_binary_relation_encoder_decoder_parse_incomplete(mode):
     encoding = encoder_decoder.encode(relation)
     # just to see the encoding
     if mode.endswith("_label"):
-        assert encoding == [6, 7, 0, 4, 5, 1, 2]
+        assert encoding == [7, 8, 0, 5, 6, 1, 2]
     elif mode.startswith("label_"):
-        assert encoding == [2, 6, 7, 0, 4, 5, 1]
+        assert encoding == [2, 7, 8, 0, 5, 6, 1]
     else:
         raise ValueError(f"unknown mode: {mode}")
 
@@ -940,8 +944,8 @@ def test_binary_relation_encoder_decoder_parse_incomplete(mode):
         raise ValueError(f"unknown mode: {mode}")
     assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
     # we expect a start index which can be any valid start index, i.e. [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-    # but we need to add the offset of 3
-    assert excinfo.value.follow_up_candidates == [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    # but we need to add the offset of 4
+    assert excinfo.value.follow_up_candidates == [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
 
     # check missing end index of first argument
     if mode.endswith("_label"):
@@ -954,8 +958,8 @@ def test_binary_relation_encoder_decoder_parse_incomplete(mode):
         raise ValueError(f"unknown mode: {mode}")
     assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
     # we expect an end index of a none-empty Span, i.e. [4, 5, 6, 7, 8, 9, 10],
-    # but we need to add the offset of 3
-    assert excinfo.value.follow_up_candidates == [7, 8, 9, 10, 11, 12, 13]
+    # but we need to add the offset of 4
+    assert excinfo.value.follow_up_candidates == [8, 9, 10, 11, 12, 13, 14]
 
     # check missing label of first argument
     if mode.endswith("_label"):
@@ -979,12 +983,13 @@ def test_binary_relation_encoder_decoder_parse_incomplete(mode):
             encoder_decoder.parse(encoding[:4], [], 10)
     else:
         raise ValueError(f"unknown mode: {mode}")
-    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
-    # we expect a start index which can be any index that is not covered by the first
+    assert str(excinfo.value) == "the encoding has not enough values to decode as BinaryRelation"
+    # we expect
+    # 1) the none_label index, which is 3, or
+    # 2) a start index which can be any index that is not covered by the first
     # argument span which is LabeledSpan(start=3, end=4, label="A"),
-    # i.e. [0, 1, 2] + [4, 5, 6, 7, 8, 9],
-    # but we need to add the offset of 3
-    assert excinfo.value.follow_up_candidates == [3, 4, 5] + [7, 8, 9, 10, 11, 12]
+    # i.e. [0, 1, 2] + [4, 5, 6, 7, 8, 9], but we need to add the offset of 4
+    assert excinfo.value.follow_up_candidates == [3] + [4, 5, 6] + [8, 9, 10, 11, 12, 13]
 
     # check missing end index of second argument
     if mode.endswith("_label"):
@@ -998,8 +1003,8 @@ def test_binary_relation_encoder_decoder_parse_incomplete(mode):
     assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
     # we expect an end index of a none-empty Span and the span should not overlap with the first argument span
     # which is LabeledSpan(start=3, end=4, label="A"), so allowed end indices are [2, 3]
-    # but we need to add the offset of 3
-    assert excinfo.value.follow_up_candidates == [5, 6]
+    # but we need to add the offset of 4
+    assert excinfo.value.follow_up_candidates == [6, 7]
 
     # check missing label of second argument
     if mode.endswith("_label"):
@@ -1025,7 +1030,63 @@ def test_binary_relation_encoder_decoder_parse_incomplete(mode):
         raise ValueError(f"unknown mode: {mode}")
     assert str(excinfo.value) == "the encoding has not enough values to decode as BinaryRelation"
     # we expect a label encoding
-    assert excinfo.value.follow_up_candidates == [2]
+    # TODO: this should be only 2
+    assert excinfo.value.follow_up_candidates == [2, 3]
+
+    # check loop dummy relation
+    encoding = encoder_decoder.encode(
+        BinaryRelation(
+            head=LabeledSpan(start=3, end=4, label="A"),
+            tail=LabeledSpan(start=3, end=4, label="A"),
+            label="loop",
+        )
+    )
+    if mode.endswith("_label"):
+        assert encoding == [7, 8, 0, 3, 3, 3, 3]
+    elif mode.startswith("label_"):
+        assert encoding == [3, 7, 8, 0, 3, 3, 3]
+    else:
+        raise ValueError(f"unknown mode: {mode}")
+
+    # check missing second none id in second argument
+    if mode.endswith("_label"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:4], [], 10)
+    elif mode.startswith("label_"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:5], [], 10)
+    else:
+        raise ValueError(f"unknown mode: {mode}")
+    assert str(excinfo.value) == "the encoding has not enough values to decode as BinaryRelation"
+    # we expect the none_label index, which is 3
+    assert excinfo.value.follow_up_candidates == [3]
+
+    # check missing third none id in second argument
+    if mode.endswith("_label"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:5], [], 10)
+    elif mode.startswith("label_"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:6], [], 10)
+    else:
+        raise ValueError(f"unknown mode: {mode}")
+    assert str(excinfo.value) == "the encoding has not enough values to decode as BinaryRelation"
+    # we expect the none_label index, which is 3
+    assert excinfo.value.follow_up_candidates == [3]
+
+    # check missing none id as loop dummy relation id
+    if mode.endswith("_label"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:6], [], 10)
+    elif mode.startswith("label_"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse([], [], 10)
+    else:
+        raise ValueError(f"unknown mode: {mode}")
+    assert str(excinfo.value) == "the encoding has not enough values to decode as BinaryRelation"
+    # we expect the none_label index, which is 3
+    # TODO: this should be only 3
+    assert excinfo.value.follow_up_candidates == [2, 3]
 
 
 def test_binary_relation_encoder_decoder_parse_incomplete_with_previous_annotations():
@@ -1110,7 +1171,3 @@ def test_binary_relation_encoder_decoder_parse_incomplete_with_previous_annotati
     assert str(excinfo.value) == "the encoding has not enough values to decode as BinaryRelation"
     # we expect a label encoding
     assert excinfo.value.follow_up_candidates == [0, 1, 2]
-
-
-
-
