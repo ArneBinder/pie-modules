@@ -54,6 +54,10 @@ class EncodingEmptySpanException(EncodingException[Span]):
     identifier = "empty_span"
 
 
+class EncodingEmptySlicesException(EncodingException[LabeledMultiSpan]):
+    identifier = "empty_slices"
+
+
 def spans_have_overlap(span: Span, other_span: Span) -> bool:
     return (
         other_span.start <= span.start < other_span.end
@@ -400,7 +404,10 @@ class LabeledMultiSpanEncoderDecoder(
         self, annotation: LabeledMultiSpan, metadata: Optional[Dict[str, Any]] = None
     ) -> List[int]:
         if len(annotation.slices) == 0:
-            raise ValueError("LabeledMultiSpan must have at least one span to encode it.")
+            raise EncodingEmptySlicesException(
+                "LabeledMultiSpan must have at least one slice to encode it.",
+                annotation=annotation,
+            )
         encoding = []
         for start, end in annotation.slices:
             encoded_span = self.span_encoder_decoder.encode(
@@ -415,8 +422,8 @@ class LabeledMultiSpanEncoderDecoder(
     ) -> LabeledMultiSpan:
         if len(encoding) % 2 != 1:
             raise DecodingLengthException(
-                f"an odd number of values is required to decode as LabeledMultiSpan, "
-                f"but encoding has length {len(encoding)}",
+                f"an odd number of encoding entries is required for decoding a LabeledMultiSpan, "
+                f"but got {len(encoding)}",
                 encoding=encoding,
             )
         slices = []

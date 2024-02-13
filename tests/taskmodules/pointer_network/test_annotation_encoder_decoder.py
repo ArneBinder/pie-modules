@@ -1,6 +1,7 @@
 import pytest
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 
+from pie_modules.annotations import LabeledMultiSpan
 from pie_modules.taskmodules.pointer_network.annotation_encoder_decoder import (
     BinaryRelationEncoderDecoder,
     DecodingEmptySpanException,
@@ -10,8 +11,10 @@ from pie_modules.taskmodules.pointer_network.annotation_encoder_decoder import (
     DecodingOrderException,
     DecodingSpanNestedException,
     DecodingSpanOverlapException,
+    EncodingEmptySlicesException,
     EncodingEmptySpanException,
     IncompleteEncodingException,
+    LabeledMultiSpanEncoderDecoder,
     LabeledSpanEncoderDecoder,
     SpanEncoderDecoder,
     SpanEncoderDecoderWithOffset,
@@ -453,6 +456,34 @@ def test_labeled_span_encoder_decoder_parse_incomplete(mode):
         assert excinfo.value.follow_up_candidates == [0, 1]
     else:
         raise ValueError(f"unknown mode: {mode}")
+
+
+def test_labeled_multi_span_encoder_decoder():
+    """Test the LabeledMultiSpanEncoderDecoder class."""
+
+    label2id = {"A": 0, "B": 1}
+    encoder_decoder = LabeledMultiSpanEncoderDecoder(
+        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
+        label2id=label2id,
+    )
+    # encode and decode a single span with two slices and label A
+    span = LabeledMultiSpan(slices=((1, 2), (4, 6)), label="A")
+    encoding = [3, 4, 6, 8, 0]
+    assert encoder_decoder.encode(span) == encoding
+    assert encoder_decoder.decode(encoding) == span
+
+    # encoding empty slices are not allowed
+    with pytest.raises(EncodingEmptySlicesException) as excinfo:
+        encoder_decoder.encode(LabeledMultiSpan(slices=(), label="A"))
+    assert str(excinfo.value) == "LabeledMultiSpan must have at least one slice to encode it."
+
+    # decoding an odd number of encoding entries is required for decoding
+    with pytest.raises(DecodingLengthException) as excinfo:
+        encoder_decoder.decode([3, 4, 6, 8])
+    assert (
+        str(excinfo.value)
+        == "an odd number of encoding entries is required for decoding a LabeledMultiSpan, but got 4"
+    )
 
 
 @pytest.mark.parametrize(
