@@ -147,7 +147,8 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
                 # exclude indices that are already covered by other annotations
                 nested_indices: Set[int] = set()
                 for previous_span in decoded_annotations:
-                    nested_indices.update(range(previous_span.start, previous_span.end))
+                    # +1 because we allow to generate the exact same spans again
+                    nested_indices.update(range(previous_span.start + 1, previous_span.end))
                 follow_up_candidates = [
                     idx for idx in range(text_length) if idx not in nested_indices
                 ]
@@ -158,12 +159,12 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
             )
         # the encoding is incomplete if it has only one value, collect follow-up candidate indices
         elif len(encoding) == 1:
+            covering_spans = {
+                ann for ann in decoded_annotations if ann.start <= encoding[0] < ann.end
+            }
             if self.allow_nested:
                 # exclude spans that overlap other spans, i.e. if encoding[0] is in another span, the next
                 # candidate should be also within this span
-                covering_spans = [
-                    ann for ann in decoded_annotations if ann.start <= encoding[0] < ann.end
-                ]
                 if len(covering_spans) == 0:
                     # allow all indices outside spans, after the start index
                     nested_indices = set()
@@ -188,6 +189,14 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
                     follow_up_candidates = [
                         idx - exclusive_end_offset for idx in nested_indices if idx > encoding[0]
                     ]
+            elif len(covering_spans) > 0:
+                if len(covering_spans) > 1:
+                    raise ValueError(
+                        "more than one covering span found, but allow_nested=False. This should not happen."
+                    )
+                covering_span = list(covering_spans)[0]
+                # if we generated the start of an existing span, we need to generate the exact end next
+                follow_up_candidates = [covering_span.end - exclusive_end_offset]
             else:
                 # allow all indices after the start index and before the next span. we add a dummy span to
                 # correctly handle the case where no other spans are present
@@ -239,8 +248,12 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
             # check overlap and nesting with previously decoded spans
             span = Span(start=start_idx, end=end_idx)
             for previous_span in decoded_annotations:
-                if spans_have_overlap(span=span, other_span=previous_span):
-                    if spans_are_nested(span=span, other_span=previous_span):
+                simple_previous_span = Span(start=previous_span.start, end=previous_span.end)
+                if (
+                    spans_have_overlap(span=span, other_span=simple_previous_span)
+                    and span != simple_previous_span
+                ):
+                    if spans_are_nested(span=span, other_span=simple_previous_span):
                         if not self.allow_nested:
                             raise DecodingSpanNestedException(
                                 f"the encoded span is nested in another span: {previous_span}. "
@@ -671,7 +684,7 @@ class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRela
             if self.loop_dummy_relation_name is None:
                 raise ValueError(
                     f"loop_dummy_relation_name is not set, but none_label={self.none_label} "
-                    f"was found in decoded encoding: {encoding} (label2id: {self.label2id}))"
+                    f"was found in the encoding: {encoding} (label2id: {self.label2id}))"
                 )
             label = self.loop_dummy_relation_name
 

@@ -234,8 +234,10 @@ def test_span_encoder_decoder_parse_incomplete_0(exclusive_end, allow_nested):
             assert encoded_other_span == [2, 4]
         else:
             assert encoded_other_span == [2, 3]
-        # indices 2 and 3 are excluded because they are covered by the other_span
-        assert excinfo.value.follow_up_candidates == [0, 1, 4, 5]
+        # index 3 is excluded because they are covered by the other_span
+        # Note that index 2 is not included, despite being covered by the other_span,
+        # because we allow to generate the exact same span again.
+        assert excinfo.value.follow_up_candidates == [0, 1, 2, 4, 5]
 
 
 @pytest.mark.parametrize(
@@ -300,13 +302,11 @@ def test_span_encoder_decoder_parse_incomplete_1(allow_nested, exclusive_end):
             # only the span [1, 2) is allowed, so only 1 is a valid follow-up candidate
             assert excinfo.value.follow_up_candidates == [1]
     else:
-        # Note: In this case, the start index is already not allowed to be 1.
-        # However, since we handle the case where the start index is not allowed separately,
-        # we just disregard the nesting_span here and return the same follow-up candidates as above.
+        # We generate the exact same span again, so the follow-up candidates are the same as for the previous case
         if exclusive_end:
-            assert excinfo.value.follow_up_candidates == [2, 3, 4, 5, 6]
+            assert excinfo.value.follow_up_candidates == [2]
         else:
-            assert excinfo.value.follow_up_candidates == [1, 2, 3, 4, 5]
+            assert excinfo.value.follow_up_candidates == [1]
 
 
 def test_span_encoder_decoder_with_offset():
@@ -510,27 +510,33 @@ def test_labeled_multi_span_encoder_decoder_parse_incomplete():
         span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
         label2id=label2id,
     )
+    encoding = encoder_decoder.encode(LabeledMultiSpan(slices=((1, 2), (4, 6)), label="A"))
+    assert encoding == [3, 4, 6, 8, 0]
     with pytest.raises(IncompleteEncodingException) as excinfo:
         encoder_decoder.parse([], [], 10)
     assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
-    # offset is 2, so the follow-up candidates are [2, 12)
-    assert excinfo.value.follow_up_candidates == list(range(2, 12))
+    # we expect a start index, so the follow-up candidates are [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    # but we need to add the offset of 2
+    assert excinfo.value.follow_up_candidates == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
     with pytest.raises(IncompleteEncodingException) as excinfo:
-        encoder_decoder.parse([3], [], 10)
+        encoder_decoder.parse(encoding[:1], [], 10)
     assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
-    # we expect an end index of a none-empty Span, so the follow-up candidates are [4, 13)
-    assert excinfo.value.follow_up_candidates == list(range(4, 13))
+    # we expect an end index of a none-empty Span, i.e. [2, 3, 4, 5, 6, 7, 8, 9, 10],
+    # but we need to add the offset of 2
+    assert excinfo.value.follow_up_candidates == [4, 5, 6, 7, 8, 9, 10, 11, 12]
 
     with pytest.raises(IncompleteEncodingException) as excinfo:
-        encoder_decoder.parse([3, 4], [], 10)
+        encoder_decoder.parse(encoding[:2], [], 10)
     assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledMultiSpan"
-    # we can follow up with a label encoding or a new span encoding, but 3 is not allowed because
-    # it is covered by the previous span
-    assert excinfo.value.follow_up_candidates == [0, 1] + [2] + list(range(4, 12))
+    # we can follow up with 1) a label encoding, i.e. [0, 1], or 2) the start index of a new span encoding
+    # not covered by the previous slice which is Span(1, 2), i.e. [0] + [2, 3, 4, 5, 6, 7, 8, 9, 10],
+    # but we also allow to generate the exact same span again, so the index 1 is also allowed
+    # and we need to add the offset of 2
+    assert excinfo.value.follow_up_candidates == [0, 1] + [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
     with pytest.raises(IncompleteEncodingException) as excinfo:
-        encoder_decoder.parse([3, 4, 6], [], 10)
+        encoder_decoder.parse(encoding[:3], [], 10)
     assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
     # we expect an end index of a none-empty Span, so the follow-up candidates are [7, 13)
     assert excinfo.value.follow_up_candidates == list(range(7, 13))
@@ -548,8 +554,9 @@ def test_labeled_multi_span_encoder_decoder_parse_incomplete_with_previous_annot
         encoder_decoder.parse([], [other_span_before], 10)
     assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
     # we expect a start index which can be in between the slices of the other_span_before or after the last slice,
-    # i.e. [1] + [3, 4, 5, 6, 7, 8, 9], but we need to add the offset of 2
-    assert excinfo.value.follow_up_candidates == [3, 5, 6, 7, 8, 9, 10, 11]
+    # but we also allow to generate the exact same spans again, so the indices [0, 2] are also allowed
+    # i.e. [0] + [1] + [2] + [3, 4, 5, 6, 7, 8, 9], but we need to add the offset of 2
+    assert excinfo.value.follow_up_candidates == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
     # a span after the current start index should limit the follow-up candidates
     other_span_after = LabeledMultiSpan(slices=((5, 6), (7, 8)), label="A")
@@ -566,9 +573,10 @@ def test_labeled_multi_span_encoder_decoder_parse_incomplete_with_previous_annot
     assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledMultiSpan"
     # we expect either a label encoding, i.e. [0, 1], or a new span encoding, but the start index is
     # not allowed to be within any of the slices of the entangled_span, i.e. [0, 1] and [4],
-    # and not within the span  itself, i.e. [2, 3], so the allowed end indices are [3] + [5, 6, 7, 8, 9],
-    # but we need to add the offset of 2
-    assert excinfo.value.follow_up_candidates == [0, 1] + [5] + [7, 8, 9, 10, 11]
+    # and not within the span  itself, i.e. [2, 3], but we allow to generate the exact same spans again,
+    # so the indices 0, 4, and 2 are also allowed, so the allowed end indices are
+    # [0] + [2] + [3] + [4] + [5, 6, 7, 8, 9], but we need to add the offset of 2
+    assert excinfo.value.follow_up_candidates == [0, 1] + [2] + [4] + [5] + [6] + [7, 8, 9, 10, 11]
 
 
 @pytest.mark.parametrize(
@@ -899,6 +907,71 @@ def test_binary_relation_encoder_decoder_parse(mode):
     )
 
 
+@pytest.mark.parametrize(
+    "mode", ["head_tail_label", "tail_head_label", "label_head_tail", "label_tail_head"]
+)
+def test_binary_relation_encoder_decoder_parse_loop_dummy_relation(mode):
+    """Test the BinaryRelationEncoderDecoder class."""
+
+    label2id = {"A": 0, "B": 1, "C": 2, "N": 3}
+    labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
+        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
+        label2id=label2id,
+        mode="indices_label",
+    )
+    encoder_decoder = BinaryRelationEncoderDecoder(
+        head_encoder_decoder=labeled_span_encoder_decoder,
+        tail_encoder_decoder=labeled_span_encoder_decoder,
+        label2id=label2id,
+        mode=mode,
+        loop_dummy_relation_name="L",
+        none_label="N",
+    )
+    expected_relation = BinaryRelation(
+        head=LabeledSpan(start=1, end=2, label="A"),
+        tail=LabeledSpan(start=1, end=2, label="A"),
+        label="L",
+    )
+    encoding = encoder_decoder.encode(expected_relation)
+    remaining_encoding = [6, 7, 8]
+    # encoding of the expected relation + remaining encoding
+    assert encoder_decoder.parse(encoding + remaining_encoding, [], 10) == (
+        expected_relation,
+        remaining_encoding,
+    )
+
+
+def test_binary_relation_encoder_decoder_parse_loop_dummy_relation_missing():
+    """Test the BinaryRelationEncoderDecoder class."""
+
+    label2id = {"A": 0, "B": 1, "C": 2, "N": 3}
+    labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
+        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
+        label2id=label2id,
+        mode="indices_label",
+    )
+    encoder_decoder = BinaryRelationEncoderDecoder(
+        head_encoder_decoder=labeled_span_encoder_decoder,
+        tail_encoder_decoder=labeled_span_encoder_decoder,
+        label2id=label2id,
+        mode="head_tail_label",
+        none_label="N",
+    )
+    expected_relation = BinaryRelation(
+        head=LabeledSpan(start=1, end=2, label="A"),
+        tail=LabeledSpan(start=1, end=2, label="A"),
+        label="N",
+    )
+    encoding = encoder_decoder.encode(expected_relation)
+    with pytest.raises(ValueError) as excinfo:
+        encoder_decoder.parse(encoding, [], 10)
+    assert (
+        str(excinfo.value)
+        == "loop_dummy_relation_name is not set, but none_label=N was found in the encoding: "
+        "[5, 6, 0, 5, 6, 0, 3] (label2id: {'A': 0, 'B': 1, 'C': 2, 'N': 3}))"
+    )
+
+
 @pytest.mark.parametrize("mode", ["head_tail_label", "label_head_tail"])
 def test_binary_relation_encoder_decoder_parse_incomplete(mode):
     span_label2id = {"A": 0, "B": 1}
@@ -988,8 +1061,9 @@ def test_binary_relation_encoder_decoder_parse_incomplete(mode):
     # 1) the none_label index, which is 3, or
     # 2) a start index which can be any index that is not covered by the first
     # argument span which is LabeledSpan(start=3, end=4, label="A"),
-    # i.e. [0, 1, 2] + [4, 5, 6, 7, 8, 9], but we need to add the offset of 4
-    assert excinfo.value.follow_up_candidates == [3] + [4, 5, 6] + [8, 9, 10, 11, 12, 13]
+    # but we allow to generate the exact same span again, i.e. [0, 1, 2] + [3] + [4, 5, 6, 7, 8, 9],
+    # but we need to add the offset of 4
+    assert excinfo.value.follow_up_candidates == [3] + [4, 5, 6] + [7] + [8, 9, 10, 11, 12, 13]
 
     # check missing end index of second argument
     if mode.endswith("_label"):
@@ -1120,15 +1194,18 @@ def test_binary_relation_encoder_decoder_parse_incomplete_with_previous_annotati
         encoder_decoder.parse([], [surrounding_relation], 10)
     assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
     # we expect a start index which can be any index that is not covered by the surrounding_relation argument spans,
-    # i.e. [1, 2, 3, 4, 5] + [7, 8, 9], but we need to add the offset of 3
-    assert excinfo.value.follow_up_candidates == [4, 5, 6, 7, 8] + [10, 11, 12]
+    # which are LabeledSpan(start=0, end=1, label="A") and LabeledSpan(start=6, end=7, label="B"),
+    # but we allow to generate the exact same span again, i.e. [0] + [1, 2, 3, 4, 5] + [6] + [7, 8, 9]
+    # but we need to add the offset of 3
+    assert excinfo.value.follow_up_candidates == [3] + [4, 5, 6, 7, 8] + [9] + [10, 11, 12]
 
     # test the first span end index
     with pytest.raises(IncompleteEncodingException) as excinfo:
         encoder_decoder.parse(encoding[:1], [surrounding_relation], 10)
     assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
-    # we expect an end index of a none-empty Span and the span should not overlap with the surrounding_relation argument spans,
-    # so allowed end indices are [4, 5, 6], but we need to add the offset of 3
+    # we expect an end index of a none-empty Span and the span should not overlap with the
+    # surrounding_relation argument spans, so allowed end indices are [4, 5, 6],
+    # but we need to add the offset of 3
     assert excinfo.value.follow_up_candidates == [7, 8, 9]
 
     # test the first span label
@@ -1145,8 +1222,9 @@ def test_binary_relation_encoder_decoder_parse_incomplete_with_previous_annotati
     # we expect a start index which can be any index that is not covered by the surrounding_relation argument spans,
     # which are LabeledSpan(start=0, end=1, label="A") and LabeledSpan(start=6, end=7, label="B"),
     # and not by the first argument span which is LabeledSpan(start=3, end=4, label="A"),
-    # i.e. [1, 2] + [4, 5] + [7, 8, 9], but we need to add the offset of 3
-    assert excinfo.value.follow_up_candidates == [4, 5] + [7, 8] + [10, 11, 12]
+    # but we allow to generate the exact same spans again,
+    # i.e. [0] + [1, 2] + [3] + [4, 5] + [6] + [7, 8, 9], but we need to add the offset of 3
+    assert excinfo.value.follow_up_candidates == [3] + [4, 5] + [6] + [7, 8] + [9] + [10, 11, 12]
 
     # test the second span end index
     with pytest.raises(IncompleteEncodingException) as excinfo:
