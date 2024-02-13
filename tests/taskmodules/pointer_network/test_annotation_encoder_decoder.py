@@ -865,3 +865,252 @@ def test_binary_relation_encoder_decoder_wrong_label_index():
         encoder_decoder.decode([1, 2, 3, 4, 5, 6, 7])
     assert str(excinfo.value) == "unknown label id: 7 (label2id: {'A': 0, 'B': 1, 'C': 2})"
     assert excinfo.value.identifier == "label"
+
+
+@pytest.mark.parametrize(
+    "mode", ["head_tail_label", "tail_head_label", "label_head_tail", "label_tail_head"]
+)
+def test_binary_relation_encoder_decoder_parse(mode):
+    """Test the BinaryRelationEncoderDecoder class."""
+
+    label2id = {"A": 0, "B": 1, "C": 2}
+    labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
+        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
+        label2id=label2id,
+        mode="indices_label",
+    )
+    encoder_decoder = BinaryRelationEncoderDecoder(
+        head_encoder_decoder=labeled_span_encoder_decoder,
+        tail_encoder_decoder=labeled_span_encoder_decoder,
+        label2id=label2id,
+        mode=mode,
+    )
+    expected_relation = BinaryRelation(
+        head=LabeledSpan(start=1, end=2, label="A"),
+        tail=LabeledSpan(start=3, end=4, label="B"),
+        label="C",
+    )
+    encoding = encoder_decoder.encode(expected_relation)
+    remaining_encoding = [2, 3]
+    # encoding of the expected relation + remaining encoding
+    assert encoder_decoder.parse(encoding + remaining_encoding, [], 10) == (
+        expected_relation,
+        remaining_encoding,
+    )
+
+
+@pytest.mark.parametrize("mode", ["head_tail_label", "label_head_tail"])
+def test_binary_relation_encoder_decoder_parse_incomplete(mode):
+    span_label2id = {"A": 0, "B": 1}
+    relation_label2id = {"C": 2}
+    labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
+        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(span_label2id) + len(relation_label2id)),
+        label2id=span_label2id,
+        mode="indices_label",
+    )
+    encoder_decoder = BinaryRelationEncoderDecoder(
+        head_encoder_decoder=labeled_span_encoder_decoder,
+        tail_encoder_decoder=labeled_span_encoder_decoder,
+        label2id=relation_label2id,
+        mode=mode,
+    )
+    # Note: we use a tail that comes before the head on purpose to test the follow-up candidates
+    relation = BinaryRelation(
+        head=LabeledSpan(start=3, end=4, label="A"),
+        tail=LabeledSpan(start=1, end=2, label="B"),
+        label="C",
+    )
+    encoding = encoder_decoder.encode(relation)
+    # just to see the encoding
+    if mode.endswith("_label"):
+        assert encoding == [6, 7, 0, 4, 5, 1, 2]
+    elif mode.startswith("label_"):
+        assert encoding == [2, 6, 7, 0, 4, 5, 1]
+    else:
+        raise ValueError(f"unknown mode: {mode}")
+
+    # check missing start index of first argument
+    if mode.endswith("_label"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse([], [], 10)
+    elif mode.startswith("label_"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:1], [], 10)
+    else:
+        raise ValueError(f"unknown mode: {mode}")
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    # we expect a start index which can be any valid start index, i.e. [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    # but we need to add the offset of 3
+    assert excinfo.value.follow_up_candidates == [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+
+    # check missing end index of first argument
+    if mode.endswith("_label"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:1], [], 10)
+    elif mode.startswith("label_"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:2], [], 10)
+    else:
+        raise ValueError(f"unknown mode: {mode}")
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    # we expect an end index of a none-empty Span, i.e. [4, 5, 6, 7, 8, 9, 10],
+    # but we need to add the offset of 3
+    assert excinfo.value.follow_up_candidates == [7, 8, 9, 10, 11, 12, 13]
+
+    # check missing label of first argument
+    if mode.endswith("_label"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:2], [], 10)
+    elif mode.startswith("label_"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:3], [], 10)
+    else:
+        raise ValueError(f"unknown mode: {mode}")
+    assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
+    # we expect a label encoding
+    assert excinfo.value.follow_up_candidates == [0, 1]
+
+    # check missing start index of second argument
+    if mode.endswith("_label"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:3], [], 10)
+    elif mode.startswith("label_"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:4], [], 10)
+    else:
+        raise ValueError(f"unknown mode: {mode}")
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    # we expect a start index which can be any index that is not covered by the first
+    # argument span which is LabeledSpan(start=3, end=4, label="A"),
+    # i.e. [0, 1, 2] + [4, 5, 6, 7, 8, 9],
+    # but we need to add the offset of 3
+    assert excinfo.value.follow_up_candidates == [3, 4, 5] + [7, 8, 9, 10, 11, 12]
+
+    # check missing end index of second argument
+    if mode.endswith("_label"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:4], [], 10)
+    elif mode.startswith("label_"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:5], [], 10)
+    else:
+        raise ValueError(f"unknown mode: {mode}")
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    # we expect an end index of a none-empty Span and the span should not overlap with the first argument span
+    # which is LabeledSpan(start=3, end=4, label="A"), so allowed end indices are [2, 3]
+    # but we need to add the offset of 3
+    assert excinfo.value.follow_up_candidates == [5, 6]
+
+    # check missing label of second argument
+    if mode.endswith("_label"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:5], [], 10)
+    elif mode.startswith("label_"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:6], [], 10)
+    else:
+        raise ValueError(f"unknown mode: {mode}")
+    assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
+    # we expect a label encoding
+    assert excinfo.value.follow_up_candidates == [0, 1]
+
+    # check missing label
+    if mode.endswith("_label"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoding[:6], [], 10)
+    elif mode.startswith("label_"):
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse([], [], 10)
+    else:
+        raise ValueError(f"unknown mode: {mode}")
+    assert str(excinfo.value) == "the encoding has not enough values to decode as BinaryRelation"
+    # we expect a label encoding
+    assert excinfo.value.follow_up_candidates == [2]
+
+
+def test_binary_relation_encoder_decoder_parse_incomplete_with_previous_annotations():
+    label2id = {"A": 0, "B": 1, "C": 2}
+    labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
+        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
+        label2id=label2id,
+        mode="indices_label",
+    )
+    encoder_decoder = BinaryRelationEncoderDecoder(
+        head_encoder_decoder=labeled_span_encoder_decoder,
+        tail_encoder_decoder=labeled_span_encoder_decoder,
+        label2id=label2id,
+        mode="head_tail_label",
+    )
+    relation = BinaryRelation(
+        head=LabeledSpan(start=3, end=4, label="A"),
+        tail=LabeledSpan(start=1, end=2, label="B"),
+        label="C",
+    )
+    encoding = encoder_decoder.encode(relation)
+    assert encoding == [6, 7, 0, 4, 5, 1, 2]
+    surrounding_relation = BinaryRelation(
+        head=LabeledSpan(start=0, end=1, label="A"),
+        tail=LabeledSpan(start=6, end=7, label="B"),
+        label="C",
+    )
+
+    # test the first span start index
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse([], [surrounding_relation], 10)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    # we expect a start index which can be any index that is not covered by the surrounding_relation argument spans,
+    # i.e. [1, 2, 3, 4, 5] + [7, 8, 9], but we need to add the offset of 3
+    assert excinfo.value.follow_up_candidates == [4, 5, 6, 7, 8] + [10, 11, 12]
+
+    # test the first span end index
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse(encoding[:1], [surrounding_relation], 10)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    # we expect an end index of a none-empty Span and the span should not overlap with the surrounding_relation argument spans,
+    # so allowed end indices are [4, 5, 6], but we need to add the offset of 3
+    assert excinfo.value.follow_up_candidates == [7, 8, 9]
+
+    # test the first span label
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse(encoding[:2], [surrounding_relation], 10)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
+    # we expect a label encoding
+    assert excinfo.value.follow_up_candidates == [0, 1, 2]
+
+    # test the second span start index
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse(encoding[:3], [surrounding_relation], 10)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    # we expect a start index which can be any index that is not covered by the surrounding_relation argument spans,
+    # which are LabeledSpan(start=0, end=1, label="A") and LabeledSpan(start=6, end=7, label="B"),
+    # and not by the first argument span which is LabeledSpan(start=3, end=4, label="A"),
+    # i.e. [1, 2] + [4, 5] + [7, 8, 9], but we need to add the offset of 3
+    assert excinfo.value.follow_up_candidates == [4, 5] + [7, 8] + [10, 11, 12]
+
+    # test the second span end index
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse(encoding[:4], [surrounding_relation], 10)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    # we expect an end index of a none-empty Span and the span should not overlap with the surrounding_relation
+    # argument spans which are LabeledSpan(start=0, end=1, label="A") and LabeledSpan(start=6, end=7, label="B"),
+    # or the first argument span which is LabeledSpan(start=3, end=4, label="A"), so allowed end indices are [2, 3],
+    # but we need to add the offset of 3
+    assert excinfo.value.follow_up_candidates == [5, 6]
+
+    # test the second span label
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse(encoding[:5], [surrounding_relation], 10)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
+    # we expect a label encoding
+    assert excinfo.value.follow_up_candidates == [0, 1, 2]
+
+    # test the relation label
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse(encoding[:6], [surrounding_relation], 10)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as BinaryRelation"
+    # we expect a label encoding
+    assert excinfo.value.follow_up_candidates == [0, 1, 2]
+
+
+
+
