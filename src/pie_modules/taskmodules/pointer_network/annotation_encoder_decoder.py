@@ -35,7 +35,7 @@ class DecodingLabelException(DecodingException[List[int]]):
 
 
 class DecodingNegativeIndexException(DecodingException[List[int]]):
-    identifier = "index"
+    identifier = "negative_index"
 
 
 class DecodingEmptySpanException(DecodingException[List[int]]):

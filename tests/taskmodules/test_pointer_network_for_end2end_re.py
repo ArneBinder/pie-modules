@@ -796,7 +796,7 @@ def test_configure_model_metric():
         "exact_encoding_matches": 0.5,
         "decoding_errors": {
             "correct": 0.2222222238779068,
-            "index": 0.5555555820465088,
+            "negative_index": 0.5555555820465088,
             "order": 0.1111111119389534,
             "empty_span": 0.1111111119389534,
             "all": 0.7777777910232544,

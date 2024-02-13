@@ -93,7 +93,7 @@ def test_span_encoder_decoder_wrong_offset():
     with pytest.raises(DecodingNegativeIndexException) as excinfo:
         encoder_decoder.decode([-1, 2])
     assert str(excinfo.value) == "indices must be positive, but got: [-1, 2]"
-    assert excinfo.value.identifier == "index"
+    assert excinfo.value.identifier == "negative_index"
 
 
 @pytest.mark.parametrize("exclusive_end", [True, False])
@@ -139,7 +139,7 @@ def test_span_encoder_decoder_parse_negative_index(exclusive_end):
     encoding = [-1, 2, 3, 4] if exclusive_end else [-1, 1, 3, 4]
     with pytest.raises(DecodingNegativeIndexException) as excinfo:
         encoder_decoder.parse(encoding, [], 5)
-    assert excinfo.value.identifier == "index"
+    assert excinfo.value.identifier == "negative_index"
     assert str(excinfo.value) == "indices must be positive, but got: start=-1, end=2"
     assert excinfo.value.remaining == [3, 4]
 
