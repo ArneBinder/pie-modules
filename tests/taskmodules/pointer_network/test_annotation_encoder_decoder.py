@@ -536,6 +536,41 @@ def test_labeled_multi_span_encoder_decoder_parse_incomplete():
     assert excinfo.value.follow_up_candidates == list(range(7, 13))
 
 
+def test_labeled_multi_span_encoder_decoder_parse_incomplete_with_previous_annotations():
+    label2id = {"A": 0, "B": 1}
+    encoder_decoder = LabeledMultiSpanEncoderDecoder(
+        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
+        label2id=label2id,
+    )
+    # a span before the current start index should not affect the follow-up candidates
+    other_span_before = LabeledMultiSpan(slices=((0, 1), (2, 3)), label="A")
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse([], [other_span_before], 10)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    # we expect a start index which can be in between the slices of the other_span_before or after the last slice,
+    # i.e. [1] + [3, 4, 5, 6, 7, 8, 9], but we need to add the offset of 2
+    assert excinfo.value.follow_up_candidates == [3, 5, 6, 7, 8, 9, 10, 11]
+
+    # a span after the current start index should limit the follow-up candidates
+    other_span_after = LabeledMultiSpan(slices=((5, 6), (7, 8)), label="A")
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse([3], [other_span_after], 10)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    # we expect an end index of a none-empty Span and the span should not overlap with other_span_after,
+    # so allowed end indices are [2, 3, 4, 5], but we need to add the offset of 2
+    assert excinfo.value.follow_up_candidates == [4, 5, 6, 7]
+
+    entangled_span = LabeledMultiSpan(slices=((0, 2), (4, 5)), label="A")
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse([4, 5], [entangled_span], 10)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledMultiSpan"
+    # we expect either a label encoding, i.e. [0, 1], or a new span encoding, but the start index is
+    # not allowed to be within any of the slices of the entangled_span, i.e. [0, 1] and [4],
+    # and not within the span  itself, i.e. [2, 3], so the allowed end indices are [3] + [5, 6, 7, 8, 9],
+    # but we need to add the offset of 2
+    assert excinfo.value.follow_up_candidates == [0, 1] + [5] + [7, 8, 9, 10, 11]
+
+
 @pytest.mark.parametrize(
     "mode", ["head_tail_label", "tail_head_label", "label_head_tail", "label_tail_head"]
 )
