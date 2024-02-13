@@ -19,7 +19,7 @@ from typing import (
 
 import torch
 from pytorch_ie import AnnotationLayer, Document
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan
+from pytorch_ie.annotations import BinaryRelation, LabeledMultiSpan, LabeledSpan
 from pytorch_ie.core import Annotation, TaskEncoding, TaskModule
 from pytorch_ie.core.taskmodule import (
     InputEncoding,
@@ -47,6 +47,7 @@ from .metrics import (
 )
 from .pointer_network.annotation_encoder_decoder import (
     BinaryRelationEncoderDecoder,
+    LabeledMultiSpanEncoderDecoder,
     LabeledSpanEncoderDecoder,
     SpanEncoderDecoderWithOffset,
 )
@@ -88,12 +89,47 @@ KEY_INVALID_CORRECT = "correct"
 
 
 def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
-    # TODO: adjust for MultiSpans
     if not all(isinstance(ann, LabeledSpan) for ann in [v1.head, v1.tail, v2.head, v2.tail]):
         raise Exception(f"expected LabeledSpan, but got: {v1}, {v2}")
     if v1.head.start == v2.head.start:  # v1[0]["from"] == v2[0]["from"]:
         return v1.tail.start - v2.tail.start  # v1[1]["from"] - v2[1]["from"]
     return v1.head.start - v2.head.start  # v1[0]["from"] - v2[0]["from"]
+
+
+def span_sort_key(span: Annotation) -> Tuple[int, ...]:
+    # just use the (first) start index to sort
+    if isinstance(span, LabeledSpan):
+        return (span.start,)
+    elif isinstance(span, LabeledMultiSpan):
+        if len(span.slices) == 0:
+            raise Exception(f"can not sort LabeledMultiSpan with empty slices: {span}")
+        return (span.slices[0][0],)
+    else:
+        raise Exception(f"unexpected type: {type(span)}")
+
+
+def binary_relation_sort_key(rel: BinaryRelation) -> Tuple[int, ...]:
+    # use the start indices of head and tail to sort
+    return span_sort_key(rel.head) + span_sort_key(rel.tail)
+
+
+def annotation_to_indices(argument_annotation: Annotation) -> Tuple[int, ...]:
+    if isinstance(argument_annotation, LabeledSpan):
+        return argument_annotation.start, argument_annotation.end
+    elif isinstance(argument_annotation, LabeledMultiSpan):
+        result = []
+        for s in argument_annotation.slices:
+            result.extend(s)
+        return tuple(result)
+    else:
+        raise Exception(f"unexpected type: {type(argument_annotation)}")
+
+
+def annotation_to_label(annotation: Annotation) -> str:
+    if isinstance(annotation, (LabeledSpan, LabeledMultiSpan)):
+        return annotation.label
+    else:
+        raise Exception(f"unexpected type: {type(annotation)}")
 
 
 @TaskModule.register()
@@ -325,13 +361,24 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             offset=self.pointer_offset, exclusive_end=False
         )
         span_labels = self.labels_per_layer[self.span_layer_name]
-        # TODO: adjust for MultiSpans
-        labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
-            span_encoder_decoder=span_encoder_decoder,
-            # restrict label2id to get better error messages
-            label2id={label: idx for label, idx in self.label2id.items() if label in span_labels},
-            mode="indices_label",
-        )
+        # restrict label2id to get better error messages
+        span_label2id = {
+            label: idx for label, idx in self.label2id.items() if label in span_labels
+        }
+        labeled_span_encoder_decoder: Union[
+            LabeledSpanEncoderDecoder, LabeledMultiSpanEncoderDecoder
+        ]
+        if self.use_multi_spans:
+            labeled_span_encoder_decoder = LabeledMultiSpanEncoderDecoder(
+                span_encoder_decoder=span_encoder_decoder,
+                label2id=span_label2id,
+            )
+        else:
+            labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
+                span_encoder_decoder=span_encoder_decoder,
+                label2id=span_label2id,
+                mode="indices_label",
+            )
         relation_labels = self.labels_per_layer[self.relation_layer_name] + [
             self.loop_dummy_relation_name,
             self.none_label,
@@ -490,7 +537,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                 relation_encodings[dummy_relation] = encoded_relation
 
         # sort relations by start indices of head and tail # TODO: is this correct?
-        sorted_relations = sorted(relation_encodings, key=cmp_to_key(cmp_src_rel))
+        sorted_relations = sorted(relation_encodings, key=binary_relation_sort_key)
 
         # build target_ids
         target_ids = []
@@ -540,32 +587,39 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         self, encoding: TaskOutputType
     ) -> Tuple[Dict[str, Iterable[Annotation]], Dict[str, int]]:
         decoded_relations, errors, remaining = self.decode_relations(label_ids=encoding.labels)
-        relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
-        entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
-        # TODO: adjust for MultiSpans
+        relation_tuples: List[Tuple[Tuple[int, ...], Tuple[int, ...], str]] = []
+        entity_labels: Dict[Tuple[int, ...], List[str]] = defaultdict(list)
         for rel in decoded_relations:
-            head_span = (rel.head.start, rel.head.end)
-            entity_labels[head_span].append(rel.head.label)
+            head_indices = annotation_to_indices(rel.head)
+            head_label = annotation_to_label(rel.head)
+            entity_labels[head_indices].append(head_label)
 
             if rel.label != self.loop_dummy_relation_name:
-                tail_span = (rel.tail.start, rel.tail.end)
-                entity_labels[tail_span].append(rel.tail.label)
-                relation_tuples.append((head_span, tail_span, rel.label))
+                tail_indices = annotation_to_indices(rel.tail)
+                tail_label = annotation_to_label(rel.tail)
+                entity_labels[tail_indices].append(tail_label)
+                relation_tuples.append((head_indices, tail_indices, rel.label))
             else:
                 assert rel.head == rel.tail
 
-        # TODO: adjust for MultiSpans
         # It may happen that some spans take part in multiple relations, but got generated with different labels.
         # In this case, we just create one span and take the most common label.
-        entities: Dict[Tuple[int, int], LabeledSpan] = {}
-        for (start, end), labels in entity_labels.items():
+        entities: Dict[Tuple[int, ...], Union[LabeledSpan, LabeledMultiSpan]] = {}
+        for span_indices, labels in entity_labels.items():
             c = Counter(labels)
             # if len(c) > 1:
             #    logger.warning(f"multiple labels for span, take the most common: {dict(c)}")
             most_common_label = c.most_common(1)[0][0]
-            entities[(start, end)] = LabeledSpan(start=start, end=end, label=most_common_label)
+            if self.use_multi_spans:
+                slices = tuple(
+                    (span_indices[i], span_indices[i + 1]) for i in range(0, len(span_indices), 2)
+                )
+                entities[span_indices] = LabeledMultiSpan(slices=slices, label=most_common_label)
+            else:
+                entities[span_indices] = LabeledSpan(
+                    start=span_indices[0], end=span_indices[1], label=most_common_label
+                )
 
-        # TODO: adjust for MultiSpans
         entity_layer = list(entities.values())
         relation_layer = [
             BinaryRelation(head=entities[head_span], tail=entities[tail_span], label=label)
