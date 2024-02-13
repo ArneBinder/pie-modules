@@ -474,29 +474,30 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         label_ids: List[int],
     ) -> Tuple[List[BinaryRelation], Dict[str, int], List[int]]:
         errors: Dict[str, int] = defaultdict(int)
-        encodings = []
-        current_encoding: List[int] = []
+        decoded_relations: List[BinaryRelation] = []
         valid_encoding: BinaryRelation
-        if len(label_ids):
-            for i in label_ids:
-                current_encoding.append(i)
-                # An encoding is complete when it ends with a relation_id
-                # or when it contains a none_id and has a length of 7
-                # TODO: adjust for MultiSpans
-                if i in self.relation_ids or (i == self.none_id and len(current_encoding) == 7):
-                    # try to decode the current relation encoding
-                    try:
-                        valid_encoding = self.relation_encoder_decoder.decode(
-                            encoding=current_encoding
-                        )
-                        encodings.append(valid_encoding)
-                        errors[KEY_INVALID_CORRECT] += 1
-                    except DecodingException as e:
-                        errors[e.identifier] += 1
+        successfully_decoded: List[int] = []
+        remaining = label_ids
+        while len(remaining) > 0:
+            if remaining[0] == self.eos_id:
+                # we discard everything after the eos token
+                break
+            try:
+                valid_encoding, remaining = self.relation_encoder_decoder.parse(
+                    encoding=remaining,
+                    decoded_annotations=decoded_relations,
+                    text_length=self.tokenizer.model_max_length,
+                )
+                decoded_relations.append(valid_encoding)
+                errors[KEY_INVALID_CORRECT] += 1
+                successfully_decoded = label_ids[: len(label_ids) - len(remaining)]
+            except DecodingException as e:
+                if e.remaining is None:
+                    raise ValueError(f"decoding exception did not return remaining encoding: {e}")
+                errors[e.identifier] += 1
+                remaining = e.remaining
 
-                    current_encoding = []
-
-        return encodings, dict(errors), current_encoding
+        return decoded_relations, dict(errors), label_ids[len(successfully_decoded) :]
 
     def encode_annotations(
         self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None

@@ -794,7 +794,13 @@ def test_configure_model_metric():
     values = metric.compute()
     assert values == {
         "exact_encoding_matches": 0.5,
-        "decoding_errors": {"correct": 0.5, "len": 0.25, "order": 0.25, "all": 0.5},
+        "decoding_errors": {
+            "correct": 0.2222222238779068,
+            "index": 0.5555555820465088,
+            "order": 0.1111111119389534,
+            "empty_span": 0.1111111119389534,
+            "all": 0.7777777910232544,
+        },
         "labeled_spans": {
             "person": {"recall": 0.5, "precision": 1.0, "f1": 0.6666666865348816},
             "topic": {"recall": 0.5, "precision": 1.0, "f1": 0.6666666865348816},
