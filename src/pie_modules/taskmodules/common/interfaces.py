@@ -17,9 +17,10 @@ class DecodingException(Exception, Generic[AE], abc.ABC):
 
     identifier: str
 
-    def __init__(self, message: str, encoding: AE):
+    def __init__(self, message: str, encoding: AE, remaining: Optional[AE] = None):
         self.message = message
         self.encoding = encoding
+        self.remaining = remaining
 
 
 class EncodingException(Exception, Generic[A], abc.ABC):

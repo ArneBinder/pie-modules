@@ -46,7 +46,7 @@ class IncompleteEncodingException(DecodingException[List[int]]):
     identifier = "incomplete"
 
     def __init__(self, message: str, encoding: List[int], follow_up_candidates: List[int]):
-        super().__init__(message, encoding)
+        super().__init__(message, encoding, remaining=[])
         self.follow_up_candidates = follow_up_candidates
 
 
@@ -225,6 +225,7 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
         else:
             start_idx = encoding[0]
             end_idx = encoding[1]
+            remaining = encoding[2:]
             # the end index for Span annotations is exclusive, so we need to add 1 to the end index
             if not self.exclusive_end:
                 end_idx += 1
@@ -233,17 +234,20 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
                     "end index can not be equal to start index to decode as Span, but got: "
                     f"start={start_idx}, end={end_idx}",
                     encoding=encoding,
+                    remaining=remaining,
                 )
             if end_idx < start_idx:
                 raise DecodingOrderException(
                     f"end index can not be smaller than start index, "
                     f"but got: start={start_idx}, end={end_idx}",
                     encoding=encoding,
+                    remaining=remaining,
                 )
             if any(idx < 0 for idx in [start_idx, end_idx]):
                 raise DecodingNegativeIndexException(
                     f"indices must be positive, but got: start={start_idx}, end={end_idx}",
                     encoding=encoding,
+                    remaining=remaining,
                 )
             # check overlap and nesting with previously decoded spans
             span = Span(start=start_idx, end=end_idx)
@@ -259,6 +263,7 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
                                 f"the encoded span is nested in another span: {previous_span}. "
                                 "You can set allow_nested=True to allow nested spans.",
                                 encoding=encoding,
+                                remaining=remaining,
                             )
                         else:
                             # this is allowed, so we just pass
@@ -267,8 +272,9 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
                         raise DecodingSpanOverlapException(
                             f"the encoded span overlaps with another span: {previous_span}",
                             encoding=encoding,
+                            remaining=remaining,
                         )
-            return span, encoding[2:]
+            return span, remaining
 
 
 class SpanEncoderDecoderWithOffset(SpanEncoderDecoder):
@@ -355,6 +361,24 @@ class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, 
         )
         return result
 
+    def _parse_label(self, encoding: List[int]) -> Tuple[str, List[int]]:
+        if len(encoding) == 0:
+            raise IncompleteEncodingException(
+                "the encoding has not enough values to decode as LabeledSpan",
+                encoding=encoding,
+                follow_up_candidates=sorted(self.id2label.keys()),
+            )
+        label_encoding = encoding[0]
+        remaining = encoding[1:]
+        if label_encoding not in self.id2label:
+            raise DecodingLabelException(
+                f"unknown label id: {label_encoding} (label2id: {self.label2id})",
+                encoding=encoding,
+                remaining=remaining,
+            )
+        label = self.id2label[label_encoding]
+        return label, remaining
+
     def parse(
         self,
         encoding: List[int],
@@ -362,18 +386,9 @@ class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, 
         text_length: int,
     ) -> Tuple[LabeledSpan, List[int]]:
         if self.mode == "label_indices":
-            if len(encoding) == 0:
-                follow_up_candidates = sorted(self.id2label.keys())
-                raise IncompleteEncodingException(
-                    "the encoding has not enough values to decode as LabeledSpan",
-                    encoding=encoding,
-                    follow_up_candidates=follow_up_candidates,
-                )
-            label = self.id2label[encoding[0]]
-            remaining = encoding[1:]
+            label, remaining = self._parse_label(encoding)
         elif self.mode == "indices_label":
-            remaining = encoding
-            label = None
+            label, remaining = None, encoding
         else:
             raise ValueError(f"unknown mode: {self.mode}")
 
@@ -381,15 +396,7 @@ class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, 
             encoding=remaining, decoded_annotations=decoded_annotations, text_length=text_length
         )
         if label is None:
-            if len(remaining) == 0:
-                follow_up_candidates = sorted(self.id2label.keys())
-                raise IncompleteEncodingException(
-                    "the encoding has not enough values to decode as LabeledSpan",
-                    encoding=encoding,
-                    follow_up_candidates=follow_up_candidates,
-                )
-            label = self.id2label[remaining[0]]
-            remaining = remaining[1:]
+            label, remaining = self._parse_label(remaining)
         result = LabeledSpan(start=span.start, end=span.end, label=label)
         return result, remaining
 
@@ -603,6 +610,24 @@ class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRela
 
         return rel
 
+    def _parse_label(self, encoding: List[int]) -> Tuple[str, List[int]]:
+        if len(encoding) == 0:
+            raise IncompleteEncodingException(
+                "the encoding has not enough values to decode as BinaryRelation",
+                encoding=encoding,
+                follow_up_candidates=sorted(self.id2label.keys()),
+            )
+        label_encoding = encoding[0]
+        remaining = encoding[1:]
+        if label_encoding not in self.id2label:
+            raise DecodingLabelException(
+                f"unknown label id: {label_encoding} (label2id: {self.label2id})",
+                encoding=encoding,
+                remaining=remaining,
+            )
+        label = self.id2label[label_encoding]
+        return label, remaining
+
     def parse(
         self,
         encoding: List[int],
@@ -610,18 +635,10 @@ class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRela
         text_length: int,
     ) -> Tuple[BinaryRelation, List[int]]:
         if self.mode.endswith("_label"):
-            label = None
-            remaining = encoding
+            label, remaining = None, encoding
             argument_mode = self.mode[: -len("_label")]
         elif self.mode.startswith("label_"):
-            if len(encoding) == 0:
-                raise IncompleteEncodingException(
-                    "the encoding has not enough values to decode as BinaryRelation",
-                    encoding=encoding,
-                    follow_up_candidates=sorted(self.id2label.keys()),
-                )
-            label = self.id2label[encoding[0]]
-            remaining = encoding[1:]
+            label, remaining = self._parse_label(encoding)
             argument_mode = self.mode[len("label_") :]
         else:
             raise ValueError(f"unknown mode: {self.mode}")
@@ -671,14 +688,7 @@ class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRela
                 raise e
 
         if label is None:
-            if len(remaining) == 0:
-                raise IncompleteEncodingException(
-                    "the encoding has not enough values to decode as BinaryRelation",
-                    encoding=encoding,
-                    follow_up_candidates=sorted(self.id2label.keys()),
-                )
-            label = self.id2label[remaining[0]]
-            remaining = remaining[1:]
+            label, remaining = self._parse_label(remaining)
 
         if label == self.none_label:
             if self.loop_dummy_relation_name is None:

@@ -116,6 +116,7 @@ def test_span_encoder_decoder_parse_empty_span(exclusive_end):
         str(excinfo.value)
         == "end index can not be equal to start index to decode as Span, but got: start=3, end=3"
     )
+    assert excinfo.value.remaining == [3, 4]
 
 
 @pytest.mark.parametrize("exclusive_end", [True, False])
@@ -129,6 +130,7 @@ def test_span_encoder_decoder_parse_wrong_order(exclusive_end):
         str(excinfo.value)
         == "end index can not be smaller than start index, but got: start=3, end=2"
     )
+    assert excinfo.value.remaining == [3, 4]
 
 
 @pytest.mark.parametrize("exclusive_end", [True, False])
@@ -139,6 +141,7 @@ def test_span_encoder_decoder_parse_negative_index(exclusive_end):
         encoder_decoder.parse(encoding, [], 5)
     assert excinfo.value.identifier == "index"
     assert str(excinfo.value) == "indices must be positive, but got: start=-1, end=2"
+    assert excinfo.value.remaining == [3, 4]
 
 
 def test_spans_are_nested():
@@ -205,10 +208,12 @@ def test_span_encoder_decoder_parse_with_previous_annotations(allow_nested):
             str(excinfo.value) == f"the encoded span is nested in another span: {nested_span}. "
             f"You can set allow_nested=True to allow nested spans."
         )
+        assert excinfo.value.remaining == remaining_encoding
     # overlapping_span is not allowed in any case
     with pytest.raises(DecodingSpanOverlapException) as excinfo:
         encoder_decoder.parse(encoding, [overlapping_span], 5)
     assert str(excinfo.value) == f"the encoded span overlaps with another span: {overlapping_span}"
+    assert excinfo.value.remaining == remaining_encoding
 
 
 @pytest.mark.parametrize(
