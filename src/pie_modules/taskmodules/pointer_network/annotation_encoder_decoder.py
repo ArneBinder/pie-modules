@@ -288,7 +288,7 @@ class SpanEncoderDecoderWithOffset(SpanEncoderDecoder):
                 e.message, encoding=encoding, follow_up_candidates=follow_up_candidates
             )
         # use the original encoding, i.e. with any potential offset, to get the remaining encoding
-        return span, encoding[-len(remaining) :]
+        return span, encoding[len(encoding) - len(remaining) :]
 
 
 class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, List[int]]):

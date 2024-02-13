@@ -319,10 +319,17 @@ def test_span_encoder_decoder_with_offset_parse():
     """Test the SpanEncoderDecoderWithOffset class."""
     encoder_decoder = SpanEncoderDecoderWithOffset(offset=1)
     expected_span = Span(start=1, end=3)
+    encoded_span = encoder_decoder.encode(expected_span)
+
+    # test without remaining encoding
+    assert encoder_decoder.parse(encoded_span, [], 6) == (expected_span, [])
+
+    # test with remaining encoding
     remaining_encoding = [3, 4]
-    # encoding of the expected span + remaining encoding
-    encoding = [2, 4] + remaining_encoding
-    assert encoder_decoder.parse(encoding, [], 6) == (expected_span, remaining_encoding)
+    assert encoder_decoder.parse(encoded_span + remaining_encoding, [], 6) == (
+        expected_span,
+        remaining_encoding,
+    )
 
 
 def test_span_encoder_decoder_with_offset_parse_incomplete():
