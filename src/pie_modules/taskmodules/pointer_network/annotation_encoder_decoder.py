@@ -465,13 +465,7 @@ class LabeledMultiSpanEncoderDecoder(
                     raise e
             slices.append((span.start, span.end))
             decoded_spans.append(span)
-            if len(remaining) == 0:
-                raise IncompleteEncodingException(
-                    "the encoding misses a final label id to decode as LabeledMultiSpan",
-                    encoding=encoding,
-                    follow_up_candidates=sorted(self.id2label),
-                )
-            elif remaining[0] in self.id2label:
+            if len(remaining) > 0 and remaining[0] in self.id2label:
                 label = self.id2label[remaining[0]]
                 break
 

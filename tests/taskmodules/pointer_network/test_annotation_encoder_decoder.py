@@ -486,6 +486,56 @@ def test_labeled_multi_span_encoder_decoder():
     )
 
 
+def test_labeled_multi_span_encoder_decoder_parse():
+    """Test the LabeledMultiSpanEncoderDecoder class."""
+
+    label2id = {"A": 0, "B": 1}
+    encoder_decoder = LabeledMultiSpanEncoderDecoder(
+        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
+        label2id=label2id,
+    )
+    expected_span = LabeledMultiSpan(slices=((1, 2), (4, 6)), label="A")
+    encoding = [3, 4, 6, 8, 0]
+    remaining_encoding = [0, 1]
+    # encoding of the expected span + remaining encoding
+    assert encoder_decoder.parse(encoding + remaining_encoding, [], 10) == (
+        expected_span,
+        remaining_encoding,
+    )
+
+
+def test_labeled_multi_span_encoder_decoder_parse_incomplete():
+    label2id = {"A": 0, "B": 1}
+    encoder_decoder = LabeledMultiSpanEncoderDecoder(
+        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
+        label2id=label2id,
+    )
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse([], [], 10)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    # offset is 2, so the follow-up candidates are [2, 12)
+    assert excinfo.value.follow_up_candidates == list(range(2, 12))
+
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse([3], [], 10)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    # we expect an end index of a none-empty Span, so the follow-up candidates are [4, 13)
+    assert excinfo.value.follow_up_candidates == list(range(4, 13))
+
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse([3, 4], [], 10)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledMultiSpan"
+    # we can follow up with a label encoding or a new span encoding, but 3 is not allowed because
+    # it is covered by the previous span
+    assert excinfo.value.follow_up_candidates == [0, 1] + [2] + list(range(4, 12))
+
+    with pytest.raises(IncompleteEncodingException) as excinfo:
+        encoder_decoder.parse([3, 4, 6], [], 10)
+    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    # we expect an end index of a none-empty Span, so the follow-up candidates are [7, 13)
+    assert excinfo.value.follow_up_candidates == list(range(7, 13))
+
+
 @pytest.mark.parametrize(
     "mode", ["head_tail_label", "tail_head_label", "label_head_tail", "label_tail_head"]
 )
