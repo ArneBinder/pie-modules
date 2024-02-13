@@ -400,6 +400,61 @@ def test_labeled_span_encoder_decoder_unknown_mode():
     assert str(excinfo.value) == "unknown mode: unknown"
 
 
+@pytest.mark.parametrize("mode", ["indices_label", "label_indices"])
+def test_labeled_span_encoder_decoder_parse(mode):
+    """Test the LabeledSpanEncoderDecoder class."""
+
+    label2id = {"A": 0, "B": 1}
+    encoder_decoder = LabeledSpanEncoderDecoder(
+        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
+        label2id=label2id,
+        mode=mode,
+    )
+    expected_span = LabeledSpan(start=1, end=3, label="A")
+    encoded_span = encoder_decoder.encode(expected_span)
+    remaining_encoding = [3, 4]
+    # encoding of the expected span + remaining encoding
+    encoding = encoded_span + remaining_encoding
+    assert encoder_decoder.parse(encoding, [], 6) == (expected_span, remaining_encoding)
+
+
+def test_labeled_span_encoder_decoder_parse_unknown_mode():
+    """Test the LabeledSpanEncoderDecoder class."""
+
+    label2id = {"A": 0, "B": 1}
+    encoder_decoder = LabeledSpanEncoderDecoder(
+        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
+        label2id=label2id,
+        mode="unknown",
+    )
+    with pytest.raises(ValueError) as excinfo:
+        encoder_decoder.parse([0, 3, 4], [], 6)
+    assert str(excinfo.value) == "unknown mode: unknown"
+
+
+@pytest.mark.parametrize("mode", ["label_indices", "indices_label"])
+def test_labeled_span_encoder_decoder_parse_incomplete(mode):
+    label2id = {"A": 0, "B": 1}
+    encoder_decoder = LabeledSpanEncoderDecoder(
+        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
+        label2id=label2id,
+        mode=mode,
+    )
+    if mode == "label_indices":
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse([], [], 6)
+        assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
+        assert excinfo.value.follow_up_candidates == [0, 1]
+    elif mode == "indices_label":
+        encoded_span = encoder_decoder.span_encoder_decoder.encode(Span(start=1, end=2))
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoded_span, [], 6)
+        assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
+        assert excinfo.value.follow_up_candidates == [0, 1]
+    else:
+        raise ValueError(f"unknown mode: {mode}")
+
+
 @pytest.mark.parametrize(
     "mode", ["head_tail_label", "tail_head_label", "label_head_tail", "label_tail_head"]
 )
