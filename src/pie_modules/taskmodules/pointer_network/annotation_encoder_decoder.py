@@ -9,6 +9,7 @@ from pie_modules.taskmodules.common.interfaces import (
     DecodingException,
     EncodingException,
     GenerativeAnnotationEncoderDecoder,
+    GenerativeAnnotationEncoderDecoderWithParseWithErrors,
 )
 
 logger = logging.getLogger(__name__)
@@ -499,7 +500,9 @@ class LabeledMultiSpanEncoderDecoder(
         return LabeledMultiSpan(slices=tuple(slices), label=label), remaining[1:]
 
 
-class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRelation, List[int]]):
+class BinaryRelationEncoderDecoder(
+    GenerativeAnnotationEncoderDecoderWithParseWithErrors[BinaryRelation]
+):
     def __init__(
         self,
         head_encoder_decoder: GenerativeAnnotationEncoderDecoder[Annotation, List[int]],

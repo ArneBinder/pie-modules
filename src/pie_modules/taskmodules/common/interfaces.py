@@ -1,4 +1,5 @@
 import abc
+from collections import defaultdict
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
 
 from pytorch_ie import Annotation
@@ -52,3 +53,41 @@ class GenerativeAnnotationEncoderDecoder(AnnotationEncoderDecoder[A, AE], abc.AB
     def parse(self, encoding: AE, decoded_annotations: List[A], text_length: int) -> Tuple[A, AE]:
         """Parse the encoding and return the decoded annotation and the remaining encoding."""
         pass
+
+
+class GenerativeAnnotationEncoderDecoderWithParseWithErrors(
+    Generic[A], GenerativeAnnotationEncoderDecoder[A, List[int]], abc.ABC
+):
+    KEY_INVALID_CORRECT = "correct"
+
+    def parse_with_error_handling(
+        self,
+        encoding: List[int],
+        input_length: int,
+        stop_ids: List[int],
+    ) -> Tuple[List[A], Dict[str, int], List[int]]:
+        errors: Dict[str, int] = defaultdict(int)
+        decoded_relations: List[A] = []
+        valid_encoding: A
+        successfully_decoded: List[int] = []
+        remaining = encoding
+        while len(remaining) > 0:
+            if remaining[0] in stop_ids:
+                # we discard everything after any stop id
+                break
+            try:
+                valid_encoding, remaining = self.parse(
+                    encoding=remaining,
+                    decoded_annotations=decoded_relations,
+                    text_length=input_length,
+                )
+                decoded_relations.append(valid_encoding)
+                errors[self.KEY_INVALID_CORRECT] += 1
+                successfully_decoded = encoding[: len(encoding) - len(remaining)]
+            except DecodingException as e:
+                if e.remaining is None:
+                    raise ValueError(f"decoding exception did not return remaining encoding: {e}")
+                errors[e.identifier] += 1
+                remaining = e.remaining
+
+        return decoded_relations, dict(errors), encoding[len(successfully_decoded) :]

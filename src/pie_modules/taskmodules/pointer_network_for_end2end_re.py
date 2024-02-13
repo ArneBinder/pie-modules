@@ -469,36 +469,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             error_key_correct=KEY_INVALID_CORRECT,
         )
 
-    def decode_relations(
-        self,
-        label_ids: List[int],
-    ) -> Tuple[List[BinaryRelation], Dict[str, int], List[int]]:
-        errors: Dict[str, int] = defaultdict(int)
-        decoded_relations: List[BinaryRelation] = []
-        valid_encoding: BinaryRelation
-        successfully_decoded: List[int] = []
-        remaining = label_ids
-        while len(remaining) > 0:
-            if remaining[0] == self.eos_id:
-                # we discard everything after the eos token
-                break
-            try:
-                valid_encoding, remaining = self.relation_encoder_decoder.parse(
-                    encoding=remaining,
-                    decoded_annotations=decoded_relations,
-                    text_length=self.tokenizer.model_max_length,
-                )
-                decoded_relations.append(valid_encoding)
-                errors[KEY_INVALID_CORRECT] += 1
-                successfully_decoded = label_ids[: len(label_ids) - len(remaining)]
-            except DecodingException as e:
-                if e.remaining is None:
-                    raise ValueError(f"decoding exception did not return remaining encoding: {e}")
-                errors[e.identifier] += 1
-                remaining = e.remaining
-
-        return decoded_relations, dict(errors), label_ids[len(successfully_decoded) :]
-
     def encode_annotations(
         self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None
     ) -> TaskOutputType:
@@ -548,7 +518,11 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         target_ids.append(self.eos_id)
 
         # sanity check
-        _, encoding_errors, remaining = self.decode_relations(label_ids=target_ids)
+        _, encoding_errors, remaining = self.relation_encoder_decoder.parse_with_error_handling(
+            encoding=target_ids,
+            input_length=self.tokenizer.model_max_length,
+            stop_ids=[self.eos_id],
+        )
         if (
             not all(v == 0 for k, v in encoding_errors.items() if k != "correct")
             or len(remaining) > 0
@@ -587,7 +561,15 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     def decode_annotations(
         self, encoding: TaskOutputType
     ) -> Tuple[Dict[str, Iterable[Annotation]], Dict[str, int]]:
-        decoded_relations, errors, remaining = self.decode_relations(label_ids=encoding.labels)
+        (
+            decoded_relations,
+            errors,
+            remaining,
+        ) = self.relation_encoder_decoder.parse_with_error_handling(
+            encoding=encoding.labels,
+            input_length=self.tokenizer.model_max_length,
+            stop_ids=[self.eos_id],
+        )
         relation_tuples: List[Tuple[Tuple[int, ...], Tuple[int, ...], str]] = []
         entity_labels: Dict[Tuple[int, ...], List[str]] = defaultdict(list)
         for rel in decoded_relations:
@@ -653,7 +635,11 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         return result
 
     def build_constraint(self, previous_ids: List[int], input_len: int) -> torch.LongTensor:
-        decoded_relations, _, remaining = self.decode_relations(label_ids=previous_ids)
+        decoded_relations, _, remaining = self.relation_encoder_decoder.parse_with_error_handling(
+            encoding=previous_ids,
+            input_length=input_len,
+            stop_ids=[self.eos_id],
+        )
         # this is a binary mask
         follow_up_ids = self.build_constraint_mask(
             previous_ids=remaining,
