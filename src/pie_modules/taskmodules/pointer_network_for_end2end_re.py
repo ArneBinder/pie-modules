@@ -87,15 +87,8 @@ TaskEncodingType: TypeAlias = TaskEncoding[
 TaskOutputType: TypeAlias = LabelsAndOptionalConstraints
 
 
-def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
-    if not all(isinstance(ann, LabeledSpan) for ann in [v1.head, v1.tail, v2.head, v2.tail]):
-        raise Exception(f"expected LabeledSpan, but got: {v1}, {v2}")
-    if v1.head.start == v2.head.start:  # v1[0]["from"] == v2[0]["from"]:
-        return v1.tail.start - v2.tail.start  # v1[1]["from"] - v2[1]["from"]
-    return v1.head.start - v2.head.start  # v1[0]["from"] - v2[0]["from"]
-
-
 def span_sort_key(span: Annotation) -> Tuple[int, ...]:
+    # TODO: use the full span to sort
     # just use the (first) start index to sort
     if isinstance(span, LabeledSpan):
         return (span.start,)
@@ -505,7 +498,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             if encoded_relation is not None:
                 relation_encodings[dummy_relation] = encoded_relation
 
-        # sort relations by start indices of head and tail # TODO: is this correct?
+        # sort relations by start indices of head and tail
         sorted_relations = sorted(relation_encodings, key=binary_relation_sort_key)
 
         # build target_ids
