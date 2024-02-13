@@ -86,8 +86,6 @@ TaskEncodingType: TypeAlias = TaskEncoding[
 ]
 TaskOutputType: TypeAlias = LabelsAndOptionalConstraints
 
-KEY_INVALID_CORRECT = "correct"
-
 
 def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
     if not all(isinstance(ann, LabeledSpan) for ann in [v1.head, v1.tail, v2.head, v2.tail]):
@@ -466,7 +464,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             unbatch_function=self.unbatch_output,
             decode_layers_with_errors_function=self.decode_annotations,
             layer_metrics=layer_metrics,
-            error_key_correct=KEY_INVALID_CORRECT,
+            error_key_correct=self.relation_encoder_decoder.KEY_INVALID_CORRECT,
         )
 
     def encode_annotations(
