@@ -141,16 +141,15 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
         # the encoding is incomplete if it is empty, collect follow-up candidate indices
         if len(encoding) == 0:
             if self.allow_nested:
-                # everything is allowed (-1 because we disallow empty spans)
-                follow_up_candidates = list(range(text_length - 1))
+                # everything is allowed
+                follow_up_candidates = list(range(text_length))
             else:
                 # exclude indices that are already covered by other annotations
                 nested_indices: Set[int] = set()
                 for previous_span in decoded_annotations:
                     nested_indices.update(range(previous_span.start, previous_span.end))
-                # -1 because we disallow empty spans
                 follow_up_candidates = [
-                    idx for idx in range(text_length - 1) if idx not in nested_indices
+                    idx for idx in range(text_length) if idx not in nested_indices
                 ]
             raise IncompleteEncodingException(
                 "the encoding has not enough values to decode as Span",

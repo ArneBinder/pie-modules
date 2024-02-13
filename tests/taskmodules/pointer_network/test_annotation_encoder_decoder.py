@@ -220,7 +220,7 @@ def test_span_encoder_decoder_parse_incomplete_0(exclusive_end, allow_nested):
     with pytest.raises(IncompleteEncodingException) as excinfo:
         encoder_decoder.parse([], [], 6)
     assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
-    assert excinfo.value.follow_up_candidates == [0, 1, 2, 3, 4]
+    assert excinfo.value.follow_up_candidates == [0, 1, 2, 3, 4, 5]
     # previous annotation
     other_span = Span(start=2, end=4)
     encoded_other_span = encoder_decoder.encode(other_span)
@@ -228,14 +228,14 @@ def test_span_encoder_decoder_parse_incomplete_0(exclusive_end, allow_nested):
         encoder_decoder.parse([], [other_span], 6)
     assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
     if allow_nested:
-        assert excinfo.value.follow_up_candidates == [0, 1, 2, 3, 4]
+        assert excinfo.value.follow_up_candidates == [0, 1, 2, 3, 4, 5]
     else:
         if exclusive_end:
             assert encoded_other_span == [2, 4]
         else:
             assert encoded_other_span == [2, 3]
         # indices 2 and 3 are excluded because they are covered by the other_span
-        assert excinfo.value.follow_up_candidates == [0, 1, 4]
+        assert excinfo.value.follow_up_candidates == [0, 1, 4, 5]
 
 
 @pytest.mark.parametrize(
