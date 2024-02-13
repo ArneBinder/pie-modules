@@ -285,14 +285,14 @@ def test_target_encoding(target_encoding, taskmodule):
                 [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
                 [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1],
+                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
                 [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                 [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1],
                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
                 [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1],
+                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1],
                 [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                 [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                 [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -306,7 +306,7 @@ def test_target_encoding(target_encoding, taskmodule):
                 [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
                 [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1],
+                [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0],
                 [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                 [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -351,14 +351,14 @@ def test_build_constraints(taskmodule, task_encoding, config):
             [[0, 1], [0], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],  # 14
             [[0, 0], [0], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1]],  # 14
             [[0, 0], [0], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 5
-            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1]],  # 11
+            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],  # 11
             [[0, 0], [0], [0, 0, 0], [0], [0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0]],  # 12
             [[0, 0], [0], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 3
             [[0, 0], [0], [0, 0, 0], [1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 6
-            [[0, 1], [0], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],  # 17
+            [[0, 1], [0], [0, 0, 0], [0], [1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1]],  # 17
             [[0, 0], [0], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]],  # 17
             [[0, 0], [0], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 4
-            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1]],  # 2
+            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1]],  # 2
             [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 2
             [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 2
             [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 2
@@ -377,7 +377,7 @@ def test_build_constraints(taskmodule, task_encoding, config):
             [[0, 1], [0], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],  # 14
             [[0, 0], [0], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 1, 1, 1]],  # 14
             [[0, 0], [0], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 5
-            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 0, 1, 1]],  # 11
+            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],  # 11
             [[0, 0], [0], [0, 0, 0], [0], [0, 0, 0, 0, 1, 1, 1, 0, 0, 0]],  # 12
             [[0, 0], [0], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 3
             [[0, 0], [0], [0, 0, 0], [1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 6
@@ -392,7 +392,9 @@ def test_build_constraint(taskmodule):
     input_len = 13
 
     # empty previous_ids
-    constraint = taskmodule._build_constraint(previous_ids=[], input_len=input_len)
+    constraint = taskmodule.build_constraint_mask(
+        previous_ids=[], input_len=input_len, decoded_relations=[]
+    )
     # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
     constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
     # allow eos and all offsets
@@ -405,7 +407,9 @@ def test_build_constraint(taskmodule):
     ]
 
     # just first span start
-    constraint = taskmodule._build_constraint(previous_ids=[14], input_len=input_len)
+    constraint = taskmodule.build_constraint_mask(
+        previous_ids=[14], input_len=input_len, decoded_relations=[]
+    )
     # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
     constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
     # allow all offsets after first span start
@@ -418,7 +422,9 @@ def test_build_constraint(taskmodule):
     ]
 
     # first span start and end
-    constraint = taskmodule._build_constraint(previous_ids=[14, 14], input_len=input_len)
+    constraint = taskmodule.build_constraint_mask(
+        previous_ids=[14, 14], input_len=input_len, decoded_relations=[]
+    )
     # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
     constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
     # allow all span ids
@@ -431,7 +437,9 @@ def test_build_constraint(taskmodule):
     ]
 
     # first span start, end, and label
-    constraint = taskmodule._build_constraint(previous_ids=[14, 14, 5], input_len=input_len)
+    constraint = taskmodule.build_constraint_mask(
+        previous_ids=[14, 14, 5], input_len=input_len, decoded_relations=[]
+    )
     # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
     constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
     # allow none and all offsets except offsets covered by first span
@@ -440,11 +448,13 @@ def test_build_constraint(taskmodule):
         [1],
         [0, 0, 0],
         [0],
-        [1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
     ]
 
     # first span, and second span start
-    constraint = taskmodule._build_constraint(previous_ids=[14, 14, 5, 11], input_len=input_len)
+    constraint = taskmodule.build_constraint_mask(
+        previous_ids=[14, 14, 5, 11], input_len=input_len, decoded_relations=[]
+    )
     # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
     constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
     # allow all offsets after second span start, but not after first span start
@@ -457,8 +467,8 @@ def test_build_constraint(taskmodule):
     ]
 
     # first span, and second span start and end
-    constraint = taskmodule._build_constraint(
-        previous_ids=[14, 14, 5, 11, 12], input_len=input_len
+    constraint = taskmodule.build_constraint_mask(
+        previous_ids=[14, 14, 5, 11, 12], input_len=input_len, decoded_relations=[]
     )
     # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
     constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
@@ -472,8 +482,8 @@ def test_build_constraint(taskmodule):
     ]
 
     # first span, and second span
-    constraint = taskmodule._build_constraint(
-        previous_ids=[14, 14, 5, 11, 12, 3], input_len=input_len
+    constraint = taskmodule.build_constraint_mask(
+        previous_ids=[14, 14, 5, 11, 12, 3], input_len=input_len, decoded_relations=[]
     )
     # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
     constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
@@ -489,8 +499,8 @@ def test_build_constraint(taskmodule):
     # fist span, and (1 to 3)-times none
     for i in range(1, 3):
         none_ids = [2] * i
-        constraint = taskmodule._build_constraint(
-            previous_ids=[14, 14, 5] + none_ids, input_len=input_len
+        constraint = taskmodule.build_constraint_mask(
+            previous_ids=[14, 14, 5] + none_ids, input_len=input_len, decoded_relations=[]
         )
         # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
         constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
@@ -504,8 +514,8 @@ def test_build_constraint(taskmodule):
         ]
 
     # contains eos
-    constraint = taskmodule._build_constraint(
-        previous_ids=[14, 14, 5, 11, 12, 3, 6, 1], input_len=input_len
+    constraint = taskmodule.build_constraint_mask(
+        previous_ids=[14, 14, 5, 11, 12, 3, 6, 1], input_len=input_len, decoded_relations=[]
     )
     # [bos, eos/pad], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
     constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
@@ -517,6 +527,8 @@ def test_build_constraint(taskmodule):
         [0],
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     ]
+
+    # TODO: test with decoded_relations
 
 
 def test_maybe_log_example(taskmodule, task_encoding, caplog, config):
@@ -596,14 +608,14 @@ def test_collate(batch, taskmodule):
                     [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
                     [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1],
+                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
                     [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                     [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1],
                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
                     [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1],
+                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1],
                     [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                     [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                     [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -627,7 +639,7 @@ def test_collate(batch, taskmodule):
                     [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
                     [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1],
+                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0],
                     [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                     [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -637,7 +649,7 @@ def test_collate(batch, taskmodule):
                     [0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1],
                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, -1, -1, -1, -1, -1],
                     [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
-                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 1, 1, -1, -1, -1, -1, -1],
+                    [0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1],
                     [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
                     [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
                     [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1],
@@ -868,7 +880,8 @@ def test_prefix_allowed_tokens_fn_with_maximum():
         batch_id=0, input_ids=add_previous_input_ids[:4], maximum=20
     )
     # allow none [2] and all offsets except offsets covered by first span [14]
-    assert allowed_ids == [2, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19]
+    # TODO: no, 14 is also allowed! because of generating the exact same spans is allowed. or better not?
+    assert allowed_ids == [2, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
 
     # first span, and second span start
     allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
@@ -895,8 +908,8 @@ def test_prefix_allowed_tokens_fn_with_maximum():
     allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
         batch_id=0, input_ids=add_previous_input_ids[:8], maximum=20
     )
-    # allow eos [1] and all offsets [7..19]
-    assert allowed_ids == [1, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    # allow eos [1] and all offsets [7..19] except the ones covered by the first entry, i.e. [12]
+    assert allowed_ids == [1, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19]
 
     # first span start
     allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
@@ -917,7 +930,8 @@ def test_prefix_allowed_tokens_fn_with_maximum():
         batch_id=0, input_ids=add_previous_input_ids[:11], maximum=20
     )
     # allow none [2] and all offsets except offsets covered by first span [17]
-    assert allowed_ids == [2, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19]
+    # TODO: no, 17 is also allowed! because of generating the exact same spans is allowed. or better not?
+    assert allowed_ids == [2, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19]
 
     # first span, and none
     allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
@@ -944,8 +958,8 @@ def test_prefix_allowed_tokens_fn_with_maximum():
     allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
         batch_id=0, input_ids=add_previous_input_ids[:15], maximum=20
     )
-    # allow eos [1] and all offsets [7..19]
-    assert allowed_ids == [1, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    # allow eos [1] and all offsets [7..19], except the ones covered by the first entry, i.e. [12]
+    assert allowed_ids == [1, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19]
 
     # got an eos, so the sequence is complete
     allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
