@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Type
 
 from pytorch_ie import Annotation
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
@@ -76,6 +76,27 @@ def spans_are_nested(span: Span, other_span: Span) -> bool:
     return span_is_nested_in_other_span(
         span=span, other_span=other_span
     ) or span_is_nested_in_other_span(span=other_span, other_span=span)
+
+
+def _parse_label(
+    encoding: List[int], id2label: Dict[int, str], annotation_type: Type[Annotation]
+) -> Tuple[str, List[int]]:
+    if len(encoding) == 0:
+        raise IncompleteEncodingException(
+            f"the encoding has not enough values to decode as {annotation_type.__name__}",
+            encoding=encoding,
+            follow_up_candidates=sorted(id2label.keys()),
+        )
+    label_encoding = encoding[0]
+    remaining = encoding[1:]
+    if label_encoding not in id2label:
+        raise DecodingLabelException(
+            f"unknown label id: {label_encoding} (id2label: {id2label})",
+            encoding=encoding,
+            remaining=remaining,
+        )
+    label = id2label[label_encoding]
+    return label, remaining
 
 
 class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
@@ -361,24 +382,6 @@ class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, 
         )
         return result
 
-    def _parse_label(self, encoding: List[int]) -> Tuple[str, List[int]]:
-        if len(encoding) == 0:
-            raise IncompleteEncodingException(
-                "the encoding has not enough values to decode as LabeledSpan",
-                encoding=encoding,
-                follow_up_candidates=sorted(self.id2label.keys()),
-            )
-        label_encoding = encoding[0]
-        remaining = encoding[1:]
-        if label_encoding not in self.id2label:
-            raise DecodingLabelException(
-                f"unknown label id: {label_encoding} (label2id: {self.label2id})",
-                encoding=encoding,
-                remaining=remaining,
-            )
-        label = self.id2label[label_encoding]
-        return label, remaining
-
     def parse(
         self,
         encoding: List[int],
@@ -386,7 +389,9 @@ class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, 
         text_length: int,
     ) -> Tuple[LabeledSpan, List[int]]:
         if self.mode == "label_indices":
-            label, remaining = self._parse_label(encoding)
+            label, remaining = _parse_label(
+                encoding, id2label=self.id2label, annotation_type=LabeledSpan
+            )
         elif self.mode == "indices_label":
             label, remaining = None, encoding
         else:
@@ -396,7 +401,9 @@ class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, 
             encoding=remaining, decoded_annotations=decoded_annotations, text_length=text_length
         )
         if label is None:
-            label, remaining = self._parse_label(remaining)
+            label, remaining = _parse_label(
+                remaining, id2label=self.id2label, annotation_type=LabeledSpan
+            )
         result = LabeledSpan(start=span.start, end=span.end, label=label)
         return result, remaining
 
@@ -610,24 +617,6 @@ class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRela
 
         return rel
 
-    def _parse_label(self, encoding: List[int]) -> Tuple[str, List[int]]:
-        if len(encoding) == 0:
-            raise IncompleteEncodingException(
-                "the encoding has not enough values to decode as BinaryRelation",
-                encoding=encoding,
-                follow_up_candidates=sorted(self.id2label.keys()),
-            )
-        label_encoding = encoding[0]
-        remaining = encoding[1:]
-        if label_encoding not in self.id2label:
-            raise DecodingLabelException(
-                f"unknown label id: {label_encoding} (label2id: {self.label2id})",
-                encoding=encoding,
-                remaining=remaining,
-            )
-        label = self.id2label[label_encoding]
-        return label, remaining
-
     def parse(
         self,
         encoding: List[int],
@@ -638,7 +627,9 @@ class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRela
             label, remaining = None, encoding
             argument_mode = self.mode[: -len("_label")]
         elif self.mode.startswith("label_"):
-            label, remaining = self._parse_label(encoding)
+            label, remaining = _parse_label(
+                encoding, id2label=self.id2label, annotation_type=BinaryRelation
+            )
             argument_mode = self.mode[len("label_") :]
         else:
             raise ValueError(f"unknown mode: {self.mode}")
@@ -660,6 +651,7 @@ class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRela
             encoding=remaining, decoded_annotations=decoded_arguments, text_length=text_length
         )
         decoded_arguments.append(first_argument)
+        found_none = False
         try:
             second_argument, remaining = second_argument_encoder.parse(
                 encoding=remaining, decoded_annotations=decoded_arguments, text_length=text_length
@@ -670,6 +662,7 @@ class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRela
                 if remaining[0:3] == [none_id] * 3:
                     second_argument = first_argument
                     remaining = remaining[3:]
+                    found_none = True
                 elif len(remaining) == 0 and isinstance(e, IncompleteEncodingException):
                     raise IncompleteEncodingException(
                         "the encoding has not enough values to decode as BinaryRelation",
@@ -688,7 +681,17 @@ class BinaryRelationEncoderDecoder(GenerativeAnnotationEncoderDecoder[BinaryRela
                 raise e
 
         if label is None:
-            label, remaining = self._parse_label(remaining)
+            if found_none:
+                id2label = {
+                    id: label for label, id in self.label2id.items() if label == self.none_label
+                }
+            else:
+                id2label = {
+                    id: label for label, id in self.label2id.items() if label != self.none_label
+                }
+            label, remaining = _parse_label(
+                remaining, id2label=id2label, annotation_type=BinaryRelation
+            )
 
         if label == self.none_label:
             if self.loop_dummy_relation_name is None:
