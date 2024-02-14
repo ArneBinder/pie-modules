@@ -284,9 +284,15 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         else:
             unpadded_label_ids = []
 
-        follow_up_candidates = self.get_follow_up_candidates(
-            previous_ids=unpadded_label_ids, input_len=maximum - self.pointer_offset
-        )
+        try:
+            follow_up_candidates = self.get_follow_up_candidates(
+                previous_ids=unpadded_label_ids, input_len=maximum - self.pointer_offset
+            )
+        except DecodingException as e:
+            # if the decoding failed, allow all tokens. Maybe the model can recover from this state
+            # TODO: log a warning?
+            return list(range(maximum))
+
         # sort and convert to a list
         return sorted(follow_up_candidates)
 
