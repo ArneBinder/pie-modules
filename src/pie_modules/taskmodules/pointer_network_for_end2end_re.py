@@ -283,14 +283,12 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             )[0].labels
         else:
             unpadded_label_ids = []
-        # this is a binary mask
-        follow_up_mask = self.build_constraint(
+
+        follow_up_candidates = self.get_follow_up_candidates(
             previous_ids=unpadded_label_ids, input_len=maximum - self.pointer_offset
         )
-        # convert to indices
-        allowed_indices = torch.nonzero(follow_up_mask).squeeze(1)
-        # convert to a list
-        return allowed_indices.tolist()
+        # sort and convert to a list
+        return sorted(follow_up_candidates)
 
     def _prepare(self, documents: Sequence[DocumentType]) -> None:
         # collect all labels
@@ -600,40 +598,36 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         )
         return self.postprocess_decoded_relations(decoded_relations), errors
 
-    def build_constraint_mask(
-        self,
-        previous_ids: List[int],
-        input_len: int,
-        decoded_relations: List[BinaryRelation],
+    def follow_up_candidates_to_mask(
+        self, follow_up_candidates: Set[int], input_len: int
     ) -> torch.LongTensor:
         result = torch.zeros(input_len + self.pointer_offset).to(torch.long)
-        # if the eos was already found, do not allow any other token
-        if self.eos_id in previous_ids:
-            result[self.eos_id] = 1
-            return result
-        try:
-            self.relation_encoder_decoder.parse(
-                encoding=previous_ids, decoded_annotations=decoded_relations, text_length=input_len
-            )
-        except IncompleteEncodingException as e:
-            result[e.follow_up_candidates] = 1
-        if len(previous_ids) == 0:
-            result[self.eos_id] = 1
+        result[list(follow_up_candidates)] = 1
         return result
 
-    def build_constraint(self, previous_ids: List[int], input_len: int) -> torch.LongTensor:
+    def get_follow_up_candidates(self, previous_ids: List[int], input_len: int) -> Set[int]:
+        # if the eos was already generated, do not allow any other token
+        if self.eos_id in previous_ids:
+            return {self.eos_id}
+
         decoded_relations, _, remaining = self.relation_encoder_decoder.parse_with_error_handling(
             encoding=previous_ids,
             input_length=input_len,
             stop_ids=[self.eos_id],
         )
-        # this is a binary mask
-        follow_up_ids = self.build_constraint_mask(
-            previous_ids=remaining,
-            input_len=input_len,
-            decoded_relations=decoded_relations,
-        )
-        return follow_up_ids
+        try:
+            self.relation_encoder_decoder.parse(
+                encoding=remaining, decoded_annotations=decoded_relations, text_length=input_len
+            )
+            raise Exception("expected IncompleteEncodingException")
+        except IncompleteEncodingException as e:
+            result = set(e.follow_up_candidates)
+
+        # if the encoding could be parsed completely, also allow the eos token
+        if len(remaining) == 0:
+            result.add(self.eos_id)
+
+        return result
 
     def build_constraints(
         self,
@@ -647,8 +641,11 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         labels_without_eos = target_ids[:-1]
         constraints: List[torch.LongTensor] = []
         for idx, t in enumerate(labels_without_eos):
-            current_constraints = self.build_constraint(
+            follow_up_candidates = self.get_follow_up_candidates(
                 previous_ids=labels_without_eos[:idx], input_len=input_len
+            )
+            current_constraints = self.follow_up_candidates_to_mask(
+                follow_up_candidates=follow_up_candidates, input_len=input_len
             )
             if current_constraints[t] == 0:
                 raise Exception(

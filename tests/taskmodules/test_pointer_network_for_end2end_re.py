@@ -387,14 +387,23 @@ def test_build_constraints(taskmodule, task_encoding, config):
         raise Exception(f"unknown config: {config}")
 
 
+def build_constraint_mask(
+    taskmodule,
+    previous_ids: List[int],
+    input_len: int,
+) -> torch.LongTensor:
+    follow_up_candidates = taskmodule.get_follow_up_candidates(
+        previous_ids=previous_ids, input_len=input_len
+    )
+    return taskmodule.follow_up_candidates_to_mask(follow_up_candidates, input_len)
+
+
 def test_build_constraint(taskmodule):
     target_ids = [14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]
     input_len = 13
 
     # empty previous_ids
-    constraint = taskmodule.build_constraint_mask(
-        previous_ids=[], input_len=input_len, decoded_relations=[]
-    )
+    constraint = build_constraint_mask(taskmodule, previous_ids=[], input_len=input_len)
     # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
     constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
     # allow eos and all offsets
@@ -407,9 +416,7 @@ def test_build_constraint(taskmodule):
     ]
 
     # just first span start
-    constraint = taskmodule.build_constraint_mask(
-        previous_ids=[14], input_len=input_len, decoded_relations=[]
-    )
+    constraint = build_constraint_mask(taskmodule, previous_ids=[14], input_len=input_len)
     # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
     constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
     # allow all offsets after first span start
@@ -422,9 +429,7 @@ def test_build_constraint(taskmodule):
     ]
 
     # first span start and end
-    constraint = taskmodule.build_constraint_mask(
-        previous_ids=[14, 14], input_len=input_len, decoded_relations=[]
-    )
+    constraint = build_constraint_mask(taskmodule, previous_ids=[14, 14], input_len=input_len)
     # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
     constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
     # allow all span ids
@@ -437,9 +442,7 @@ def test_build_constraint(taskmodule):
     ]
 
     # first span start, end, and label
-    constraint = taskmodule.build_constraint_mask(
-        previous_ids=[14, 14, 5], input_len=input_len, decoded_relations=[]
-    )
+    constraint = build_constraint_mask(taskmodule, previous_ids=[14, 14, 5], input_len=input_len)
     # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
     constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
     # allow none and all offsets except offsets covered by first span
@@ -452,8 +455,8 @@ def test_build_constraint(taskmodule):
     ]
 
     # first span, and second span start
-    constraint = taskmodule.build_constraint_mask(
-        previous_ids=[14, 14, 5, 11], input_len=input_len, decoded_relations=[]
+    constraint = build_constraint_mask(
+        taskmodule, previous_ids=[14, 14, 5, 11], input_len=input_len
     )
     # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
     constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
@@ -467,8 +470,8 @@ def test_build_constraint(taskmodule):
     ]
 
     # first span, and second span start and end
-    constraint = taskmodule.build_constraint_mask(
-        previous_ids=[14, 14, 5, 11, 12], input_len=input_len, decoded_relations=[]
+    constraint = build_constraint_mask(
+        taskmodule, previous_ids=[14, 14, 5, 11, 12], input_len=input_len
     )
     # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
     constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
@@ -482,8 +485,8 @@ def test_build_constraint(taskmodule):
     ]
 
     # first span, and second span
-    constraint = taskmodule.build_constraint_mask(
-        previous_ids=[14, 14, 5, 11, 12, 3], input_len=input_len, decoded_relations=[]
+    constraint = build_constraint_mask(
+        taskmodule, previous_ids=[14, 14, 5, 11, 12, 3], input_len=input_len
     )
     # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
     constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
@@ -499,8 +502,8 @@ def test_build_constraint(taskmodule):
     # fist span, and (1 to 3)-times none
     for i in range(1, 3):
         none_ids = [2] * i
-        constraint = taskmodule.build_constraint_mask(
-            previous_ids=[14, 14, 5] + none_ids, input_len=input_len, decoded_relations=[]
+        constraint = build_constraint_mask(
+            taskmodule, previous_ids=[14, 14, 5] + none_ids, input_len=input_len
         )
         # [bos, eos], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
         constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
@@ -514,8 +517,8 @@ def test_build_constraint(taskmodule):
         ]
 
     # contains eos
-    constraint = taskmodule.build_constraint_mask(
-        previous_ids=[14, 14, 5, 11, 12, 3, 6, 1], input_len=input_len, decoded_relations=[]
+    constraint = build_constraint_mask(
+        taskmodule, previous_ids=[14, 14, 5, 11, 12, 3, 6, 1], input_len=input_len
     )
     # [bos, eos/pad], [none], [content, person, topic], [is_about] [13 offsets (all remaining)]
     constraint_formatted = _separate_constraint(constraint.tolist(), taskmodule)
