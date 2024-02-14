@@ -421,6 +421,20 @@ class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, 
             label, remaining = _parse_label(
                 remaining, id2label=self.id2label, annotation_type=LabeledSpan
             )
+
+        if not self.span_encoder_decoder.allow_nested:
+            # if we have parsed a span that has the same start and end as a previous span,
+            # it is not allowed to have a different label
+            previous_spans_to_label = {
+                Span(start=ann.start, end=ann.end): ann.label for ann in decoded_annotations
+            }
+            if span in previous_spans_to_label and previous_spans_to_label[span] != label:
+                raise DecodingSpanOverlapException(
+                    "the encoded span overlaps with another span with a different label",
+                    encoding=encoding,
+                    remaining=remaining,
+                )
+
         result = LabeledSpan(start=span.start, end=span.end, label=label)
         return result, remaining
 
@@ -483,9 +497,6 @@ class LabeledMultiSpanEncoderDecoder(
         decoded_annotations: List[LabeledMultiSpan],
         text_length: int,
     ) -> Tuple[LabeledMultiSpan, List[int]]:
-        # TODO: handle the case were the encoding consists of a complete span which contains a previously decoded span
-        # this can happen like this: previous_encoding = (0, 5, label), encoding = (0, 5, 10, 11, label).
-        # This should not be allowed if not self.span_encoder_decoder.allow_nested, but it currently is.
         try:
             decoded_spans = []
             for ann in decoded_annotations:
@@ -539,6 +550,13 @@ class LabeledMultiSpanEncoderDecoder(
                     )
             raise e
 
+        if not self.span_encoder_decoder.allow_nested:
+            # TODO: handle the case were the encoding consists of a complete span
+            #  which contains a previously decoded span this can happen like this:
+            #  previous_encoding = (0, 5, label), encoding = (0, 5, 10, 11, label).
+            #  This should not be allowed if not self.span_encoder_decoder.allow_nested,
+            #  but it currently is.
+            pass
         return LabeledMultiSpan(slices=tuple(slices), label=label), remaining[1:]
 
 
