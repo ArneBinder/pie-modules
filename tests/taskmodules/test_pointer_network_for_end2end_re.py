@@ -904,8 +904,8 @@ def test_prefix_allowed_tokens_fn_with_maximum():
     allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
         batch_id=0, input_ids=add_previous_input_ids[:7], maximum=20
     )
-    # allow all relation ids
-    assert allowed_ids == [6]
+    # allow all relation ids. we also allow the eos [1] because two entries are sampled each step
+    assert allowed_ids == [1, 6]
 
     # entry begins (second entry)
     allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
@@ -941,21 +941,24 @@ def test_prefix_allowed_tokens_fn_with_maximum():
         batch_id=0, input_ids=add_previous_input_ids[:12], maximum=20
     )
     # allow only none [2] because when the entry contains already a none id, it cannot be followed by anything else
-    assert allowed_ids == [2]
+    # we also allow the eos [1] because two entries are sampled each step
+    assert allowed_ids == [1, 2]
 
     # first span, and none, and none
     allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
         batch_id=0, input_ids=add_previous_input_ids[:13], maximum=20
     )
     # allow only none [2] because when the entry contains already a none id, it cannot be followed by anything else
-    assert allowed_ids == [2]
+    # we also allow the eos [1] because two entries are sampled each step
+    assert allowed_ids == [1, 2]
 
     # first span, and none, and none, and none
     allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(
         batch_id=0, input_ids=add_previous_input_ids[:14], maximum=20
     )
     # allow only none [2] because when the entry contains already a none id, it cannot be followed by anything else
-    assert allowed_ids == [2]
+    # we also allow the eos [1] because two entries are sampled each step
+    assert allowed_ids == [1, 2]
 
     # first span, and none, and none, and none, and none (second entry is complete)
     allowed_ids = taskmodule._prefix_allowed_tokens_fn_with_maximum(

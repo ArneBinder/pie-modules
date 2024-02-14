@@ -293,6 +293,12 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             # TODO: log a warning?
             return list(range(maximum))
 
+        # If there is only one candidate, we add the eos token. This is because two ids are sampled
+        # when using GenerationMixin.beam_search() and we want to avoid that a non-candidate which
+        # is "more wrong" is sampled.
+        if len(follow_up_candidates) == 1:
+            follow_up_candidates.add(self.eos_id)
+
         # sort and convert to a list
         return sorted(follow_up_candidates)
 
