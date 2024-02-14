@@ -508,17 +508,20 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             target_ids.extend(encoded_relation)
         target_ids.append(self.eos_id)
 
+        if self.create_constraints:
+            if metadata is None or "src_len" not in metadata:
+                raise Exception("metadata with 'src_len' is required to create constraints")
+            constraints = self.build_constraints(
+                input_len=metadata["src_len"], target_ids=target_ids
+            ).tolist()
+        else:
+            constraints = None
+
+        result = LabelsAndOptionalConstraints(labels=target_ids, constraints=constraints)
+
         # sanity check
-        _, encoding_errors, remaining = self.relation_encoder_decoder.parse_with_error_handling(
-            encoding=target_ids,
-            input_length=self.tokenizer.model_max_length,
-            stop_ids=[self.eos_id],
-        )
-        if (
-            not all(v == 0 for k, v in encoding_errors.items() if k != "correct")
-            or len(remaining) > 0
-        ):
-            decoded, invalid = self.decode_annotations(LabelsAndOptionalConstraints(target_ids))
+        decoded, decoding_errors = self.decode_annotations(encoding=result)
+        if not all(v == 0 for k, v in decoding_errors.items() if k != "correct"):
             not_encoded = {}
             for layer_name in layers:
                 # convert to dicts to make them comparable (original annotations are attached which breaks comparison)
@@ -531,36 +534,15 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                     not_encoded[layer_name] = list(filtered)
             if len(not_encoded) > 0:
                 logger.warning(
-                    f"encoding errors: {encoding_errors}, skipped annotations:\n"
+                    f"encoding errors: {decoding_errors}, skipped annotations:\n"
                     f"{json.dumps(not_encoded, sort_keys=True, indent=2)}"
                 )
-            elif len([tag for tag in remaining if tag != self.eos_id]) > 0:
-                logger.warning(
-                    f"encoding errors: {encoding_errors}, remaining encoding ids: {remaining}"
-                )
 
-        if self.create_constraints:
-            if metadata is None or "src_len" not in metadata:
-                raise Exception("metadata with 'src_len' is required to create constraints")
-            constraints = self.build_constraints(
-                input_len=metadata["src_len"], target_ids=target_ids
-            ).tolist()
-        else:
-            constraints = None
-        return LabelsAndOptionalConstraints(labels=target_ids, constraints=constraints)
+        return result
 
-    def decode_annotations(
-        self, encoding: TaskOutputType
-    ) -> Tuple[Dict[str, Iterable[Annotation]], Dict[str, int]]:
-        (
-            decoded_relations,
-            errors,
-            remaining,
-        ) = self.relation_encoder_decoder.parse_with_error_handling(
-            encoding=encoding.labels,
-            input_length=self.tokenizer.model_max_length,
-            stop_ids=[self.eos_id],
-        )
+    def postprocess_decoded_relations(
+        self, decoded_relations: List[BinaryRelation]
+    ) -> Dict[str, Iterable[Annotation]]:
         relation_tuples: List[Tuple[Tuple[int, ...], Tuple[int, ...], str]] = []
         entity_labels: Dict[Tuple[int, ...], List[str]] = defaultdict(list)
         for rel in decoded_relations:
@@ -602,7 +584,21 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         return {
             self.span_layer_name: entity_layer,
             self.relation_layer_name: relation_layer,
-        }, errors
+        }
+
+    def decode_annotations(
+        self, encoding: TaskOutputType
+    ) -> Tuple[Dict[str, Iterable[Annotation]], Dict[str, int]]:
+        (
+            decoded_relations,
+            errors,
+            remaining,
+        ) = self.relation_encoder_decoder.parse_with_error_handling(
+            encoding=encoding.labels,
+            input_length=self.tokenizer.model_max_length,
+            stop_ids=[self.eos_id],
+        )
+        return self.postprocess_decoded_relations(decoded_relations), errors
 
     def build_constraint_mask(
         self,
