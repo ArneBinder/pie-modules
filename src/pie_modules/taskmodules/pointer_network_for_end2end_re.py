@@ -290,7 +290,8 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             )
         except DecodingException as e:
             # if the decoding failed, allow all tokens. Maybe the model can recover from this state
-            # TODO: log a warning?
+            # TODO: remove the warning?
+            logger.warning(f"failed to get follow_up_candidates: {e}, allow all tokens")
             return list(range(maximum))
 
         # If there is only one candidate, we add the eos token. This is because two ids are sampled
