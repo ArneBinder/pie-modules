@@ -807,11 +807,11 @@ def test_configure_model_metric():
     assert values == {
         "exact_encoding_matches": 0.5,
         "decoding_errors": {
-            "correct": 0.2222222238779068,
-            "negative_index": 0.5555555820465088,
-            "order": 0.1111111119389534,
-            "empty_span": 0.1111111119389534,
-            "all": 0.7777777910232544,
+            "correct": 0.25,
+            "negative_index": 0.5,
+            "order": 0.125,
+            "label": 0.125,
+            "all": 0.75,
         },
         "labeled_spans": {
             "person": {"recall": 0.5, "precision": 1.0, "f1": 0.6666666865348816},

@@ -325,12 +325,16 @@ class SpanEncoderDecoderWithOffset(SpanEncoderDecoder):
                 decoded_annotations=decoded_annotations,
                 text_length=text_length,
             )
-        except IncompleteEncodingException as e:
-            # we need to add the offset to the follow-up candidates
-            follow_up_candidates = [x + self.offset for x in e.follow_up_candidates]
-            raise IncompleteEncodingException(
-                e.message, encoding=encoding, follow_up_candidates=follow_up_candidates
-            )
+            # and also to the follow-up candidates if present
+        except DecodingException as e:
+            # we need to add the offset to the remaining encoding
+            # and also to the follow-up candidates if any of them is present
+            kwargs = {}
+            if e.remaining is not None and not isinstance(e, IncompleteEncodingException):
+                kwargs["remaining"] = [x + self.offset for x in e.remaining]
+            if isinstance(e, IncompleteEncodingException):
+                kwargs["follow_up_candidates"] = [x + self.offset for x in e.follow_up_candidates]
+            raise type(e)(e.message, encoding=encoding, **kwargs)
         # use the original encoding, i.e. with any potential offset, to get the remaining encoding
         return span, encoding[len(encoding) - len(remaining) :]
 
