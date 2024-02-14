@@ -627,6 +627,9 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         if len(remaining) == 0:
             result.add(self.eos_id)
 
+        if len(result) == 0:
+            raise Exception(f"no follow_up_candidates found: {previous_ids}")
+
         return result
 
     def build_constraints(
