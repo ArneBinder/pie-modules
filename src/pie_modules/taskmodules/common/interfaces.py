@@ -1,8 +1,11 @@
 import abc
+import logging
 from collections import defaultdict
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
 
 from pytorch_ie import Annotation
+
+logger = logging.getLogger(__name__)
 
 # Annotation Encoding type: encoding for a single annotation
 AE = TypeVar("AE")
@@ -71,6 +74,7 @@ class GenerativeAnnotationEncoderDecoderWithParseWithErrors(
         valid_encoding: A
         successfully_decoded: List[int] = []
         remaining = encoding
+        prev_len = len(remaining)
         while len(remaining) > 0:
             if remaining[0] in stop_ids:
                 # we discard everything after any stop id
@@ -89,5 +93,13 @@ class GenerativeAnnotationEncoderDecoderWithParseWithErrors(
                     raise ValueError(f"decoding exception did not return remaining encoding: {e}")
                 errors[e.identifier] += 1
                 remaining = e.remaining
+
+            # if we did not consume any ids, we discard the first remaining one
+            if len(remaining) == prev_len:
+                logger.warning(
+                    f"parse did not consume any ids, discarding first id from {remaining}"
+                )
+                remaining = remaining[1:]
+            prev_len = len(remaining)
 
         return decoded_relations, dict(errors), encoding[len(successfully_decoded) :]
