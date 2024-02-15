@@ -423,6 +423,7 @@ class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, 
                 remaining, id2label=self.id2label, annotation_type=LabeledSpan
             )
 
+        result = LabeledSpan(start=span.start, end=span.end, label=label)
         if not self.span_encoder_decoder.allow_nested:
             # if we have parsed a span that has the same start and end as a previous span,
             # it is not allowed to have a different label
@@ -431,12 +432,12 @@ class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, 
             }
             if span in previous_spans_to_label and previous_spans_to_label[span] != label:
                 raise DecodingSpanOverlapException(
-                    "the encoded span overlaps with another span with a different label",
+                    f"the encoded span {result} overlaps with another span with a different label: "
+                    f"{previous_spans_to_label[span]}",
                     encoding=encoding,
                     remaining=remaining,
                 )
 
-        result = LabeledSpan(start=span.start, end=span.end, label=label)
         return result, remaining
 
 

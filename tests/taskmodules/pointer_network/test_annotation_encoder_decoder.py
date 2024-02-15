@@ -463,6 +463,28 @@ def test_labeled_span_encoder_decoder_parse_incomplete(mode):
         raise ValueError(f"unknown mode: {mode}")
 
 
+@pytest.mark.parametrize("mode", ["label_indices", "indices_label"])
+def test_labeled_span_encoder_decoder_parse_with_previous_exact_overlap(mode):
+    label2id = {"A": 0, "B": 1}
+    encoder_decoder = LabeledSpanEncoderDecoder(
+        span_encoder_decoder=SpanEncoderDecoderWithOffset(offset=len(label2id)),
+        label2id=label2id,
+        mode=mode,
+    )
+    expected_span = LabeledSpan(start=1, end=3, label="A")
+    remaining_encoding = [3, 4]
+    # encoding of the expected span + remaining encoding
+    encoding = encoder_decoder.encode(expected_span) + remaining_encoding
+    other_span = LabeledSpan(start=1, end=3, label="B")
+    with pytest.raises(DecodingSpanOverlapException) as excinfo:
+        encoder_decoder.parse(encoding, [other_span], 6)
+    assert (
+        str(excinfo.value)
+        == f"the encoded span {expected_span} overlaps with another span with a different label: B"
+    )
+    assert excinfo.value.remaining == remaining_encoding
+
+
 def test_labeled_multi_span_encoder_decoder():
     """Test the LabeledMultiSpanEncoderDecoder class."""
 
