@@ -215,7 +215,8 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
             elif len(covering_spans) > 0:
                 if len(covering_spans) > 1:
                     raise ValueError(
-                        "more than one covering span found, but allow_nested=False. This should not happen."
+                        f"more than one covering span found, but allow_nested=False. This should not happen. "
+                        f"covering spans: {covering_spans}"
                     )
                 covering_span = list(covering_spans)[0]
                 # if we generated the start of an existing span, we need to generate the exact end next
