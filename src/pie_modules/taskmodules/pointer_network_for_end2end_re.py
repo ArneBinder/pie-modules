@@ -600,16 +600,20 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     def decode_annotations(
         self, encoding: TaskOutputType
     ) -> Tuple[Dict[str, Iterable[Annotation]], Dict[str, int]]:
-        (
-            decoded_relations,
-            errors,
-            remaining,
-        ) = self.relation_encoder_decoder.parse_with_error_handling(
-            encoding=encoding.labels,
-            input_length=self.tokenizer.model_max_length,
-            stop_ids=[self.eos_id],
-        )
-        return self.postprocess_decoded_relations(decoded_relations), errors
+        try:
+            (
+                decoded_relations,
+                errors,
+                remaining,
+            ) = self.relation_encoder_decoder.parse_with_error_handling(
+                encoding=encoding.labels,
+                input_length=self.tokenizer.model_max_length,
+                stop_ids=[self.eos_id],
+            )
+            return self.postprocess_decoded_relations(decoded_relations), errors
+        except Exception as e:
+            logger.error(f"failed to decode annotations: {e}")
+            return {layer_name: [] for layer_name in self.layer_names}, {"full_encoding": 1}
 
     def follow_up_candidates_to_mask(
         self, follow_up_candidates: Set[int], input_len: int
