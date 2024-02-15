@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 from typing import Any, Dict, List, Optional, Set, Tuple, Type
 
 from pytorch_ie import Annotation
@@ -497,12 +498,14 @@ class LabeledMultiSpanEncoderDecoder(
         decoded_annotations: List[LabeledMultiSpan],
         text_length: int,
     ) -> Tuple[LabeledMultiSpan, List[int]]:
+        decoded_spans = []
+        decoded_slices_to_spans = defaultdict(list)
+        for ann in decoded_annotations:
+            for start, end in ann.slices:
+                span = Span(start=start, end=end)
+                decoded_spans.append(span)
+                decoded_slices_to_spans[(start, end)].append(ann)
         try:
-            decoded_spans = []
-            for ann in decoded_annotations:
-                for start, end in ann.slices:
-                    decoded_spans.append(Span(start=start, end=end))
-
             slices: List[Tuple[int, int]] = []
             remaining = encoding
             while True:
@@ -530,6 +533,7 @@ class LabeledMultiSpanEncoderDecoder(
                 decoded_spans.append(span)
                 if len(remaining) > 0 and remaining[0] in self.id2label:
                     label = self.id2label[remaining[0]]
+                    remaining = remaining[1:]
                     break
 
         except IncompleteEncodingException as e:
@@ -550,14 +554,33 @@ class LabeledMultiSpanEncoderDecoder(
                     )
             raise e
 
-        if not self.span_encoder_decoder.allow_nested:
-            # TODO: handle the case were the encoding consists of a complete span
-            #  which contains a previously decoded span this can happen like this:
-            #  previous_encoding = (0, 5, label), encoding = (0, 5, 10, 11, label).
-            #  This should not be allowed if not self.span_encoder_decoder.allow_nested,
-            #  but it currently is.
-            pass
-        return LabeledMultiSpan(slices=tuple(slices), label=label), remaining[1:]
+        result = LabeledMultiSpan(slices=tuple(slices), label=label)
+
+        # check for any overlap with previously decoded spans
+        for s in slices:
+            if s in decoded_slices_to_spans:
+                # get all previous LabeledMultiSpans that have any of the slices in common
+                previous_spans = decoded_slices_to_spans[s]
+                for previous_span in previous_spans:
+                    if previous_span != result:
+                        if previous_span.slices != result.slices:
+                            raise DecodingSpanOverlapException(
+                                "the decoded slices partly overlap with the slices of another LabeledMultiSpan",
+                                encoding=encoding,
+                                remaining=remaining,
+                            )
+                        elif (
+                            not self.span_encoder_decoder.allow_nested
+                            and previous_span.label != result.label
+                        ):
+                            raise DecodingSpanNestedException(
+                                "the decoded LabeledMultiSpan is nested in another LabeledMultiSpan "
+                                "with a different label",
+                                encoding=encoding,
+                                remaining=remaining,
+                            )
+
+        return result, remaining
 
 
 class BinaryRelationEncoderDecoder(
