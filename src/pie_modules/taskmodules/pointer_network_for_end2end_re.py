@@ -271,6 +271,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
         # cache
         self.cache_decoded: SimpleCache[Tuple[List[BinaryRelation], List[int]]] = SimpleCache(
+            # TODO: set max_size to a reasonable value when using the cache is fixed
             max_size=0
         )
 
