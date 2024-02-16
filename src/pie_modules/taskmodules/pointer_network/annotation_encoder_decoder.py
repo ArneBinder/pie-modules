@@ -64,7 +64,7 @@ def spans_have_overlap(span: Span, other_span: Span) -> bool:
     return (
         other_span.start <= span.start < other_span.end
         or other_span.start < span.end <= other_span.end
-    )
+    ) and not spans_are_nested(span=span, other_span=other_span)
 
 
 def span_is_nested_in_other_span(span: Span, other_span: Span) -> bool:
@@ -277,27 +277,23 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
             span = Span(start=start_idx, end=end_idx)
             for previous_span in decoded_annotations:
                 simple_previous_span = Span(start=previous_span.start, end=previous_span.end)
-                if (
-                    spans_have_overlap(span=span, other_span=simple_previous_span)
-                    and span != simple_previous_span
-                ):
-                    if spans_are_nested(span=span, other_span=simple_previous_span):
-                        if not self.allow_nested:
-                            raise DecodingSpanNestedException(
-                                f"the encoded span is nested in another span: {previous_span}. "
-                                "You can set allow_nested=True to allow nested spans.",
-                                encoding=encoding,
-                                remaining=remaining,
-                            )
-                        else:
-                            # this is allowed, so we just pass
-                            pass
-                    else:
+                if span != simple_previous_span:
+                    if spans_have_overlap(span=span, other_span=simple_previous_span):
                         raise DecodingSpanOverlapException(
                             f"the encoded span overlaps with another span: {previous_span}",
                             encoding=encoding,
                             remaining=remaining,
                         )
+                    if not self.allow_nested and spans_are_nested(
+                        span=span, other_span=simple_previous_span
+                    ):
+                        raise DecodingSpanNestedException(
+                            f"the encoded span is nested in another span: {previous_span}. "
+                            "You can set allow_nested=True to allow nested spans.",
+                            encoding=encoding,
+                            remaining=remaining,
+                        )
+
             return span, remaining
 
 

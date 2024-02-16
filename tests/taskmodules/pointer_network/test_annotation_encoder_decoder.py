@@ -169,12 +169,12 @@ def test_spans_have_overlap():
     # overlap, no touching
     assert spans_have_overlap(Span(start=1, end=3), Span(start=2, end=4))
     assert spans_have_overlap(Span(start=2, end=4), Span(start=1, end=3))
-    # overlap, same start
-    assert spans_have_overlap(Span(start=1, end=2), Span(start=1, end=3))
-    assert spans_have_overlap(Span(start=1, end=3), Span(start=1, end=2))
-    # overlap, same end
-    assert spans_have_overlap(Span(start=2, end=3), Span(start=1, end=3))
-    assert spans_have_overlap(Span(start=1, end=3), Span(start=2, end=3))
+    # same start, nested -> no overlap
+    assert not spans_have_overlap(Span(start=1, end=2), Span(start=1, end=3))
+    assert not spans_have_overlap(Span(start=1, end=3), Span(start=1, end=2))
+    # same end, nested -> no overlap
+    assert not spans_have_overlap(Span(start=2, end=3), Span(start=1, end=3))
+    assert not spans_have_overlap(Span(start=1, end=3), Span(start=2, end=3))
     # no overlap, not touching
     assert not spans_have_overlap(Span(start=1, end=2), Span(start=3, end=4))
     assert not spans_have_overlap(Span(start=3, end=4), Span(start=1, end=2))
@@ -189,7 +189,7 @@ def test_span_encoder_decoder_parse_with_previous_annotations(allow_nested):
     expected_span = Span(start=1, end=3)
     remaining_encoding = [3, 4]
     # encoding of the expected span + remaining encoding
-    encoding = [1, 3] + remaining_encoding
+    encoding = encoder_decoder.encode(expected_span) + remaining_encoding
     other_span = Span(start=3, end=4)
     nested_span = Span(start=2, end=3)
     overlapping_span = Span(start=2, end=4)
@@ -214,6 +214,19 @@ def test_span_encoder_decoder_parse_with_previous_annotations(allow_nested):
         encoder_decoder.parse(encoding, [overlapping_span], 5)
     assert str(excinfo.value) == f"the encoded span overlaps with another span: {overlapping_span}"
     assert excinfo.value.remaining == remaining_encoding
+
+
+def test_dummy():
+    encoder_decoder = SpanEncoderDecoder(allow_nested=False, exclusive_end=False)
+    previous_span = Span(start=55, end=66)
+    encoding = [51, 69]
+    text_length = 1000
+    with pytest.raises(DecodingSpanNestedException) as excinfo:
+        encoder_decoder.parse(encoding, [previous_span], text_length)
+    assert (
+        str(excinfo.value)
+        == f"the encoded span is nested in another span: {previous_span}. You can set allow_nested=True to allow nested spans."
+    )
 
 
 @pytest.mark.parametrize(
