@@ -627,6 +627,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         if self.eos_id in previous_ids:
             return {self.eos_id}
 
+        # TODO: use some kind of FIFO-cache based on previous_ids[:-1]
         decoded_relations, _, remaining = self.relation_encoder_decoder.parse_with_error_handling(
             encoding=previous_ids,
             input_length=input_len,
@@ -660,10 +661,39 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             )
         labels_without_eos = target_ids[:-1]
         constraints: List[torch.LongTensor] = []
+        decoded_relations: List[BinaryRelation] = []
+        decoded_successfully: List[int] = []
         for idx, t in enumerate(labels_without_eos):
-            follow_up_candidates = self.get_follow_up_candidates(
-                previous_ids=labels_without_eos[:idx], input_len=input_len
-            )
+            previous_ids = labels_without_eos[:idx]
+            if self.eos_id in previous_ids:
+                follow_up_candidates = {self.eos_id}
+            else:
+                try:
+                    current_encoding = previous_ids[len(decoded_successfully) :]
+                    new_annotation, remaining = self.relation_encoder_decoder.parse(
+                        encoding=current_encoding,
+                        decoded_annotations=decoded_relations,
+                        text_length=input_len,
+                    )
+                    if len(remaining) > 0:
+                        raise Exception(f"remaining encoding after parsing: {remaining}")
+                    decoded_relations.append(new_annotation)
+                    decoded_successfully = previous_ids
+                    # we could parse the encoding completely, so we need to get the follow_up_candidates
+                    # for the empty encoding
+                    self.relation_encoder_decoder.parse(
+                        encoding=[], decoded_annotations=decoded_relations, text_length=input_len
+                    )
+                    raise Exception("expected IncompleteEncodingException")
+                except IncompleteEncodingException as e:
+                    follow_up_candidates = set(e.follow_up_candidates)
+
+                # if the encoding could be parsed completely, also allow the eos token
+                if decoded_successfully == previous_ids:
+                    follow_up_candidates.add(self.eos_id)
+
+                if len(follow_up_candidates) == 0:
+                    raise Exception(f"no follow_up_candidates found: {previous_ids}")
             current_constraints = self.follow_up_candidates_to_mask(
                 follow_up_candidates=follow_up_candidates, input_len=input_len
             )
