@@ -1,5 +1,6 @@
 import logging
 import pickle
+import random
 from dataclasses import asdict, dataclass
 from typing import Dict, List, Set
 
@@ -977,32 +978,19 @@ def test_prefix_allowed_tokens_fn_with_maximum():
     assert allowed_ids == [1]
 
 
-def test_decode_annotations_issue():
+def test_decode_annotations_fuzzing():
     taskmodule = get_default_taskmodule(
         labels_per_layer={
             "binary_relations": ["contradicts", "parts_of_same", "semantically_same", "supports"],
             "labeled_spans": ["background_claim", "data", "own_claim"],
         }
     )
-
-    # chunk into pieces of 20 ids for better readability
-    encoding_chunks = [
-        [66, 48, 3, 50, 48, 3, 7, 54, 48, 3, 50, 52, 4, 9, 79, 60, 3, 50, 64, 4],
-        [9, 79, 85, 3, 2, 2, 2, 2, 79, 85, 3, 2, 97, 4, 9, 190, 433, 5, 2, 2],
-        [2, 2, 125, 141, 5, 2, 2, 2, 2, 2, 367, 5, 2, 304, 5, 7, 306, 433, 5, 293],
-        [433, 5, 9, 403, 367, 5, 293, 313, 5, 7, 403, 401, 5, 403, 433, 5, 7, 403, 367, 5],
-        [2, 433, 5, 7, 403, 554, 5, 2, 2, 2, 2, 574, 606, 5, 2, 2, 2, 2, 556, 583],
-        [5, 2, 2, 2, 2, 2, 606, 5, 2, 2, 2, 2, 608, 643, 5, 2, 632, 5, 7, 653],
-        [659, 5, 2, 2, 2, 2, 665, 675, 5, 661, 679, 4, 9, 665],
-    ]
-    encoding = sum(encoding_chunks, [])
-    input_length = 1024
-    stop_ids = [1]
-
-    (
-        decoded_relations,
-        errors,
-        remaining,
-    ) = taskmodule.relation_encoder_decoder.parse_with_error_handling(
-        encoding=encoding, input_length=input_length, stop_ids=stop_ids
-    )
+    random.seed(42)
+    input_length = 100
+    output_length = 30
+    for _ in range(1000):
+        encoding = random.sample(range(0, input_length + taskmodule.pointer_offset), output_length)
+        encoding_without_bos = [idx for idx in encoding if idx != taskmodule.bos_id]
+        taskmodule.relation_encoder_decoder.parse_with_error_handling(
+            encoding=encoding_without_bos, input_length=input_length, stop_ids=[taskmodule.eos_id]
+        )
