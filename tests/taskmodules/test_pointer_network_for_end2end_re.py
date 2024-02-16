@@ -751,13 +751,15 @@ def test_annotations_from_output(task_encodings, task_outputs, taskmodule):
     )
 
 
-def get_default_taskmodule(**kwargs):
-    taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
-        tokenizer_name_or_path="facebook/bart-base",
-        labels_per_layer={
+def get_default_taskmodule(labels_per_layer=None, **kwargs):
+    if labels_per_layer is None:
+        labels_per_layer = {
             "labeled_spans": ["content", "person", "topic"],
             "binary_relations": ["is_about"],
-        },
+        }
+    taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
+        tokenizer_name_or_path="facebook/bart-base",
+        labels_per_layer=labels_per_layer,
         **kwargs,
     )
     taskmodule.post_prepare()
@@ -973,3 +975,34 @@ def test_prefix_allowed_tokens_fn_with_maximum():
     )
     # allow only pad [1] (same as eos) because the sequence is complete
     assert allowed_ids == [1]
+
+
+def test_decode_annotations_issue():
+    taskmodule = get_default_taskmodule(
+        labels_per_layer={
+            "binary_relations": ["contradicts", "parts_of_same", "semantically_same", "supports"],
+            "labeled_spans": ["background_claim", "data", "own_claim"],
+        }
+    )
+
+    # chunk into pieces of 20 ids for better readability
+    encoding_chunks = [
+        [66, 48, 3, 50, 48, 3, 7, 54, 48, 3, 50, 52, 4, 9, 79, 60, 3, 50, 64, 4],
+        [9, 79, 85, 3, 2, 2, 2, 2, 79, 85, 3, 2, 97, 4, 9, 190, 433, 5, 2, 2],
+        [2, 2, 125, 141, 5, 2, 2, 2, 2, 2, 367, 5, 2, 304, 5, 7, 306, 433, 5, 293],
+        [433, 5, 9, 403, 367, 5, 293, 313, 5, 7, 403, 401, 5, 403, 433, 5, 7, 403, 367, 5],
+        [2, 433, 5, 7, 403, 554, 5, 2, 2, 2, 2, 574, 606, 5, 2, 2, 2, 2, 556, 583],
+        [5, 2, 2, 2, 2, 2, 606, 5, 2, 2, 2, 2, 608, 643, 5, 2, 632, 5, 7, 653],
+        [659, 5, 2, 2, 2, 2, 665, 675, 5, 661, 679, 4, 9, 665],
+    ]
+    encoding = sum(encoding_chunks, [])
+    input_length = 1024
+    stop_ids = [1]
+
+    (
+        decoded_relations,
+        errors,
+        remaining,
+    ) = taskmodule.relation_encoder_decoder.parse_with_error_handling(
+        encoding=encoding, input_length=input_length, stop_ids=stop_ids
+    )
