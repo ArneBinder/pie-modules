@@ -184,6 +184,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         none_label: str = "none",
         loop_dummy_relation_name: str = "loop",
         constrained_generation: bool = False,
+        constrain_with_previous_records: bool = True,
         # generic pointer network
         label_tokens: Optional[Dict[str, str]] = None,
         label_representations: Optional[Dict[str, str]] = None,
@@ -237,6 +238,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         self.none_label = none_label
         self.loop_dummy_relation_name = loop_dummy_relation_name
         self.constrained_generation = constrained_generation
+        self.constrain_with_previous_records = constrain_with_previous_records
         # will be set in _post_prepare()
         self.relation_encoder_decoder: BinaryRelationEncoderDecoder
 
@@ -652,6 +654,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                 encoding=encoding.labels,
                 input_length=self.tokenizer.model_max_length,
                 stop_ids=[self.eos_id],
+                disrespect_decoded_annotations=not self.constrain_with_previous_records,
             )
             return self.postprocess_decoded_relations(decoded_relations), errors
         except Exception as e:
@@ -687,6 +690,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             input_length=input_len,
             stop_ids=[self.eos_id],
             decoded_annotations=decoded_relations,
+            disrespect_decoded_annotations=not self.constrain_with_previous_records,
         )
         successfully_decoded = previous_ids[: len(previous_ids) - len(remaining)]
         self.cache_decoded.add(tuple(previous_ids), (decoded_relations, successfully_decoded))
