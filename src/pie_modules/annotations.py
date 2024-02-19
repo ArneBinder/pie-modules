@@ -8,14 +8,17 @@ from pytorch_ie.annotations import (
     LabeledSpan,
     MultiLabel,
     MultiLabeledBinaryRelation,
-    MultiLabeledMultiSpan,
     MultiLabeledSpan,
     NaryRelation,
     Span,
-    _post_init_multi_span,
     _post_init_single_label,
 )
 from pytorch_ie.core import Annotation
+
+
+def _post_init_multi_span(self):
+    if isinstance(self.slices, list):
+        object.__setattr__(self, "slices", tuple(tuple(s) for s in self.slices))
 
 
 @dataclasses.dataclass(eq=True, frozen=True)
