@@ -23,7 +23,7 @@ from typing import (
 
 import torch
 from pytorch_ie import AnnotationLayer, Document
-from pytorch_ie.annotations import BinaryRelation, LabeledMultiSpan, LabeledSpan
+from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.core import Annotation, TaskEncoding, TaskModule
 from pytorch_ie.core.taskmodule import (
     InputEncoding,
@@ -42,6 +42,7 @@ from pie_modules.documents import (
     TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
 
+from ..annotations import LabeledMultiSpan
 from ..document.processing import token_based_document_to_text_based, tokenize_document
 from ..utils import resolve_type
 from .common import BatchableMixin, DecodingException, get_first_occurrence_index
@@ -113,7 +114,7 @@ def annotation_to_indices(argument_annotation: Annotation) -> Tuple[int, ...]:
     if isinstance(argument_annotation, LabeledSpan):
         return argument_annotation.start, argument_annotation.end
     elif isinstance(argument_annotation, LabeledMultiSpan):
-        result = []
+        result: List[int] = []
         for s in argument_annotation.slices:
             result.extend(s)
         return tuple(result)
