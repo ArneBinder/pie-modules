@@ -70,6 +70,7 @@ class GenerativeAnnotationEncoderDecoderWithParseWithErrors(
         stop_ids: List[int],
         errors: Optional[Dict[str, int]] = None,
         decoded_annotations: Optional[List[A]] = None,
+        disrespect_decoded_annotations: bool = False,
     ) -> Tuple[List[A], Dict[str, int], List[int]]:
         errors = errors or defaultdict(int)
         decoded_annotations = decoded_annotations or []
@@ -84,7 +85,9 @@ class GenerativeAnnotationEncoderDecoderWithParseWithErrors(
             try:
                 valid_encoding, remaining = self.parse(
                     encoding=remaining,
-                    decoded_annotations=decoded_annotations,
+                    decoded_annotations=decoded_annotations
+                    if not disrespect_decoded_annotations
+                    else [],
                     text_length=input_length,
                 )
                 decoded_annotations.append(valid_encoding)
