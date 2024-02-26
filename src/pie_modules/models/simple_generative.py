@@ -84,20 +84,16 @@ class SimpleGenerativeModel(
         # Note: We do not set expected_super_type=PreTrainedModel for resolve_type() because
         #   AutoModel* classed such as AutoModelForSeq2SeqLM do not inherit from that.
         resolved_base_model_type: Type[PreTrainedModel] = resolve_type(base_model_type)
-        self._model = resolved_base_model_type.from_pretrained(**base_model_config)
+        self.model = resolved_base_model_type.from_pretrained(**base_model_config)
         self.generation_config = self.configure_generation(**(override_generation_kwargs or {}))
         self.use_ema = use_ema
         if use_ema:
-            self._model = EMA(
-                self._model,
+            self.ema = EMA(
+                self.model,
                 beta=0.9999,  # exponential moving average factor
                 update_after_step=100,  # only after this number of .update() calls will it start updating
                 update_every=10,  # how often to actually update, to save on compute (updates every 10th .update() call)
             )
-
-    @property
-    def model(self) -> PreTrainedModel:
-        return self._model if not self.use_ema else self._model.model
 
     def configure_generation(self, **kwargs) -> Dict[str, Any]:
         if self.taskmodule is not None:
@@ -115,7 +111,7 @@ class SimpleGenerativeModel(
     def training_step(self, batch: StepInputType, batch_idx: int) -> StepOutputType:
         result = self._step(stage=TRAINING, batch=batch)
         if self.use_ema:
-            self._model.update()
+            self.ema.update()
         return result
 
     def predict(self, inputs, **kwargs) -> TargetType:
@@ -138,7 +134,7 @@ class SimpleGenerativeModel(
 
     def forward(self, inputs: InputType, targets: Optional[TargetType] = None) -> OutputType:
         kwargs = {**inputs, **(targets or {})}
-        return self._model(**kwargs)
+        return self.model(**kwargs)
 
     def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
         # construct prediction from the model output
