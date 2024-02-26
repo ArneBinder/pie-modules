@@ -32,6 +32,7 @@ pytorch-crf = ">=0.7.2"
 networkx = "^3.0.0"
 # because of BartModelWithDecoderPositionIds
 transformers = "^4.35.0"
+ema-pytorch = "^0.4.2"
 
 [tool.poetry.group.dev.dependencies]
 torch = {version = "^2.1.0+cpu", source = "pytorch"}
