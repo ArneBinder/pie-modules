@@ -12,6 +12,7 @@ from pie_modules.taskmodules.common.interfaces import (
     GenerativeAnnotationEncoderDecoder,
     GenerativeAnnotationEncoderDecoderWithParseWithErrors,
 )
+from pie_modules.utils.span import are_nested, have_overlap
 
 logger = logging.getLogger(__name__)
 
@@ -61,23 +62,17 @@ class EncodingEmptySlicesException(EncodingException[LabeledMultiSpan]):
 
 
 def spans_have_overlap(span: Span, other_span: Span) -> bool:
-    return (
-        other_span.start <= span.start < other_span.end
-        or other_span.start < span.end <= other_span.end
-    ) and not spans_are_nested(span=span, other_span=other_span)
-
-
-def span_is_nested_in_other_span(span: Span, other_span: Span) -> bool:
-    return (
-        other_span.start <= span.start < other_span.end
-        and other_span.start < span.end <= other_span.end
+    start_end = (span.start, span.end)
+    other_start_end = (other_span.start, other_span.end)
+    return have_overlap(start_end=start_end, other_start_end=other_start_end) and not are_nested(
+        start_end=start_end, other_start_end=other_start_end
     )
 
 
 def spans_are_nested(span: Span, other_span: Span) -> bool:
-    return span_is_nested_in_other_span(
-        span=span, other_span=other_span
-    ) or span_is_nested_in_other_span(span=other_span, other_span=span)
+    return are_nested(
+        start_end=(span.start, span.end), other_start_end=(other_span.start, other_span.end)
+    )
 
 
 def _parse_label(
