@@ -1,26 +1,12 @@
 from typing import Tuple
 
 
-def get_overlap_len(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> int:
-    if start_end[0] > other_start_end[0]:
-        tmp = start_end
-        start_end = other_start_end
-        other_start_end = tmp
-    if start_end[1] <= other_start_end[0]:
-        return 0
-    return min(start_end[1] - other_start_end[0], other_start_end[1] - other_start_end[0])
-
-
 def have_overlap(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> bool:
     other_start_overlaps = start_end[0] <= other_start_end[0] < start_end[1]
     other_end_overlaps = start_end[0] < other_start_end[1] <= start_end[1]
     start_overlaps_other = other_start_end[0] <= start_end[0] < other_start_end[1]
     end_overlaps_other = other_start_end[0] < start_end[1] <= other_start_end[1]
     return other_start_overlaps or other_end_overlaps or start_overlaps_other or end_overlaps_other
-
-
-def is_contained_in(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> bool:
-    return other_start_end[0] <= start_end[0] and start_end[1] <= other_start_end[1]
 
 
 def distance_center(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> float:
