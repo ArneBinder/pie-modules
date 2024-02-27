@@ -1,6 +1,7 @@
 import pytest
 
 from pie_modules.utils.span import (
+    are_nested,
     distance,
     distance_center,
     distance_inner,
@@ -27,6 +28,29 @@ def test_have_overlap():
     assert have_overlap((1, 2), (0, 2))
     # overlap, identical
     assert have_overlap((0, 1), (0, 1))
+
+
+def test_are_nested():
+    # no overlap, not touching
+    assert not are_nested((0, 1), (2, 3))
+    assert not are_nested((2, 3), (0, 1))
+    # no overlap, touching
+    assert not are_nested((0, 1), (1, 2))
+    assert not are_nested((1, 2), (0, 1))
+    # overlap, not touching
+    assert not are_nested((0, 2), (1, 3))
+    assert not are_nested((1, 3), (0, 2))
+    # overlap, same start
+    assert are_nested((0, 2), (0, 3))
+    assert are_nested((0, 3), (0, 2))
+    # overlap, same end
+    assert are_nested((0, 2), (1, 2))
+    assert are_nested((1, 2), (0, 2))
+    # overlap, identical
+    assert are_nested((0, 1), (0, 1))
+    # nested, not touching
+    assert are_nested((0, 3), (1, 2))
+    assert are_nested((1, 2), (0, 3))
 
 
 def test_distance_center():

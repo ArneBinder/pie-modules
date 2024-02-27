@@ -9,6 +9,12 @@ def have_overlap(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -
     return other_start_overlaps or other_end_overlaps or start_overlaps_other or end_overlaps_other
 
 
+def are_nested(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> bool:
+    return (start_end[0] <= other_start_end[0] and start_end[1] >= other_start_end[1]) or (
+        other_start_end[0] <= start_end[0] and other_start_end[1] >= start_end[1]
+    )
+
+
 def distance_center(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> float:
     center = (start_end[0] + start_end[1]) / 2
     center_other = (other_start_end[0] + other_start_end[1]) / 2
