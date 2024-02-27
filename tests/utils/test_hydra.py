@@ -5,7 +5,7 @@ from pytorch_ie import AnnotationLayer, annotation_field
 from pytorch_ie.annotations import LabeledSpan, Span
 from pytorch_ie.documents import TextBasedDocument
 
-from pie_modules.utils import flatten_dict, resolve_type
+from pie_modules.utils import resolve_type
 
 
 @dataclasses.dataclass
@@ -20,9 +20,11 @@ class TestDocumentWithSentences(TextBasedDocument):
 
 def test_resolve_document_type():
     assert resolve_type(TestDocumentWithEntities) == TestDocumentWithEntities
-    assert resolve_type("tests.test_utils.TestDocumentWithEntities") == TestDocumentWithEntities
+    assert (
+        resolve_type("tests.utils.test_hydra.TestDocumentWithEntities") == TestDocumentWithEntities
+    )
     with pytest.raises(TypeError) as exc_info:
-        resolve_type("tests.test_utils.test_resolve_document_type")
+        resolve_type("tests.utils.test_hydra.test_resolve_document_type")
     assert str(exc_info.value).startswith(
         "type must be a subclass of None or a string that resolves to that, but got "
         "<function test_resolve_document_type"
@@ -36,12 +38,6 @@ def test_resolve_document_type():
         resolve_type(TestDocumentWithEntities, expected_super_type=TestDocumentWithSentences)
     assert (
         str(exc_info.value)
-        == "type must be a subclass of <class 'tests.test_utils.TestDocumentWithSentences'> or a string "
-        "that resolves to that, but got <class 'tests.test_utils.TestDocumentWithEntities'>"
+        == f"type must be a subclass of {TestDocumentWithSentences} or a string "
+        f"that resolves to that, but got {TestDocumentWithEntities}"
     )
-
-
-def test_flatten_nested_dict():
-    d = {"a": {"b": 1, "c": 2}, "d": 3}
-    assert flatten_dict(d) == {"a/b": 1, "a/c": 2, "d": 3}
-    assert flatten_dict(d, sep=".") == {"a.b": 1, "a.c": 2, "d": 3}
