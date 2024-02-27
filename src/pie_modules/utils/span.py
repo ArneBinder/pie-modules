@@ -48,7 +48,7 @@ def distance_outer(start_end: Tuple[int, int], other_start_end: Tuple[int, int])
 
 
 def distance_inner(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> float:
-    """Calculate the distance between the inner edges of two spans.The spans are defined by their
+    """Calculate the distance between the inner edges of two spans. The spans are defined by their
     start and end indices.
 
     In case of an overlap, the negative of the overlapping area is considered to be the distance.
@@ -65,7 +65,7 @@ def distance_inner(start_end: Tuple[int, int], other_start_end: Tuple[int, int])
 def distance(
     start_end: Tuple[int, int], other_start_end: Tuple[int, int], distance_type: str
 ) -> float:
-    """Calculate the distance between two spans.
+    """Calculate the distance between two spans based on the given distance type.
 
     Args:
         start_end: a tuple of two integers representing the start and end index of the first span
