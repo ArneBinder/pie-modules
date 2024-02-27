@@ -170,13 +170,7 @@ class PointerHead(torch.nn.Module):
 
         return decoder_input_ids
 
-    def prepare_decoder_position_ids(
-        self,
-        input_ids: torch.LongTensor,
-        # will be used to create the padding mask from the input_ids. Needs to be provided because
-        # the input_ids may be in token space or target space.
-        pad_input_id: int,
-    ) -> torch.LongTensor:
+    def prepare_decoder_position_ids(self, input_ids: torch.LongTensor) -> torch.LongTensor:
         if self.decoder_position_id_mode in ["pattern", "pattern_with_increment"]:
             bsz, tokens_len = input_ids.size()
             pattern_len = len(self.decoder_position_id_pattern)
@@ -204,7 +198,7 @@ class PointerHead(torch.nn.Module):
             all_position_ids_truncated = all_position_ids[:bsz, :tokens_len]
 
             # mask the padding tokens
-            mask_invalid = input_ids.eq(pad_input_id)
+            mask_invalid = input_ids.eq(self.pad_id)
             all_position_ids_truncated_masked = all_position_ids_truncated.masked_fill(
                 mask_invalid, 1
             )
@@ -228,7 +222,6 @@ class PointerHead(torch.nn.Module):
                 elif key == "eos":
                     position_ids[input_ids.eq(self.eos_id)] = value
                 elif key == "pad":
-                    # TODO: or use pad_input_id?
                     position_ids[input_ids.eq(self.pad_id)] = value
                 else:
                     raise ValueError(f'Unknown key "{key}" for mapping {mapping}!')
@@ -247,11 +240,7 @@ class PointerHead(torch.nn.Module):
         inputs = {}
         if self.use_prepared_position_ids:
             if position_ids is None:
-                position_ids = self.prepare_decoder_position_ids(
-                    # the input_ids are in the target space, so we provide pointer_head.pad_id as the pad_token_id
-                    input_ids=input_ids,
-                    pad_input_id=self.pad_id,
-                )
+                position_ids = self.prepare_decoder_position_ids(input_ids=input_ids)
             inputs["position_ids"] = position_ids
 
         inputs["input_ids"] = self.prepare_decoder_input_ids(

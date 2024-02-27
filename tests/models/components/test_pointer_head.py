@@ -158,11 +158,7 @@ def test_prepare_decoder_position_ids(decoder_position_id_mode):
         ]
     ).to(torch.long)
 
-    prepared_decoder_position_ids = pointer_head.prepare_decoder_position_ids(
-        input_ids=input_ids,
-        # the input_ids are in the target space, so we provide pointer_head.pad_id as the pad_token_id
-        pad_input_id=pointer_head.pad_id,
-    )
+    prepared_decoder_position_ids = pointer_head.prepare_decoder_position_ids(input_ids=input_ids)
     assert prepared_decoder_position_ids is not None
     assert prepared_decoder_position_ids.shape == input_ids.shape
     if decoder_position_id_mode == "pattern":
