@@ -46,6 +46,7 @@ class BartAsPointerNetworkConfig(BartConfig):
         # other parameters
         use_encoder_mlp: bool = True,
         use_constraints_encoder_mlp: bool = False,
+        decoder_position_id_mode: Optional[str] = None,
         decoder_position_id_pattern: Optional[List[int]] = None,
         increase_position_ids_per_record: bool = False,
         # optimizer
@@ -67,6 +68,7 @@ class BartAsPointerNetworkConfig(BartConfig):
         self.use_encoder_mlp = use_encoder_mlp
         self.use_constraints_encoder_mlp = use_constraints_encoder_mlp
 
+        self.decoder_position_id_mode = decoder_position_id_mode
         self.decoder_position_id_pattern = decoder_position_id_pattern
         self.increase_position_ids_per_record = increase_position_ids_per_record
 
@@ -88,7 +90,11 @@ class BartAsPointerNetwork(BartPreTrainedModel):
 
     def __init__(self, config: BartAsPointerNetworkConfig):
         super().__init__(config)
-        if self.config.decoder_position_id_pattern is not None:
+        # TODO: remove "or self.config.decoder_position_id_pattern is not None" when backward compatibility is removed
+        if (
+            self.config.decoder_position_id_mode is not None
+            or self.config.decoder_position_id_pattern is not None
+        ):
             self.model = BartModelWithDecoderPositionIds(config)
         else:
             self.model = BartModel(config)
@@ -106,6 +112,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             # other parameters
             use_encoder_mlp=self.model.config.use_encoder_mlp,
             use_constraints_encoder_mlp=self.model.config.use_constraints_encoder_mlp,
+            decoder_position_id_mode=self.model.config.decoder_position_id_mode,
             decoder_position_id_pattern=self.model.config.decoder_position_id_pattern,
             increase_position_ids_per_record=self.model.config.increase_position_ids_per_record,
         )

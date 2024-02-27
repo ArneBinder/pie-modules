@@ -20,16 +20,15 @@ def get_pointer_head(num_embeddings=120, embedding_dim=3, **kwargs):
         },
         use_encoder_mlp=True,
         use_constraints_encoder_mlp=True,
-        decoder_position_id_pattern=[0, 1, 1, 2],
         # increase_position_ids_per_record=True,
-        **kwargs
+        **kwargs,
     )
 
 
 def test_get_pointer_head():
     pointer_head = get_pointer_head()
     assert pointer_head is not None
-    assert pointer_head.use_prepared_position_ids
+    assert not pointer_head.use_prepared_position_ids
 
 
 def test_set_embeddings():
@@ -137,12 +136,15 @@ def test_prepare_decoder_input_ids_out_of_bounds():
 
 
 @pytest.mark.parametrize(
-    "increase_position_ids_per_record",
-    [True, False],
+    "decoder_position_id_mode",
+    ["pattern", "pattern_with_increment", "mapping_default:3-labels:2-bos:0-eos:0-pad:1"],
 )
-def test_prepare_decoder_position_ids(increase_position_ids_per_record):
+def test_prepare_decoder_position_ids(decoder_position_id_mode):
     pointer_head = get_pointer_head(
-        increase_position_ids_per_record=increase_position_ids_per_record
+        decoder_position_id_mode=decoder_position_id_mode,
+        decoder_position_id_pattern=[0, 1, 1, 2]
+        if "pattern" in decoder_position_id_mode
+        else None,
     )
     input_ids = torch.tensor(
         [
@@ -160,22 +162,31 @@ def test_prepare_decoder_position_ids(increase_position_ids_per_record):
     )
     assert prepared_decoder_position_ids is not None
     assert prepared_decoder_position_ids.shape == input_ids.shape
-    if not increase_position_ids_per_record:
+    if decoder_position_id_mode == "pattern":
         assert prepared_decoder_position_ids.tolist() == [
             [0, 2, 3, 3, 4, 2],
             [0, 2, 3, 3, 1, 1],
         ]
-    else:
+    elif decoder_position_id_mode == "pattern_with_increment":
         # the position ids (except for position-bos=0 and position-pad=1) get increased by 3 per record
         # (which has length 4)
         assert prepared_decoder_position_ids.tolist() == [
             [0, 2, 3, 3, 4, 5],
             [0, 2, 3, 3, 1, 1],
         ]
+    elif decoder_position_id_mode == "mapping_default:3-labels:2-bos:0-eos:0-pad:1":
+        assert prepared_decoder_position_ids.tolist() == [
+            [0, 3, 3, 2, 2, 3],
+            [0, 2, 3, 0, 1, 1],
+        ]
+    else:
+        raise ValueError(f"unknown decoder_position_id_mode={decoder_position_id_mode}")
 
 
 def test_prepare_decoder_inputs():
-    pointer_head = get_pointer_head()
+    pointer_head = get_pointer_head(
+        decoder_position_id_mode="pattern", decoder_position_id_pattern=[0, 1, 1, 2]
+    )
     encoder_input_ids = torch.tensor(
         [
             [10, 11, 12, 13, 14, 15],

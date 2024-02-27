@@ -26,6 +26,7 @@ class PointerHead(torch.nn.Module):
         # other parameters
         use_encoder_mlp: bool = False,
         use_constraints_encoder_mlp: bool = False,
+        decoder_position_id_mode: Optional[nn.Module] = None,
         decoder_position_id_pattern: Optional[List[int]] = None,
         increase_position_ids_per_record: bool = False,
     ):
@@ -84,15 +85,37 @@ class PointerHead(torch.nn.Module):
                 int(k): v for k, v in embedding_weight_mapping.items()
             }
 
-        if decoder_position_id_pattern is not None:
+        self.decoder_position_id_mode = decoder_position_id_mode
+        if decoder_position_id_pattern is not None and self.decoder_position_id_mode is None:
+            logger.warning(
+                "decoder_position_id_pattern is provided but decoder_position_id_mode is not set. "
+                'decoder_position_id_mode will be set to "pattern" to be backwards compatible. '
+                "This is deprecated and will raise an error in the future. "
+                'Please set decoder_position_id_mode="pattern" explicitly.'
+            )
+            self.decoder_position_id_mode = "pattern"
+        if self.decoder_position_id_mode in ["pattern", "pattern_with_increment"]:
+            if decoder_position_id_pattern is None:
+                raise ValueError(
+                    "decoder_position_id_pattern must be provided when using "
+                    'decoder_position_id_mode="pattern" or "pattern_with_increment"!'
+                )
             self.register_buffer(
                 "decoder_position_id_pattern", torch.tensor(decoder_position_id_pattern)
             )
-        self.increase_position_ids_per_record = increase_position_ids_per_record
+            if (
+                increase_position_ids_per_record
+                and self.decoder_position_id_mode != "pattern_with_increment"
+            ):
+                logger.warning(
+                    "using increase_position_ids_per_record=True is deprecated, please use "
+                    'decoder_position_id_mode="pattern_with_increment" instead'
+                )
+                self.decoder_position_id_mode = "pattern_with_increment"
 
     @property
     def use_prepared_position_ids(self):
-        return hasattr(self, "decoder_position_id_pattern")
+        return self.decoder_position_id_mode is not None
 
     def set_embeddings(self, embedding: nn.Embedding) -> None:
         self.embeddings = embedding
@@ -148,36 +171,68 @@ class PointerHead(torch.nn.Module):
         # the input_ids may be in token space or target space.
         pad_input_id: int,
     ) -> torch.LongTensor:
-        bsz, tokens_len = input_ids.size()
-        pattern_len = len(self.decoder_position_id_pattern)
-        # the number of full and partly records. note that tokens_len includes the bos token
-        repeat_num = (tokens_len - 2) // pattern_len + 1
-        position_ids = self.decoder_position_id_pattern.repeat(bsz, repeat_num)
+        if self.decoder_position_id_mode in ["pattern", "pattern_with_increment"]:
+            bsz, tokens_len = input_ids.size()
+            pattern_len = len(self.decoder_position_id_pattern)
+            # the number of full and partly records. note that tokens_len includes the bos token
+            repeat_num = (tokens_len - 2) // pattern_len + 1
+            position_ids = self.decoder_position_id_pattern.repeat(bsz, repeat_num)
 
-        if self.increase_position_ids_per_record:
-            position_ids_reshaped = position_ids.view(bsz, -1, pattern_len)
-            add_shift_pos = (
-                torch.arange(0, repeat_num, device=position_ids_reshaped.device)
-                .repeat(bsz)
-                .view(bsz, -1)
-                .unsqueeze(-1)
+            if self.decoder_position_id_mode == "pattern_with_increment":
+                position_ids_reshaped = position_ids.view(bsz, -1, pattern_len)
+                add_shift_pos = (
+                    torch.arange(0, repeat_num, device=position_ids_reshaped.device)
+                    .repeat(bsz)
+                    .view(bsz, -1)
+                    .unsqueeze(-1)
+                )
+                # multiply by the highest position id in the pattern so that the position ids are unique
+                # for any decoder_position_id_pattern across all records
+                add_shift_pos *= max(self.decoder_position_id_pattern) + 1
+                position_ids_reshaped = add_shift_pos + position_ids_reshaped
+                position_ids = position_ids_reshaped.view(bsz, -1).long()
+            # use start_position_id=0
+            start_pos = torch.zeros(bsz, 1, dtype=position_ids.dtype, device=position_ids.device)
+            # shift by 2 to account for start_position_id=0 and pad_position_id=1
+            all_position_ids = torch.cat([start_pos, position_ids + 2], dim=-1)
+            all_position_ids_truncated = all_position_ids[:bsz, :tokens_len]
+
+            # mask the padding tokens
+            mask_invalid = input_ids.eq(pad_input_id)
+            all_position_ids_truncated_masked = all_position_ids_truncated.masked_fill(
+                mask_invalid, 1
             )
-            # multiply by the highest position id in the pattern so that the position ids are unique
-            # for any decoder_position_id_pattern across all records
-            add_shift_pos *= max(self.decoder_position_id_pattern) + 1
-            position_ids_reshaped = add_shift_pos + position_ids_reshaped
-            position_ids = position_ids_reshaped.view(bsz, -1).long()
-        # use start_position_id=0
-        start_pos = torch.zeros(bsz, 1, dtype=position_ids.dtype, device=position_ids.device)
-        # shift by 2 to account for start_position_id=0 and pad_position_id=1
-        all_position_ids = torch.cat([start_pos, position_ids + 2], dim=-1)
-        all_position_ids_truncated = all_position_ids[:bsz, :tokens_len]
 
-        # mask the padding tokens
-        mask_invalid = input_ids.eq(pad_input_id)
-        all_position_ids_truncated_masked = all_position_ids_truncated.masked_fill(mask_invalid, 1)
-
-        return all_position_ids_truncated_masked
+            return all_position_ids_truncated_masked
+        elif self.decoder_position_id_mode.startswith("mapping_"):
+            mapping_str = self.decoder_position_id_mode[len("mapping_"):]
+            mapping = dict(part.split(":") for part in mapping_str.split("-"))
+            if "default" not in mapping:
+                raise ValueError(
+                    f"mapping must contain a default entry, but only contains {mapping.keys()} "
+                    f"(mapping string: {mapping_str})!"
+                )
+            position_ids = input_ids.new_full(input_ids.size(), fill_value=int(mapping["default"]))
+            for key, value_str in mapping.items():
+                value = int(value_str)
+                if key == "default":
+                    pass
+                elif key == "labels":
+                    position_ids[input_ids.lt(self.pointer_offset)] = value
+                elif key == "bos":
+                    position_ids[input_ids.eq(self.bos_id)] = value
+                elif key == "eos":
+                    position_ids[input_ids.eq(self.eos_id)] = value
+                elif key == "pad":
+                    # TODO: or use pad_input_id?
+                    position_ids[input_ids.eq(self.pad_id)] = value
+                else:
+                    raise ValueError(f"Unknown key {key} in mapping {mapping} (mapping string: {mapping_str})!")
+            return position_ids
+        else:
+            raise ValueError(
+                f"decoder_position_id_mode={self.decoder_position_id_mode} not supported!"
+            )
 
     def prepare_decoder_inputs(
         self,
