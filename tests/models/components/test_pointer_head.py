@@ -182,6 +182,27 @@ def test_prepare_decoder_position_ids(decoder_position_id_mode):
         raise ValueError(f"unknown decoder_position_id_mode={decoder_position_id_mode}")
 
 
+@pytest.mark.parametrize(
+    "decoder_position_id_mode",
+    ["pattern", "pattern_with_increment", "mapping"],
+)
+def test_prepare_decoder_position_ids_missing_parameter(decoder_position_id_mode):
+    with pytest.raises(ValueError) as excinfo:
+        get_pointer_head(decoder_position_id_mode=decoder_position_id_mode)
+    if decoder_position_id_mode in ["pattern", "pattern_with_increment"]:
+        assert (
+            str(excinfo.value) == "decoder_position_id_pattern must be provided when using "
+            'decoder_position_id_mode="pattern" or "pattern_with_increment"!'
+        )
+    elif decoder_position_id_mode == "mapping":
+        assert (
+            str(excinfo.value)
+            == 'decoder_position_id_mode="mapping" requires decoder_position_id_mapping to be provided!'
+        )
+    else:
+        raise ValueError(f"unknown decoder_position_id_mode={decoder_position_id_mode}")
+
+
 def test_prepare_decoder_position_ids_with_wrong_mapping():
     input_ids = torch.tensor(
         [
