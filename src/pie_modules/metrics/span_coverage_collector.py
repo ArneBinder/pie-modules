@@ -14,21 +14,21 @@ logger = logging.getLogger(__name__)
 
 
 class SpanCoverageCollector(DocumentStatistic):
-    """Collects the coverage of Span annotations of a certain layer. It can handle overlapping
-    spans.
+    """Collects the coverage of Span annotations. It can handle overlapping spans.
 
     If a tokenizer is provided, the span coverage is calculated in means of tokens, otherwise in
     means of characters.
 
     Args:
-        layer: The annotation layer of the document to collect the span coverage from.
-        tokenize: Whether to tokenize the document before calculating the span coverage.
+        layer: The annotation layer of the document to calculate the span coverage for.
+        tokenize: Whether to tokenize the document before calculating the span coverage. Default is False.
         tokenizer: The tokenizer to use for tokenization. Should be a PreTrainedTokenizer or a string
-            representing the name of a pre-trained tokenizer. Required if tokenize is True.
-        tokenize_kwargs: Additional keyword arguments for the tokenization. Required if tokenize is True.
-        tokenized_document_type: The type of the tokenized document.
+            representing the name of a pre-trained tokenizer, e.g. "bert-base-uncased". Required if
+            tokenize is True.
+        tokenized_document_type: The type of the tokenized document. Required if tokenize is True.
+        tokenize_kwargs: Additional keyword arguments for the tokenization.
         labels: If provided, only spans with these labels are considered.
-        label_attribute: The attribute of the span to consider as label. Required if labels are provided.
+        label_attribute: The attribute of the span to consider as label. Default is "label".
     """
 
     DEFAULT_AGGREGATION_FUNCTIONS = ["len", "mean", "std", "min", "max"]
