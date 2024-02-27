@@ -175,6 +175,8 @@ def test_spans_have_overlap():
     # same end, nested -> no overlap
     assert not spans_have_overlap(Span(start=2, end=3), Span(start=1, end=3))
     assert not spans_have_overlap(Span(start=1, end=3), Span(start=2, end=3))
+    # same start and end, nested -> no overlap
+    assert not spans_have_overlap(Span(start=1, end=3), Span(start=1, end=3))
     # no overlap, not touching
     assert not spans_have_overlap(Span(start=1, end=2), Span(start=3, end=4))
     assert not spans_have_overlap(Span(start=3, end=4), Span(start=1, end=2))
