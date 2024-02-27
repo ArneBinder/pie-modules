@@ -1,9 +1,4 @@
-from typing import Any, Iterable, MutableMapping, Tuple, TypeVar
-
-from pytorch_ie import Document
-
-T = TypeVar("T", bound=Document)
-T_super = TypeVar("T_super", bound=Document)
+from typing import Any, Iterable, MutableMapping, Tuple
 
 
 def list_of_dicts2dict_of_lists(list_of_dicts: list[dict]) -> dict[str, list]:
