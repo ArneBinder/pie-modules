@@ -12,11 +12,19 @@ from pie_modules.utils.span import distance
 
 
 class RelationArgumentDistanceCollector(DocumentStatistic):
-    """Collects the distances between the arguments of binary relations. For n-ary relations, the
-    distances between all pairs of arguments are collected.
+    """Collects the distances between the arguments of relation annotations. For n-ary relations,
+    the distances between all pairs of arguments are collected. The distances can be calculated in
+    means of characters or tokens.
 
-    If a tokenizer is provided, the distance is calculated in means of tokens, otherwise in means
-    of characters.
+    Args:
+        layer: The relation annotation layer of the document to collect the distances from.
+        distance_type: The type of distance to calculate. Can be "outer", "inner", or "center".
+        tokenize: Whether to tokenize the document before calculating the distance.
+        tokenizer: The tokenizer to use for tokenization. If a string is provided, the tokenizer is
+            loaded from the Hugging Face model hub. Required if tokenize is True.
+        tokenized_document_type: The type of document to return after tokenization. Required if
+            tokenize is True.
+        key_all: The key to use for the aggregation of all values.
     """
 
     DEFAULT_AGGREGATION_FUNCTIONS = ["len", "mean", "std", "min", "max"]
