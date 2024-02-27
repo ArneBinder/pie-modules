@@ -28,6 +28,7 @@ class PointerHead(torch.nn.Module):
         use_constraints_encoder_mlp: bool = False,
         decoder_position_id_mode: Optional[nn.Module] = None,
         decoder_position_id_pattern: Optional[List[int]] = None,
+        decoder_position_id_mapping: Optional[Dict[str, int]] = None,
         increase_position_ids_per_record: bool = False,
     ):
         super().__init__()
@@ -112,6 +113,11 @@ class PointerHead(torch.nn.Module):
                     'decoder_position_id_mode="pattern_with_increment" instead'
                 )
                 self.decoder_position_id_mode = "pattern_with_increment"
+        self.decoder_position_id_mapping = decoder_position_id_mapping
+        if self.decoder_position_id_mode == "mapping" and self.decoder_position_id_mapping is None:
+            raise ValueError(
+                'decoder_position_id_mode="mapping" requires decoder_position_id_mapping to be provided!'
+            )
 
     @property
     def use_prepared_position_ids(self):
@@ -204,20 +210,18 @@ class PointerHead(torch.nn.Module):
             )
 
             return all_position_ids_truncated_masked
-        elif self.decoder_position_id_mode.startswith("mapping_"):
-            mapping_str = self.decoder_position_id_mode[len("mapping_"):]
-            mapping = dict(part.split(":") for part in mapping_str.split("-"))
+        elif self.decoder_position_id_mode == "mapping":
+            # we ignor the typing issue here because we ensure that the mapping is not None in the __init__
+            mapping: Dict[str, int] = self.decoder_position_id_mapping  # type: ignore
             if "default" not in mapping:
                 raise ValueError(
-                    f"mapping must contain a default entry, but only contains {mapping.keys()} "
-                    f"(mapping string: {mapping_str})!"
+                    f"mapping must contain a default entry, but only contains {mapping.keys()}!"
                 )
-            position_ids = input_ids.new_full(input_ids.size(), fill_value=int(mapping["default"]))
-            for key, value_str in mapping.items():
-                value = int(value_str)
+            position_ids = input_ids.new_full(input_ids.size(), fill_value=mapping["default"])
+            for key, value in mapping.items():
                 if key == "default":
                     pass
-                elif key == "labels":
+                elif key == "vocab":
                     position_ids[input_ids.lt(self.pointer_offset)] = value
                 elif key == "bos":
                     position_ids[input_ids.eq(self.bos_id)] = value
@@ -227,7 +231,7 @@ class PointerHead(torch.nn.Module):
                     # TODO: or use pad_input_id?
                     position_ids[input_ids.eq(self.pad_id)] = value
                 else:
-                    raise ValueError(f"Unknown key {key} in mapping {mapping} (mapping string: {mapping_str})!")
+                    raise ValueError(f'Unknown key "{key}" for mapping {mapping}!')
             return position_ids
         else:
             raise ValueError(

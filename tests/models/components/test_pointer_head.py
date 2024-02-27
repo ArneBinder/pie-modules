@@ -137,13 +137,16 @@ def test_prepare_decoder_input_ids_out_of_bounds():
 
 @pytest.mark.parametrize(
     "decoder_position_id_mode",
-    ["pattern", "pattern_with_increment", "mapping_default:3-labels:2-bos:0-eos:0-pad:1"],
+    ["pattern", "pattern_with_increment", "mapping"],
 )
 def test_prepare_decoder_position_ids(decoder_position_id_mode):
     pointer_head = get_pointer_head(
         decoder_position_id_mode=decoder_position_id_mode,
         decoder_position_id_pattern=[0, 1, 1, 2]
         if "pattern" in decoder_position_id_mode
+        else None,
+        decoder_position_id_mapping={"default": 3, "vocab": 2, "bos": 0, "eos": 0, "pad": 1}
+        if decoder_position_id_mode == "mapping"
         else None,
     )
     input_ids = torch.tensor(
@@ -174,7 +177,7 @@ def test_prepare_decoder_position_ids(decoder_position_id_mode):
             [0, 2, 3, 3, 4, 5],
             [0, 2, 3, 3, 1, 1],
         ]
-    elif decoder_position_id_mode == "mapping_default:3-labels:2-bos:0-eos:0-pad:1":
+    elif decoder_position_id_mode == "mapping":
         assert prepared_decoder_position_ids.tolist() == [
             [0, 3, 3, 2, 2, 3],
             [0, 2, 3, 0, 1, 1],

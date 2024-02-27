@@ -43,12 +43,14 @@ class BartAsPointerNetworkConfig(BartConfig):
         target_token_ids: Optional[List[int]] = None,
         # token id mapping to better initialize the label embedding weights
         embedding_weight_mapping: Optional[Dict[Union[int, str], List[int]]] = None,
+        # special decoder position id handling
+        decoder_position_id_mode: Optional[str] = None,
+        decoder_position_id_pattern: Optional[List[int]] = None,
+        decoder_position_id_mapping: Optional[Dict[int, int]] = None,
+        increase_position_ids_per_record: bool = False,
         # other parameters
         use_encoder_mlp: bool = True,
         use_constraints_encoder_mlp: bool = False,
-        decoder_position_id_mode: Optional[str] = None,
-        decoder_position_id_pattern: Optional[List[int]] = None,
-        increase_position_ids_per_record: bool = False,
         # optimizer
         lr: float = 5e-5,
         weight_decay: float = 1e-2,
@@ -70,6 +72,7 @@ class BartAsPointerNetworkConfig(BartConfig):
 
         self.decoder_position_id_mode = decoder_position_id_mode
         self.decoder_position_id_pattern = decoder_position_id_pattern
+        self.decoder_position_id_mapping = decoder_position_id_mapping
         self.increase_position_ids_per_record = increase_position_ids_per_record
 
         self.lr = lr
@@ -114,6 +117,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             use_constraints_encoder_mlp=self.model.config.use_constraints_encoder_mlp,
             decoder_position_id_mode=self.model.config.decoder_position_id_mode,
             decoder_position_id_pattern=self.model.config.decoder_position_id_pattern,
+            decoder_position_id_mapping=self.model.config.decoder_position_id_mapping,
             increase_position_ids_per_record=self.model.config.increase_position_ids_per_record,
         )
 
