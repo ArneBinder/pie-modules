@@ -5,7 +5,26 @@ from pie_modules.utils.span import (
     distance_center,
     distance_inner,
     distance_outer,
+    have_overlap,
 )
+
+
+def test_have_overlap():
+    # no overlap, not touching
+    assert not have_overlap((0, 1), (2, 3))
+    assert not have_overlap((2, 3), (0, 1))
+    # no overlap, touching
+    assert not have_overlap((0, 1), (1, 2))
+    assert not have_overlap((1, 2), (0, 1))
+    # overlap, not touching
+    assert have_overlap((0, 2), (1, 3))
+    assert have_overlap((1, 3), (0, 2))
+    # overlap, same start
+    assert have_overlap((0, 2), (0, 3))
+    assert have_overlap((0, 3), (0, 2))
+    # overlap, same end
+    assert have_overlap((0, 2), (1, 2))
+    assert have_overlap((1, 2), (0, 2))
 
 
 def test_distance_center():
