@@ -25,7 +25,8 @@ class SpanCoverageCollector(DocumentStatistic):
         tokenizer: The tokenizer to use for tokenization. Should be a PreTrainedTokenizer or a string
             representing the name of a pre-trained tokenizer, e.g. "bert-base-uncased". Required if
             tokenize is True.
-        tokenized_document_type: The type of the tokenized document. Required if tokenize is True.
+        tokenized_document_type: The type of the tokenized document or a string that can be resolved
+            to such a type. Required if tokenize is True.
         tokenize_kwargs: Additional keyword arguments for the tokenization.
         labels: If provided, only spans with these labels are considered.
         label_attribute: The attribute of the span to consider as label. Default is "label".
