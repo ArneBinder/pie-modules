@@ -6,5 +6,6 @@ from pytorch_ie.metrics.statistics import (
     TokenCountCollector,
 )
 
+from .span_coverage_collector import SpanCoverageCollector
 from .span_length_collector import SpanLengthCollector
 from .squad_f1 import SQuADF1
