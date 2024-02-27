@@ -209,7 +209,7 @@ class PointerHead(torch.nn.Module):
             mapping: Dict[str, int] = self.decoder_position_id_mapping  # type: ignore
             if "default" not in mapping:
                 raise ValueError(
-                    f"mapping must contain a default entry, but only contains {mapping.keys()}!"
+                    f"mapping must contain a default entry, but only contains {list(mapping)}!"
                 )
             position_ids = input_ids.new_full(input_ids.size(), fill_value=mapping["default"])
             for key, value in mapping.items():
@@ -224,7 +224,7 @@ class PointerHead(torch.nn.Module):
                 elif key == "pad":
                     position_ids[input_ids.eq(self.pad_id)] = value
                 else:
-                    raise ValueError(f'Unknown key "{key}" for mapping {mapping}!')
+                    raise ValueError(f"Mapping contains unknown key '{key}' (mapping: {mapping}).")
             return position_ids
         else:
             raise ValueError(

@@ -182,6 +182,47 @@ def test_prepare_decoder_position_ids(decoder_position_id_mode):
         raise ValueError(f"unknown decoder_position_id_mode={decoder_position_id_mode}")
 
 
+def test_prepare_decoder_position_ids_with_wrong_mapping():
+    input_ids = torch.tensor(
+        [
+            # bos, offset (0=6-6), offset (1=7-6), label (3), label (4), offset (2=8-6)
+            [0, 6, 7, 3, 4, 8],
+            # bos, label (3), offset (3=9-6), eos, pad, pad
+            [0, 3, 9, 1, 2, 2],
+        ]
+    ).to(torch.long)
+
+    # missing default
+    pointer_head = get_pointer_head(
+        decoder_position_id_mode="mapping",
+        decoder_position_id_mapping={"vocab": 2, "bos": 0, "eos": 0, "pad": 1},
+    )
+    with pytest.raises(ValueError) as excinfo:
+        pointer_head.prepare_decoder_position_ids(input_ids=input_ids)
+    assert (
+        str(excinfo.value)
+        == "mapping must contain a default entry, but only contains ['vocab', 'bos', 'eos', 'pad']!"
+    )
+    # unknown key
+    pointer_head = get_pointer_head(
+        decoder_position_id_mode="mapping",
+        decoder_position_id_mapping={
+            "default": 3,
+            "vocab": 2,
+            "bos": 0,
+            "eos": 0,
+            "pad": 1,
+            "unknown": 4,
+        },
+    )
+    with pytest.raises(ValueError) as excinfo:
+        pointer_head.prepare_decoder_position_ids(input_ids=input_ids)
+    assert (
+        str(excinfo.value) == "Mapping contains unknown key 'unknown' "
+        "(mapping: {'default': 3, 'vocab': 2, 'bos': 0, 'eos': 0, 'pad': 1, 'unknown': 4})."
+    )
+
+
 def test_prepare_decoder_inputs():
     pointer_head = get_pointer_head(
         decoder_position_id_mode="pattern", decoder_position_id_pattern=[0, 1, 1, 2]
