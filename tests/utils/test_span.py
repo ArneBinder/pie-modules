@@ -11,4 +11,4 @@ def test_inner_span_distance_overlap():
 def test_span_distance_unknown_type():
     with pytest.raises(ValueError) as excinfo:
         distance((0, 1), (2, 3), "unknown")
-    assert str(excinfo.value) == "unknown distance_type=unknown. use one of: inner"
+    assert str(excinfo.value) == "unknown distance_type=unknown. use one of: center, inner, outer"
