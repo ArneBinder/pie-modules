@@ -1,20 +1,6 @@
 from typing import Tuple
 
 
-def have_overlap(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> bool:
-    """Check if two spans have an overlap. The spans are defined by their start and end indices.
-
-    Note that two spans that are touching each other are not considered to have an overlap. But two
-    spans that are identical are considered to have an overlap.
-    """
-
-    other_start_overlaps = start_end[0] <= other_start_end[0] < start_end[1]
-    other_end_overlaps = start_end[0] < other_start_end[1] <= start_end[1]
-    start_overlaps_other = other_start_end[0] <= start_end[0] < other_start_end[1]
-    end_overlaps_other = other_start_end[0] < start_end[1] <= other_start_end[1]
-    return other_start_overlaps or other_end_overlaps or start_overlaps_other or end_overlaps_other
-
-
 def are_nested(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> bool:
     """Check if two spans are nested. The spans are defined by their start and end indices.
 
@@ -24,6 +10,21 @@ def are_nested(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> 
     return (start_end[0] <= other_start_end[0] and start_end[1] >= other_start_end[1]) or (
         other_start_end[0] <= start_end[0] and other_start_end[1] >= start_end[1]
     )
+
+
+def have_overlap(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> bool:
+    """Check if two spans have an overlap. The spans are defined by their start and end indices.
+
+    Note that two spans that are touching each other are not considered to have an overlap. But two
+    spans that are nested, including the case where they are identical, are considered to have an
+    overlap.
+    """
+
+    other_start_overlaps = start_end[0] <= other_start_end[0] < start_end[1]
+    other_end_overlaps = start_end[0] < other_start_end[1] <= start_end[1]
+    start_overlaps_other = other_start_end[0] <= start_end[0] < other_start_end[1]
+    end_overlaps_other = other_start_end[0] < start_end[1] <= other_start_end[1]
+    return other_start_overlaps or other_end_overlaps or start_overlaps_other or end_overlaps_other
 
 
 def distance_center(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> float:
