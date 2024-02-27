@@ -5,10 +5,10 @@ from pytorch_ie.annotations import BinaryRelation, NaryRelation, Span
 from pytorch_ie.core import Document, DocumentStatistic
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from pytorch_ie.utils.hydra import resolve_target
-from src.utils.span import distance
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
 from pie_modules.document.processing import tokenize_document
+from pie_modules.utils.span import distance
 
 
 class RelationArgumentDistanceCollector(DocumentStatistic):
