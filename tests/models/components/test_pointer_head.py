@@ -137,7 +137,7 @@ def test_prepare_decoder_input_ids_out_of_bounds():
 
 @pytest.mark.parametrize(
     "decoder_position_id_mode",
-    ["pattern", "pattern_with_increment", "mapping"],
+    ["pattern", "pattern_with_increment", "mapping", "unknown"],
 )
 def test_prepare_decoder_position_ids(decoder_position_id_mode):
     pointer_head = get_pointer_head(
@@ -158,28 +158,35 @@ def test_prepare_decoder_position_ids(decoder_position_id_mode):
         ]
     ).to(torch.long)
 
-    prepared_decoder_position_ids = pointer_head.prepare_decoder_position_ids(input_ids=input_ids)
-    assert prepared_decoder_position_ids is not None
-    assert prepared_decoder_position_ids.shape == input_ids.shape
-    if decoder_position_id_mode == "pattern":
-        assert prepared_decoder_position_ids.tolist() == [
-            [0, 2, 3, 3, 4, 2],
-            [0, 2, 3, 3, 1, 1],
-        ]
-    elif decoder_position_id_mode == "pattern_with_increment":
-        # the position ids (except for position-bos=0 and position-pad=1) get increased by 3 per record
-        # (which has length 4)
-        assert prepared_decoder_position_ids.tolist() == [
-            [0, 2, 3, 3, 4, 5],
-            [0, 2, 3, 3, 1, 1],
-        ]
-    elif decoder_position_id_mode == "mapping":
-        assert prepared_decoder_position_ids.tolist() == [
-            [0, 3, 3, 2, 2, 3],
-            [0, 2, 3, 0, 1, 1],
-        ]
+    if not decoder_position_id_mode == "unknown":
+        prepared_decoder_position_ids = pointer_head.prepare_decoder_position_ids(
+            input_ids=input_ids
+        )
+        assert prepared_decoder_position_ids is not None
+        assert prepared_decoder_position_ids.shape == input_ids.shape
+        if decoder_position_id_mode == "pattern":
+            assert prepared_decoder_position_ids.tolist() == [
+                [0, 2, 3, 3, 4, 2],
+                [0, 2, 3, 3, 1, 1],
+            ]
+        elif decoder_position_id_mode == "pattern_with_increment":
+            # the position ids (except for position-bos=0 and position-pad=1) get increased by 3 per record
+            # (which has length 4)
+            assert prepared_decoder_position_ids.tolist() == [
+                [0, 2, 3, 3, 4, 5],
+                [0, 2, 3, 3, 1, 1],
+            ]
+        elif decoder_position_id_mode == "mapping":
+            assert prepared_decoder_position_ids.tolist() == [
+                [0, 3, 3, 2, 2, 3],
+                [0, 2, 3, 0, 1, 1],
+            ]
+        else:
+            raise ValueError(f"unknown decoder_position_id_mode={decoder_position_id_mode}")
     else:
-        raise ValueError(f"unknown decoder_position_id_mode={decoder_position_id_mode}")
+        with pytest.raises(ValueError) as excinfo:
+            pointer_head.prepare_decoder_position_ids(input_ids=input_ids)
+        assert str(excinfo.value) == "decoder_position_id_mode=unknown not supported!"
 
 
 @pytest.mark.parametrize(
