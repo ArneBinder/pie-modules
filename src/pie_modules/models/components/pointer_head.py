@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -212,19 +212,31 @@ class PointerHead(torch.nn.Module):
                     f"mapping must contain a default entry, but only contains {list(mapping)}!"
                 )
             position_ids = input_ids.new_full(input_ids.size(), fill_value=mapping["default"])
+            # ensure that values for all vocab entries are set first
+            if "vocab" in mapping:
+                position_ids[input_ids.lt(self.pointer_offset)] = mapping["vocab"]
+            already_set: Dict[int, Tuple[str, int]] = {}
             for key, value in mapping.items():
-                if key == "default":
-                    pass
-                elif key == "vocab":
-                    position_ids[input_ids.lt(self.pointer_offset)] = value
+                if key in ["default", "vocab"]:
+                    continue
                 elif key == "bos":
-                    position_ids[input_ids.eq(self.bos_id)] = value
+                    input_id = self.bos_id
                 elif key == "eos":
-                    position_ids[input_ids.eq(self.eos_id)] = value
+                    input_id = self.eos_id
                 elif key == "pad":
-                    position_ids[input_ids.eq(self.pad_id)] = value
+                    input_id = self.pad_id
                 else:
                     raise ValueError(f"Mapping contains unknown key '{key}' (mapping: {mapping}).")
+                if already_set.get(input_id, (key, value))[1] != value:
+                    previous_key, previous_value = already_set[input_id]
+                    raise ValueError(
+                        f"Can not set the position ids for '{key}' to {value} because it was already "
+                        f"set to {previous_value} by key '{previous_key}'. Note that both, '{key}' and "
+                        f"'{previous_key}', have the same id ({input_id}), so their position_ids need to "
+                        f"be also the same (position id mapping: {mapping})."
+                    )
+                position_ids[input_ids.eq(input_id)] = value
+                already_set[input_id] = key, value
             return position_ids
         else:
             raise ValueError(

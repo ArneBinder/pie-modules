@@ -5,15 +5,15 @@ from torch import nn
 from pie_modules.models.components.pointer_head import PointerHead
 
 
-def get_pointer_head(num_embeddings=120, embedding_dim=3, **kwargs):
+def get_pointer_head(num_embeddings=120, embedding_dim=3, eos_id=1, pad_id=2, **kwargs):
     torch.manual_seed(42)
     return PointerHead(
         embeddings=nn.Embedding(num_embeddings=num_embeddings, embedding_dim=embedding_dim),
         # bos, eos, pad, 3 x label ids
         target_token_ids=[100, 101, 102, 110, 111, 112],
         bos_id=0,  # -> 100
-        eos_id=1,  # -> 101
-        pad_id=2,  # -> 102
+        eos_id=eos_id,  # 1 (default) -> 101
+        pad_id=pad_id,  # 2 (default) -> 102
         embedding_weight_mapping={
             "110": [20, 21],
             "111": [30],
@@ -224,6 +224,7 @@ def test_prepare_decoder_position_ids_with_wrong_mapping():
         str(excinfo.value)
         == "mapping must contain a default entry, but only contains ['vocab', 'bos', 'eos', 'pad']!"
     )
+
     # unknown key
     pointer_head = get_pointer_head(
         decoder_position_id_mode="mapping",
@@ -241,6 +242,30 @@ def test_prepare_decoder_position_ids_with_wrong_mapping():
     assert (
         str(excinfo.value) == "Mapping contains unknown key 'unknown' "
         "(mapping: {'default': 3, 'vocab': 2, 'bos': 0, 'eos': 0, 'pad': 1, 'unknown': 4})."
+    )
+
+    # multiple values for same input id
+    pointer_head = get_pointer_head(
+        # same id for eos and pad
+        eos_id=1,
+        pad_id=1,
+        decoder_position_id_mode="mapping",
+        decoder_position_id_mapping={
+            "default": 3,
+            "vocab": 2,
+            "bos": 0,
+            # different position ids for eos and pad, this is not allowed when eos and pad have the same id
+            "eos": 0,
+            "pad": 1,
+        },
+    )
+    with pytest.raises(ValueError) as excinfo:
+        pointer_head.prepare_decoder_position_ids(input_ids=input_ids)
+    assert (
+        str(excinfo.value)
+        == "Can not set the position ids for 'pad' to 1 because it was already set to 0 by key 'eos'. "
+        "Note that both, 'pad' and 'eos', have the same id (1), so their position_ids need to be "
+        "also the same (position id mapping: {'default': 3, 'vocab': 2, 'bos': 0, 'eos': 0, 'pad': 1})."
     )
 
 
