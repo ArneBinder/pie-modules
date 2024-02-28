@@ -5,31 +5,30 @@ from torch import nn
 from pie_modules.models.components.pointer_head import PointerHead
 
 
-def get_pointer_head(num_embeddings=120, embedding_dim=3, **kwargs):
+def get_pointer_head(num_embeddings=120, embedding_dim=3, eos_id=1, pad_id=2, **kwargs):
     torch.manual_seed(42)
     return PointerHead(
         embeddings=nn.Embedding(num_embeddings=num_embeddings, embedding_dim=embedding_dim),
         # bos, eos, pad, 3 x label ids
         target_token_ids=[100, 101, 102, 110, 111, 112],
         bos_id=0,  # -> 100
-        eos_id=1,  # -> 101
-        pad_id=2,  # -> 102
+        eos_id=eos_id,  # 1 (default) -> 101
+        pad_id=pad_id,  # 2 (default) -> 102
         embedding_weight_mapping={
             "110": [20, 21],
             "111": [30],
         },
         use_encoder_mlp=True,
         use_constraints_encoder_mlp=True,
-        decoder_position_id_pattern=[0, 1, 1, 2],
         # increase_position_ids_per_record=True,
-        **kwargs
+        **kwargs,
     )
 
 
 def test_get_pointer_head():
     pointer_head = get_pointer_head()
     assert pointer_head is not None
-    assert pointer_head.use_prepared_position_ids
+    assert not pointer_head.use_prepared_position_ids
 
 
 def test_set_embeddings():
@@ -137,12 +136,18 @@ def test_prepare_decoder_input_ids_out_of_bounds():
 
 
 @pytest.mark.parametrize(
-    "increase_position_ids_per_record",
-    [True, False],
+    "decoder_position_id_mode",
+    ["pattern", "pattern_with_increment", "mapping", "unknown"],
 )
-def test_prepare_decoder_position_ids(increase_position_ids_per_record):
+def test_prepare_decoder_position_ids(decoder_position_id_mode):
     pointer_head = get_pointer_head(
-        increase_position_ids_per_record=increase_position_ids_per_record
+        decoder_position_id_mode=decoder_position_id_mode,
+        decoder_position_id_pattern=[0, 1, 1, 2]
+        if "pattern" in decoder_position_id_mode
+        else None,
+        decoder_position_id_mapping={"default": 3, "vocab": 2, "bos": 0, "eos": 0, "pad": 1}
+        if decoder_position_id_mode == "mapping"
+        else None,
     )
     input_ids = torch.tensor(
         [
@@ -153,29 +158,128 @@ def test_prepare_decoder_position_ids(increase_position_ids_per_record):
         ]
     ).to(torch.long)
 
-    prepared_decoder_position_ids = pointer_head.prepare_decoder_position_ids(
-        input_ids=input_ids,
-        # the input_ids are in the target space, so we provide pointer_head.pad_id as the pad_token_id
-        pad_input_id=pointer_head.pad_id,
-    )
-    assert prepared_decoder_position_ids is not None
-    assert prepared_decoder_position_ids.shape == input_ids.shape
-    if not increase_position_ids_per_record:
-        assert prepared_decoder_position_ids.tolist() == [
-            [0, 2, 3, 3, 4, 2],
-            [0, 2, 3, 3, 1, 1],
-        ]
+    if not decoder_position_id_mode == "unknown":
+        prepared_decoder_position_ids = pointer_head.prepare_decoder_position_ids(
+            input_ids=input_ids
+        )
+        assert prepared_decoder_position_ids is not None
+        assert prepared_decoder_position_ids.shape == input_ids.shape
+        if decoder_position_id_mode == "pattern":
+            assert prepared_decoder_position_ids.tolist() == [
+                [0, 2, 3, 3, 4, 2],
+                [0, 2, 3, 3, 1, 1],
+            ]
+        elif decoder_position_id_mode == "pattern_with_increment":
+            # the position ids (except for position-bos=0 and position-pad=1) get increased by 3 per record
+            # (which has length 4)
+            assert prepared_decoder_position_ids.tolist() == [
+                [0, 2, 3, 3, 4, 5],
+                [0, 2, 3, 3, 1, 1],
+            ]
+        elif decoder_position_id_mode == "mapping":
+            assert prepared_decoder_position_ids.tolist() == [
+                [0, 3, 3, 2, 2, 3],
+                [0, 2, 3, 0, 1, 1],
+            ]
+        else:
+            raise ValueError(f"unknown decoder_position_id_mode={decoder_position_id_mode}")
     else:
-        # the position ids (except for position-bos=0 and position-pad=1) get increased by 3 per record
-        # (which has length 4)
-        assert prepared_decoder_position_ids.tolist() == [
-            [0, 2, 3, 3, 4, 5],
-            [0, 2, 3, 3, 1, 1],
+        with pytest.raises(ValueError) as excinfo:
+            pointer_head.prepare_decoder_position_ids(input_ids=input_ids)
+        assert str(excinfo.value) == "decoder_position_id_mode=unknown not supported!"
+
+
+@pytest.mark.parametrize(
+    "decoder_position_id_mode",
+    ["pattern", "pattern_with_increment", "mapping"],
+)
+def test_prepare_decoder_position_ids_missing_parameter(decoder_position_id_mode):
+    with pytest.raises(ValueError) as excinfo:
+        get_pointer_head(decoder_position_id_mode=decoder_position_id_mode)
+    if decoder_position_id_mode in ["pattern", "pattern_with_increment"]:
+        assert (
+            str(excinfo.value) == "decoder_position_id_pattern must be provided when using "
+            'decoder_position_id_mode="pattern" or "pattern_with_increment"!'
+        )
+    elif decoder_position_id_mode == "mapping":
+        assert (
+            str(excinfo.value)
+            == 'decoder_position_id_mode="mapping" requires decoder_position_id_mapping to be provided!'
+        )
+    else:
+        raise ValueError(f"unknown decoder_position_id_mode={decoder_position_id_mode}")
+
+
+def test_prepare_decoder_position_ids_with_wrong_mapping():
+    input_ids = torch.tensor(
+        [
+            # bos, offset (0=6-6), offset (1=7-6), label (3), label (4), offset (2=8-6)
+            [0, 6, 7, 3, 4, 8],
+            # bos, label (3), offset (3=9-6), eos, pad, pad
+            [0, 3, 9, 1, 2, 2],
         ]
+    ).to(torch.long)
+
+    # missing default
+    pointer_head = get_pointer_head(
+        decoder_position_id_mode="mapping",
+        decoder_position_id_mapping={"vocab": 2, "bos": 0, "eos": 0, "pad": 1},
+    )
+    with pytest.raises(ValueError) as excinfo:
+        pointer_head.prepare_decoder_position_ids(input_ids=input_ids)
+    assert (
+        str(excinfo.value)
+        == "mapping must contain a default entry, but only contains ['vocab', 'bos', 'eos', 'pad']!"
+    )
+
+    # unknown key
+    pointer_head = get_pointer_head(
+        decoder_position_id_mode="mapping",
+        decoder_position_id_mapping={
+            "default": 3,
+            "vocab": 2,
+            "bos": 0,
+            "eos": 0,
+            "pad": 1,
+            "unknown": 4,
+        },
+    )
+    with pytest.raises(ValueError) as excinfo:
+        pointer_head.prepare_decoder_position_ids(input_ids=input_ids)
+    assert (
+        str(excinfo.value) == "Mapping contains unknown key 'unknown' "
+        "(mapping: {'default': 3, 'vocab': 2, 'bos': 0, 'eos': 0, 'pad': 1, 'unknown': 4})."
+    )
+
+    # multiple values for same input id
+    pointer_head = get_pointer_head(
+        # same id for eos and pad
+        eos_id=1,
+        pad_id=1,
+        decoder_position_id_mode="mapping",
+        decoder_position_id_mapping={
+            "default": 3,
+            "vocab": 2,
+            "bos": 0,
+            # different position ids for eos and pad, this is not allowed when eos and pad have the same id
+            "eos": 0,
+            "pad": 1,
+        },
+    )
+    with pytest.raises(ValueError) as excinfo:
+        pointer_head.prepare_decoder_position_ids(input_ids=input_ids)
+    assert (
+        str(excinfo.value)
+        == "Can not set the position ids for 'pad' to 1 because it was already set to 0 by key 'eos'. "
+        "Note that both, 'pad' and 'eos', have the same id (1), so their position_ids need to be "
+        "also the same (position id mapping: {'default': 3, 'vocab': 2, 'bos': 0, 'eos': 0, 'pad': 1})."
+    )
 
 
 def test_prepare_decoder_inputs():
-    pointer_head = get_pointer_head()
+    pointer_head = get_pointer_head(
+        decoder_position_id_mode="pattern", decoder_position_id_pattern=[0, 1, 1, 2]
+    )
     encoder_input_ids = torch.tensor(
         [
             [10, 11, 12, 13, 14, 15],
