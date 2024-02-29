@@ -87,13 +87,13 @@ class RelationArgumentSorter:
             if self.label_whitelist is not None and rel.label not in self.label_whitelist:
                 # just add the relations whose label is not in the label whitelist (if a whitelist is present)
                 # rel_layer.append(rel)
-                old2new_annotations[rel._id] = rel
+                old2new_annotations[rel._id] = rel.copy()
             else:
                 args_sorted = tuple(sorted(args, key=lambda arg: (arg.start, arg.end)))
                 if args == args_sorted:
                     # if the relation args are already sorted, just add the relation
                     # rel_layer.append(rel)
-                    old2new_annotations[rel._id] = rel
+                    old2new_annotations[rel._id] = rel.copy()
                 else:
                     if args_sorted not in args2relations:
                         new_rel = construct_relation_with_new_args(rel, args_sorted)
@@ -112,7 +112,7 @@ class RelationArgumentSorter:
                                 f"{prev_rel}"
                             )
                             # removed_annotation_ids.append(rel._id)
-                            old2new_annotations[rel._id] = prev_rel
+                            old2new_annotations[rel._id] = prev_rel.copy()
 
         result = doc.copy(with_annotations=False)
         result[self.relation_layer].extend(old2new_annotations.values())

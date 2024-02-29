@@ -32,8 +32,7 @@ def document():
     return doc
 
 
-@pytest.mark.parametrize("inplace", [True, False])
-def test_relation_argument_sorter(document, inplace):
+def test_relation_argument_sorter(document):
     # these arguments are not sorted
     document.binary_relations.append(
         BinaryRelation(
@@ -47,7 +46,7 @@ def test_relation_argument_sorter(document, inplace):
         )
     )
 
-    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations", inplace=inplace)
+    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations")
     doc_sorted_args = arg_sorter(document)
 
     assert document.text == doc_sorted_args.text
@@ -64,10 +63,7 @@ def test_relation_argument_sorter(document, inplace):
     assert str(doc_sorted_args.binary_relations[1].tail) == "I"
     assert doc_sorted_args.binary_relations[1].label == "founded"
 
-    if inplace:
-        assert document == doc_sorted_args
-    else:
-        assert document != doc_sorted_args
+    assert document != doc_sorted_args
 
 
 @pytest.fixture
@@ -140,7 +136,8 @@ def test_relation_argument_sorter_with_label_whitelist(document):
 
     # we only want to sort the relations with the label "founded"
     arg_sorter = RelationArgumentSorter(
-        relation_layer="binary_relations", label_whitelist=["founded"], inplace=False
+        relation_layer="binary_relations",
+        label_whitelist=["founded"],
     )
     doc_sorted_args = arg_sorter(document)
 
@@ -169,7 +166,7 @@ def test_relation_argument_sorter_sorted_rel_already_exists_with_same_label(docu
         )
     )
 
-    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations", inplace=False)
+    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations")
 
     caplog.clear()
     with caplog.at_level(logging.WARNING):
@@ -206,7 +203,7 @@ def test_relation_argument_sorter_sorted_rel_already_exists_with_different_label
         )
     )
 
-    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations", inplace=False)
+    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations")
 
     with pytest.raises(ValueError) as excinfo:
         arg_sorter(document)
@@ -245,7 +242,7 @@ def test_relation_argument_sorter_with_dependent_layers():
         Attribute(annotation=doc.binary_relations[0], label="some_attribute")
     )
 
-    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations", inplace=False)
+    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations")
 
     with pytest.raises(ValueError) as excinfo:
         arg_sorter(doc)
