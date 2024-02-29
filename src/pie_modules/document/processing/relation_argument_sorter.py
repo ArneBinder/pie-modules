@@ -50,47 +50,55 @@ class RelationArgumentSorter:
     Args:
         relation_layer: the name of the relation layer
         label_whitelist: if not None, only the relations with the label in the whitelist are sorted
-        inplace: if True, the sorting is done in place, otherwise the document is copied and the sorting is done
-            on the copy
+        verbose: if True, log warnings for relations with sorted arguments that are already present
     """
 
     def __init__(
-        self, relation_layer: str, label_whitelist: list[str] | None = None, inplace: bool = True
+        self,
+        relation_layer: str,
+        label_whitelist: list[str] | None = None,
+        verbose: bool = True,
     ):
         self.relation_layer = relation_layer
         self.label_whitelist = label_whitelist
-        self.inplace = inplace
+        self.verbose = verbose
 
     def __call__(self, doc: D) -> D:
-        if not self.inplace:
-            doc = doc.copy()
+        # if not self.inplace:
+        #    doc = doc.copy()
 
         rel_layer: AnnotationList[BinaryRelation] = doc[self.relation_layer]
         args2relations: dict[tuple[LabeledSpan, ...], BinaryRelation] = {
             get_relation_args(rel): rel for rel in rel_layer
         }
 
-        # assert that no other layers depend on the relation layer
-        if has_dependent_layers(document=doc, layer=self.relation_layer):
-            raise ValueError(
-                f"the relation layer {self.relation_layer} has dependent layers, "
-                f"cannot sort the arguments of the relations"
-            )
+        old2new_annotations = {}
+        # removed_annotation_ids = []
 
-        rel_layer.clear()
+        # assert that no other layers depend on the relation layer
+        # if has_dependent_layers(document=doc, layer=self.relation_layer):
+        #    raise ValueError(
+        #        f"the relation layer {self.relation_layer} has dependent layers, "
+        #        f"cannot sort the arguments of the relations"
+        #    )
+
+        # rel_layer.clear()
         for args, rel in args2relations.items():
             if self.label_whitelist is not None and rel.label not in self.label_whitelist:
                 # just add the relations whose label is not in the label whitelist (if a whitelist is present)
-                rel_layer.append(rel)
+                # rel_layer.append(rel)
+                old2new_annotations[rel._id] = rel
             else:
                 args_sorted = tuple(sorted(args, key=lambda arg: (arg.start, arg.end)))
                 if args == args_sorted:
                     # if the relation args are already sorted, just add the relation
-                    rel_layer.append(rel)
+                    # rel_layer.append(rel)
+                    old2new_annotations[rel._id] = rel
                 else:
                     if args_sorted not in args2relations:
                         new_rel = construct_relation_with_new_args(rel, args_sorted)
-                        rel_layer.append(new_rel)
+                        # rel_layer.append(new_rel)
+                        old2new_annotations[rel._id] = new_rel
                     else:
                         prev_rel = args2relations[args_sorted]
                         if prev_rel.label != rel.label:
@@ -103,5 +111,16 @@ class RelationArgumentSorter:
                                 f"do not add the new relation with sorted arguments, because it is already there: "
                                 f"{prev_rel}"
                             )
+                            # removed_annotation_ids.append(rel._id)
+                            old2new_annotations[rel._id] = prev_rel
 
-        return doc
+        result = doc.copy(with_annotations=False)
+        result[self.relation_layer].extend(old2new_annotations.values())
+        result.add_all_annotations_from_other(
+            doc,
+            override_annotations={self.relation_layer: old2new_annotations},
+            # removed_annotations={self.relation_layer: set(removed_annotation_ids)},
+            verbose=self.verbose,
+            strict=True,
+        )
+        return result
