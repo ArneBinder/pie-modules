@@ -115,7 +115,11 @@ class RelationArgumentSorter:
                             old2new_annotations[rel._id] = prev_rel.copy()
 
         result = doc.copy(with_annotations=False)
-        result[self.relation_layer].extend(old2new_annotations.values())
+        annotations_deduplicated = []
+        for annotation in old2new_annotations.values():
+            if annotation not in annotations_deduplicated:
+                annotations_deduplicated.append(annotation)
+        result[self.relation_layer].extend(annotations_deduplicated)
         result.add_all_annotations_from_other(
             doc,
             override_annotations={self.relation_layer: old2new_annotations},
