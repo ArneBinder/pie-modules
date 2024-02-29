@@ -18,6 +18,7 @@ def trim_text_spans(
     document: D,
     layer: str,
     skip_empty: bool = True,
+    strict: bool = True,
     verbose: bool = True,
 ) -> D:
     """Remove the whitespace at the beginning and end of span annotations that target a text field.
@@ -26,6 +27,8 @@ def trim_text_spans(
         document: The document to trim its span annotations.
         layer: The name of the span layer to trim.
         skip_empty: If True, empty spans will be skipped. Otherwise, an error will be raised.
+        strict: If True, raise an error if a removed span causes a removal of a relation or
+            other annotation that depends on it.
         verbose: If True, log warnings for trimmed spans.
 
     Returns:
@@ -124,7 +127,7 @@ def trim_text_spans(
         override_annotations={layer: old2new_spans},
         removed_annotations={layer: set(removed_span_ids)},
         verbose=verbose,
-        strict=True,
+        strict=strict,
     )
 
     return result
@@ -136,6 +139,8 @@ class TextSpanTrimmer:
     Args:
         layer: The name of the text span layer to trim.
         skip_empty: If True, empty spans will be skipped. Otherwise, an error will be raised.
+        strict: If True, raise an error if a removed span causes a removal of a relation or other
+            annotation that depends on it.
         verbose: If True, log warnings for trimmed spans.
     """
 
@@ -143,10 +148,12 @@ class TextSpanTrimmer:
         self,
         layer: str,
         skip_empty: bool = True,
+        strict: bool = True,
         verbose: bool = True,
     ):
         self.layer = layer
         self.skip_empty = skip_empty
+        self.strict = strict
         self.verbose = verbose
 
     def __call__(self, document: D) -> D:
@@ -154,5 +161,6 @@ class TextSpanTrimmer:
             document=document,
             layer=self.layer,
             skip_empty=self.skip_empty,
+            strict=self.strict,
             verbose=self.verbose,
         )
