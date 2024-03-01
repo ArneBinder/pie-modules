@@ -6,6 +6,8 @@ from typing import TypeVar
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.core import Annotation, AnnotationList, Document
 
+from pie_modules.annotations import LabeledMultiSpan
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,6 +20,20 @@ def get_relation_args(relation: Annotation) -> tuple[Annotation, ...]:
     else:
         raise TypeError(
             f"relation {relation} has unknown type [{type(relation)}], cannot get arguments from it"
+        )
+
+
+def sort_annotations(annotations: tuple[Annotation, ...]) -> tuple[Annotation, ...]:
+    if len(annotations) <= 1:
+        return annotations
+    if all(isinstance(ann, LabeledSpan) for ann in annotations):
+        return tuple(sorted(annotations, key=lambda ann: (ann.start, ann.end, ann.label)))
+    elif all(isinstance(ann, LabeledMultiSpan) for ann in annotations):
+        return tuple(sorted(annotations, key=lambda ann: (ann.slices, ann.label)))
+    else:
+        raise TypeError(
+            f"annotations {annotations} have unknown types [{set(type(ann) for ann in annotations)}], "
+            f"cannot sort them"
         )
 
 
@@ -38,10 +54,6 @@ def construct_relation_with_new_args(
         )
 
 
-def has_dependent_layers(document: D, layer: str) -> bool:
-    return layer not in document._annotation_graph["_artificial_root"]
-
-
 class RelationArgumentSorter:
     """Sorts the arguments of the relations in the given relation layer. The sorting is done by the
     start and end positions of the arguments. The relations with the same sorted arguments are
@@ -50,47 +62,44 @@ class RelationArgumentSorter:
     Args:
         relation_layer: the name of the relation layer
         label_whitelist: if not None, only the relations with the label in the whitelist are sorted
-        inplace: if True, the sorting is done in place, otherwise the document is copied and the sorting is done
-            on the copy
+        verbose: if True, log warnings for relations with sorted arguments that are already present
     """
 
     def __init__(
-        self, relation_layer: str, label_whitelist: list[str] | None = None, inplace: bool = True
+        self,
+        relation_layer: str,
+        label_whitelist: list[str] | None = None,
+        verbose: bool = True,
     ):
         self.relation_layer = relation_layer
         self.label_whitelist = label_whitelist
-        self.inplace = inplace
+        self.verbose = verbose
 
     def __call__(self, doc: D) -> D:
-        if not self.inplace:
-            doc = doc.copy()
-
         rel_layer: AnnotationList[BinaryRelation] = doc[self.relation_layer]
         args2relations: dict[tuple[LabeledSpan, ...], BinaryRelation] = {
             get_relation_args(rel): rel for rel in rel_layer
         }
 
-        # assert that no other layers depend on the relation layer
-        if has_dependent_layers(document=doc, layer=self.relation_layer):
-            raise ValueError(
-                f"the relation layer {self.relation_layer} has dependent layers, "
-                f"cannot sort the arguments of the relations"
-            )
-
-        rel_layer.clear()
+        old2new_annotations = {}
+        new_annotations = []
         for args, rel in args2relations.items():
             if self.label_whitelist is not None and rel.label not in self.label_whitelist:
                 # just add the relations whose label is not in the label whitelist (if a whitelist is present)
-                rel_layer.append(rel)
+                old2new_annotations[rel._id] = rel.copy()
+                new_annotations.append(old2new_annotations[rel._id])
             else:
-                args_sorted = tuple(sorted(args, key=lambda arg: (arg.start, arg.end)))
+                args_sorted = sort_annotations(args)
                 if args == args_sorted:
                     # if the relation args are already sorted, just add the relation
-                    rel_layer.append(rel)
+                    old2new_annotations[rel._id] = rel.copy()
+                    new_annotations.append(old2new_annotations[rel._id])
                 else:
                     if args_sorted not in args2relations:
-                        new_rel = construct_relation_with_new_args(rel, args_sorted)
-                        rel_layer.append(new_rel)
+                        old2new_annotations[rel._id] = construct_relation_with_new_args(
+                            rel, args_sorted
+                        )
+                        new_annotations.append(old2new_annotations[rel._id])
                     else:
                         prev_rel = args2relations[args_sorted]
                         if prev_rel.label != rel.label:
@@ -103,5 +112,16 @@ class RelationArgumentSorter:
                                 f"do not add the new relation with sorted arguments, because it is already there: "
                                 f"{prev_rel}"
                             )
+                            # we use the previous relation with sorted arguments to re-map any annotations that
+                            # depend on the current relation
+                            old2new_annotations[rel._id] = prev_rel.copy()
 
-        return doc
+        result = doc.copy(with_annotations=False)
+        result[self.relation_layer].extend(new_annotations)
+        result.add_all_annotations_from_other(
+            doc,
+            override_annotations={self.relation_layer: old2new_annotations},
+            verbose=self.verbose,
+            strict=True,
+        )
+        return result

@@ -10,6 +10,7 @@ from pytorch_ie.documents import (
     TextDocumentWithLabeledSpansAndBinaryRelations,
 )
 
+from pie_modules.annotations import LabeledMultiSpan
 from pie_modules.document.processing import RelationArgumentSorter
 from pie_modules.document.processing.relation_argument_sorter import (
     construct_relation_with_new_args,
@@ -32,8 +33,7 @@ def document():
     return doc
 
 
-@pytest.mark.parametrize("inplace", [True, False])
-def test_relation_argument_sorter(document, inplace):
+def test_relation_argument_sorter(document):
     # these arguments are not sorted
     document.binary_relations.append(
         BinaryRelation(
@@ -47,7 +47,7 @@ def test_relation_argument_sorter(document, inplace):
         )
     )
 
-    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations", inplace=inplace)
+    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations")
     doc_sorted_args = arg_sorter(document)
 
     assert document.text == doc_sorted_args.text
@@ -64,10 +64,7 @@ def test_relation_argument_sorter(document, inplace):
     assert str(doc_sorted_args.binary_relations[1].tail) == "I"
     assert doc_sorted_args.binary_relations[1].label == "founded"
 
-    if inplace:
-        assert document == doc_sorted_args
-    else:
-        assert document != doc_sorted_args
+    assert document != doc_sorted_args
 
 
 @pytest.fixture
@@ -140,7 +137,8 @@ def test_relation_argument_sorter_with_label_whitelist(document):
 
     # we only want to sort the relations with the label "founded"
     arg_sorter = RelationArgumentSorter(
-        relation_layer="binary_relations", label_whitelist=["founded"], inplace=False
+        relation_layer="binary_relations",
+        label_whitelist=["founded"],
     )
     doc_sorted_args = arg_sorter(document)
 
@@ -169,7 +167,7 @@ def test_relation_argument_sorter_sorted_rel_already_exists_with_same_label(docu
         )
     )
 
-    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations", inplace=False)
+    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations")
 
     caplog.clear()
     with caplog.at_level(logging.WARNING):
@@ -206,7 +204,7 @@ def test_relation_argument_sorter_sorted_rel_already_exists_with_different_label
         )
     )
 
-    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations", inplace=False)
+    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations")
 
     with pytest.raises(ValueError) as excinfo:
         arg_sorter(document)
@@ -241,16 +239,51 @@ def test_relation_argument_sorter_with_dependent_layers():
     doc.binary_relations.append(
         BinaryRelation(head=doc.labeled_spans[1], tail=doc.labeled_spans[0], label="worksAt")
     )
+    assert str(doc.binary_relations[0].head) == "H"
+    assert str(doc.binary_relations[0].tail) == "Entity G"
     doc.relation_attributes.append(
         Attribute(annotation=doc.binary_relations[0], label="some_attribute")
     )
 
-    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations", inplace=False)
+    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations")
 
-    with pytest.raises(ValueError) as excinfo:
-        arg_sorter(doc)
+    doc_sorted_args = arg_sorter(doc)
 
-    assert (
-        str(excinfo.value)
-        == "the relation layer binary_relations has dependent layers, cannot sort the arguments of the relations"
-    )
+    assert doc.text == doc_sorted_args.text
+    assert doc.labeled_spans == doc_sorted_args.labeled_spans
+    assert len(doc_sorted_args.relation_attributes) == len(doc.relation_attributes) == 1
+    new_rel = doc_sorted_args.binary_relations[0]
+    assert str(new_rel.head) == "Entity G"
+    assert str(new_rel.tail) == "H"
+    assert len(doc_sorted_args.relation_attributes) == len(doc.relation_attributes) == 1
+    assert doc_sorted_args.relation_attributes[0].annotation == new_rel
+    assert doc_sorted_args.relation_attributes[0].label == "some_attribute"
+
+
+def test_relation_argument_sorter_with_labeled_multi_spans():
+    @dataclasses.dataclass
+    class TestDocument(TextBasedDocument):
+        labeled_multi_spans: AnnotationLayer[LabeledMultiSpan] = annotation_field(target="text")
+        binary_relations: AnnotationLayer[BinaryRelation] = annotation_field(
+            target="labeled_multi_spans"
+        )
+
+    doc = TestDocument(text="Karl The Big Heinz loves what he does.")
+    karl = LabeledMultiSpan(slices=((0, 4), (13, 18)), label="PER")
+    doc.labeled_multi_spans.append(karl)
+    assert str(karl) == "('Karl', 'Heinz')"
+    he = LabeledMultiSpan(slices=((30, 32),), label="PER")
+    doc.labeled_multi_spans.append(he)
+    assert str(he) == "('he',)"
+    doc.binary_relations.append(BinaryRelation(head=he, tail=karl, label="coref"))
+
+    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations")
+    doc_sorted_args = arg_sorter(doc)
+
+    assert doc.text == doc_sorted_args.text
+    assert doc.labeled_multi_spans == doc_sorted_args.labeled_multi_spans
+    assert len(doc_sorted_args.binary_relations) == len(doc.binary_relations) == 1
+    new_rel = doc_sorted_args.binary_relations[0]
+    assert new_rel.head == karl
+    assert new_rel.tail == he
+    assert new_rel.label == "coref"
