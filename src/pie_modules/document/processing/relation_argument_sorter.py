@@ -38,10 +38,6 @@ def construct_relation_with_new_args(
         )
 
 
-def has_dependent_layers(document: D, layer: str) -> bool:
-    return layer not in document._annotation_graph["_artificial_root"]
-
-
 class RelationArgumentSorter:
     """Sorts the arguments of the relations in the given relation layer. The sorting is done by the
     start and end positions of the arguments. The relations with the same sorted arguments are
@@ -64,47 +60,30 @@ class RelationArgumentSorter:
         self.verbose = verbose
 
     def __call__(self, doc: D) -> D:
-        # if not self.inplace:
-        #    doc = doc.copy()
-
         rel_layer: AnnotationList[BinaryRelation] = doc[self.relation_layer]
         args2relations: dict[tuple[LabeledSpan, ...], BinaryRelation] = {
             get_relation_args(rel): rel for rel in rel_layer
         }
 
         old2new_annotations = {}
-        # removed_annotation_ids = []
-
-        # assert that no other layers depend on the relation layer
-        # if has_dependent_layers(document=doc, layer=self.relation_layer):
-        #    raise ValueError(
-        #        f"the relation layer {self.relation_layer} has dependent layers, "
-        #        f"cannot sort the arguments of the relations"
-        #    )
-
-        # rel_layer.clear()
         new_annotations = []
         for args, rel in args2relations.items():
             if self.label_whitelist is not None and rel.label not in self.label_whitelist:
                 # just add the relations whose label is not in the label whitelist (if a whitelist is present)
-                # rel_layer.append(rel)
-                new_annotation = rel.copy()
-                old2new_annotations[rel._id] = new_annotation
-                new_annotations.append(new_annotation)
+                old2new_annotations[rel._id] = rel.copy()
+                new_annotations.append(old2new_annotations[rel._id])
             else:
                 args_sorted = tuple(sorted(args, key=lambda arg: (arg.start, arg.end)))
                 if args == args_sorted:
                     # if the relation args are already sorted, just add the relation
-                    # rel_layer.append(rel)
-                    new_annotation = rel.copy()
-                    old2new_annotations[rel._id] = new_annotation
-                    new_annotations.append(new_annotation)
+                    old2new_annotations[rel._id] = rel.copy()
+                    new_annotations.append(old2new_annotations[rel._id])
                 else:
                     if args_sorted not in args2relations:
-                        new_annotation = construct_relation_with_new_args(rel, args_sorted)
-                        # rel_layer.append(new_annotation)
-                        old2new_annotations[rel._id] = new_annotation
-                        new_annotations.append(new_annotation)
+                        old2new_annotations[rel._id] = construct_relation_with_new_args(
+                            rel, args_sorted
+                        )
+                        new_annotations.append(old2new_annotations[rel._id])
                     else:
                         prev_rel = args2relations[args_sorted]
                         if prev_rel.label != rel.label:
@@ -117,7 +96,8 @@ class RelationArgumentSorter:
                                 f"do not add the new relation with sorted arguments, because it is already there: "
                                 f"{prev_rel}"
                             )
-                            # removed_annotation_ids.append(rel._id)
+                            # we use the previous relation with sorted arguments to re-map any annotations that
+                            # depend on the current relation
                             old2new_annotations[rel._id] = prev_rel.copy()
 
         result = doc.copy(with_annotations=False)
@@ -125,7 +105,6 @@ class RelationArgumentSorter:
         result.add_all_annotations_from_other(
             doc,
             override_annotations={self.relation_layer: old2new_annotations},
-            # removed_annotations={self.relation_layer: set(removed_annotation_ids)},
             verbose=self.verbose,
             strict=True,
         )
