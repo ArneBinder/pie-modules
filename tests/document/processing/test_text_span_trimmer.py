@@ -5,6 +5,7 @@ from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.core import AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument
 
+from pie_modules.annotations import LabeledMultiSpan
 from pie_modules.document.processing import TextSpanTrimmer
 
 
@@ -117,3 +118,78 @@ def test_text_span_trimmer_remove_entity_of_relations(document1):
         "to DocumentWithEntitiesRelationsAndPartitions because it depends on annotations that are not present "
         "in the document."
     )
+
+
+@dataclasses.dataclass
+class DocumentWithLabeledMultiSpansAndBinaryRelations(TextBasedDocument):
+    labeled_multi_spans: AnnotationList[LabeledMultiSpan] = annotation_field(target="text")
+    binary_relations: AnnotationList[BinaryRelation] = annotation_field(
+        target="labeled_multi_spans"
+    )
+
+
+def test_text_span_trimmer_with_multi_spans():
+    doc = DocumentWithLabeledMultiSpansAndBinaryRelations(
+        text="Jane Doe lives in New The Big York."
+    )
+    jane_doe = LabeledMultiSpan(slices=((0, 4), (5, 9)), label="person", score=1.0)  # Jane Doe
+    doc.labeled_multi_spans.append(jane_doe)
+    assert str(jane_doe) == "('Jane', 'Doe ')"
+    new_york = LabeledMultiSpan(slices=((17, 21), (30, 34)), label="city", score=0.9)  # New York
+    doc.labeled_multi_spans.append(new_york)
+    assert str(new_york) == "(' New', 'York')"
+    lives_in = BinaryRelation(head=jane_doe, tail=new_york, label="lives_in", score=0.8)
+    doc.binary_relations.append(lives_in)
+
+    trimmer = TextSpanTrimmer(layer="labeled_multi_spans")
+    processed_document = trimmer(doc)
+    assert len(processed_document.labeled_multi_spans) == 2
+    assert len(processed_document.binary_relations) == 1
+    assert str(processed_document.labeled_multi_spans[0]) == "('Jane', 'Doe')"
+    assert str(processed_document.labeled_multi_spans[1]) == "('New', 'York')"
+
+
+@pytest.mark.parametrize("skip_empty,strict", [(True, True), (False, False)])
+def test_text_span_trimmer_with_multi_spans_that_is_already_empty(skip_empty, strict):
+    doc = DocumentWithLabeledMultiSpansAndBinaryRelations(
+        text="Jane Doe lives in New The Big York."
+    )
+    empty = LabeledMultiSpan(slices=(), label="person")
+    doc.labeled_multi_spans.append(empty)
+    assert str(empty) == "()"
+    new_york = LabeledMultiSpan(slices=((17, 21), (30, 34)), label="city", score=0.9)  # New York
+    doc.labeled_multi_spans.append(new_york)
+    assert str(new_york) == "(' New', 'York')"
+    lives_in = BinaryRelation(head=empty, tail=new_york, label="lives_in", score=0.8)
+    doc.binary_relations.append(lives_in)
+
+    trimmer = TextSpanTrimmer(layer="labeled_multi_spans", skip_empty=skip_empty, strict=strict)
+    if skip_empty and strict:
+        with pytest.raises(ValueError) as excinfo:
+            processed_document = trimmer(doc)
+        assert (
+            str(excinfo.value)
+            == "Could not add annotation BinaryRelation(head=LabeledMultiSpan(slices=(), label='person', score=1.0), "
+            "tail=LabeledMultiSpan(slices=((17, 21), (30, 34)), label='city', score=0.9), label='lives_in', score=0.8) "
+            "to DocumentWithLabeledMultiSpansAndBinaryRelations because it depends on annotations that are not present "
+            "in the document."
+        )
+    else:
+        processed_document = trimmer(doc)
+        if skip_empty:
+            assert len(processed_document.labeled_multi_spans) == 1
+            assert str(processed_document.labeled_multi_spans[0]) == "('New', 'York')"
+            assert len(processed_document.binary_relations) == 0
+        else:
+            assert len(processed_document.labeled_multi_spans) == 2
+            assert str(processed_document.labeled_multi_spans[0]) == "()"
+            assert str(processed_document.labeled_multi_spans[1]) == "('New', 'York')"
+            assert len(processed_document.binary_relations) == 1
+            assert (
+                processed_document.binary_relations[0].head
+                == processed_document.labeled_multi_spans[0]
+            )
+            assert (
+                processed_document.binary_relations[0].tail
+                == processed_document.labeled_multi_spans[1]
+            )
