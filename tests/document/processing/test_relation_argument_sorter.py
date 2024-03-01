@@ -238,16 +238,22 @@ def test_relation_argument_sorter_with_dependent_layers():
     doc.binary_relations.append(
         BinaryRelation(head=doc.labeled_spans[1], tail=doc.labeled_spans[0], label="worksAt")
     )
+    assert str(doc.binary_relations[0].head) == "H"
+    assert str(doc.binary_relations[0].tail) == "Entity G"
     doc.relation_attributes.append(
         Attribute(annotation=doc.binary_relations[0], label="some_attribute")
     )
 
     arg_sorter = RelationArgumentSorter(relation_layer="binary_relations")
 
-    with pytest.raises(ValueError) as excinfo:
-        arg_sorter(doc)
+    doc_sorted_args = arg_sorter(doc)
 
-    assert (
-        str(excinfo.value)
-        == "the relation layer binary_relations has dependent layers, cannot sort the arguments of the relations"
-    )
+    assert doc.text == doc_sorted_args.text
+    assert doc.labeled_spans == doc_sorted_args.labeled_spans
+    assert len(doc_sorted_args.relation_attributes) == len(doc.relation_attributes) == 1
+    new_rel = doc_sorted_args.binary_relations[0]
+    assert str(new_rel.head) == "Entity G"
+    assert str(new_rel.tail) == "H"
+    assert len(doc_sorted_args.relation_attributes) == len(doc.relation_attributes) == 1
+    assert doc_sorted_args.relation_attributes[0].annotation == new_rel
+    assert doc_sorted_args.relation_attributes[0].label == "some_attribute"
