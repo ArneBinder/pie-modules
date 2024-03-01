@@ -83,22 +83,28 @@ class RelationArgumentSorter:
         #    )
 
         # rel_layer.clear()
+        new_annotations = []
         for args, rel in args2relations.items():
             if self.label_whitelist is not None and rel.label not in self.label_whitelist:
                 # just add the relations whose label is not in the label whitelist (if a whitelist is present)
                 # rel_layer.append(rel)
-                old2new_annotations[rel._id] = rel.copy()
+                new_annotation = rel.copy()
+                old2new_annotations[rel._id] = new_annotation
+                new_annotations.append(new_annotation)
             else:
                 args_sorted = tuple(sorted(args, key=lambda arg: (arg.start, arg.end)))
                 if args == args_sorted:
                     # if the relation args are already sorted, just add the relation
                     # rel_layer.append(rel)
-                    old2new_annotations[rel._id] = rel.copy()
+                    new_annotation = rel.copy()
+                    old2new_annotations[rel._id] = new_annotation
+                    new_annotations.append(new_annotation)
                 else:
                     if args_sorted not in args2relations:
-                        new_rel = construct_relation_with_new_args(rel, args_sorted)
-                        # rel_layer.append(new_rel)
-                        old2new_annotations[rel._id] = new_rel
+                        new_annotation = construct_relation_with_new_args(rel, args_sorted)
+                        # rel_layer.append(new_annotation)
+                        old2new_annotations[rel._id] = new_annotation
+                        new_annotations.append(new_annotation)
                     else:
                         prev_rel = args2relations[args_sorted]
                         if prev_rel.label != rel.label:
@@ -115,11 +121,7 @@ class RelationArgumentSorter:
                             old2new_annotations[rel._id] = prev_rel.copy()
 
         result = doc.copy(with_annotations=False)
-        annotations_deduplicated = []
-        for annotation in old2new_annotations.values():
-            if annotation not in annotations_deduplicated:
-                annotations_deduplicated.append(annotation)
-        result[self.relation_layer].extend(annotations_deduplicated)
+        result[self.relation_layer].extend(new_annotations)
         result.add_all_annotations_from_other(
             doc,
             override_annotations={self.relation_layer: old2new_annotations},
