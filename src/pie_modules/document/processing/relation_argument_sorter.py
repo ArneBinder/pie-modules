@@ -6,6 +6,8 @@ from typing import TypeVar
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.core import Annotation, AnnotationList, Document
 
+from pie_modules.annotations import LabeledMultiSpan
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,6 +20,20 @@ def get_relation_args(relation: Annotation) -> tuple[Annotation, ...]:
     else:
         raise TypeError(
             f"relation {relation} has unknown type [{type(relation)}], cannot get arguments from it"
+        )
+
+
+def sort_annotations(annotations: tuple[Annotation, ...]) -> tuple[Annotation, ...]:
+    if len(annotations) <= 1:
+        return annotations
+    if all(isinstance(ann, LabeledSpan) for ann in annotations):
+        return tuple(sorted(annotations, key=lambda ann: (ann.start, ann.end, ann.label)))
+    elif all(isinstance(ann, LabeledMultiSpan) for ann in annotations):
+        return tuple(sorted(annotations, key=lambda ann: (ann.slices, ann.label)))
+    else:
+        raise TypeError(
+            f"annotations {annotations} have unknown types [{set(type(ann) for ann in annotations)}], "
+            f"cannot sort them"
         )
 
 
@@ -73,7 +89,7 @@ class RelationArgumentSorter:
                 old2new_annotations[rel._id] = rel.copy()
                 new_annotations.append(old2new_annotations[rel._id])
             else:
-                args_sorted = tuple(sorted(args, key=lambda arg: (arg.start, arg.end)))
+                args_sorted = sort_annotations(args)
                 if args == args_sorted:
                     # if the relation args are already sorted, just add the relation
                     old2new_annotations[rel._id] = rel.copy()

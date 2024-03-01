@@ -10,6 +10,7 @@ from pytorch_ie.documents import (
     TextDocumentWithLabeledSpansAndBinaryRelations,
 )
 
+from pie_modules.annotations import LabeledMultiSpan
 from pie_modules.document.processing import RelationArgumentSorter
 from pie_modules.document.processing.relation_argument_sorter import (
     construct_relation_with_new_args,
@@ -257,3 +258,32 @@ def test_relation_argument_sorter_with_dependent_layers():
     assert len(doc_sorted_args.relation_attributes) == len(doc.relation_attributes) == 1
     assert doc_sorted_args.relation_attributes[0].annotation == new_rel
     assert doc_sorted_args.relation_attributes[0].label == "some_attribute"
+
+
+def test_relation_argument_sorter_with_labeled_multi_spans():
+    @dataclasses.dataclass
+    class TestDocument(TextBasedDocument):
+        labeled_multi_spans: AnnotationLayer[LabeledMultiSpan] = annotation_field(target="text")
+        binary_relations: AnnotationLayer[BinaryRelation] = annotation_field(
+            target="labeled_multi_spans"
+        )
+
+    doc = TestDocument(text="Karl The Big Heinz loves what he does.")
+    karl = LabeledMultiSpan(slices=((0, 4), (13, 18)), label="PER")
+    doc.labeled_multi_spans.append(karl)
+    assert str(karl) == "('Karl', 'Heinz')"
+    he = LabeledMultiSpan(slices=((30, 32),), label="PER")
+    doc.labeled_multi_spans.append(he)
+    assert str(he) == "('he',)"
+    doc.binary_relations.append(BinaryRelation(head=he, tail=karl, label="coref"))
+
+    arg_sorter = RelationArgumentSorter(relation_layer="binary_relations")
+    doc_sorted_args = arg_sorter(doc)
+
+    assert doc.text == doc_sorted_args.text
+    assert doc.labeled_multi_spans == doc_sorted_args.labeled_multi_spans
+    assert len(doc_sorted_args.binary_relations) == len(doc.binary_relations) == 1
+    new_rel = doc_sorted_args.binary_relations[0]
+    assert new_rel.head == karl
+    assert new_rel.tail == he
+    assert new_rel.label == "coref"
