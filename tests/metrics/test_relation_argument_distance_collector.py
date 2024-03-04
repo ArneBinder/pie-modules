@@ -38,7 +38,6 @@ def test_relation_argument_distance_collector():
     }
 
 
-@pytest.mark.slow
 def test_relation_argument_distance_collector_with_n_ary_relation():
     doc = TestDocument(
         text="This is the first entity. This is the second entity. And, this is the third entity."
