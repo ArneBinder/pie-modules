@@ -993,6 +993,6 @@ def test_decode_annotations_fuzzing():
     for _ in range(1000):
         encoding = random.sample(range(0, input_length + taskmodule.pointer_offset), output_length)
         encoding_without_bos = [idx for idx in encoding if idx != taskmodule.bos_id]
-        taskmodule.relation_encoder_decoder.parse_with_error_handling(
+        taskmodule.annotation_encoder_decoder.parse_with_error_handling(
             encoding=encoding_without_bos, input_length=input_length, stop_ids=[taskmodule.eos_id]
         )

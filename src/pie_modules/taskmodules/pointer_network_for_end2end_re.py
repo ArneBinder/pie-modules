@@ -240,7 +240,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         self.constrained_generation = constrained_generation
         self.constrain_with_previous_records = constrain_with_previous_records
         # will be set in _post_prepare()
-        self.relation_encoder_decoder: BinaryRelationEncoderDecoder
+        self.annotation_encoder_decoder: BinaryRelationEncoderDecoder
 
         # collected in prepare(), if not passed in
         self.labels_per_layer = labels_per_layer
@@ -430,7 +430,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             self.loop_dummy_relation_name,
             self.none_label,
         ]
-        self.relation_encoder_decoder = BinaryRelationEncoderDecoder(
+        self.annotation_encoder_decoder = BinaryRelationEncoderDecoder(
             head_encoder_decoder=labeled_span_encoder_decoder,
             tail_encoder_decoder=labeled_span_encoder_decoder,
             # restrict label2id to get better error messages
@@ -513,12 +513,10 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             unbatch_function=self.unbatch_output,
             decode_layers_with_errors_function=self.decode_annotations,
             layer_metrics=layer_metrics,
-            error_key_correct=self.relation_encoder_decoder.KEY_INVALID_CORRECT,
+            error_key_correct=self.annotation_encoder_decoder.KEY_INVALID_CORRECT,
         )
 
-    def encode_annotations(
-        self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None
-    ) -> TaskOutputType:
+    def prepare_annotations_for_encoding(self, layers: Dict[str, List[Annotation]]) -> List[BinaryRelation]:
         if not set(layers.keys()) == set(self.layer_names):
             raise Exception(f"unexpected layers: {layers.keys()}. expected: {self.layer_names}")
 
@@ -527,17 +525,15 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
         # encode relations
         all_relation_arguments = set()
-        relation_encodings = dict()
+        prepared_relations = []
         for rel in layers[self.relation_layer_name]:
             if not isinstance(rel, BinaryRelation):
                 raise Exception(f"expected BinaryRelation, but got: {rel}")
             if rel.label in self.labels_per_layer[self.relation_layer_name]:
-                encoded_relation = self.relation_encoder_decoder.encode(
-                    annotation=rel, metadata=metadata
-                )
+                encoded_relation = self.annotation_encoder_decoder.encode(annotation=rel)
                 if encoded_relation is None:
                     raise Exception(f"failed to encode relation: {rel}")
-                relation_encodings[rel] = encoded_relation
+                prepared_relations.append(rel)
                 all_relation_arguments.update([rel.head, rel.tail])
 
         # encode spans that are not arguments of any relation
@@ -548,20 +544,25 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             dummy_relation = BinaryRelation(
                 head=span, tail=span, label=self.loop_dummy_relation_name
             )
-            encoded_relation = self.relation_encoder_decoder.encode(
-                annotation=dummy_relation, metadata=metadata
-            )
+            encoded_relation = self.annotation_encoder_decoder.encode(annotation=dummy_relation)
             if encoded_relation is not None:
-                relation_encodings[dummy_relation] = encoded_relation
+                prepared_relations.append(dummy_relation)
 
         # sort relations by start indices of head and tail
-        sorted_relations = sorted(relation_encodings, key=binary_relation_sort_key)
+        sorted_relations = sorted(prepared_relations, key=binary_relation_sort_key)
+        return sorted_relations
+
+    def encode_annotations(
+        self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None
+    ) -> TaskOutputType:
+
+        prepared_annotations = self.prepare_annotations_for_encoding(layers=layers)
 
         # build target_ids
         target_ids = []
-        for rel in sorted_relations:
-            encoded_relation = relation_encodings[rel]
-            target_ids.extend(encoded_relation)
+        for rel in prepared_annotations:
+            encoded_annotation = self.annotation_encoder_decoder.encode(annotation=rel)
+            target_ids.extend(encoded_annotation)
         target_ids.append(self.eos_id)
 
         if self.create_constraints:
@@ -596,12 +597,14 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
         return result
 
-    def postprocess_decoded_relations(
-        self, decoded_relations: List[BinaryRelation]
+    def postprocess_decoded_annotations(
+        self, decoded_annotations: List[Annotation]
     ) -> Dict[str, Iterable[Annotation]]:
         relation_tuples: List[Tuple[Tuple[int, ...], Tuple[int, ...], str]] = []
         entity_labels: Dict[Tuple[int, ...], List[str]] = defaultdict(list)
-        for rel in decoded_relations:
+        for rel in decoded_annotations:
+            if not isinstance(rel, BinaryRelation):
+                raise Exception(f"expected BinaryRelation, but got: {rel}")
             head_indices = annotation_to_indices(rel.head)
             head_label = annotation_to_label(rel.head)
             entity_labels[head_indices].append(head_label)
@@ -647,16 +650,16 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     ) -> Tuple[Dict[str, Iterable[Annotation]], Dict[str, int]]:
         try:
             (
-                decoded_relations,
+                decoded_annotations,
                 errors,
                 remaining,
-            ) = self.relation_encoder_decoder.parse_with_error_handling(
+            ) = self.annotation_encoder_decoder.parse_with_error_handling(
                 encoding=encoding.labels,
                 input_length=self.tokenizer.model_max_length,
                 stop_ids=[self.eos_id],
                 disrespect_decoded_annotations=not self.constrain_with_previous_records,
             )
-            return self.postprocess_decoded_relations(decoded_relations), errors
+            return self.postprocess_decoded_annotations(decoded_annotations), errors
         except Exception as e:
             logger.error(f"failed to decode annotations: {e}")
             return {layer_name: [] for layer_name in self.layer_names}, {"full_encoding": 1}
@@ -676,27 +679,27 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         # speed up by using a cache
         cache_key = tuple(previous_ids[:-1])
         if cache_key in self.cache_decoded:
-            decoded_relations, previous_successfully_decoded = self.cache_decoded.get(cache_key)
+            decoded_annotations, previous_successfully_decoded = self.cache_decoded.get(cache_key)
             encoding = previous_ids[len(previous_successfully_decoded) :]
         else:
-            decoded_relations = None
+            decoded_annotations = None
             encoding = previous_ids
         (
-            decoded_relations,
+            decoded_annotations,
             decoding_errors,
             remaining,
-        ) = self.relation_encoder_decoder.parse_with_error_handling(
+        ) = self.annotation_encoder_decoder.parse_with_error_handling(
             encoding=encoding,
             input_length=input_len,
             stop_ids=[self.eos_id],
-            decoded_annotations=decoded_relations,
+            decoded_annotations=decoded_annotations,
             disrespect_decoded_annotations=not self.constrain_with_previous_records,
         )
         successfully_decoded = previous_ids[: len(previous_ids) - len(remaining)]
-        self.cache_decoded.add(tuple(previous_ids), (decoded_relations, successfully_decoded))
+        self.cache_decoded.add(tuple(previous_ids), (decoded_annotations, successfully_decoded))
         try:
-            self.relation_encoder_decoder.parse(
-                encoding=remaining, decoded_annotations=decoded_relations, text_length=input_len
+            self.annotation_encoder_decoder.parse(
+                encoding=remaining, decoded_annotations=decoded_annotations, text_length=input_len
             )
             raise Exception("expected IncompleteEncodingException")
         except IncompleteEncodingException as e:
