@@ -2,15 +2,10 @@ import dataclasses
 
 import pytest
 from pytorch_ie import Annotation, Document
-from pytorch_ie.annotations import (
-    BinaryRelation,
-    LabeledSpan,
-    MultiLabeledBinaryRelation,
-)
+from pytorch_ie.annotations import BinaryRelation, LabeledSpan, NaryRelation
 from pytorch_ie.core import AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 
-from pie_modules.annotations import LabeledMultiSpan
 from pie_modules.metrics import RelationArgumentDistanceCollector
 
 
@@ -22,11 +17,11 @@ class TestDocument(TextBasedDocument):
 
 def test_relation_argument_distance_collector():
     doc = TestDocument(
-        text="This is the first entity. This is the second entity. " "This is the third entity."
+        text="This is the first entity. This is the second entity. And, this is the third entity."
     )
     doc.entities.append(LabeledSpan(start=0, end=25, label="entity"))
     doc.entities.append(LabeledSpan(start=26, end=52, label="entity"))
-    doc.entities.append(LabeledSpan(start=53, end=78, label="entity"))
+    doc.entities.append(LabeledSpan(start=53, end=83, label="entity"))
     doc.relations.append(
         BinaryRelation(head=doc.entities[0], tail=doc.entities[1], label="relation_label_1")
     )
@@ -37,50 +32,58 @@ def test_relation_argument_distance_collector():
     statistic = RelationArgumentDistanceCollector(layer="relations")
     values = statistic(doc)
     assert values == {
-        "ALL": {"len": 4, "mean": 52.0, "std": 0.0, "min": 52.0, "max": 52.0},
+        "ALL": {"len": 4, "mean": 54.5, "std": 2.5, "min": 52.0, "max": 57.0},
         "relation_label_1": {"len": 2, "mean": 52.0, "std": 0.0, "min": 52.0, "max": 52.0},
-        "relation_label_2": {"len": 2, "mean": 52.0, "std": 0.0, "min": 52.0, "max": 52.0},
+        "relation_label_2": {"len": 2, "mean": 57.0, "std": 0.0, "min": 57.0, "max": 57.0},
     }
 
 
-def test_relation_argument_distance_collector_with_multi_span():
+@pytest.mark.slow
+def test_relation_argument_distance_collector_with_n_ary_relation():
     doc = TestDocument(
-        text="This is the first entity. This is the second entity. "
-        "This is a filler. This is the third entity."
+        text="This is the first entity. This is the second entity. And, this is the third entity."
     )
-    doc.entities.append(LabeledMultiSpan(slices=((0, 25),), label="entity"))
-    doc.entities.append(LabeledMultiSpan(slices=((26, 52),), label="entity"))
-    doc.entities.append(LabeledMultiSpan(slices=((53, 78),), label="entity"))
+    doc.entities.append(LabeledSpan(start=0, end=25, label="entity"))
+    doc.entities.append(LabeledSpan(start=26, end=52, label="entity"))
+    doc.entities.append(LabeledSpan(start=53, end=83, label="entity"))
     doc.relations.append(
-        MultiLabeledBinaryRelation(
-            head=doc.entities[0], tail=doc.entities[1], label="relation_label_1"
+        NaryRelation(
+            arguments=[
+                doc.entities[0],
+                doc.entities[1],
+            ],
+            roles=["head", "tail"],
+            label="relation_label_1",
         )
     )
     doc.relations.append(
-        MultiLabeledBinaryRelation(
-            head=doc.entities[1], tail=doc.entities[2], label="relation_label_2"
+        NaryRelation(
+            arguments=[
+                doc.entities[1],
+                doc.entities[2],
+            ],
+            roles=["head", "tail"],
+            label="relation_label_2",
         )
     )
 
-    # TypeError
-    # argument distance calculation is not yet supported for <class 'pytorch_ie.annotations.MultiLabeledBinaryRelation'>
     statistic = RelationArgumentDistanceCollector(layer="relations")
     values = statistic(doc)
     assert values == {
-        "ALL": {"len": 4, "mean": 52, "std": 0.0, "min": 52.0, "max": 52.0},
+        "ALL": {"len": 4, "mean": 54.5, "std": 2.5, "min": 52.0, "max": 57.0},
         "relation_label_1": {"len": 2, "mean": 52.0, "std": 0.0, "min": 52.0, "max": 52.0},
-        "relation_label_2": {"len": 2, "mean": 52.0, "std": 0.0, "min": 52.0, "max": 52.0},
+        "relation_label_2": {"len": 2, "mean": 57.0, "std": 0.0, "min": 57.0, "max": 57.0},
     }
 
 
 def test_relation_argument_distance_collector_with_tokenize():
     doc = TestDocument(
-        text="This is the first entity. This is the second entity. " "This is the third entity."
+        text="This is the first entity. This is the second entity. And, this is the third entity."
     )
 
     doc.entities.append(LabeledSpan(start=0, end=25, label="entity"))
     doc.entities.append(LabeledSpan(start=26, end=52, label="entity"))
-    doc.entities.append(LabeledSpan(start=53, end=78, label="entity"))
+    doc.entities.append(LabeledSpan(start=53, end=83, label="entity"))
     doc.relations.append(
         BinaryRelation(head=doc.entities[0], tail=doc.entities[1], label="relation_label_1")
     )
@@ -101,9 +104,9 @@ def test_relation_argument_distance_collector_with_tokenize():
     )
     values = statistic(doc)
     assert values == {
-        "ALL": {"len": 4, "mean": 12.0, "std": 0.0, "min": 12.0, "max": 12.0},
+        "ALL": {"len": 4, "mean": 13.0, "std": 1.0, "min": 12.0, "max": 14.0},
         "relation_label_1": {"len": 2, "mean": 12.0, "std": 0.0, "min": 12.0, "max": 12.0},
-        "relation_label_2": {"len": 2, "mean": 12.0, "std": 0.0, "min": 12.0, "max": 12.0},
+        "relation_label_2": {"len": 2, "mean": 14.0, "std": 0.0, "min": 14.0, "max": 14.0},
     }
 
 
@@ -140,7 +143,7 @@ def test_relation_argument_distance_collector_with_tokenize_wrong_document_type(
         relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
 
     doc = TestDocument(
-        data="This is the first entity. This is the second entity. " "This is the third entity."
+        data="This is the first entity. This is the second entity. This is the third entity."
     )
 
     doc.entities.append(LabeledSpan(start=0, end=25, label="entity"))
