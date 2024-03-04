@@ -516,7 +516,9 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             error_key_correct=self.annotation_encoder_decoder.KEY_INVALID_CORRECT,
         )
 
-    def prepare_annotations_for_encoding(self, layers: Dict[str, List[Annotation]]) -> List[BinaryRelation]:
+    def prepare_annotations_for_encoding(
+        self, layers: Dict[str, List[Annotation]]
+    ) -> List[BinaryRelation]:
         if not set(layers.keys()) == set(self.layer_names):
             raise Exception(f"unexpected layers: {layers.keys()}. expected: {self.layer_names}")
 
@@ -555,7 +557,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     def encode_annotations(
         self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None
     ) -> TaskOutputType:
-
         prepared_annotations = self.prepare_annotations_for_encoding(layers=layers)
 
         # build target_ids
