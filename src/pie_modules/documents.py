@@ -147,3 +147,30 @@ class TextDocumentWithLabeledMultiSpansBinaryRelationsAndLabeledPartitions(
     TextDocumentWithLabeledMultiSpansAndBinaryRelations,
 ):
     pass
+
+
+@dataclasses.dataclass
+class TokenDocumentWithLabeledMultiSpans(TokenBasedDocument):
+    labeled_multi_spans: AnnotationLayer[LabeledMultiSpan] = annotation_field(target="tokens")
+
+
+@dataclasses.dataclass
+class TokenDocumentWithLabeledMultiSpansAndLabeledPartitions(
+    TokenDocumentWithLabeledMultiSpans, TokenDocumentWithLabeledPartitions
+):
+    pass
+
+
+@dataclasses.dataclass
+class TokenDocumentWithLabeledMultiSpansAndBinaryRelations(TokenDocumentWithLabeledMultiSpans):
+    binary_relations: AnnotationLayer[BinaryRelation] = annotation_field(
+        target="labeled_multi_spans"
+    )
+
+
+@dataclasses.dataclass
+class TokenDocumentWithLabeledMultiSpansBinaryRelationsAndLabeledPartitions(
+    TokenDocumentWithLabeledMultiSpansAndLabeledPartitions,
+    TokenDocumentWithLabeledMultiSpansAndBinaryRelations,
+):
+    pass
