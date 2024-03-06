@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, get_args
 
-from pytorch_ie import Document
+from pytorch_ie import Annotation, Document
 
-from pie_modules.annotations import LabeledSpan, MultiSpan, Span
+from pie_modules.annotations import MultiSpan, Span
 
-T = TypeVar("T", bound=Span)
+ST = TypeVar("ST", bound=Span)
 
 
-def multi_span_to_span(multi_span: MultiSpan, result_type: type[T]) -> T:
+def multi_span_to_span(multi_span: MultiSpan, result_type: type[ST]) -> ST:
     """Convert a MultiSpan to a Span by taking the start and end of the first and last slice, i.e.
     create a span that covers all slices of the MultiSpan."""
 
@@ -22,6 +22,26 @@ def multi_span_to_span(multi_span: MultiSpan, result_type: type[T]) -> T:
     span_dict["start"] = slices_sorted[0][0]
     span_dict["end"] = slices_sorted[-1][1]
     return result_type(**span_dict)
+
+
+AT = TypeVar("AT", bound=Annotation)
+
+
+def get_layer_annotation_type(
+    document_type: type[Document], layer_name: str, super_type: type[AT] = Annotation
+) -> type[AT]:
+    """Get the annotation type of the given layer in the given document type."""
+    for field in document_type.annotation_fields():
+        if field.name == layer_name:
+            result = get_args(field.type)[0]
+            if not issubclass(result, super_type):
+                raise ValueError(
+                    f"The layer {layer_name} in the document type {document_type} must be a subclass of {super_type}."
+                )
+            return result
+    raise ValueError(
+        f"The document type {document_type} does not have a layer with the name {layer_name}."
+    )
 
 
 D = TypeVar("D", bound=Document)
@@ -51,14 +71,18 @@ class MultiSpanMerger(Generic[D]):
         self.result_field_mapping = result_field_mapping or {}
 
     def __call__(self, document: Document) -> D:
+        # ensure that the layer exists and is a MultiSpan layer
+        get_layer_annotation_type(type(document), layer_name=self.layer, super_type=MultiSpan)
         result: D = document.copy(with_annotations=False).as_type(
             new_type=self.result_document_type, field_mapping=self.result_field_mapping
         )
         target_layer_name = self.result_field_mapping.get(self.layer, self.layer)
         source_layer = document[self.layer]
         target_layer = result[target_layer_name]
-        # TODO: get from target layer / document
-        target_span_type = LabeledSpan
+        # get target annotation type from the result document type
+        target_span_type = get_layer_annotation_type(
+            self.result_document_type, layer_name=target_layer_name, super_type=Span
+        )
         span_mapping: dict[int, Span] = {}
         # process gold annotations
         for multi_span in source_layer:
