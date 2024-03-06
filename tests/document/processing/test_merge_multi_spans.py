@@ -67,9 +67,7 @@ def test_multi_span_merger():
     multi_span_merger = MultiSpanMerger(
         result_document_type=TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
         layer="labeled_multi_spans",
-        result_field_mapping={
-            "labeled_multi_spans": "labeled_spans",
-        },
+        target_layer="labeled_spans",
     )
     result = multi_span_merger(doc)
     assert len(result.labeled_spans) == 2

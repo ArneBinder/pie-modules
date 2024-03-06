@@ -54,34 +54,31 @@ class MultiSpanMerger(Generic[D]):
     Args:
         layer: The name of the annotation layer that contains the MultiSpans to merge.
         result_document_type: The type of the result document.
-        result_field_mapping: A dictionary that maps the layer name of the input document to the
-            layer name of the result document. If None, the layer name of the input document is used
-            as the layer name of the result document. Required if the layer name of the result
-            document is different from the layer name of the input document.
+        target_layer: The name of the annotation layer in the result document where the merged
+            Spans should be added. If not provided, the same name as the input layer will be used.
     """
 
     def __init__(
         self,
         layer: str,
         result_document_type: type[D],
-        result_field_mapping: dict[str, str] | None = None,
+        target_layer: str | None = None,
     ):
         self.layer = layer
+        self.target_layer = target_layer or layer
         self.result_document_type = result_document_type
-        self.result_field_mapping = result_field_mapping or {}
 
     def __call__(self, document: Document) -> D:
         # ensure that the layer exists and is a MultiSpan layer
         get_layer_annotation_type(type(document), layer_name=self.layer, super_type=MultiSpan)
         result: D = document.copy(with_annotations=False).as_type(
-            new_type=self.result_document_type, field_mapping=self.result_field_mapping
+            new_type=self.result_document_type
         )
-        target_layer_name = self.result_field_mapping.get(self.layer, self.layer)
         source_layer = document[self.layer]
-        target_layer = result[target_layer_name]
+        target_layer = result[self.target_layer]
         # get target annotation type from the result document type
         target_span_type = get_layer_annotation_type(
-            self.result_document_type, layer_name=target_layer_name, super_type=Span
+            self.result_document_type, layer_name=self.target_layer, super_type=Span
         )
         span_mapping: dict[int, Span] = {}
         # process gold annotations
@@ -96,6 +93,6 @@ class MultiSpanMerger(Generic[D]):
             target_layer.predictions.append(new_span)
 
         result.add_all_annotations_from_other(
-            document, override_annotations={target_layer_name: span_mapping}
+            document, override_annotations={self.target_layer: span_mapping}
         )
         return result
