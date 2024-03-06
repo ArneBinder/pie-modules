@@ -10,6 +10,9 @@ D = TypeVar("D", bound=Document)
 
 
 def multi_span_to_span(multi_span: MultiSpan) -> Span:
+    """Convert a MultiSpan to a Span by taking the start and end of the first and last slice, i.e.
+    create a span that covers all slices of the MultiSpan."""
+
     if len(multi_span.slices) == 0:
         raise ValueError("Cannot convert an empty MultiSpan to a Span.")
     slices_sorted = sorted(multi_span.slices)
@@ -27,6 +30,18 @@ def multi_span_to_span(multi_span: MultiSpan) -> Span:
 
 
 class MultiSpanMerger(Generic[D]):
+    """Merges MultiSpans in the given layer of the input document into Spans in the result
+    document.
+
+    Args:
+        layer: The name of the annotation layer that contains the MultiSpans to merge.
+        result_document_type: The type of the result document.
+        result_field_mapping: A dictionary that maps the layer name of the input document to the
+            layer name of the result document. If None, the layer name of the input document is used
+            as the layer name of the result document. Required if the layer name of the result
+            document is different from the layer name of the input document.
+    """
+
     def __init__(
         self,
         layer: str,
