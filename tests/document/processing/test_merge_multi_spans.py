@@ -1,4 +1,7 @@
+import dataclasses
+
 import pytest
+from pytorch_ie import Annotation
 
 from pie_modules.annotations import (
     BinaryRelation,
@@ -21,7 +24,7 @@ def test_multi_span_to_span(not_sorted):
         multi_span = MultiSpan(slices=((4, 6), (0, 2)))
     else:
         multi_span = MultiSpan(slices=((0, 2), (4, 6)))
-    span = multi_span_to_span(multi_span)
+    span = multi_span_to_span(multi_span, result_type=Span)
     assert isinstance(span, Span)
     assert span.start == 0
     assert span.end == 6
@@ -30,13 +33,13 @@ def test_multi_span_to_span(not_sorted):
 def test_multi_span_to_span_empty():
     multi_span = MultiSpan(slices=())
     with pytest.raises(ValueError) as excinfo:
-        multi_span_to_span(multi_span)
+        multi_span_to_span(multi_span, result_type=Span)
     assert str(excinfo.value) == "Cannot convert an empty MultiSpan to a Span."
 
 
 def test_labeled_multi_span_to_span():
     multi_span = LabeledMultiSpan(slices=((0, 2), (4, 6)), label="label_a", score=0.5)
-    span = multi_span_to_span(multi_span)
+    span = multi_span_to_span(multi_span, result_type=LabeledSpan)
     assert isinstance(span, LabeledSpan)
     assert span.start == 0
     assert span.end == 6

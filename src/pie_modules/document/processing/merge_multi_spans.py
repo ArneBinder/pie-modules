@@ -1,25 +1,15 @@
 from __future__ import annotations
 
-from typing import Generic, TypeVar, overload
+from typing import Generic, TypeVar
 
 from pytorch_ie import Document
 
-from pie_modules.annotations import LabeledMultiSpan, LabeledSpan, MultiSpan, Span
+from pie_modules.annotations import LabeledSpan, MultiSpan, Span
 
-D = TypeVar("D", bound=Document)
-
-
-@overload
-def multi_span_to_span(multi_span: LabeledMultiSpan) -> LabeledSpan:
-    ...
+T = TypeVar("T", bound=Span)
 
 
-@overload
-def multi_span_to_span(multi_span: MultiSpan) -> Span:
-    ...
-
-
-def multi_span_to_span(multi_span: MultiSpan) -> Span:
+def multi_span_to_span(multi_span: MultiSpan, result_type: type[T]) -> T:
     """Convert a MultiSpan to a Span by taking the start and end of the first and last slice, i.e.
     create a span that covers all slices of the MultiSpan."""
 
@@ -31,12 +21,10 @@ def multi_span_to_span(multi_span: MultiSpan) -> Span:
     span_dict.pop("_id")
     span_dict["start"] = slices_sorted[0][0]
     span_dict["end"] = slices_sorted[-1][1]
-    if isinstance(multi_span, LabeledMultiSpan):
-        return LabeledSpan(**span_dict)
-    elif isinstance(multi_span, MultiSpan):
-        return Span(**span_dict)
-    else:
-        raise ValueError(f"Unknown MultiSpan type: {type(multi_span)}")
+    return result_type(**span_dict)
+
+
+D = TypeVar("D", bound=Document)
 
 
 class MultiSpanMerger(Generic[D]):
@@ -69,15 +57,17 @@ class MultiSpanMerger(Generic[D]):
         target_layer_name = self.result_field_mapping.get(self.layer, self.layer)
         source_layer = document[self.layer]
         target_layer = result[target_layer_name]
+        # TODO: get from target layer / document
+        target_span_type = LabeledSpan
         span_mapping: dict[int, Span] = {}
         # process gold annotations
         for multi_span in source_layer:
-            new_span = multi_span_to_span(multi_span)
+            new_span = multi_span_to_span(multi_span, result_type=target_span_type)
             span_mapping[multi_span._id] = new_span
             target_layer.append(new_span)
         # process predicted annotations
         for multi_span in source_layer.predictions:
-            new_span = multi_span_to_span(multi_span)
+            new_span = multi_span_to_span(multi_span, result_type=target_span_type)
             span_mapping[multi_span._id] = new_span
             target_layer.predictions.append(new_span)
 
