@@ -1,11 +1,11 @@
 import pytest
-from pytorch_ie.annotations import Span
 
 from pie_modules.annotations import (
     BinaryRelation,
     LabeledMultiSpan,
     LabeledSpan,
     MultiSpan,
+    Span,
 )
 from pie_modules.document.processing import MultiSpanMerger
 from pie_modules.document.processing.merge_multi_spans import multi_span_to_span
