@@ -1,9 +1,47 @@
-from pie_modules.annotations import BinaryRelation, LabeledMultiSpan, LabeledSpan
+import pytest
+from pytorch_ie.annotations import Span
+
+from pie_modules.annotations import (
+    BinaryRelation,
+    LabeledMultiSpan,
+    LabeledSpan,
+    MultiSpan,
+)
 from pie_modules.document.processing import MultiSpanMerger
+from pie_modules.document.processing.merge_multi_spans import multi_span_to_span
 from pie_modules.documents import (
     TextDocumentWithLabeledMultiSpansBinaryRelationsAndLabeledPartitions,
     TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
+
+
+@pytest.mark.parametrize("not_sorted", [False, True])
+def test_multi_span_to_span(not_sorted):
+    if not_sorted:
+        multi_span = MultiSpan(slices=((4, 6), (0, 2)))
+    else:
+        multi_span = MultiSpan(slices=((0, 2), (4, 6)))
+    span = multi_span_to_span(multi_span)
+    assert isinstance(span, Span)
+    assert span.start == 0
+    assert span.end == 6
+
+
+def test_multi_span_to_span_empty():
+    multi_span = MultiSpan(slices=())
+    with pytest.raises(ValueError) as excinfo:
+        multi_span_to_span(multi_span)
+    assert str(excinfo.value) == "Cannot convert an empty MultiSpan to a Span."
+
+
+def test_labeled_multi_span_to_span():
+    multi_span = LabeledMultiSpan(slices=((0, 2), (4, 6)), label="label_a", score=0.5)
+    span = multi_span_to_span(multi_span)
+    assert isinstance(span, LabeledSpan)
+    assert span.start == 0
+    assert span.end == 6
+    assert span.label == "label_a"
+    assert span.score == 0.5
 
 
 def test_multi_span_merger():

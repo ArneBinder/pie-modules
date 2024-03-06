@@ -1,12 +1,22 @@
 from __future__ import annotations
 
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, overload
 
 from pytorch_ie import Document
 
 from pie_modules.annotations import LabeledMultiSpan, LabeledSpan, MultiSpan, Span
 
 D = TypeVar("D", bound=Document)
+
+
+@overload
+def multi_span_to_span(multi_span: LabeledMultiSpan) -> LabeledSpan:
+    ...
+
+
+@overload
+def multi_span_to_span(multi_span: MultiSpan) -> Span:
+    ...
 
 
 def multi_span_to_span(multi_span: MultiSpan) -> Span:
