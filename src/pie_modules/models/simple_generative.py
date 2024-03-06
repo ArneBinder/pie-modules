@@ -3,6 +3,7 @@ import logging
 from typing import Any, Dict, Optional, Tuple, Type, Union
 
 import torch
+from ema_pytorch import EMA
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch import FloatTensor, LongTensor
@@ -11,7 +12,7 @@ from transformers import PreTrainedModel, get_linear_schedule_with_warmup
 from transformers.modeling_outputs import Seq2SeqLMOutput
 from typing_extensions import TypeAlias
 
-from pie_modules.models.common import ModelWithBoilerplate
+from pie_modules.models.common import TRAINING, ModelWithBoilerplate
 from pie_modules.utils import resolve_type
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,8 @@ class SimpleGenerativeModel(
         override_generation_kwargs: Optional[Dict[str, Any]] = None,
         # scheduler / optimizer
         warmup_proportion: float = 0.0,
+        # Exponential Moving Average (EMA)
+        use_ema: bool = False,
         # important: the following entries are only used if the base model does not have a configure_optimizer method!
         learning_rate: Optional[float] = None,
         optimizer_type: Optional[Union[str, Type[Optimizer]]] = None,
@@ -83,6 +86,14 @@ class SimpleGenerativeModel(
         resolved_base_model_type: Type[PreTrainedModel] = resolve_type(base_model_type)
         self.model = resolved_base_model_type.from_pretrained(**base_model_config)
         self.generation_config = self.configure_generation(**(override_generation_kwargs or {}))
+        self.use_ema = use_ema
+        if use_ema:
+            self.ema = EMA(
+                self.model,
+                beta=0.9999,  # exponential moving average factor
+                update_after_step=100,  # only after this number of .update() calls will it start updating
+                update_every=10,  # how often to actually update, to save on compute (updates every 10th .update() call)
+            )
 
     def configure_generation(self, **kwargs) -> Dict[str, Any]:
         if self.taskmodule is not None:
@@ -96,6 +107,12 @@ class SimpleGenerativeModel(
             generation_config = {}
         generation_config.update(kwargs)
         return generation_config
+
+    def training_step(self, batch: StepInputType, batch_idx: int) -> StepOutputType:
+        result = self._step(stage=TRAINING, batch=batch)
+        if self.use_ema:
+            self.ema.update()
+        return result
 
     def predict(self, inputs, **kwargs) -> TargetType:
         is_training = self.training
@@ -149,7 +166,7 @@ class SimpleGenerativeModel(
             resolved_optimizer_type = resolve_type(
                 self.optimizer_type, expected_super_type=Optimizer
             )
-            optimizer = resolved_optimizer_type(self.parameters(), lr=self.learning_rate)
+            optimizer = resolved_optimizer_type(self.model.parameters(), lr=self.learning_rate)
 
         if self.warmup_proportion > 0.0:
             stepping_batches = self.trainer.estimated_stepping_batches

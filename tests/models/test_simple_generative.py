@@ -25,8 +25,8 @@ def taskmodule():
     )
 
 
-@pytest.fixture(scope="module")
-def model(taskmodule) -> SimpleGenerativeModel:
+@pytest.fixture(scope="module", params=[False, True])
+def model(taskmodule, request) -> SimpleGenerativeModel:
     return SimpleGenerativeModel(
         base_model_type="transformers.AutoModelForSeq2SeqLM",
         base_model_config=dict(pretrained_model_name_or_path=MODEL_ID),
@@ -36,6 +36,7 @@ def model(taskmodule) -> SimpleGenerativeModel:
         # use a strange learning rate to make sure it is passed through
         learning_rate=13e-3,
         optimizer_type="torch.optim.Adam",
+        use_ema=request.param,
     )
 
 
