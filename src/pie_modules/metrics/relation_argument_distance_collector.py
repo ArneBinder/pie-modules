@@ -68,10 +68,6 @@ class RelationArgumentDistanceCollector(DocumentStatistic):
                 raise ValueError(
                     "doc must be a TextBasedDocument to calculate distance in means of tokens"
                 )
-            if not isinstance(doc, TextBasedDocument):
-                raise ValueError(
-                    "doc must be a TextBasedDocument to calculate distance in means of tokens"
-                )
             docs = tokenize_document(
                 doc,
                 tokenizer=self.tokenizer,

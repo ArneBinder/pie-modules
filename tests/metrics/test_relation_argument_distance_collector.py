@@ -40,26 +40,28 @@ def test_relation_argument_distance_collector():
 
 def test_relation_argument_distance_collector_with_n_ary_relation():
     doc = TestDocument(
-        text="This is the first entity. This is the second entity. And, this is the third entity."
+        text="This is the first entity, which has details. This is the second entity. And, this is the third entity."
     )
     doc.entities.append(LabeledSpan(start=0, end=25, label="entity"))
-    doc.entities.append(LabeledSpan(start=26, end=52, label="entity"))
-    doc.entities.append(LabeledSpan(start=53, end=83, label="entity"))
+    doc.entities.append(LabeledSpan(start=26, end=44, label="entity"))
+    doc.entities.append(LabeledSpan(start=45, end=71, label="entity"))
+    doc.entities.append(LabeledSpan(start=72, end=102, label="entity"))
     doc.relations.append(
         NaryRelation(
             arguments=[
                 doc.entities[0],
                 doc.entities[1],
+                doc.entities[2],
             ],
-            roles=["head", "tail"],
+            roles=["head", "head", "tail"],
             label="relation_label_1",
         )
     )
     doc.relations.append(
         NaryRelation(
             arguments=[
-                doc.entities[1],
                 doc.entities[2],
+                doc.entities[3],
             ],
             roles=["head", "tail"],
             label="relation_label_2",
@@ -69,9 +71,15 @@ def test_relation_argument_distance_collector_with_n_ary_relation():
     statistic = RelationArgumentDistanceCollector(layer="relations")
     values = statistic(doc)
     assert values == {
-        "ALL": {"len": 4, "mean": 54.5, "std": 2.5, "min": 52.0, "max": 57.0},
-        "relation_label_1": {"len": 2, "mean": 52.0, "std": 0.0, "min": 52.0, "max": 52.0},
-        "relation_label_2": {"len": 2, "mean": 57.0, "std": 0.0, "min": 57.0, "max": 57.0},
+        "ALL": {"len": 8, "max": 71.0, "mean": 54.25, "min": 44.0, "std": 10.940178243520533},
+        "relation_label_1": {
+            "len": 6,
+            "max": 71.0,
+            "mean": 53.333333333333336,
+            "min": 44.0,
+            "std": 12.498888839501783,
+        },
+        "relation_label_2": {"len": 2, "max": 57.0, "mean": 57.0, "min": 57.0, "std": 0.0},
     }
 
 
@@ -160,7 +168,6 @@ def test_relation_argument_distance_collector_with_tokenize_wrong_document_type(
         entities: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
         relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
 
-    #
     statistic = RelationArgumentDistanceCollector(
         layer="relations",
         tokenize=True,
