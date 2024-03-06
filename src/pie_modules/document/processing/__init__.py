@@ -1,3 +1,4 @@
+from .merge_multi_spans import MultiSpanMerger
 from .merge_spans_via_relation import SpansViaRelationMerger
 from .regex_partitioner import RegexPartitioner
 from .relation_argument_sorter import RelationArgumentSorter
