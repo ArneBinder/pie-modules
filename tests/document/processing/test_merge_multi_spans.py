@@ -1,7 +1,4 @@
-import dataclasses
-
 import pytest
-from pytorch_ie import Annotation
 
 from pie_modules.annotations import (
     BinaryRelation,
