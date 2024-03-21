@@ -24,7 +24,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.9"
-pytorch-ie = ">=0.29.8,<0.31.0"
+pytorch-ie = ">=0.30.1,<0.31.0"
 pytorch-lightning = "^2.1.0"
 torchmetrics = "^1"
 pytorch-crf = ">=0.7.2"

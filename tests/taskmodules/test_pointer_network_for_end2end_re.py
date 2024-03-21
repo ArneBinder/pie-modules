@@ -106,7 +106,6 @@ def test_document(document):
 def taskmodule(document, config):
     taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
         tokenizer_name_or_path="facebook/bart-base",
-        span_layer_name="entities",
         relation_layer_name="relations",
         exclude_labels_per_layer={"relations": ["no_relation"]},
         annotation_field_mapping={
@@ -173,11 +172,26 @@ def test_taskmodule(taskmodule):
     assert taskmodule.target_token_ids == [0, 2, 50266, 50269, 50268, 50265, 50267]
 
 
+def test_taskmodule_with_wrong_annotation_field_mapping():
+    with pytest.raises(ValueError) as exc_info:
+        PointerNetworkTaskModuleForEnd2EndRE(
+            tokenizer_name_or_path="facebook/bart-base",
+            relation_layer_name="relations",
+            annotation_field_mapping={
+                "entities": "labeled_spans",
+                "sentences": "labeled_spans",
+            },
+        )
+    assert str(exc_info.value) == (
+        "inverted annotation_field_mapping is not unique. annotation_field_mapping: "
+        "{'entities': 'labeled_spans', 'sentences': 'labeled_spans'}"
+    )
+
+
 def test_prepared_config(taskmodule, config):
     if config == {}:
         assert taskmodule._config() == {
             "taskmodule_type": "PointerNetworkTaskModuleForEnd2EndRE",
-            "span_layer_name": "entities",
             "relation_layer_name": "relations",
             "none_label": "none",
             "loop_dummy_relation_name": "loop",
@@ -205,7 +219,6 @@ def test_prepared_config(taskmodule, config):
     elif config == {"partition_layer_name": "sentences"}:
         assert taskmodule._config() == {
             "taskmodule_type": "PointerNetworkTaskModuleForEnd2EndRE",
-            "span_layer_name": "entities",
             "relation_layer_name": "relations",
             "none_label": "none",
             "loop_dummy_relation_name": "loop",
