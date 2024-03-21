@@ -106,7 +106,6 @@ def test_document(document):
 def taskmodule(document, config):
     taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
         tokenizer_name_or_path="facebook/bart-base",
-        span_layer_name="entities",
         relation_layer_name="relations",
         exclude_labels_per_layer={"relations": ["no_relation"]},
         annotation_field_mapping={
@@ -177,7 +176,6 @@ def test_prepared_config(taskmodule, config):
     if config == {}:
         assert taskmodule._config() == {
             "taskmodule_type": "PointerNetworkTaskModuleForEnd2EndRE",
-            "span_layer_name": "entities",
             "relation_layer_name": "relations",
             "none_label": "none",
             "loop_dummy_relation_name": "loop",
@@ -205,7 +203,6 @@ def test_prepared_config(taskmodule, config):
     elif config == {"partition_layer_name": "sentences"}:
         assert taskmodule._config() == {
             "taskmodule_type": "PointerNetworkTaskModuleForEnd2EndRE",
-            "span_layer_name": "entities",
             "relation_layer_name": "relations",
             "none_label": "none",
             "loop_dummy_relation_name": "loop",

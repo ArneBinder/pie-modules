@@ -113,7 +113,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         # specific for this use case
         document_type: str = "pytorch_ie.documents.TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
         tokenized_document_type: str = "pie_modules.documents.TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions",
-        span_layer_name: str = "labeled_spans",
         relation_layer_name: str = "binary_relations",
         none_label: str = "none",
         loop_dummy_relation_name: str = "loop",
@@ -151,11 +150,20 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             **(tokenizer_init_kwargs or {}),
         )
         self.annotation_field_mapping = annotation_field_mapping or dict()
+        annotation_field_mapping_inv = {v: k for k, v in self.annotation_field_mapping.items()}
+        if len(self.annotation_field_mapping) != len(annotation_field_mapping_inv):
+            raise Exception("annotation_field_mapping is not bijective")
         self.partition_layer_name = partition_layer_name
 
         # for this specific use case: end-to-end relation extraction
-        self.span_layer_name = span_layer_name
         self.relation_layer_name = relation_layer_name
+        relation_layer_mapped = self.annotation_field_mapping.get(
+            relation_layer_name, relation_layer_name
+        )
+        relation_layer_target = self.document_type.target_name(relation_layer_mapped)
+        self.span_layer_name = annotation_field_mapping_inv.get(
+            relation_layer_target, relation_layer_target
+        )
         self.none_label = none_label
         self.loop_dummy_relation_name = loop_dummy_relation_name
         self.constrained_generation = constrained_generation
