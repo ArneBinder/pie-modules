@@ -29,7 +29,6 @@ class PointerHead(torch.nn.Module):
         decoder_position_id_mode: Optional[nn.Module] = None,
         decoder_position_id_pattern: Optional[List[int]] = None,
         decoder_position_id_mapping: Optional[Dict[str, int]] = None,
-        increase_position_ids_per_record: bool = False,
     ):
         super().__init__()
 
@@ -87,15 +86,10 @@ class PointerHead(torch.nn.Module):
             }
 
         self.decoder_position_id_mode = decoder_position_id_mode
-        if decoder_position_id_pattern is not None and self.decoder_position_id_mode is None:
-            logger.warning(
-                "decoder_position_id_pattern is provided but decoder_position_id_mode is not set. "
-                'decoder_position_id_mode will be set to "pattern" to be backwards compatible. '
-                "This is deprecated and will raise an error in the future. "
-                'Please set decoder_position_id_mode="pattern" explicitly.'
-            )
-            self.decoder_position_id_mode = "pattern"
-        if self.decoder_position_id_mode in ["pattern", "pattern_with_increment"]:
+        self.decoder_position_id_mapping = decoder_position_id_mapping
+        if self.decoder_position_id_mode is None:
+            pass
+        elif self.decoder_position_id_mode in ["pattern", "pattern_with_increment"]:
             if decoder_position_id_pattern is None:
                 raise ValueError(
                     "decoder_position_id_pattern must be provided when using "
@@ -104,19 +98,15 @@ class PointerHead(torch.nn.Module):
             self.register_buffer(
                 "decoder_position_id_pattern", torch.tensor(decoder_position_id_pattern)
             )
-            if (
-                increase_position_ids_per_record
-                and self.decoder_position_id_mode != "pattern_with_increment"
-            ):
-                logger.warning(
-                    "using increase_position_ids_per_record=True is deprecated, please use "
-                    'decoder_position_id_mode="pattern_with_increment" instead'
+        elif self.decoder_position_id_mode == "mapping":
+            if self.decoder_position_id_mapping is None:
+                raise ValueError(
+                    'decoder_position_id_mode="mapping" requires decoder_position_id_mapping to be provided!'
                 )
-                self.decoder_position_id_mode = "pattern_with_increment"
-        self.decoder_position_id_mapping = decoder_position_id_mapping
-        if self.decoder_position_id_mode == "mapping" and self.decoder_position_id_mapping is None:
+        else:
             raise ValueError(
-                'decoder_position_id_mode="mapping" requires decoder_position_id_mapping to be provided!'
+                f'decoder_position_id_mode="{self.decoder_position_id_mode}" is not supported, '
+                'use one of "pattern", "pattern_with_increment", or "mapping"!'
             )
 
     @property
