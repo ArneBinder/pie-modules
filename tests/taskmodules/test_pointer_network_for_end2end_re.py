@@ -172,6 +172,22 @@ def test_taskmodule(taskmodule):
     assert taskmodule.target_token_ids == [0, 2, 50266, 50269, 50268, 50265, 50267]
 
 
+def test_taskmodule_with_wrong_annotation_field_mapping():
+    with pytest.raises(ValueError) as exc_info:
+        PointerNetworkTaskModuleForEnd2EndRE(
+            tokenizer_name_or_path="facebook/bart-base",
+            relation_layer_name="relations",
+            annotation_field_mapping={
+                "entities": "labeled_spans",
+                "sentences": "labeled_spans",
+            },
+        )
+    assert str(exc_info.value) == (
+        "inverted annotation_field_mapping is not unique. annotation_field_mapping: "
+        "{'entities': 'labeled_spans', 'sentences': 'labeled_spans'}"
+    )
+
+
 def test_prepared_config(taskmodule, config):
     if config == {}:
         assert taskmodule._config() == {
