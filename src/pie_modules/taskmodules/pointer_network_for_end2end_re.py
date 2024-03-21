@@ -152,7 +152,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         self.annotation_field_mapping = annotation_field_mapping or dict()
         annotation_field_mapping_inv = {v: k for k, v in self.annotation_field_mapping.items()}
         if len(self.annotation_field_mapping) != len(annotation_field_mapping_inv):
-            raise Exception(
+            raise ValueError(
                 f"inverted annotation_field_mapping is not unique. annotation_field_mapping: "
                 f"{self.annotation_field_mapping}"
             )
