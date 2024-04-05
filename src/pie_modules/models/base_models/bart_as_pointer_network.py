@@ -52,6 +52,7 @@ class BartAsPointerNetworkConfig(BartConfig):
         use_constraints_encoder_mlp: bool = False,
         # optimizer
         lr: float = 5e-5,
+        task_lr: Optional[float] = None,
         weight_decay: float = 1e-2,
         head_decay: Optional[float] = None,
         shared_decay: Optional[float] = None,
@@ -74,6 +75,7 @@ class BartAsPointerNetworkConfig(BartConfig):
         self.decoder_position_id_mapping = decoder_position_id_mapping
 
         self.lr = lr
+        self.task_lr = task_lr
         self.weight_decay = weight_decay
         self.head_decay = head_decay
         self.shared_decay = shared_decay
@@ -408,7 +410,7 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             else self.config.weight_decay
         )
         params = {
-            "lr": self.config.lr,
+            "lr": self.config.task_lr if self.config.task_lr is not None else self.config.lr,
             "weight_decay": head_decay,
             "params": dict(self.head_named_params()).values(),
         }
