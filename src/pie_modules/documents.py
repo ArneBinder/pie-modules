@@ -6,6 +6,10 @@ from pytorch_ie.core import AnnotationLayer, AnnotationList, annotation_field
 from pytorch_ie.documents import (
     TextBasedDocument,
     TextDocumentWithLabel,
+    TextDocumentWithLabeledMultiSpans,
+    TextDocumentWithLabeledMultiSpansAndBinaryRelations,
+    TextDocumentWithLabeledMultiSpansAndLabeledPartitions,
+    TextDocumentWithLabeledMultiSpansBinaryRelationsAndLabeledPartitions,
     TextDocumentWithLabeledPartitions,
     TextDocumentWithLabeledSpans,
     TextDocumentWithLabeledSpansAndBinaryRelations,
@@ -120,33 +124,6 @@ class TokenDocumentWithAbstractiveSummary(TokenBasedDocument):
     """A tokenized PIE document with annotations for abstractive summarization."""
 
     abstractive_summary: AnnotationLayer[AbstractiveSummary] = annotation_field()
-
-
-@dataclasses.dataclass
-class TextDocumentWithLabeledMultiSpans(TextBasedDocument):
-    labeled_multi_spans: AnnotationLayer[LabeledMultiSpan] = annotation_field(target="text")
-
-
-@dataclasses.dataclass
-class TextDocumentWithLabeledMultiSpansAndLabeledPartitions(
-    TextDocumentWithLabeledMultiSpans, TextDocumentWithLabeledPartitions
-):
-    pass
-
-
-@dataclasses.dataclass
-class TextDocumentWithLabeledMultiSpansAndBinaryRelations(TextDocumentWithLabeledMultiSpans):
-    binary_relations: AnnotationLayer[BinaryRelation] = annotation_field(
-        target="labeled_multi_spans"
-    )
-
-
-@dataclasses.dataclass
-class TextDocumentWithLabeledMultiSpansBinaryRelationsAndLabeledPartitions(
-    TextDocumentWithLabeledMultiSpansAndLabeledPartitions,
-    TextDocumentWithLabeledMultiSpansAndBinaryRelations,
-):
-    pass
 
 
 @dataclasses.dataclass

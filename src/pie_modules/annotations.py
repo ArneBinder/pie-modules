@@ -5,20 +5,17 @@ from typing import Optional, Tuple
 from pytorch_ie.annotations import (
     BinaryRelation,
     Label,
+    LabeledMultiSpan,
     LabeledSpan,
     MultiLabel,
     MultiLabeledBinaryRelation,
     MultiLabeledSpan,
+    MultiSpan,
     NaryRelation,
     Span,
     _post_init_single_label,
 )
 from pytorch_ie.core import Annotation
-
-
-def _post_init_multi_span(self):
-    if isinstance(self.slices, list):
-        object.__setattr__(self, "slices", tuple(tuple(s) for s in self.slices))
 
 
 @dataclasses.dataclass(eq=True, frozen=True)
@@ -66,26 +63,3 @@ class GenerativeAnswer(AnnotationWithText):
 
     score: Optional[float] = dataclasses.field(default=None, compare=False)
     question: Optional[Question] = None
-
-
-@dataclasses.dataclass(eq=True, frozen=True)
-class MultiSpan(Annotation):
-    slices: Tuple[Tuple[int, int], ...]
-
-    def __post_init__(self) -> None:
-        _post_init_multi_span(self)
-
-    def __str__(self) -> str:
-        if not self.is_attached:
-            return super().__str__()
-        return str(tuple(self.target[start:end] for start, end in self.slices))
-
-
-@dataclasses.dataclass(eq=True, frozen=True)
-class LabeledMultiSpan(MultiSpan):
-    label: str
-    score: float = dataclasses.field(default=1.0, compare=False)
-
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        _post_init_single_label(self)
