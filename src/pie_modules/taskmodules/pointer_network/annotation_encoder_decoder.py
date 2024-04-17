@@ -134,30 +134,37 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
                 f"two values are required to decode as Span, but encoding has length {len(encoding)}",
                 encoding=encoding,
             )
+        start_idx = encoding[0]
         end_idx = encoding[1]
+        # the end index for Span annotations is exclusive, so we need to add 1 to the end index
         if not self.exclusive_end:
             end_idx += 1
-        if end_idx < encoding[0]:
-            raise DecodingOrderException(
-                f"end index can not be smaller than start index, but got: start={encoding[0]}, "
-                f"end={end_idx}",
+        if end_idx == start_idx:
+            raise DecodingEmptySpanException(
+                "end index can not be equal to start index to decode as Span, but got: "
+                f"start={start_idx}, end={end_idx}",
                 encoding=encoding,
             )
-        if any(idx < 0 for idx in encoding):
-            raise DecodingNegativeIndexException(
-                f"indices must be positive, but got: {encoding}", encoding=encoding
+        if end_idx < start_idx:
+            raise DecodingOrderException(
+                f"end index can not be smaller than start index, "
+                f"but got: start={start_idx}, end={end_idx}",
+                encoding=encoding,
             )
-        return Span(start=encoding[0], end=end_idx)
+        if any(idx < 0 for idx in [start_idx, end_idx]):
+            raise DecodingNegativeIndexException(
+                f"indices must be positive, but got: start={start_idx}, end={end_idx}",
+                encoding=encoding,
+                # remaining=remaining,
+            )
+        return Span(start=start_idx, end=end_idx)
 
-    def parse(
-        self,
-        encoding: List[int],
-        decoded_annotations: List[Span],
-        text_length: int,
-    ) -> Tuple[Span, List[int]]:
+    def get_follow_up_candidates(
+        self, decoded_annotations: List[Span], incomplete_encoding: List[int], text_length: int
+    ) -> List[int]:
         exclusive_end_offset = 0 if self.exclusive_end else 1
         # the encoding is incomplete if it is empty, collect follow-up candidate indices
-        if len(encoding) == 0:
+        if len(incomplete_encoding) == 0:
             if self.allow_nested:
                 # everything is allowed
                 follow_up_candidates = list(range(text_length))
@@ -170,15 +177,10 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
                 follow_up_candidates = [
                     idx for idx in range(text_length) if idx not in nested_indices
                 ]
-            raise IncompleteEncodingException(
-                "the encoding has not enough values to decode as Span",
-                encoding=encoding,
-                follow_up_candidates=follow_up_candidates,
-            )
         # the encoding is incomplete if it has only one value, collect follow-up candidate indices
-        elif len(encoding) == 1:
+        elif len(incomplete_encoding) == 1:
             covering_spans = {
-                ann for ann in decoded_annotations if ann.start <= encoding[0] < ann.end
+                ann for ann in decoded_annotations if ann.start <= incomplete_encoding[0] < ann.end
             }
             if self.allow_nested:
                 # exclude spans that overlap other spans, i.e. if encoding[0] is in another span, the next
@@ -192,7 +194,7 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
 
                     follow_up_candidates = [
                         idx + 1 - exclusive_end_offset
-                        for idx in range(encoding[0], text_length)
+                        for idx in range(incomplete_encoding[0], text_length)
                         if idx not in nested_indices
                     ]
                 else:
@@ -205,7 +207,9 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
                             set(range(span.start, span.end + 1))
                         )
                     follow_up_candidates = [
-                        idx - exclusive_end_offset for idx in nested_indices if idx > encoding[0]
+                        idx - exclusive_end_offset
+                        for idx in nested_indices
+                        if idx > incomplete_encoding[0]
                     ]
             elif len(covering_spans) > 0:
                 if len(covering_spans) > 1:
@@ -223,10 +227,10 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
                 next_span_start = min(
                     ann.start
                     for ann in decoded_annotations + [dummy_span]
-                    if encoding[0] <= ann.start
+                    if incomplete_encoding[0] <= ann.start
                 )
                 # +1 because we disallow empty spans
-                min_index = encoding[0] + 1
+                min_index = incomplete_encoding[0] + 1
                 # +1 because the end index is exclusive
                 max_index_exclusive = next_span_start + 1
                 follow_up_candidates = list(
@@ -235,6 +239,25 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
                         max_index_exclusive - exclusive_end_offset,
                     )
                 )
+        else:
+            raise ValueError(
+                "The encoding is not incomplete, can not calculate follow-up candidates."
+            )
+        return follow_up_candidates
+
+    def parse(
+        self,
+        encoding: List[int],
+        decoded_annotations: List[Span],
+        text_length: int,
+    ) -> Tuple[Span, List[int]]:
+        # the encoding is incomplete if it is empty, collect follow-up candidate indices
+        if len(encoding) < 2:
+            follow_up_candidates = self.get_follow_up_candidates(
+                decoded_annotations=decoded_annotations,
+                incomplete_encoding=encoding,
+                text_length=text_length,
+            )
             raise IncompleteEncodingException(
                 "the encoding has not enough values to decode as Span",
                 encoding=encoding,
@@ -242,34 +265,12 @@ class SpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[Span, List[int]]):
             )
         # the encoding is complete, try to decode the span
         else:
-            start_idx = encoding[0]
-            end_idx = encoding[1]
             remaining = encoding[2:]
-            # the end index for Span annotations is exclusive, so we need to add 1 to the end index
-            if not self.exclusive_end:
-                end_idx += 1
-            if end_idx == start_idx:
-                raise DecodingEmptySpanException(
-                    "end index can not be equal to start index to decode as Span, but got: "
-                    f"start={start_idx}, end={end_idx}",
-                    encoding=encoding,
-                    remaining=remaining,
-                )
-            if end_idx < start_idx:
-                raise DecodingOrderException(
-                    f"end index can not be smaller than start index, "
-                    f"but got: start={start_idx}, end={end_idx}",
-                    encoding=encoding,
-                    remaining=remaining,
-                )
-            if any(idx < 0 for idx in [start_idx, end_idx]):
-                raise DecodingNegativeIndexException(
-                    f"indices must be positive, but got: start={start_idx}, end={end_idx}",
-                    encoding=encoding,
-                    remaining=remaining,
-                )
-            # check overlap and nesting with previously decoded spans
-            span = Span(start=start_idx, end=end_idx)
+            try:
+                span = self.decode(encoding=encoding[:2])
+            except DecodingException as e:
+                e.remaining = remaining
+                raise e
             for previous_span in decoded_annotations:
                 simple_previous_span = Span(start=previous_span.start, end=previous_span.end)
                 if span != simple_previous_span:
@@ -297,39 +298,33 @@ class SpanEncoderDecoderWithOffset(SpanEncoderDecoder):
         super().__init__(**kwargs)
         self.offset = offset
 
-    def encode(self, annotation: Span, metadata: Optional[Dict[str, Any]] = None) -> List[int]:
-        encoding = super().encode(annotation=annotation, metadata=metadata)
+    def shift_indices(self, encoding: List[int]) -> List[int]:
         return [x + self.offset for x in encoding]
 
-    def decode(self, encoding: List[int], metadata: Optional[Dict[str, Any]] = None) -> Span:
-        encoding = [x - self.offset for x in encoding]
-        return super().decode(encoding=encoding, metadata=metadata)
+    def unshift_indices(self, encoding: List[int]) -> List[int]:
+        return [x - self.offset for x in encoding]
 
-    def parse(
-        self,
-        encoding: List[int],
-        decoded_annotations: List[Span],
-        text_length: int,
-    ) -> Tuple[Span, List[int]]:
-        encoding_without_offset = [x - self.offset for x in encoding]
+    def encode(self, annotation: Span, metadata: Optional[Dict[str, Any]] = None) -> List[int]:
+        encoding = super().encode(annotation=annotation, metadata=metadata)
+        return self.shift_indices(encoding)
+
+    def decode(self, encoding: List[int], metadata: Optional[Dict[str, Any]] = None) -> Span:
+        encoding = self.unshift_indices(encoding)
         try:
-            span, remaining = super().parse(
-                encoding=encoding_without_offset,
-                decoded_annotations=decoded_annotations,
-                text_length=text_length,
-            )
-            # and also to the follow-up candidates if present
+            return super().decode(encoding=encoding, metadata=metadata)
         except DecodingException as e:
-            # we need to add the offset to the remaining encoding
-            # and also to the follow-up candidates if any of them is present
-            kwargs = {}
-            if e.remaining is not None and not isinstance(e, IncompleteEncodingException):
-                kwargs["remaining"] = [x + self.offset for x in e.remaining]
-            if isinstance(e, IncompleteEncodingException):
-                kwargs["follow_up_candidates"] = [x + self.offset for x in e.follow_up_candidates]
-            raise type(e)(e.message, encoding=encoding, **kwargs)
-        # use the original encoding, i.e. with any potential offset, to get the remaining encoding
-        return span, encoding[len(encoding) - len(remaining) :]
+            e.encoding = self.shift_indices(e.encoding)
+            raise e
+
+    def get_follow_up_candidates(
+        self, decoded_annotations: List[Span], incomplete_encoding: List[int], text_length: int
+    ) -> List[int]:
+        result = super().get_follow_up_candidates(
+            decoded_annotations=decoded_annotations,
+            incomplete_encoding=self.unshift_indices(incomplete_encoding),
+            text_length=text_length,
+        )
+        return self.shift_indices(result)
 
 
 class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, List[int]]):
@@ -380,57 +375,90 @@ class LabeledSpanEncoderDecoder(GenerativeAnnotationEncoderDecoder[LabeledSpan, 
         )
         return result
 
+    def get_follow_up_candidates(
+        self,
+        decoded_annotations: List[LabeledSpan],
+        incomplete_encoding: List[int],
+        text_length: int,
+    ) -> List[int]:
+        if len(incomplete_encoding) == 0:
+            if self.mode == "label_indices":
+                return sorted(self.id2label)
+            elif self.mode == "indices_label":
+                return self.span_encoder_decoder.get_follow_up_candidates(
+                    decoded_annotations=decoded_annotations,
+                    incomplete_encoding=incomplete_encoding,
+                    text_length=text_length,
+                )
+            else:
+                raise ValueError(f"unknown mode: {self.mode}")
+        elif len(incomplete_encoding) == 1:
+            return self.span_encoder_decoder.get_follow_up_candidates(
+                decoded_annotations=decoded_annotations,
+                incomplete_encoding=incomplete_encoding[1:]
+                if self.mode == "label_indices"
+                else incomplete_encoding,
+                text_length=text_length,
+            )
+        elif len(incomplete_encoding) == 2:
+            if self.mode == "label_indices":
+                return self.span_encoder_decoder.get_follow_up_candidates(
+                    decoded_annotations=decoded_annotations,
+                    incomplete_encoding=incomplete_encoding[1:],  # skip label
+                    text_length=text_length,
+                )
+            elif self.mode == "indices_label":
+                # if the incomplete_encoding encodes a span that has the same start and end as a previous span,
+                # it is not allowed to have a different label
+                previous_spans_to_labels = {
+                    (ann.start, ann.end): ann.label for ann in decoded_annotations
+                }
+                span = self.span_encoder_decoder.decode(encoding=incomplete_encoding)
+                previous_label = previous_spans_to_labels.get((span.start, span.end))
+                if previous_label is not None:
+                    return [self.label2id[previous_label]]
+                else:
+                    return sorted(self.id2label)
+            else:
+                raise ValueError(f"unknown mode: {self.mode}")
+        else:
+            raise ValueError(
+                "The encoding is not incomplete, can not calculate follow-up candidates."
+            )
+
     def parse(
         self,
         encoding: List[int],
         decoded_annotations: List[LabeledSpan],
         text_length: int,
     ) -> Tuple[LabeledSpan, List[int]]:
-        if not self.span_encoder_decoder.allow_nested:
-            # if we have a generated a beginning of a previous span, we need to generate the exact ending next,
-            # thus we set the follow-up candidates to the ending (label or end index) of the previous span
-            previous_encodings = [self.encode(ann) for ann in decoded_annotations]
-            previous_to_follow_up = {tuple(enc[:2]): enc[2] for enc in previous_encodings}
-            if tuple(encoding) in previous_to_follow_up:
-                raise IncompleteEncodingException(
-                    "the encoding has not enough values to decode as LabeledSpan",
-                    encoding=encoding,
-                    follow_up_candidates=[previous_to_follow_up[tuple(encoding)]],
-                )
-
-        if self.mode == "label_indices":
-            label, remaining = _parse_label(
-                encoding, id2label=self.id2label, annotation_type=LabeledSpan
+        if len(encoding) < 3:
+            follow_up_candidates = self.get_follow_up_candidates(
+                decoded_annotations=decoded_annotations,
+                incomplete_encoding=encoding,
+                text_length=text_length,
             )
-        elif self.mode == "indices_label":
-            label, remaining = None, encoding
+            raise IncompleteEncodingException(
+                "the encoding has not enough values to decode as LabeledSpan",
+                encoding=encoding,
+                follow_up_candidates=follow_up_candidates,
+            )
         else:
-            raise ValueError(f"unknown mode: {self.mode}")
-
-        span, remaining = self.span_encoder_decoder.parse(
-            encoding=remaining, decoded_annotations=decoded_annotations, text_length=text_length
-        )
-        if label is None:
-            label, remaining = _parse_label(
-                remaining, id2label=self.id2label, annotation_type=LabeledSpan
-            )
-
-        result = LabeledSpan(start=span.start, end=span.end, label=label)
-        if not self.span_encoder_decoder.allow_nested:
-            # if we have parsed a span that has the same start and end as a previous span,
-            # it is not allowed to have a different label
-            previous_spans_to_label = {
-                Span(start=ann.start, end=ann.end): ann.label for ann in decoded_annotations
-            }
-            if span in previous_spans_to_label and previous_spans_to_label[span] != label:
-                raise DecodingSpanOverlapException(
-                    f"the encoded span {result} overlaps with another span with a different label: "
-                    f"{previous_spans_to_label[span]}",
-                    encoding=encoding,
-                    remaining=remaining,
-                )
-
-        return result, remaining
+            remaining = encoding[3:]
+            try:
+                result = self.decode(encoding=encoding[:3])
+            except DecodingException as e:
+                e.remaining = remaining
+                raise e
+            for previous_ann in decoded_annotations:
+                if result.start == previous_ann.start and result.end == previous_ann.end:
+                    if result.label != previous_ann.label:
+                        raise DecodingSpanOverlapException(
+                            f'the encoded span {result} overlaps with another span with a different label: "{previous_ann.label}"',
+                            encoding=encoding,
+                            remaining=remaining,
+                        )
+            return result, remaining
 
 
 class LabeledMultiSpanEncoderDecoder(
@@ -484,6 +512,42 @@ class LabeledMultiSpanEncoderDecoder(
             slices.append((span.start, span.end))
         label = self.id2label[encoding[-1]]
         return LabeledMultiSpan(slices=tuple(slices), label=label)
+
+    # TODO: this is not yet used and also parses the incomplete_encoding again
+    def get_follow_up_candidates(
+        self,
+        decoded_annotations: List[LabeledMultiSpan],
+        incomplete_encoding: List[int],
+        text_length: int,
+    ) -> List[int]:
+        if incomplete_encoding[-1] in self.id2label:
+            raise ValueError(
+                "The encoding is not incomplete, can not calculate follow-up candidates."
+            )
+        decoded_spans = []
+        for ann in decoded_annotations:
+            for start, end in ann.slices:
+                span = Span(start=start, end=end)
+                decoded_spans.append(span)
+        remaining = incomplete_encoding
+        current_spans = []
+        # first, try to decode all complete spans
+        while len(remaining) >= 2:
+            span = self.span_encoder_decoder.decode(encoding=remaining)
+            remaining = remaining[2:]
+            current_spans.append(span)
+        # remaining has length 0 or 1 now
+        follow_up_candidates = self.span_encoder_decoder.get_follow_up_candidates(
+            decoded_annotations=decoded_spans + current_spans,
+            incomplete_encoding=remaining,
+            text_length=text_length,
+        )
+        # if at least one span was decoded (we do not allow empty multi-spans) and there are
+        # no remaining values (i.e. there is no partial span), the multi-span can be
+        # completed by adding a label id, so we add all label ids to the follow-up candidates
+        if len(current_spans) > 0 and len(remaining) == 0:
+            follow_up_candidates = sorted(self.id2label) + follow_up_candidates
+        return follow_up_candidates
 
     def parse(
         self,

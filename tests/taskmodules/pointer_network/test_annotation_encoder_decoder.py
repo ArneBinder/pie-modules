@@ -80,9 +80,19 @@ def test_span_encoder_decoder_wrong_order():
     )
     assert excinfo.value.identifier == "order"
 
-    # zero-length span
-    span = encoder_decoder.decode([1, 1])
-    assert span is not None
+
+@pytest.mark.parametrize("exclusive_end", [True, False])
+def test_span_encoder_decoder_zero_length_span(exclusive_end):
+    """Test the SimpleSpanEncoderDecoder class."""
+
+    encoder_decoder = SpanEncoderDecoder(exclusive_end=exclusive_end)
+
+    with pytest.raises(DecodingEmptySpanException) as excinfo:
+        encoder_decoder.decode([1, 1 if exclusive_end else 0])
+    assert (
+        str(excinfo.value)
+        == "end index can not be equal to start index to decode as Span, but got: start=1, end=1"
+    )
 
 
 def test_span_encoder_decoder_wrong_offset():
@@ -92,7 +102,7 @@ def test_span_encoder_decoder_wrong_offset():
 
     with pytest.raises(DecodingNegativeIndexException) as excinfo:
         encoder_decoder.decode([-1, 2])
-    assert str(excinfo.value) == "indices must be positive, but got: [-1, 2]"
+    assert str(excinfo.value) == "indices must be positive, but got: start=-1, end=2"
     assert excinfo.value.identifier == "negative_index"
 
 
@@ -463,15 +473,39 @@ def test_labeled_span_encoder_decoder_parse_incomplete(mode):
         label2id=label2id,
         mode=mode,
     )
+    encoded_annotation = encoder_decoder.encode(LabeledSpan(start=1, end=3, label="A"))
     if mode == "label_indices":
+        assert encoded_annotation == [0, 3, 5]
+        # expecting a label next
         with pytest.raises(IncompleteEncodingException) as excinfo:
             encoder_decoder.parse([], [], 6)
         assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
         assert excinfo.value.follow_up_candidates == [0, 1]
-    elif mode == "indices_label":
-        encoded_span = encoder_decoder.span_encoder_decoder.encode(Span(start=1, end=2))
+        # expecting a start index next
         with pytest.raises(IncompleteEncodingException) as excinfo:
-            encoder_decoder.parse(encoded_span, [], 6)
+            encoder_decoder.parse(encoded_annotation[:1], [], 6)
+        assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
+        assert excinfo.value.follow_up_candidates == [2, 3, 4, 5, 6, 7]
+        # expecting an end index next
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoded_annotation[:2], [], 6)
+        assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
+        assert excinfo.value.follow_up_candidates == [4, 5, 6, 7, 8]
+    elif mode == "indices_label":
+        assert encoded_annotation == [3, 5, 0]
+        # expecting a start index next
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse([], [], 6)
+        assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
+        assert excinfo.value.follow_up_candidates == [2, 3, 4, 5, 6, 7]
+        # expecting an end index next
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoded_annotation[:1], [], 6)
+        assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
+        assert excinfo.value.follow_up_candidates == [4, 5, 6, 7, 8]
+        # expecting a label next
+        with pytest.raises(IncompleteEncodingException) as excinfo:
+            encoder_decoder.parse(encoded_annotation[:2], [], 6)
         assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
         assert excinfo.value.follow_up_candidates == [0, 1]
     else:
@@ -495,7 +529,7 @@ def test_labeled_span_encoder_decoder_parse_with_previous_exact_overlap(mode):
         encoder_decoder.parse(encoding, [other_span], 6)
     assert (
         str(excinfo.value)
-        == f"the encoded span {expected_span} overlaps with another span with a different label: B"
+        == f'the encoded span {expected_span} overlaps with another span with a different label: "B"'
     )
     assert excinfo.value.remaining == remaining_encoding
 
@@ -1026,7 +1060,7 @@ def test_binary_relation_encoder_decoder_parse_incomplete(mode):
             encoder_decoder.parse(encoding[:1], [], 10)
     else:
         raise ValueError(f"unknown mode: {mode}")
-    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
     # we expect a start index which can be any valid start index, i.e. [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
     # but we need to add the offset of 4
     assert excinfo.value.follow_up_candidates == [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
@@ -1040,7 +1074,7 @@ def test_binary_relation_encoder_decoder_parse_incomplete(mode):
             encoder_decoder.parse(encoding[:2], [], 10)
     else:
         raise ValueError(f"unknown mode: {mode}")
-    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
     # we expect an end index of a none-empty Span, i.e. [4, 5, 6, 7, 8, 9, 10],
     # but we need to add the offset of 4
     assert excinfo.value.follow_up_candidates == [8, 9, 10, 11, 12, 13, 14]
@@ -1085,7 +1119,7 @@ def test_binary_relation_encoder_decoder_parse_incomplete(mode):
             encoder_decoder.parse(encoding[:5], [], 10)
     else:
         raise ValueError(f"unknown mode: {mode}")
-    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
     # we expect an end index of a none-empty Span and the span should not overlap with the first argument span
     # which is LabeledSpan(start=3, end=4, label="A"), so allowed end indices are [2, 3]
     # but we need to add the offset of 4
@@ -1205,7 +1239,7 @@ def test_binary_relation_encoder_decoder_parse_incomplete_with_previous_annotati
     # test the first span start index
     with pytest.raises(IncompleteEncodingException) as excinfo:
         encoder_decoder.parse([], [surrounding_relation], 10)
-    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
     # we expect a start index which can be any index that is not covered by the surrounding_relation argument spans,
     # which are LabeledSpan(start=0, end=1, label="A") and LabeledSpan(start=6, end=7, label="B"),
     # but we allow to generate the exact same span again, i.e. [0] + [1, 2, 3, 4, 5] + [6] + [7, 8, 9]
@@ -1215,7 +1249,7 @@ def test_binary_relation_encoder_decoder_parse_incomplete_with_previous_annotati
     # test the first span end index
     with pytest.raises(IncompleteEncodingException) as excinfo:
         encoder_decoder.parse(encoding[:1], [surrounding_relation], 10)
-    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
     # we expect an end index of a none-empty Span and the span should not overlap with the
     # surrounding_relation argument spans, so allowed end indices are [4, 5, 6],
     # but we need to add the offset of 3
@@ -1231,7 +1265,7 @@ def test_binary_relation_encoder_decoder_parse_incomplete_with_previous_annotati
     # test the second span start index
     with pytest.raises(IncompleteEncodingException) as excinfo:
         encoder_decoder.parse(encoding[:3], [surrounding_relation], 10)
-    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
     # we expect a start index which can be any index that is not covered by the surrounding_relation argument spans,
     # which are LabeledSpan(start=0, end=1, label="A") and LabeledSpan(start=6, end=7, label="B"),
     # and not by the first argument span which is LabeledSpan(start=3, end=4, label="A"),
@@ -1242,7 +1276,7 @@ def test_binary_relation_encoder_decoder_parse_incomplete_with_previous_annotati
     # test the second span end index
     with pytest.raises(IncompleteEncodingException) as excinfo:
         encoder_decoder.parse(encoding[:4], [surrounding_relation], 10)
-    assert str(excinfo.value) == "the encoding has not enough values to decode as Span"
+    assert str(excinfo.value) == "the encoding has not enough values to decode as LabeledSpan"
     # we expect an end index of a none-empty Span and the span should not overlap with the surrounding_relation
     # argument spans which are LabeledSpan(start=0, end=1, label="A") and LabeledSpan(start=6, end=7, label="B"),
     # or the first argument span which is LabeledSpan(start=3, end=4, label="A"), so allowed end indices are [2, 3],
