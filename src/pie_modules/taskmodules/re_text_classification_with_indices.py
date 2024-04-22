@@ -850,7 +850,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         task_encoding: TaskEncodingType,
     ) -> TargetEncodingType:
         candidate_annotation = task_encoding.metadata["candidate_annotation"]
-        if isinstance(candidate_annotation, BinaryRelation):
+        if isinstance(candidate_annotation, (BinaryRelation, NaryRelation)):
             labels = [candidate_annotation.label]
         else:
             raise NotImplementedError(
