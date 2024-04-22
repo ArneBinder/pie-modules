@@ -14,6 +14,16 @@ D = TypeVar("D", bound=TextDocumentWithLabeledPartitions)
 
 
 class NltkSentenceSplitter:
+    """A document processor that splits the text of a document into sentences using the NLTK Punkt
+    tokenizer, see https://www.nltk.org/api/nltk.tokenize.html#nltk.tokenize.punkt.PunktSentenceTokenizer.
+
+    Args:
+        partition_layer_name: The name of the partition layer to add the sentence partitions to. This layer
+            must be an AnnotationLayer of LabeledSpan annotations.
+        text_field_name: The name of the text field in the document to split into sentences.
+        sentencizer_url: The URL to the NLTK Punkt tokenizer model.
+    """
+
     def __init__(
         self,
         partition_layer_name: str = "labeled_partitions",
