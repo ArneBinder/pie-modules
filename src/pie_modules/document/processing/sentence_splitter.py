@@ -33,7 +33,7 @@ class NltkSentenceSplitter:
     ):
         self.partition_layer_name = partition_layer_name
         self.text_field_name = text_field_name
-        nltk.download(sentencizer_url)
+        nltk.download("punkt")
         self.sentencizer = nltk.data.load(sentencizer_url)
 
     def __call__(self, document: D) -> None:
