@@ -850,12 +850,13 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         task_encoding: TaskEncodingType,
     ) -> TargetEncodingType:
         candidate_annotation = task_encoding.metadata["candidate_annotation"]
-        if isinstance(candidate_annotation, BinaryRelation):
+        if isinstance(candidate_annotation, (BinaryRelation, NaryRelation)):
             labels = [candidate_annotation.label]
         else:
             raise NotImplementedError(
-                f"encoding the target with a candidate_annotation of another type than BinaryRelation is "
-                f"not yet supported. candidate_annotation has the type: {type(candidate_annotation)}"
+                f"encoding the target with a candidate_annotation of another type than BinaryRelation or"
+                f"NaryRelation is not yet supported. candidate_annotation has the type: "
+                f"{type(candidate_annotation)}"
             )
         target = [self.label_to_id[label] for label in labels]
 
