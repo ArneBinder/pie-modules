@@ -14,15 +14,15 @@ logger = logging.getLogger(__name__)
 D = TypeVar("D", bound=TextDocumentWithLabeledPartitions)
 
 
-def get_nltk_resource(resource_name: str):
+def get_nltk_resource(resource_name: str, resource_url: str):
     try:
         _create_unverified_https_context = ssl._create_unverified_context
     except AttributeError:
         pass
     else:
         ssl._create_default_https_context = _create_unverified_https_context
-    nltk.download("punkt")
-    return nltk.data.load(resource_name)
+    nltk.download(resource_name)
+    return nltk.data.load(resource_url)
 
 
 class NltkSentenceSplitter:
@@ -45,7 +45,7 @@ class NltkSentenceSplitter:
     ):
         self.partition_layer_name = partition_layer_name
         self.text_field_name = text_field_name
-        self.sentencizer = get_nltk_resource(sentencizer_url)
+        self.sentencizer = get_nltk_resource(resource_name="punbkt", resource_url=sentencizer_url)
 
     def __call__(self, document: D) -> None:
         partition_layer = document[self.partition_layer_name]
