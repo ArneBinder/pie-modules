@@ -1,7 +1,7 @@
 from pytorch_ie.annotations import LabeledSpan
 from pytorch_ie.documents import TextDocumentWithLabeledPartitions
 
-from pie_modules.document.processing.sentence_splitter import NltkSentenceSplitter
+from pie_modules.document.processing import NltkSentenceSplitter
 
 
 def test_nltk_sentence_splitter(caplog):
