@@ -1,10 +1,12 @@
+import pytest
 from pytorch_ie.annotations import LabeledSpan
 from pytorch_ie.documents import TextDocumentWithLabeledPartitions
 
 from pie_modules.document.processing import NltkSentenceSplitter
 
 
-def test_nltk_sentence_splitter(caplog):
+@pytest.mark.parametrize("inplace", [True, False])
+def test_nltk_sentence_splitter(caplog, inplace):
     doc = TextDocumentWithLabeledPartitions(
         text="This is a test sentence. This is another one.", id="test_doc"
     )
@@ -12,9 +14,14 @@ def test_nltk_sentence_splitter(caplog):
     doc.labeled_partitions.append(LabeledSpan(start=0, end=len(doc.text), label="text"))
     caplog.clear()
     # create the sentence splitter
-    sentence_splitter = NltkSentenceSplitter()
+    sentence_splitter = NltkSentenceSplitter(inplace=inplace)
     # call the sentence splitter
-    sentence_splitter(doc)
+    result = sentence_splitter(doc)
+    if inplace:
+        assert result is doc
+    else:
+        assert result is not doc
+        doc = result
     # check the log message
     assert len(caplog.records) == 1
     assert (

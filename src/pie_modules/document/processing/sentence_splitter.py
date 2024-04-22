@@ -24,6 +24,8 @@ class NltkSentenceSplitter:
             must be an AnnotationLayer of LabeledSpan annotations.
         text_field_name: The name of the text field in the document to split into sentences.
         sentencizer_url: The URL to the NLTK Punkt tokenizer model.
+        inplace: A boolean value that determines whether the sentence partitions are added to the input document
+            or a new document is created.
     """
 
     def __init__(
@@ -31,14 +33,19 @@ class NltkSentenceSplitter:
         partition_layer_name: str = "labeled_partitions",
         text_field_name: str = "text",
         sentencizer_url: str = "tokenizers/punkt/PY3/english.pickle",
+        inplace: bool = True,
     ):
         self.partition_layer_name = partition_layer_name
         self.text_field_name = text_field_name
+        self.inplace = inplace
         # download the NLTK Punkt tokenizer model
         nltk.download("punkt")
         self.sentencizer = nltk.data.load(sentencizer_url)
 
-    def __call__(self, document: D) -> None:
+    def __call__(self, document: D) -> D:
+        if not self.inplace:
+            document = document.copy()
+
         partition_layer = document[self.partition_layer_name]
         if len(partition_layer) > 0:
             logger.warning(
@@ -53,3 +60,5 @@ class NltkSentenceSplitter:
             LabeledSpan(start=start, end=end, label="sentence") for start, end in sentence_spans
         ]
         partition_layer.extend(sentences)
+
+        return document
