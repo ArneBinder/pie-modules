@@ -45,7 +45,7 @@ class NltkSentenceSplitter:
     ):
         self.partition_layer_name = partition_layer_name
         self.text_field_name = text_field_name
-        self.sentencizer = get_nltk_resource(resource_name="punbkt", resource_url=sentencizer_url)
+        self.sentencizer = get_nltk_resource(resource_name="punkt", resource_url=sentencizer_url)
 
     def __call__(self, document: D) -> None:
         partition_layer = document[self.partition_layer_name]
