@@ -14,8 +14,9 @@ D = TypeVar("D", bound=TextDocumentWithLabeledPartitions)
 
 
 class NltkSentenceSplitter:
-    """A document processor that splits the text of a document into sentences using the NLTK Punkt
-    tokenizer, see https://www.nltk.org/api/nltk.tokenize.html#nltk.tokenize.punkt.PunktSentenceTokenizer.
+    """A document processor that adds sentence partitions to a TextDocumentWithLabeledPartitions document.
+    It uses the NLTK Punkt tokenizer to split the text of the document into sentences. See
+    https://www.nltk.org/api/nltk.tokenize.html#nltk.tokenize.punkt.PunktSentenceTokenizer for more information.
 
     Args:
         partition_layer_name: The name of the partition layer to add the sentence partitions to. This layer
