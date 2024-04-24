@@ -32,6 +32,8 @@ Available taskmodules:
 Available metrics:
 
 - [SpanLengthCollector](src/pie_modules/metrics/span_length_collector.py)
+- [RelationArgumentDistanceCollector](src/pie_modules/metrics/relation_argument_distance_collector.py)
+- [SpanCoverageCollector](src/pie_modules/metrics/span_coverage_collector.py)
 - [SQuADF1](src/pie_modules/metrics/squad_f1.py)
 
 Document processing utilities:
