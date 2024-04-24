@@ -10,7 +10,7 @@
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)][pre-commit]
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)][black]
 
-Model-, taskmodule-, and metric-implementations for [PyTorch-IE](https://github.com/ChristophAlt/pytorch-ie).
+Model-, taskmodule-, and metric-implementations as well as document processing utilities for [PyTorch-IE](https://github.com/ChristophAlt/pytorch-ie).
 
 Available models:
 
@@ -33,6 +33,16 @@ Available metrics:
 
 - [SpanLengthCollector](src/pie_modules/metrics/span_length_collector.py)
 - [SQuADF1](src/pie_modules/metrics/squad_f1.py)
+
+Document processing utilities:
+
+- [MultiSpanMerger](src/pie_modules/document/processing/merge_multi_spans.py)
+- [SpansViaRelationMerger](src/pie_modules/document/processing/merge_spans_via_relation.py)
+- [RegexPartitioner](src/pie_modules/document/processing/regex_partitioner.py)
+- [RelationArgumentSorter](src/pie_modules/document/processing/relation_argument_sorter.py)
+- [SentenceSplitter](src/pie_modules/document/processing/sentence_splitter.py)
+- [TextSpanTrimmer](src/pie_modules/document/processing/text_span_trimmer.py)
+- [tokenize_document](src/pie_modules/document/processing/tokenization.py)
 
 ## Setup
 
