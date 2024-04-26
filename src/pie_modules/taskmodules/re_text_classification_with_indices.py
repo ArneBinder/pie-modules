@@ -919,7 +919,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
                 )
             elif isinstance(candidate_annotation, NaryRelation):
                 # TODO: add test case for this
-                if self.reversed_relation_label_suffix is not None:
+                if self.add_reversed_relations:
                     raise ValueError("can not reverse a NaryRelation")
                 new_annotation = NaryRelation(
                     arguments=candidate_annotation.arguments,
