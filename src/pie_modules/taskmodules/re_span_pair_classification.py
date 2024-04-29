@@ -188,16 +188,18 @@ def get_relation_argument_spans_and_roles(
 class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSize):
     """Task module for relation extraction as span pair classification.
 
-    This task module frames relation extraction as a span pair classification task. The task
-    module injects start and end markers for each entity into the text and tokenizes the text
-    (the markers are handled as special tokens, and thus, kept as they are).
-    It then collects the start- and end-token positions for each entity and constructs an model
-    input encoding from the tokenized text and entity positions. It consists of the tokenized text,
-    the start- and end-token positions for each entity, and the total number of entities. The model
-    target encoding consists of a list of label indices and a list of tuples (head and tail) of
-    argument indices that point into the start- and end-token positions. The model output is
-    expected to be of the same format as the model target encoding, but with probabilities for each
-    label.
+    This task module frames relation extraction as a span pair classification task where all candidate
+    pairs in a given text are classified at once. The task module injects start and end markers for
+    each entity into the text and tokenizes the text (the markers are handled as special tokens, and
+    thus, kept as they are). It then collects the start- and end-marker positions for each entity and
+    constructs a model input encoding from the tokenized text and these positions. The model target
+    encoding consists of a list of label indices and a list of tuples (head and tail) of argument
+    indices that point into the start- and end-marker positions from the model inputs. The model
+    output is expected to be of the same format as the model target encoding, but with probabilities
+    for each label.
+
+    This means, that the model should return only positive relations (argument indices + label) and
+    discard all negative ones.
 
     Args:
         tokenizer_name_or_path: The name or path of the tokenizer to use.
