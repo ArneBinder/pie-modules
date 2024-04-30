@@ -46,7 +46,7 @@ from pytorch_ie.documents import (
     TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
-from torch import LongTensor
+from torch import LongTensor, Tensor
 from torch.nn.utils.rnn import pad_sequence
 from torchmetrics import ClasswiseWrapper, F1Score, Metric, MetricCollection
 from transformers import AutoTokenizer
@@ -71,6 +71,14 @@ PAD_VALUES = {
     "end_marker_positions": 0,
     "arg_indices": 0,
     "labels": -100,
+}
+DTYPES = {
+    # "input_ids": torch.long,
+    # "attention_mask": torch.long,
+    "start_marker_positions": torch.long,
+    "end_marker_positions": torch.long,
+    "arg_indices": torch.long,
+    "labels": torch.long,
 }
 
 
@@ -558,9 +566,13 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
 
             # TODO: can we do this? i.e. converting to a dict and adding the new keys?
             inputs = dict(tokenized_doc.metadata["tokenizer_encoding"])
-            inputs["start_marker_positions"] = torch.tensor(start_marker_positions)
-            inputs["end_marker_positions"] = torch.tensor(end_marker_positions)
-            inputs["arg_indices"] = torch.tensor(arg_indices).to(torch.long)
+            inputs["start_marker_positions"] = torch.tensor(start_marker_positions).to(
+                dtype=DTYPES["start_marker_positions"]
+            )
+            inputs["end_marker_positions"] = torch.tensor(end_marker_positions).to(
+                dtype=DTYPES["end_marker_positions"]
+            )
+            inputs["arg_indices"] = torch.tensor(arg_indices).to(dtype=DTYPES["arg_indices"])
 
             task_encodings.append(
                 TaskEncoding(
@@ -607,7 +619,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
 
         task_encoding.metadata["candidate_relations"] = valid_candidate_relations
         target: TargetEncodingType = {
-            "labels": torch.tensor(label_indices).to(torch.long),
+            "labels": torch.tensor(label_indices).to(dtype=DTYPES["labels"]),
         }
 
         self._maybe_log_example(task_encoding=task_encoding, target=target)
@@ -645,13 +657,12 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
 
             self._logged_examples_counter += 1
 
-    def pad_or_stack(self, key: str, values: List[LongTensor]) -> LongTensor:
+    def pad_or_stack(self, key: str, values: List[LongTensor]) -> Tensor:
         if key in PAD_VALUES:
-            return pad_sequence(values, batch_first=True, padding_value=PAD_VALUES[key]).to(
-                torch.long
-            )
+            result = pad_sequence(values, batch_first=True, padding_value=PAD_VALUES[key])
         else:
-            return torch.stack(values, dim=0).to(torch.long)
+            result = torch.stack(values, dim=0)
+        return result
 
     def collate(
         self, task_encodings: Sequence[TaskEncodingType]
