@@ -72,16 +72,14 @@ class InputEncodingType(TypedDict, total=False):
     start_marker_positions: LongTensor
     # shape: (num_entities,)
     end_marker_positions: LongTensor
-    # shape: ()
-    num_spans: LongTensor
+    # list of lists of argument indices: [[head_idx, tail_idx], ...]
+    # NOTE: these indices point into start_marker_positions and end_marker_positions!
+    arg_indices: LongTensor
 
 
 class TargetEncodingType(TypedDict, total=False):
     # list of label indices: [label_idx, ...]
     labels: LongTensor
-    # list of lists of argument indices: [[head_idx, tail_idx], ...]
-    # NOTE: these indices point into start_marker_positions and end_marker_positions!
-    arg_indices: LongTensor
 
 
 DocumentType: TypeAlias = TextDocument
@@ -93,8 +91,6 @@ TaskEncodingType: TypeAlias = TaskEncoding[
 
 
 class TaskOutputType(TypedDict, total=False):
-    # binary relations for now
-    arg_indices: Sequence[Tuple[int, int]]
     labels: Sequence[str]
     probabilities: Sequence[float]
 
@@ -104,11 +100,10 @@ class ModelInputType(TypedDict, total=False):
     attention_mask: LongTensor
     start_marker_positions: LongTensor
     end_marker_positions: LongTensor
-    num_spans: LongTensor
+    arg_indices: LongTensor
 
 
 class ModelTargetType(TypedDict, total=False):
-    arg_indices: LongTensor
     labels: LongTensor
     probabilities: LongTensor
 
@@ -133,33 +128,10 @@ END = "end"
 logger = logging.getLogger(__name__)
 
 
-def _prepare_model_output_for_metrics(
-    model_output: ModelTargetType, model_input: Optional[ModelInputType] = None
+def _get_labels_from_model_output(
+    model_output: ModelTargetType,
 ) -> LongTensor:
-    # TODO: handle this case
-    if model_input is None:
-        raise ValueError(
-            "this requires a variant of the WrappedMetricWithPrepareFunction that passes the input to the prepare function"
-        )
-    # shape: (batch_size, )
-    num_spans = model_input["num_spans"]
-    # 1. create a matrix of shape (batch_size, max_num_spans, max_num_spans) and initialize with -1
-    max_num_spans = num_spans.max().item()
-    values = torch.full((len(num_spans), max_num_spans, max_num_spans), -1, dtype=torch.long)
-    # 2. set all valid entries, i.e. based on real num_spans, to 0
-    for i, num_span in enumerate(num_spans):
-        values[i, :num_span, :num_span] = 0
-    # 3. iterate over arg_indices and labels and set the corresponding entry in the matrix to label + 1
-    for i, (arg_indices, label) in enumerate(
-        zip(model_output["arg_indices"], model_output["labels"])
-    ):
-        head_idx, tail_idx = arg_indices
-        values[i, head_idx, tail_idx] = label + 1
-    # 4. flatten and remove all -1 entries
-    values_flat = values.flatten()
-    values_flat = values_flat[values_flat != -1]
-
-    return values_flat
+    return model_output["labels"]
 
 
 def get_relation_argument_spans_and_roles(
@@ -228,6 +200,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         self,
         tokenizer_name_or_path: str,
         relation_annotation: str = "binary_relations",
+        no_relation_label: str = "no_relation",
         partition_annotation: Optional[str] = None,
         tokenize_kwargs: Optional[Dict[str, Any]] = None,
         labels: Optional[List[str]] = None,
@@ -241,6 +214,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         self.save_hyperparameters()
 
         self.relation_annotation = relation_annotation
+        self.no_relation_label = no_relation_label
         self.tokenize_kwargs = tokenize_kwargs or {}
         self.labels = labels
         self.add_type_to_marker = add_type_to_marker
@@ -378,7 +352,8 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         return sorted(list(argument_markers))
 
     def _post_prepare(self):
-        self.label_to_id = {label: i for i, label in enumerate(self.labels)}
+        self.label_to_id = {label: i + 1 for i, label in enumerate(self.labels)}
+        self.label_to_id[self.no_relation_label] = 0
         self.id_to_label = {v: k for k, v in self.label_to_id.items()}
 
         self.argument_markers = self.collect_argument_markers(self.entity_labels)
@@ -520,7 +495,18 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             inputs = dict(tokenized_doc.metadata["tokenizer_encoding"])
             inputs["start_marker_positions"] = torch.tensor(start_marker_positions)
             inputs["end_marker_positions"] = torch.tensor(end_marker_positions)
-            inputs["num_spans"] = torch.tensor(len(tokenized_doc.labeled_spans))
+            # inputs["num_spans"] = torch.tensor(len(tokenized_doc.labeled_spans))
+            labeled_span2idx = {span: idx for idx, span in enumerate(tokenized_doc.labeled_spans)}
+            arg_indices = []  # list of lists of argument indices: [[head_idx, tail_idx], ...]
+            # TODO: correctly create candidate relations!
+            candidate_relations = tokenized_doc.binary_relations
+            for relation in candidate_relations:
+                current_args_indices = []
+                for _, arg_span in get_relation_argument_spans_and_roles(relation):
+                    arg_idx = labeled_span2idx[arg_span]
+                    current_args_indices.append(arg_idx)
+                arg_indices.append(current_args_indices)
+            inputs["arg_indices"] = torch.tensor(arg_indices).to(torch.long)
 
             task_encodings.append(
                 TaskEncoding(
@@ -530,6 +516,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                         "tokenized_document": tokenized_doc,
                         "injected2original_spans": injected2original_spans,
                         "injected2original_relations": injected2original_relations,
+                        "candidate_relations": candidate_relations,
                     },
                 )
             )
@@ -540,22 +527,12 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         self,
         task_encoding: TaskEncodingType,
     ) -> TargetEncodingType:
-        metadata = task_encoding.metadata
-        tokenized_document = metadata["tokenized_document"]
-        labeled_span2idx = {span: idx for idx, span in enumerate(tokenized_document.labeled_spans)}
-        arg_indices = []  # list of lists of argument indices: [[head_idx, tail_idx], ...]
         label_indices = []  # list of label indices
-        for relation in tokenized_document.binary_relations:
-            current_args_indices = []
-            for _, arg_span in get_relation_argument_spans_and_roles(relation):
-                arg_idx = labeled_span2idx[arg_span]
-                current_args_indices.append(arg_idx)
-            arg_indices.append(current_args_indices)
-            label_indices.append(self.label_to_id[relation.label])
+        for candidate_relations in task_encoding.metadata["candidate_relations"]:
+            label_indices.append(self.label_to_id[candidate_relations.label])
 
         target: TargetEncodingType = {
             "labels": torch.tensor(label_indices).to(torch.long),
-            "arg_indices": torch.tensor(arg_indices).to(torch.long),
         }
 
         self._maybe_log_example(task_encoding=task_encoding, target=target)
@@ -581,7 +558,9 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             start_marker_positions = task_encoding.inputs["start_marker_positions"]
             end_marker_positions = task_encoding.inputs["end_marker_positions"]
             labels = [self.id_to_label[label] for label in target["labels"]]
-            for i, (label, arg_indices) in enumerate(zip(labels, target["arg_indices"])):
+            for i, (label, arg_indices) in enumerate(
+                zip(labels, task_encoding.inputs["arg_indices"])
+            ):
                 head_idx, tail_idx = arg_indices
                 head_tokens = tokens[
                     start_marker_positions[head_idx] : end_marker_positions[head_idx]
@@ -599,7 +578,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         self, task_encodings: Sequence[TaskEncodingType]
     ) -> Tuple[ModelInputType, Optional[ModelTargetType]]:
         input_keys = task_encodings[0].inputs.keys()
-        # TODO: do we need padding / packaging (with num_spans) for the marker positions?
+        # TODO: do we need padding for the marker positions?
         inputs: ModelInputType = {  # type: ignore
             key: torch.stack([task_encoding.inputs[key] for task_encoding in task_encodings])
             for key in input_keys
@@ -616,10 +595,9 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         return inputs, targets
 
     def unbatch_output(self, model_output: ModelTargetType) -> Sequence[TaskOutputType]:
-        # shape: (batch_size, num_positive_entity_pairs, num_args)
-        arg_indices = model_output["arg_indices"].detach().cpu().tolist()
+        # shape: (batch_size, num_candidates)
         label_ids = model_output["labels"].detach().cpu().tolist()
-        # shape: (batch_size, num_positive_entity_pairs, num_labels)
+        # shape: (batch_size, num_candidates, num_labels)
         all_probabilities = model_output["probabilities"].detach().cpu().tolist()
         unbatched_output = []
         for batch_idx in range(len(label_ids)):
@@ -629,7 +607,6 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                 labels.append(self.id_to_label[label_id])
                 probabilities.append(probs[label_id])
             entry: TaskOutputType = {
-                "arg_indices": arg_indices[batch_idx],
                 "labels": labels,
                 "probabilities": probabilities,
             }
@@ -642,17 +619,18 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         task_output: TaskOutputType,
         tokenized_document: TokenDocumentWithLabeledSpansAndBinaryRelations,
     ) -> Dict[str, List[Annotation]]:
-        labeled_spans = tokenized_document.labeled_spans
-
         new_relations = []
-        for arg_indices, label, probability in zip(
-            task_output["arg_indices"], task_output["labels"], task_output["probabilities"]
+        for candidate_relation, label, probability in zip(
+            tokenized_document.metadata["candidate_relations"],
+            task_output["labels"],
+            task_output["probabilities"],
         ):
-            # for now, we only support binary relations
-            head_idx, tail_idx = arg_indices
-            head = labeled_spans[head_idx]
-            tail = labeled_spans[tail_idx]
-            new_annotation = BinaryRelation(head=head, tail=tail, label=label, score=probability)
+            new_annotation = BinaryRelation(
+                head=candidate_relation.head,
+                tail=candidate_relation.tail,
+                label=label,
+                score=probability,
+            )
             new_relations.append(new_annotation)
 
         return {"binary_relations": new_relations}
@@ -706,13 +684,12 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                 "Please call taskmodule.prepare(documents) before configuring the model metric "
                 "or pass the labels to the taskmodule constructor an call taskmodule.post_prepare()."
             )
-        # also see _prepare_model_output_for_metrics()
-        labels = ["NONE"] + [self.id_to_label[i] for i in range(len(self.label_to_id))]
+        labels = [self.id_to_label[i] for i in range(len(self.label_to_id))]
         common_metric_kwargs = {
             "num_classes": len(labels),
             "task": "multiclass",
-            # do we want to ignore the "NONE" label?
-            "ignore_index": 0,
+            # TODO: do we really want to ignore the no_relation_label?
+            "ignore_index": self.label_to_id[self.no_relation_label],
         }
         return WrappedMetricWithPrepareFunction(
             metric=MetricCollection(
@@ -726,5 +703,5 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                     ),
                 }
             ),
-            prepare_function=_prepare_model_output_for_metrics,
+            prepare_function=_get_labels_from_model_output,
         )
