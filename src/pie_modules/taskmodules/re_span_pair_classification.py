@@ -147,7 +147,7 @@ END = "end"
 logger = logging.getLogger(__name__)
 
 
-def _get_labels_from_model_output(
+def _get_label_ids_from_model_output(
     model_output: ModelTargetType,
 ) -> LongTensor:
     return model_output["labels"]
@@ -348,6 +348,9 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
 
             for relation in relations:
                 relation_labels.add(relation.label)
+
+        if self.no_relation_label in relation_labels:
+            relation_labels.remove(self.no_relation_label)
 
         self.labels = sorted(relation_labels)
         self.entity_labels = sorted(entity_labels)
@@ -788,5 +791,5 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                     ),
                 }
             ),
-            prepare_function=_get_labels_from_model_output,
+            prepare_function=_get_label_ids_from_model_output,
         )
