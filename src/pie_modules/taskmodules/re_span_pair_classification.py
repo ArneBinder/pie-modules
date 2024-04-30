@@ -67,17 +67,17 @@ PAD_VALUES = {
     # input_ids and attention_mask should come already padded from the tokenizer
     # "input_ids": 0,
     # "attention_mask": 0,
-    "start_marker_positions": 0,
-    "end_marker_positions": 0,
-    "arg_indices": 0,
+    "span_start_indices": 0,
+    "span_end_indices": 0,
+    "tuple_indices": 0,
     "labels": -100,
 }
 DTYPES = {
     # "input_ids": torch.long,
     # "attention_mask": torch.long,
-    "start_marker_positions": torch.long,
-    "end_marker_positions": torch.long,
-    "arg_indices": torch.long,
+    "span_start_indices": torch.long,
+    "span_end_indices": torch.long,
+    "tuple_indices": torch.long,
     "labels": torch.long,
 }
 
@@ -88,12 +88,12 @@ class InputEncodingType(TypedDict, total=False):
     # shape: (sequence_length,)
     attention_mask: LongTensor
     # shape: (num_entities,)
-    start_marker_positions: LongTensor
+    span_start_indices: LongTensor
     # shape: (num_entities,)
-    end_marker_positions: LongTensor
+    span_end_indices: LongTensor
     # list of lists of argument indices: [[head_idx, tail_idx], ...]
-    # NOTE: these indices point into start_marker_positions and end_marker_positions!
-    arg_indices: LongTensor
+    # NOTE: these indices point into span_start_indices and span_end_indices!
+    tuple_indices: LongTensor
 
 
 class TargetEncodingType(TypedDict, total=False):
@@ -117,9 +117,9 @@ class TaskOutputType(TypedDict, total=False):
 class ModelInputType(TypedDict, total=False):
     input_ids: LongTensor
     attention_mask: LongTensor
-    start_marker_positions: LongTensor
-    end_marker_positions: LongTensor
-    arg_indices: LongTensor
+    span_start_indices: LongTensor
+    span_end_indices: LongTensor
+    tuple_indices: LongTensor
 
 
 class ModelTargetType(TypedDict, total=False):
@@ -544,16 +544,16 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         task_encodings: List[TaskEncodingType] = []
         for tokenized_doc in tokenized_docs:
             # collect start- and end-token positions for each entity
-            start_marker_positions = []
-            end_marker_positions = []
+            span_start_indices = []
+            span_end_indices = []
             for labeled_span in tokenized_doc.labeled_spans:
                 # the start marker is one token before the start of the span
-                start_marker_positions.append(labeled_span.start - 1)
+                span_start_indices.append(labeled_span.start - 1)
                 # the end marker is one token after the end of the span, but the end index is exclusive
-                end_marker_positions.append(labeled_span.end)
+                span_end_indices.append(labeled_span.end)
 
             labeled_span2idx = {span: idx for idx, span in enumerate(tokenized_doc.labeled_spans)}
-            arg_indices = []  # list of lists of argument indices: [[head_idx, tail_idx], ...]
+            tuple_indices = []  # list of lists of argument indices: [[head_idx, tail_idx], ...]
             if self.create_candidate_relations:
                 candidate_relations = self._create_candidate_relations(
                     tokenized_doc, **self.create_candidate_relations_kwargs
@@ -565,17 +565,17 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                 for _, arg_span in get_relation_argument_spans_and_roles(relation):
                     arg_idx = labeled_span2idx[arg_span]
                     current_args_indices.append(arg_idx)
-                arg_indices.append(current_args_indices)
+                tuple_indices.append(current_args_indices)
 
             # TODO: can we do this? i.e. converting to a dict and adding the new keys?
             inputs = dict(tokenized_doc.metadata["tokenizer_encoding"])
-            inputs["start_marker_positions"] = torch.tensor(start_marker_positions).to(
-                dtype=DTYPES["start_marker_positions"]
+            inputs["span_start_indices"] = torch.tensor(span_start_indices).to(
+                dtype=DTYPES["span_start_indices"]
             )
-            inputs["end_marker_positions"] = torch.tensor(end_marker_positions).to(
-                dtype=DTYPES["end_marker_positions"]
+            inputs["span_end_indices"] = torch.tensor(span_end_indices).to(
+                dtype=DTYPES["span_end_indices"]
             )
-            inputs["arg_indices"] = torch.tensor(arg_indices).to(dtype=DTYPES["arg_indices"])
+            inputs["tuple_indices"] = torch.tensor(tuple_indices).to(dtype=DTYPES["tuple_indices"])
 
             task_encodings.append(
                 TaskEncoding(
@@ -648,17 +648,15 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             logger.info(f"tokens: {' '.join([str(x) for x in tokens])}")
             logger.info(f"input_ids: {' '.join([str(x) for x in input_ids])}")
             # target data
-            start_marker_positions = task_encoding.inputs["start_marker_positions"]
-            end_marker_positions = task_encoding.inputs["end_marker_positions"]
+            span_start_indices = task_encoding.inputs["span_start_indices"]
+            span_end_indices = task_encoding.inputs["span_end_indices"]
             labels = [self.id_to_label[label] for label in target["labels"]]
-            for i, (label, arg_indices) in enumerate(
-                zip(labels, task_encoding.inputs["arg_indices"])
+            for i, (label, tuple_indices) in enumerate(
+                zip(labels, task_encoding.inputs["tuple_indices"])
             ):
                 logger.info(f"relation {i}: {label}")
-                for j, arg_idx in enumerate(arg_indices):
-                    arg_tokens = tokens[
-                        start_marker_positions[arg_idx] : end_marker_positions[arg_idx]
-                    ]
+                for j, arg_idx in enumerate(tuple_indices):
+                    arg_tokens = tokens[span_start_indices[arg_idx] : span_end_indices[arg_idx]]
                     logger.info(f"\targ {i}: {' '.join([str(x) for x in arg_tokens])}")
 
             self._logged_examples_counter += 1
