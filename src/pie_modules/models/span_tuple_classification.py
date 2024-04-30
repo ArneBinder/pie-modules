@@ -165,7 +165,7 @@ class SpanTupleClassificationModel(
         elif self.span_pooler_mode in ["start_and_end_token"]:
             span_pooler_factor = 2
         else:
-            raise ValueError(f"Invalid value for use_markers: {self.span_pooler_mode}")
+            raise ValueError(f"Invalid value for span_pooler_mode: {self.span_pooler_mode}")
 
         self.num_tuple_entries = num_tuple_entries
         self.tuple_pooler_mode = tuple_pooler_mode
@@ -212,7 +212,7 @@ class SpanTupleClassificationModel(
                 dim=-1,
             )
         else:
-            raise ValueError(f"Invalid value for use_markers: {self.span_pooler_mode}")
+            raise ValueError(f"Invalid value for span_pooler_mode: {self.span_pooler_mode}")
 
         return span_embeddings
 
