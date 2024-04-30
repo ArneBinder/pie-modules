@@ -231,9 +231,17 @@ class SpanTupleClassificationModel(
             raise ValueError(
                 f"Number of entries in tuple_indices should be equal to num_tuple_entries={self.num_tuple_entries}"
             )
+        # Mask out invalid tuple indices, i.e. tuples where all indices are below 0. These result from
+        # the padding. Note that either all indices are below 0 or all are above 0, so we can just check
+        # if the sum is greater than 0. shape: (batch_size, num_tuples)
+        mask_valid = self.get_valid_indices_mask(tuple_indices)
+        # copy the tuple indices and set all invalid indices to 0
+        tuple_indices_copy = tuple_indices.clone()
+        tuple_indices_copy[~mask_valid] = 0
+
         tuple_embeddings_list: List[FloatTensor] = []
-        for i in range(tuple_indices.shape[-1]):
-            current_tuple_indices = tuple_indices[:, :, i]
+        for i in range(tuple_indices_copy.shape[-1]):
+            current_tuple_indices = tuple_indices_copy[:, :, i]
             current_embeddings = get_embeddings_at_indices(span_embeddings, current_tuple_indices)
             tuple_embeddings_list.append(current_embeddings)
         if self.tuple_pooler_mode == "concat":
@@ -242,20 +250,18 @@ class SpanTupleClassificationModel(
             raise ValueError(f"Invalid value for tuple_pooler_mode: {self.tuple_pooler_mode}")
         return tuple_embeddings
 
+    def get_valid_indices_mask(self, indices: LongTensor) -> BoolTensor:
+        # create a mask to mask out padding tuples
+        return indices.sum(dim=-1) > 0
+
     def pooler(
         self, hidden_states: FloatTensor, tuple_indices: LongTensor, **span_pooler_inputs
-    ) -> Tuple[FloatTensor, BoolTensor]:
+    ) -> FloatTensor:
         # get the span embeddings from the hidden states and the start and end marker positions
         span_embeddings = self.span_pooler(hidden_states, **span_pooler_inputs)
-        # Mask out invalid tuple indices, i.e. tuples where all indices are below 0. Note that either all indices
-        # are below 0 or all are above 0, so we can just check if the sum is greater than 0.
-        # shape: (batch_size, num_tuples)
-        mask_valid = tuple_indices.sum(dim=-1) > 0
-        # copy the tuple indices and set all invalid indices to 0
-        tuple_indices_copy = tuple_indices.clone()
-        tuple_indices_copy[~mask_valid] = 0
-        tuple_embeddings = self.tuple_pooler(span_embeddings, tuple_indices_copy)
-        return tuple_embeddings, mask_valid
+        # get the tuple embeddings from the span embeddings and the tuple indices
+        tuple_embeddings = self.tuple_pooler(span_embeddings, tuple_indices)
+        return tuple_embeddings
 
     def forward(self, inputs: InputType, targets: Optional[TargetType] = None) -> OutputType:
         pooler_inputs = {}
@@ -270,7 +276,7 @@ class SpanTupleClassificationModel(
 
         hidden_state = output.last_hidden_state
 
-        pooled_output, mask_valid = self.pooler(hidden_state, **pooler_inputs)
+        pooled_output = self.pooler(hidden_state, **pooler_inputs)
 
         pooled_output = self.dropout(pooled_output)
 
@@ -291,6 +297,10 @@ class SpanTupleClassificationModel(
         else:
             probabilities = torch.sigmoid(outputs.logits)
             labels = (probabilities > self.multi_label_threshold).to(torch.long)
+        # mask out invalid indices (padded tuples)
+        mask_valid = self.get_valid_indices_mask(inputs["tuple_indices"])
+        labels[~mask_valid] = -100
+        probabilities[~mask_valid] = -1.0
         return {"labels": labels, "probabilities": probabilities}
 
     def base_model_named_parameters(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
