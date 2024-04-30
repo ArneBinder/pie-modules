@@ -9,6 +9,7 @@ from pytorch_ie.documents import TextBasedDocument
 from torch import tensor
 
 from pie_modules.taskmodules import RESpanPairClassificationTaskModule
+from pie_modules.utils.span import distance
 from tests import _config_to_str
 
 CONFIGS = [{}, {"partition_annotation": "sentences"}]
@@ -109,6 +110,43 @@ def document(fixed_documents):
         == "sentences with multiple relation annotations and cross-sentence relation"
     )
     return result
+
+
+def test_create_candidate_relations(taskmodule, document):
+    # _create_candidate_relations requires normalized documents
+    normalized_document = taskmodule.normalize_document(document)
+    candidate_relations = taskmodule._create_candidate_relations(normalized_document)
+    resolved_relations = [ann.resolve() for ann in candidate_relations]
+    assert resolved_relations == [
+        ("no_relation", (("PER", "Entity G"), ("ORG", "H"))),
+        ("no_relation", (("PER", "Entity G"), ("ORG", "I"))),
+        ("no_relation", (("ORG", "H"), ("PER", "Entity G"))),
+        ("no_relation", (("ORG", "H"), ("ORG", "I"))),
+        ("no_relation", (("ORG", "I"), ("PER", "Entity G"))),
+        ("no_relation", (("ORG", "I"), ("ORG", "H"))),
+    ]
+
+
+def test_create_candidate_relations_with_max_distance(taskmodule, document):
+    # _create_candidate_relations requires normalized documents
+    normalized_document = taskmodule.normalize_document(document)
+    candidate_relations = taskmodule._create_candidate_relations(
+        normalized_document, max_argument_distance=10
+    )
+    resolved_relations = [ann.resolve() for ann in candidate_relations]
+    assert resolved_relations == [
+        ("no_relation", (("PER", "Entity G"), ("ORG", "H"))),
+        ("no_relation", (("ORG", "H"), ("PER", "Entity G"))),
+    ]
+    distances = [
+        distance(
+            start_end=(rel.head.start, rel.head.end),
+            other_start_end=(rel.tail.start, rel.tail.end),
+            distance_type="inner",
+        )
+        for rel in candidate_relations
+    ]
+    assert distances == [10.0, 10.0]
 
 
 @pytest.fixture(scope="module")
