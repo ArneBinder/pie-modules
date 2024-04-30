@@ -598,9 +598,12 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         gold_relations = task_encoding.metadata["tokenized_document"].binary_relations
         gold_roles_and_args2relation = defaultdict(list)
         for relation in gold_relations:
-            gold_roles_and_args2relation[get_relation_argument_spans_and_roles(relation)].append(
-                relation
-            )
+            # If we manually set the labels, we only consider relations with a label in the label_to_id mapping
+            # This allows us to ignore relations with certain labels during training.
+            if relation.label in self.label_to_id:
+                gold_roles_and_args2relation[
+                    get_relation_argument_spans_and_roles(relation)
+                ].append(relation)
         label_indices = []  # list of label indices
         valid_candidate_relations = []
         for candidate_relation in task_encoding.metadata["candidate_relations"]:
