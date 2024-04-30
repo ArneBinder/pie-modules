@@ -167,6 +167,28 @@ def get_relation_argument_spans_and_roles(
         )
 
 
+def construct_argument_marker(pos: str, label: Optional[str] = None, role: str = "ARG") -> str:
+    if pos not in [START, END]:
+        raise ValueError(f"pos must be one of {START} or {END}, but got: {pos}")
+    start_or_end_marker = "" if pos == START else "/"
+    if label is not None:
+        return f"[{start_or_end_marker}{role}:{label}]"
+    else:
+        return f"[{start_or_end_marker}{role}]"
+
+
+def inject_markers_into_text(
+    text: str, positions_and_markers: List[Tuple[int, str]]
+) -> Tuple[str, Dict[int, int]]:
+    offset = 0
+    original2new_pos = dict()
+    for original_pos, marker in sorted(positions_and_markers):
+        text = text[: original_pos + offset] + marker + text[original_pos + offset :]
+        offset += len(marker)
+        original2new_pos[original_pos] = original_pos + offset
+    return text, original2new_pos
+
+
 @TaskModule.register()
 class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSize):
     """Task module for relation extraction as span pair classification.
@@ -374,27 +396,16 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         self.show_statistics()
         return res
 
-    def construct_argument_marker(
-        self, pos: str, label: Optional[str] = None, role: str = "ARG"
-    ) -> str:
-        if pos not in [START, END]:
-            raise ValueError(f"pos must be one of {START} or {END}, but got: {pos}")
-        start_or_end_marker = "" if pos == START else "/"
-        if label is not None:
-            return f"[{start_or_end_marker}{role}:{label}]"
-        else:
-            return f"[{start_or_end_marker}{role}]"
-
     def collect_argument_markers(self, entity_labels: Iterable[str]) -> List[str]:
         argument_markers: Set[str] = set()
         for arg_pos in [START, END]:
             if self.add_type_to_marker:
                 for entity_label in entity_labels:
                     argument_markers.add(
-                        self.construct_argument_marker(pos=arg_pos, label=entity_label)
+                        construct_argument_marker(pos=arg_pos, label=entity_label)
                     )
             else:
-                argument_markers.add(self.construct_argument_marker(pos=arg_pos))
+                argument_markers.add(construct_argument_marker(pos=arg_pos))
 
         return sorted(list(argument_markers))
 
@@ -409,62 +420,6 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         self.argument_markers_to_id = {
             marker: self.tokenizer.vocab[marker] for marker in self.argument_markers
         }
-
-    def inject_markers(
-        self, document: TextDocumentWithLabeledSpansAndBinaryRelations
-    ) -> Tuple[TextDocumentWithLabeledSpansAndBinaryRelations, Dict[LabeledSpan, LabeledSpan]]:
-        # collect markers and injection positions
-        positions_and_markers = []
-        for labeled_span in document.labeled_spans:
-            start_marker = self.construct_argument_marker(pos=START, label=labeled_span.label)
-            positions_and_markers.append((labeled_span.start, start_marker))
-            end_marker = self.construct_argument_marker(pos=END, label=labeled_span.label)
-            positions_and_markers.append((labeled_span.end, end_marker))
-
-        # inject markers
-        new_text = document.text
-        offset = 0
-        original2new_pos = dict()
-        for original_pos, marker in sorted(positions_and_markers):
-            # TODO: is this really correct?
-            new_text = (
-                new_text[: original_pos + offset] + marker + new_text[original_pos + offset :]
-            )
-            offset += len(marker)
-            original2new_pos[original_pos] = original_pos + offset
-
-        # construct new spans
-        old2new_spans = dict()
-        for labeled_span in document.labeled_spans:
-            start = original2new_pos[labeled_span.start]
-            end = original2new_pos[labeled_span.end]
-            new_span = LabeledSpan(start=start, end=end, label=labeled_span.label)
-            old2new_spans[labeled_span] = new_span
-
-        # construct new relations
-        old2new_relations = dict()
-        for relation in document.binary_relations:
-            if isinstance(relation, BinaryRelation):
-                head = old2new_spans[relation.head]
-                tail = old2new_spans[relation.tail]
-                new_relation = BinaryRelation(head=head, tail=tail, label=relation.label)
-            else:
-                raise NotImplementedError(
-                    f"the taskmodule does not yet support relations of type {type(relation)}"
-                )
-            old2new_relations[relation] = new_relation
-
-        # construct new document
-        new_document = TextDocumentWithLabeledSpansAndBinaryRelations(
-            id=document.id,
-            metadata=deepcopy(document.metadata),
-            text=new_text,
-        )
-        new_document.labeled_spans.extend(old2new_spans.values())
-        new_document.binary_relations.extend(old2new_relations.values())
-
-        new2old_spans = {new_span: old_span for old_span, new_span in old2new_spans.items()}
-        return new_document, new2old_spans
 
     def _create_candidate_relations(
         self,
@@ -492,6 +447,56 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                 candidate_relations.append(rel)
         return candidate_relations
 
+    def inject_markers_for_labeled_spans(
+        self,
+        document: TextDocumentWithLabeledSpansAndBinaryRelations,
+    ) -> Tuple[TextDocumentWithLabeledSpansAndBinaryRelations, Dict[LabeledSpan, LabeledSpan]]:
+        # collect markers and injection positions
+        positions_and_markers = []
+        for labeled_span in document.labeled_spans:
+            start_marker = construct_argument_marker(pos=START, label=labeled_span.label)
+            positions_and_markers.append((labeled_span.start, start_marker))
+            end_marker = construct_argument_marker(pos=END, label=labeled_span.label)
+            positions_and_markers.append((labeled_span.end, end_marker))
+
+        # inject markers into the text
+        marked_text, original2new_pos = inject_markers_into_text(
+            document.text, positions_and_markers
+        )
+
+        # construct new spans
+        old2new_spans = dict()
+        for labeled_span in document.labeled_spans:
+            start = original2new_pos[labeled_span.start]
+            end = original2new_pos[labeled_span.end]
+            new_span = LabeledSpan(start=start, end=end, label=labeled_span.label)
+            old2new_spans[labeled_span] = new_span
+
+        # construct new relations
+        old2new_relations = dict()
+        for relation in document.binary_relations:
+            if isinstance(relation, BinaryRelation):
+                head = old2new_spans[relation.head]
+                tail = old2new_spans[relation.tail]
+                new_relation = BinaryRelation(head=head, tail=tail, label=relation.label)
+            else:
+                raise NotImplementedError(
+                    f"the taskmodule does not yet support relations of type {type(relation)}"
+                )
+            old2new_relations[relation] = new_relation
+
+        # construct new document
+        new_document = TextDocumentWithLabeledSpansAndBinaryRelations(
+            id=document.id,
+            metadata=deepcopy(document.metadata),
+            text=marked_text,
+        )
+        new_document.labeled_spans.extend(old2new_spans.values())
+        new_document.binary_relations.extend(old2new_relations.values())
+
+        new2old_spans = {new_span: old_span for old_span, new_span in old2new_spans.items()}
+        return new_document, new2old_spans
+
     def encode_input(
         self,
         document: DocumentType,
@@ -509,7 +514,9 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         # 4. construct task encoding from tokenized text and entity positions
 
         normalized_document = self.normalize_document(document)
-        document_with_markers, injected2original_spans = self.inject_markers(normalized_document)
+        document_with_markers, injected2original_spans = self.inject_markers_for_labeled_spans(
+            normalized_document
+        )
         tokenized_docs = tokenize_document(
             document_with_markers,
             tokenizer=self.tokenizer,
