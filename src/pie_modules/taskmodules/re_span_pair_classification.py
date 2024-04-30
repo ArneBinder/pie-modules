@@ -32,7 +32,6 @@ from pytorch_ie.annotations import (
     LabeledSpan,
     MultiLabeledBinaryRelation,
     NaryRelation,
-    Span,
 )
 from pytorch_ie.core import (
     Annotation,
@@ -62,6 +61,7 @@ from pie_modules.documents import (
     TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
 from pie_modules.taskmodules.metrics import WrappedMetricWithPrepareFunction
+from pie_modules.utils.span import distance as get_span_distance
 
 PAD_VALUES = {
     # input_ids and attention_mask should come already padded from the tokenizer
@@ -192,6 +192,11 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             given name. The partition layer is used to split the text into partitions, e.g. paragraphs
             or sentences, that are treated as separate documents during tokenization. Defaults to None.
         tokenize_kwargs: Additional keyword arguments passed to the tokenizer during tokenization.
+        create_candidate_relations: Whether to create candidate relations for training. If True, the
+            task module creates all possible pairs of entities in the text as candidate relations.
+            Defaults to False.
+        create_candidate_relations_kwargs: Additional keyword arguments passed to the method that
+            creates the candidate relations (e.g. max_argument_distance). Defaults to None.
         labels: The list of relation labels. If not provided, the task module will collect the labels
             from the documents during preparation. Defaults to None.
         entity_labels: The list of entity labels. If not provided, the task module will collect the
@@ -214,6 +219,8 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         no_relation_label: str = "no_relation",
         partition_annotation: Optional[str] = None,
         tokenize_kwargs: Optional[Dict[str, Any]] = None,
+        create_candidate_relations: bool = False,
+        create_candidate_relations_kwargs: Optional[Dict[str, Any]] = None,
         labels: Optional[List[str]] = None,
         entity_labels: Optional[List[str]] = None,
         add_type_to_marker: bool = False,
@@ -227,6 +234,8 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         self.relation_annotation = relation_annotation
         self.no_relation_label = no_relation_label
         self.tokenize_kwargs = tokenize_kwargs or {}
+        self.create_candidate_relations = create_candidate_relations
+        self.create_candidate_relations_kwargs = create_candidate_relations_kwargs or {}
         self.labels = labels
         self.add_type_to_marker = add_type_to_marker
         self.entity_labels = entity_labels
@@ -263,29 +272,28 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
     @property
     def tokenized_document_type(self) -> Type[TokenDocumentWithLabeledSpansAndBinaryRelations]:
         if self.partition_annotation is None:
-            tokenized_document_type = TokenDocumentWithLabeledSpansAndBinaryRelations
+            return TokenDocumentWithLabeledSpansAndBinaryRelations
         else:
-            tokenized_document_type = (
-                TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
-            )
-        return tokenized_document_type
+            return TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
 
-    def normalize_document_type(self, document) -> TextDocumentWithLabeledSpansAndBinaryRelations:
-        span_layer_name = self.get_span_layer_name(document)
+    @property
+    def normalized_document_type(self) -> Type[TextDocumentWithLabeledSpansAndBinaryRelations]:
         if self.partition_annotation is None:
-            casted_document_type = TextDocumentWithLabeledSpansAndBinaryRelations
-            field_mapping = {
-                span_layer_name: "labeled_spans",
-                self.relation_annotation: "binary_relations",
-            }
+            return TextDocumentWithLabeledSpansAndBinaryRelations
         else:
-            casted_document_type = TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
-            field_mapping = {
-                span_layer_name: "labeled_spans",
-                self.relation_annotation: "binary_relations",
-                self.partition_annotation: "labeled_partitions",
-            }
-        casted_document = document.as_type(casted_document_type, field_mapping=field_mapping)
+            return TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
+
+    def normalize_document(self, document) -> TextDocumentWithLabeledSpansAndBinaryRelations:
+        span_layer_name = self.get_span_layer_name(document)
+        field_mapping = {
+            span_layer_name: "labeled_spans",
+            self.relation_annotation: "binary_relations",
+        }
+        if self.partition_annotation is not None:
+            field_mapping[self.partition_annotation] = "labeled_partitions"
+        casted_document = document.as_type(
+            self.normalized_document_type, field_mapping=field_mapping
+        )
         return casted_document
 
     def get_relation_layer(self, document: Document) -> AnnotationList[BinaryRelation]:
@@ -458,8 +466,11 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         new2old_spans = {new_span: old_span for old_span, new_span in old2new_spans.items()}
         return new_document, new2old_spans
 
-    def create_candidate_relations(
-        self, document: TokenDocumentWithLabeledSpansAndBinaryRelations
+    def _create_candidate_relations(
+        self,
+        document: TokenDocumentWithLabeledSpansAndBinaryRelations,
+        max_argument_distance: Optional[int] = None,
+        argument_distance_type: str = "inner",
     ) -> Sequence[Annotation]:
         # TODO: ensure that the relation layer type is BinaryRelation!
         labeled_spans = document.labeled_spans
@@ -468,10 +479,17 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             for j, tail in enumerate(labeled_spans):
                 if i == j:
                     continue
-                # TODO: implement windowing!
-                candidate_relations.append(
-                    BinaryRelation(head=head, tail=tail, label=self.no_relation_label)
-                )
+                rel = BinaryRelation(head=head, tail=tail, label=self.no_relation_label)
+                if max_argument_distance is not None:
+                    arg_distance = get_span_distance(
+                        start_end=(head.start, head.end),
+                        other_start_end=(tail.start, tail.end),
+                        distance_type=argument_distance_type,
+                    )
+                    if arg_distance > max_argument_distance:
+                        self.collect_relation("skipped_argument_distance", rel)
+                        continue
+                candidate_relations.append(rel)
         return candidate_relations
 
     def encode_input(
@@ -490,8 +508,8 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         # 3. get start- and end-token positions for each entity
         # 4. construct task encoding from tokenized text and entity positions
 
-        casted_document = self.normalize_document_type(document)
-        document_with_markers, injected2original_spans = self.inject_markers(casted_document)
+        normalized_document = self.normalize_document(document)
+        document_with_markers, injected2original_spans = self.inject_markers(normalized_document)
         tokenized_docs = tokenize_document(
             document_with_markers,
             tokenizer=self.tokenizer,
@@ -518,7 +536,12 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
 
             labeled_span2idx = {span: idx for idx, span in enumerate(tokenized_doc.labeled_spans)}
             arg_indices = []  # list of lists of argument indices: [[head_idx, tail_idx], ...]
-            candidate_relations = self.create_candidate_relations(tokenized_doc)
+            if self.create_candidate_relations:
+                candidate_relations = self._create_candidate_relations(
+                    tokenized_doc, **self.create_candidate_relations_kwargs
+                )
+            else:
+                candidate_relations = tokenized_doc.binary_relations
             for relation in candidate_relations:
                 current_args_indices = []
                 for _, arg_span in get_relation_argument_spans_and_roles(relation):
@@ -557,6 +580,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                 relation
             )
         label_indices = []  # list of label indices
+        valid_candidate_relations = []
         for candidate_relation in task_encoding.metadata["candidate_relations"]:
             candidate_roles_and_args = get_relation_argument_spans_and_roles(candidate_relation)
             gold_relations = gold_roles_and_args2relation.get(candidate_roles_and_args, [])
@@ -569,7 +593,12 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                     f"skip the candidate relation because there are more than one gold relation "
                     f"for its args and roles: {gold_relations}"
                 )
+                for gold_relation in gold_relations:
+                    self.collect_relation("skipped_same_arguments", gold_relation)
+                continue
+            valid_candidate_relations.append(candidate_relation)
 
+        task_encoding.metadata["candidate_relations"] = valid_candidate_relations
         target: TargetEncodingType = {
             "labels": torch.tensor(label_indices).to(torch.long),
         }
@@ -694,18 +723,10 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             for annotation in annotations:
                 tokenized_document[layer_name].append(annotation)
 
-        # we can not use self.document_type here because that may be None if self.span_annotation or
-        # self.partition_annotation is not the default value
-        document_type = (
-            TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
-            if self.partition_annotation
-            else TextDocumentWithLabeledSpansAndBinaryRelations
-        )
-        untokenized_document: Union[
-            TextDocumentWithLabeledSpansAndBinaryRelations,
-            TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
-        ] = token_based_document_to_text_based(
-            tokenized_document, result_document_type=document_type
+        untokenized_document: TextDocumentWithLabeledSpansAndBinaryRelations = (
+            token_based_document_to_text_based(
+                tokenized_document, result_document_type=self.normalized_document_type
+            )
         )
 
         injected2original_spans = task_encoding.metadata["injected2original_spans"]
@@ -734,8 +755,8 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         common_metric_kwargs = {
             "num_classes": len(labels),
             "task": "multiclass",
-            # TODO: do we really want to ignore the no_relation_label?
-            "ignore_index": self.label_to_id[self.no_relation_label],
+            # do we want to ignore the no_relation_label?
+            # "ignore_index": self.label_to_id[self.no_relation_label],
         }
         return WrappedMetricWithPrepareFunction(
             metric=MetricCollection(
