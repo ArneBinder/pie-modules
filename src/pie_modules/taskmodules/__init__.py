@@ -3,6 +3,7 @@ from .labeled_span_extraction_by_token_classification import (
     LabeledSpanExtractionByTokenClassificationTaskModule,
 )
 from .pointer_network_for_end2end_re import PointerNetworkTaskModuleForEnd2EndRE
+from .re_span_pair_classification import RESpanPairClassificationTaskModule
 from .re_text_classification_with_indices import (
     RETextClassificationWithIndicesTaskModule,
 )

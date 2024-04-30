@@ -1,30 +1,11 @@
-import dataclasses
 import logging
-import pickle
-import re
-from dataclasses import dataclass
 
 import pytest
 import torch
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan, NaryRelation
-from pytorch_ie.core import Annotation, AnnotationList, annotation_field
-from pytorch_ie.documents import TextBasedDocument, TextDocument
 from torch import tensor
-from torchmetrics import Metric, MetricCollection
 
-from pie_modules.taskmodules import RETextClassificationWithIndicesTaskModule
-from pie_modules.taskmodules.re_span_pair_classification import (
-    RESpanPairClassificationTaskModule,
-)
-from pie_modules.taskmodules.re_text_classification_with_indices import (
-    HEAD,
-    TAIL,
-    inner_span_distance,
-    span_distance,
-)
-from pie_modules.utils import flatten_dict
+from pie_modules.taskmodules import RESpanPairClassificationTaskModule
 from tests import _config_to_str
-from tests.conftest import _TABULATE_AVAILABLE, TestDocument
 
 CONFIGS = [{}]
 CONFIGS_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
