@@ -525,8 +525,8 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             if self.partition_annotation is not None
             else None,
             strict_span_conversion=False,
-            # TODO: does this work?
-            return_tensors=True,
+            # TODO: does this work as expected? e.g. when using return_overflowing_tokens?
+            return_tensors="pt",
             **self.tokenize_kwargs,
         )
 
