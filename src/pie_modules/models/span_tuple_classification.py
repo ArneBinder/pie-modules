@@ -79,10 +79,43 @@ class SpanTupleClassificationModel(
     RequiresModelNameOrPath,
     RequiresNumClasses,
 ):
+    """A span tuple classification model that uses a pooler to get a representation of the input
+    spans and then applies a linear classifier to that representation. The pooler can be configured
+    via the `span_pooler_mode` and `tuple_pooler_mode` arguments. It expects the input to contain
+    the indices of the start and end tokens of the spans (for the span pooler) and the indices of
+    the spans in the tuples to classify (for the tuple pooler).
+
+    Args:
+        model_name_or_path: The name or path of the HuggingFace model to use.
+        num_classes: The number of classes for the classification task.
+        span_pooler_mode: The mode to pool the hidden states for the spans. One of "start_token",
+            "end_token", "start_and_end_token".
+        tuple_pooler_mode: The mode to pool the span embeddings for the tuples. Currently only
+            "concat" is supported.
+        num_tuple_entries: The number of entries in the tuples.
+        tokenizer_vocab_size: The size of the tokenizer vocabulary. If provided, the model's
+            tokenizer embeddings are resized to this size.
+        classifier_dropout: The dropout probability for the classifier. If not provided, the
+            dropout probability is taken from the Huggingface model config.
+        learning_rate: The learning rate for the optimizer.
+        task_learning_rate: The learning rate for the task-specific parameters. If None, the
+            learning rate for all parameters is set to `learning_rate`.
+        warmup_proportion: The proportion of steps to warm up the learning rate.
+        multi_label: If True, the model is trained as a multi-label classifier.
+        multi_label_threshold: The threshold for the multi-label classifier, i.e. the probability
+            above which a class is predicted.
+        freeze_base_model: If True, the base model parameters are frozen.
+        **kwargs: Additional keyword arguments passed to the parent class,
+            see :class:`ModelWithBoilerplate`.
+    """
+
     def __init__(
         self,
         model_name_or_path: str,
         num_classes: int,
+        span_pooler_mode: str = "start_and_end_token",
+        tuple_pooler_mode: str = "concat",
+        num_tuple_entries: int = 2,
         tokenizer_vocab_size: Optional[int] = None,
         classifier_dropout: Optional[float] = None,
         learning_rate: float = 1e-5,
@@ -90,9 +123,6 @@ class SpanTupleClassificationModel(
         warmup_proportion: float = 0.1,
         multi_label: bool = False,
         multi_label_threshold: float = 0.5,
-        span_pooler_mode: str = "start_and_end_token",
-        tuple_pooler_mode: str = "concat",
-        num_tuple_entries: int = 2,
         freeze_base_model: bool = False,
         **kwargs,
     ) -> None:
