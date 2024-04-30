@@ -67,10 +67,10 @@ PAD_VALUES = {
     # input_ids and attention_mask should come already padded from the tokenizer
     # "input_ids": 0,
     # "attention_mask": 0,
-    "start_marker_positions": -1,
-    "end_marker_positions": -1,
-    "arg_indices": -1,
-    "labels": -1,
+    "start_marker_positions": 0,
+    "end_marker_positions": 0,
+    "arg_indices": 0,
+    "labels": -100,
 }
 
 
