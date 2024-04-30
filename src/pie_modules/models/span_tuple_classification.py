@@ -1,11 +1,11 @@
 import logging
 from dataclasses import dataclass
-from typing import Iterator, MutableMapping, Optional, Tuple, TypeVar, Union
+from typing import Iterator, List, MutableMapping, Optional, Tuple, TypeVar, Union
 
 import torch
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
-from torch import FloatTensor, LongTensor, Tensor, nn
+from torch import BoolTensor, FloatTensor, LongTensor, Tensor, nn
 from torch.nn import Parameter
 from torch.optim import AdamW
 from transformers import AutoConfig, AutoModel, get_linear_schedule_with_warmup
@@ -182,7 +182,12 @@ class SpanTupleClassificationModel(
         self.multi_label_threshold = multi_label_threshold
         self.loss_fct = nn.BCEWithLogitsLoss() if self.multi_label else nn.CrossEntropyLoss()
 
-    def span_pooler(self, hidden_states, span_start_indices, span_end_indices):
+    def span_pooler(
+        self,
+        hidden_states: FloatTensor,
+        span_start_indices: LongTensor,
+        span_end_indices: LongTensor,
+    ) -> FloatTensor:
         """Pool the hidden states for the spans using the specified mode.
 
         Args:
@@ -208,10 +213,10 @@ class SpanTupleClassificationModel(
             )
         else:
             raise ValueError(f"Invalid value for use_markers: {self.span_pooler_mode}")
-        span_embeddings = torch.cat(span_embeddings, dim=-1)
+
         return span_embeddings
 
-    def tuple_pooler(self, span_embeddings, tuple_indices):
+    def tuple_pooler(self, span_embeddings: FloatTensor, tuple_indices: LongTensor) -> FloatTensor:
         """Pool the span embeddings for the tuples.
 
         Args:
@@ -226,21 +231,31 @@ class SpanTupleClassificationModel(
             raise ValueError(
                 f"Number of entries in tuple_indices should be equal to num_tuple_entries={self.num_tuple_entries}"
             )
-        tuple_embeddings = []
+        tuple_embeddings_list: List[FloatTensor] = []
         for i in range(tuple_indices.shape[-1]):
-            current_embeddings = get_embeddings_at_indices(span_embeddings, tuple_indices[:, i])
-            tuple_embeddings.append(current_embeddings)
+            current_tuple_indices = tuple_indices[:, :, i]
+            current_embeddings = get_embeddings_at_indices(span_embeddings, current_tuple_indices)
+            tuple_embeddings_list.append(current_embeddings)
         if self.tuple_pooler_mode == "concat":
-            tuple_embeddings = torch.cat(tuple_embeddings, dim=-1)
+            tuple_embeddings = torch.cat(tuple_embeddings_list, dim=-1).to(span_embeddings.dtype)
         else:
             raise ValueError(f"Invalid value for tuple_pooler_mode: {self.tuple_pooler_mode}")
         return tuple_embeddings
 
-    def pooler(self, hidden_states, tuple_indices, **span_pooler_inputs):
+    def pooler(
+        self, hidden_states: FloatTensor, tuple_indices: LongTensor, **span_pooler_inputs
+    ) -> Tuple[FloatTensor, BoolTensor]:
         # get the span embeddings from the hidden states and the start and end marker positions
         span_embeddings = self.span_pooler(hidden_states, **span_pooler_inputs)
-        tuple_embeddings = self.tuple_pooler(span_embeddings, tuple_indices)
-        return tuple_embeddings
+        # Mask out invalid tuple indices, i.e. tuples where all indices are below 0. Note that either all indices
+        # are below 0 or all are above 0, so we can just check if the sum is greater than 0.
+        # shape: (batch_size, num_tuples)
+        mask_valid = tuple_indices.sum(dim=-1) > 0
+        # copy the tuple indices and set all invalid indices to 0
+        tuple_indices_copy = tuple_indices.clone()
+        tuple_indices_copy[~mask_valid] = 0
+        tuple_embeddings = self.tuple_pooler(span_embeddings, tuple_indices_copy)
+        return tuple_embeddings, mask_valid
 
     def forward(self, inputs: InputType, targets: Optional[TargetType] = None) -> OutputType:
         pooler_inputs = {}
@@ -255,7 +270,7 @@ class SpanTupleClassificationModel(
 
         hidden_state = output.last_hidden_state
 
-        pooled_output = self.pooler(hidden_state, **pooler_inputs)
+        pooled_output, mask_valid = self.pooler(hidden_state, **pooler_inputs)
 
         pooled_output = self.dropout(pooled_output)
 

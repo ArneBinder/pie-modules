@@ -1,13 +1,17 @@
+import dataclasses
 import logging
 
 import pytest
 import torch
+from pytorch_ie import AnnotationLayer, annotation_field
+from pytorch_ie.annotations import BinaryRelation, LabeledSpan
+from pytorch_ie.documents import TextBasedDocument
 from torch import tensor
 
 from pie_modules.taskmodules import RESpanPairClassificationTaskModule
 from tests import _config_to_str
 
-CONFIGS = [{}]
+CONFIGS = [{}, {"partition_annotation": "sentences"}]
 CONFIGS_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
 
 
@@ -23,20 +27,50 @@ def unprepared_taskmodule(cfg):
         relation_annotation="relations",
         tokenizer_name_or_path=tokenizer_name_or_path,
         log_first_n_examples=10,
-        **cfg
+        **cfg,
     )
     assert not taskmodule.is_from_pretrained
 
     return taskmodule
 
 
+@dataclasses.dataclass
+class FixedTestDocument(TextBasedDocument):
+    sentences: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
+    entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
+    relations: AnnotationLayer[BinaryRelation] = annotation_field(target="entities")
+
+
 @pytest.fixture(scope="module")
-def taskmodule(unprepared_taskmodule, documents) -> RESpanPairClassificationTaskModule:
-    unprepared_taskmodule.prepare(documents)
+def fixed_documents(documents):
+    result = []
+    for document in documents:
+        fixed_doc = document.copy(with_annotations=False).as_type(FixedTestDocument)
+        for sentence in document.sentences:
+            fixed_doc.sentences.append(
+                LabeledSpan(start=sentence.start, end=sentence.end, label="sentence")
+            )
+        entity_mapping = {}
+        for entity in document.entities:
+            new_entity = entity.copy()
+            fixed_doc.entities.append(new_entity)
+            entity_mapping[entity] = new_entity
+        for relation in document.relations:
+            new_relation = relation.copy(
+                head=entity_mapping[relation.head], tail=entity_mapping[relation.tail]
+            )
+            fixed_doc.relations.append(new_relation)
+        result.append(fixed_doc)
+    return result
+
+
+@pytest.fixture(scope="module")
+def taskmodule(unprepared_taskmodule, fixed_documents) -> RESpanPairClassificationTaskModule:
+    unprepared_taskmodule.prepare(fixed_documents)
     return unprepared_taskmodule
 
 
-def test_taskmodule(taskmodule: RESpanPairClassificationTaskModule, documents):
+def test_taskmodule(taskmodule: RESpanPairClassificationTaskModule):
     assert taskmodule.is_prepared
 
     assert taskmodule.relation_annotation == "relations"
@@ -64,8 +98,8 @@ def test_taskmodule(taskmodule: RESpanPairClassificationTaskModule, documents):
 
 
 @pytest.fixture(scope="module")
-def document(documents):
-    result = documents[4]
+def document(fixed_documents):
+    result = fixed_documents[4]
     assert (
         result.metadata["description"]
         == "sentences with multiple relation annotations and cross-sentence relation"
@@ -79,88 +113,181 @@ def task_encodings(taskmodule, document):
     return result
 
 
-def test_encode_input(task_encodings, document, taskmodule):
+def test_encode_input(task_encodings, document, taskmodule, cfg):
     assert task_encodings is not None
-    assert len(task_encodings) == 1
-    inputs = task_encodings[0].inputs
-    tokens = taskmodule.tokenizer.convert_ids_to_tokens(inputs["input_ids"])
-    assert tokens == [
-        "[CLS]",
-        "First",
-        "sentence",
-        ".",
-        "[SPAN:PER]",
-        "En",
-        "##ti",
-        "##ty",
-        "G",
-        "[/SPAN:PER]",
-        "works",
-        "at",
-        "[SPAN:ORG]",
-        "H",
-        "[/SPAN:ORG]",
-        ".",
-        "And",
-        "founded",
-        "[SPAN:ORG]",
-        "I",
-        "[/SPAN:ORG]",
-        ".",
-        "[SEP]",
-    ]
-    span_tokens = [
-        tokens[start:end]
-        for start, end in zip(inputs["span_start_indices"], inputs["span_end_indices"])
-    ]
-    assert span_tokens == [
-        ["[SPAN:PER]", "En", "##ti", "##ty", "G", "[/SPAN:PER]"],
-        ["[SPAN:ORG]", "H", "[/SPAN:ORG]"],
-        ["[SPAN:ORG]", "I", "[/SPAN:ORG]"],
-    ]
-    tuple_spans = [[span_tokens[idx] for idx in indices] for indices in inputs["tuple_indices"]]
-    assert tuple_spans == [
-        [
+    if cfg == {}:
+        assert len(task_encodings) == 1
+        inputs = task_encodings[0].inputs
+        tokens = taskmodule.tokenizer.convert_ids_to_tokens(inputs["input_ids"])
+        assert tokens == [
+            "[CLS]",
+            "First",
+            "sentence",
+            ".",
+            "[SPAN:PER]",
+            "En",
+            "##ti",
+            "##ty",
+            "G",
+            "[/SPAN:PER]",
+            "works",
+            "at",
+            "[SPAN:ORG]",
+            "H",
+            "[/SPAN:ORG]",
+            ".",
+            "And",
+            "founded",
+            "[SPAN:ORG]",
+            "I",
+            "[/SPAN:ORG]",
+            ".",
+            "[SEP]",
+        ]
+        span_tokens = [
+            tokens[start:end]
+            for start, end in zip(inputs["span_start_indices"], inputs["span_end_indices"])
+        ]
+        assert span_tokens == [
             ["[SPAN:PER]", "En", "##ti", "##ty", "G", "[/SPAN:PER]"],
             ["[SPAN:ORG]", "H", "[/SPAN:ORG]"],
-        ],
-        [
-            ["[SPAN:PER]", "En", "##ti", "##ty", "G", "[/SPAN:PER]"],
             ["[SPAN:ORG]", "I", "[/SPAN:ORG]"],
-        ],
-        [["[SPAN:ORG]", "I", "[/SPAN:ORG]"], ["[SPAN:ORG]", "H", "[/SPAN:ORG]"]],
-    ]
+        ]
+        tuple_spans = [
+            [span_tokens[idx] for idx in indices] for indices in inputs["tuple_indices"]
+        ]
+        assert tuple_spans == [
+            [
+                ["[SPAN:PER]", "En", "##ti", "##ty", "G", "[/SPAN:PER]"],
+                ["[SPAN:ORG]", "H", "[/SPAN:ORG]"],
+            ],
+            [
+                ["[SPAN:PER]", "En", "##ti", "##ty", "G", "[/SPAN:PER]"],
+                ["[SPAN:ORG]", "I", "[/SPAN:ORG]"],
+            ],
+            [["[SPAN:ORG]", "I", "[/SPAN:ORG]"], ["[SPAN:ORG]", "H", "[/SPAN:ORG]"]],
+        ]
+    elif cfg == {"partition_annotation": "sentences"}:
+        assert len(task_encodings) == 3
+        for idx, encoding in enumerate(task_encodings):
+            inputs = encoding.inputs
+            tokens = taskmodule.tokenizer.convert_ids_to_tokens(inputs["input_ids"])
+            span_tokens = [
+                tokens[start:end]
+                for start, end in zip(inputs["span_start_indices"], inputs["span_end_indices"])
+            ]
+            tuple_spans = [
+                [span_tokens[idx] for idx in indices] for indices in inputs["tuple_indices"]
+            ]
+            if idx == 0:
+                assert tokens == ["[CLS]", "First", "sentence", ".", "[SEP]"]
+                assert span_tokens == []
+                assert tuple_spans == []
+            elif idx == 1:
+                assert tokens == [
+                    "[CLS]",
+                    "En",
+                    "##ti",
+                    "##ty",
+                    "G",
+                    "[/SPAN:PER]",
+                    "works",
+                    "at",
+                    "[SPAN:ORG]",
+                    "H",
+                    "[/SPAN:ORG]",
+                    ".",
+                    "[SEP]",
+                ]
+                assert span_tokens == [
+                    ["[CLS]", "En", "##ti", "##ty", "G", "[/SPAN:PER]"],
+                    ["[SPAN:ORG]", "H", "[/SPAN:ORG]"],
+                ]
+                assert tuple_spans == [
+                    [
+                        ["[CLS]", "En", "##ti", "##ty", "G", "[/SPAN:PER]"],
+                        ["[SPAN:ORG]", "H", "[/SPAN:ORG]"],
+                    ]
+                ]
+            elif idx == 2:
+                assert tokens == [
+                    "[CLS]",
+                    "And",
+                    "founded",
+                    "[SPAN:ORG]",
+                    "I",
+                    "[/SPAN:ORG]",
+                    ".",
+                    "[SEP]",
+                ]
+                assert span_tokens == [["[SPAN:ORG]", "I", "[/SPAN:ORG]"]]
+                assert tuple_spans == []
+            else:
+                raise ValueError(f"unexpected idx: {idx}")
+    else:
+        raise ValueError(f"unexpected config: {cfg}")
 
 
-def test_encode_target(taskmodule, task_encodings):
-    assert len(task_encodings) == 1
-    targets = task_encodings[0].targets
-    labels = [taskmodule.id_to_label[label] for label in targets["labels"].tolist()]
-    assert labels == ["per:employee_of", "per:founder", "org:founded_by"]
+def test_encode_target(taskmodule, task_encodings, cfg):
+    if cfg == {}:
+        assert len(task_encodings) == 1
+        targets = task_encodings[0].targets
+        labels = [taskmodule.id_to_label[label] for label in targets["labels"].tolist()]
+        assert labels == ["per:employee_of", "per:founder", "org:founded_by"]
+    elif cfg == {"partition_annotation": "sentences"}:
+        assert len(task_encodings) == 3
+        for idx, encoding in enumerate(task_encodings):
+            targets = encoding.targets
+            labels = [taskmodule.id_to_label[label] for label in targets["labels"].tolist()]
+            if idx == 0:
+                assert labels == []
+            elif idx == 1:
+                assert labels == ["per:employee_of"]
+            elif idx == 2:
+                assert labels == []
+            else:
+                raise ValueError(f"unexpected idx: {idx}")
+    else:
+        raise ValueError(f"unexpected config: {cfg}")
 
 
-def test_maybe_log_example(taskmodule, task_encodings, caplog):
+def test_maybe_log_example(taskmodule, task_encodings, caplog, cfg):
     caplog.clear()
-    with caplog.at_level(logging.INFO):
-        taskmodule._maybe_log_example(task_encodings[0], target=task_encodings[0].targets)
-    assert caplog.messages == [
-        "*** Example ***",
-        "doc id: train_doc5",
-        "tokens: [CLS] First sentence . [SPAN:PER] En ##ti ##ty G [/SPAN:PER] works at [SPAN:ORG] H [/SPAN:ORG] . And founded [SPAN:ORG] I [/SPAN:ORG] . [SEP]",
-        "input_ids: 101 1752 5650 119 28996 13832 3121 2340 144 28998 1759 1120 28999 145 28997 119 1262 1771 28999 146 28997 119 102",
-        "relation 0: per:employee_of",
-        "\targ 0: [SPAN:PER] En ##ti ##ty G [/SPAN:PER]",
-        "\targ 1: [SPAN:ORG] H [/SPAN:ORG]",
-        "relation 1: per:founder",
-        "\targ 0: [SPAN:PER] En ##ti ##ty G [/SPAN:PER]",
-        "\targ 1: [SPAN:ORG] I [/SPAN:ORG]",
-        "relation 2: org:founded_by",
-        "\targ 0: [SPAN:ORG] I [/SPAN:ORG]",
-        "\targ 1: [SPAN:ORG] H [/SPAN:ORG]",
-    ]
+    if cfg == {}:
+        with caplog.at_level(logging.INFO):
+            taskmodule._maybe_log_example(task_encodings[0], target=task_encodings[0].targets)
+        assert caplog.messages == [
+            "*** Example ***",
+            "doc id: train_doc5",
+            "tokens: [CLS] First sentence . [SPAN:PER] En ##ti ##ty G [/SPAN:PER] works at [SPAN:ORG] H [/SPAN:ORG] . And founded [SPAN:ORG] I [/SPAN:ORG] . [SEP]",
+            "input_ids: 101 1752 5650 119 28996 13832 3121 2340 144 28998 1759 1120 28999 145 28997 119 1262 1771 28999 146 28997 119 102",
+            "relation 0: per:employee_of",
+            "\targ 0: [SPAN:PER] En ##ti ##ty G [/SPAN:PER]",
+            "\targ 1: [SPAN:ORG] H [/SPAN:ORG]",
+            "relation 1: per:founder",
+            "\targ 0: [SPAN:PER] En ##ti ##ty G [/SPAN:PER]",
+            "\targ 1: [SPAN:ORG] I [/SPAN:ORG]",
+            "relation 2: org:founded_by",
+            "\targ 0: [SPAN:ORG] I [/SPAN:ORG]",
+            "\targ 1: [SPAN:ORG] H [/SPAN:ORG]",
+        ]
+    elif cfg == {"partition_annotation": "sentences"}:
+        with caplog.at_level(logging.INFO):
+            taskmodule._maybe_log_example(task_encodings[1], target=task_encodings[1].targets)
+        assert caplog.messages == [
+            "*** Example ***",
+            "doc id: train_doc5",
+            "tokens: [CLS] En ##ti ##ty G [/SPAN:PER] works at [SPAN:ORG] H [/SPAN:ORG] . [SEP]",
+            "input_ids: 101 13832 3121 2340 144 28998 1759 1120 28999 145 28997 119 102",
+            "relation 0: per:employee_of",
+            "\targ 0: [CLS] En ##ti ##ty G [/SPAN:PER]",
+            "\targ 1: [SPAN:ORG] H [/SPAN:ORG]",
+        ]
+    else:
+        raise ValueError(f"unexpected config: {cfg}")
 
 
-def test_collate(taskmodule, task_encodings):
+def test_collate(taskmodule, task_encodings, cfg):
     result = taskmodule.collate(task_encodings)
     assert result is not None
     inputs, targets = result
@@ -171,44 +298,82 @@ def test_collate(taskmodule, task_encodings):
         "span_end_indices",
         "tuple_indices",
     }
-    torch.testing.assert_close(
-        inputs["input_ids"],
-        tensor(
-            [
+    if cfg == {}:
+        torch.testing.assert_close(
+            inputs["input_ids"],
+            tensor(
                 [
-                    101,
-                    1752,
-                    5650,
-                    119,
-                    28996,
-                    13832,
-                    3121,
-                    2340,
-                    144,
-                    28998,
-                    1759,
-                    1120,
-                    28999,
-                    145,
-                    28997,
-                    119,
-                    1262,
-                    1771,
-                    28999,
-                    146,
-                    28997,
-                    119,
-                    102,
+                    [
+                        101,
+                        1752,
+                        5650,
+                        119,
+                        28996,
+                        13832,
+                        3121,
+                        2340,
+                        144,
+                        28998,
+                        1759,
+                        1120,
+                        28999,
+                        145,
+                        28997,
+                        119,
+                        1262,
+                        1771,
+                        28999,
+                        146,
+                        28997,
+                        119,
+                        102,
+                    ]
                 ]
-            ]
-        ),
-    )
-    torch.testing.assert_close(inputs["attention_mask"], torch.ones_like(inputs["input_ids"]))
-    torch.testing.assert_close(inputs["span_start_indices"], tensor([[4, 12, 18]]))
-    torch.testing.assert_close(inputs["span_end_indices"], tensor([[10, 15, 21]]))
-    torch.testing.assert_close(inputs["tuple_indices"], tensor([[[0, 1], [0, 2], [2, 1]]]))
-    assert set(targets) == {"labels"}
-    torch.testing.assert_close(targets["labels"], tensor([[2, 3, 1]]))
+            ),
+        )
+        torch.testing.assert_close(inputs["attention_mask"], torch.ones_like(inputs["input_ids"]))
+        torch.testing.assert_close(inputs["span_start_indices"], tensor([[4, 12, 18]]))
+        torch.testing.assert_close(inputs["span_end_indices"], tensor([[10, 15, 21]]))
+        torch.testing.assert_close(inputs["tuple_indices"], tensor([[[0, 1], [0, 2], [2, 1]]]))
+        assert set(targets) == {"labels"}
+        torch.testing.assert_close(targets["labels"], tensor([[2, 3, 1]]))
+    elif cfg == {"partition_annotation": "sentences"}:
+        torch.testing.assert_close(
+            inputs["input_ids"],
+            tensor(
+                [
+                    [101, 1752, 5650, 119, 102, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [101, 13832, 3121, 2340, 144, 28998, 1759, 1120, 28999, 145, 28997, 119, 102],
+                    [101, 1262, 1771, 28999, 146, 28997, 119, 102, 0, 0, 0, 0, 0],
+                ]
+            ),
+        )
+        torch.testing.assert_close(
+            inputs["attention_mask"],
+            tensor(
+                [
+                    [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+                ]
+            ),
+        )
+        torch.testing.assert_close(
+            inputs["span_start_indices"],
+            tensor([[0, 0], [0, 8], [3, 0]]),
+        )
+        torch.testing.assert_close(
+            inputs["span_end_indices"],
+            tensor([[0, 0], [6, 11], [6, 0]]),
+        )
+        torch.testing.assert_close(
+            inputs["tuple_indices"],
+            tensor([[[-1, -1]], [[0, 1]], [[-1, -1]]]),
+        )
+        assert set(targets) == {"labels"}
+        torch.testing.assert_close(targets["labels"], tensor([[-100], [2], [-100]]))
+    else:
+        raise ValueError(f"unexpected config: {cfg}")
 
 
 @pytest.fixture

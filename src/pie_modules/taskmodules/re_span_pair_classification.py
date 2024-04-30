@@ -42,6 +42,7 @@ from pytorch_ie.core import (
 )
 from pytorch_ie.documents import (
     TextDocument,
+    TextDocumentWithLabeledPartitions,
     TextDocumentWithLabeledSpansAndBinaryRelations,
     TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
@@ -69,7 +70,7 @@ PAD_VALUES = {
     "attention_mask": 0,
     "span_start_indices": 0,
     "span_end_indices": 0,
-    "tuple_indices": 0,
+    "tuple_indices": -1,
     "labels": -100,
 }
 DTYPES = {
@@ -203,7 +204,14 @@ def to_tensor(key: str, value: Any) -> Tensor:
 
 def pad_or_stack(key: str, values: List[LongTensor]) -> Tensor:
     if key in PAD_VALUES:
+        max_last_dim = None
+        if key == "tuple_indices":
+            max_last_dim = max(v.shape[-1] for v in values if len(v.shape) == 2)
+            values = [v.reshape(-1) for v in values]
         result = pad_sequence(values, batch_first=True, padding_value=PAD_VALUES[key])
+        if key == "tuple_indices":
+            batch_size = len(values)
+            result = result.reshape(batch_size, -1, max_last_dim)
     else:
         result = torch.stack(values, dim=0)
     return result
@@ -231,8 +239,9 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         relation_annotation: The name of the annotation layer that contains the binary relations.
         partition_annotation: The name of the annotation layer that contains the labeled partitions.
             If provided, the task module expects the document to have a partition layer with the
-            given name. The partition layer is used to split the text into partitions, e.g. paragraphs
-            or sentences, that are treated as separate documents during tokenization. Defaults to None.
+            given name containing LabeledSpans. These entries are used to split the text into
+            partitions, e.g. paragraphs or sentences, that are treated as separate documents during
+            tokenization. Defaults to None.
         tokenize_kwargs: Additional keyword arguments passed to the tokenizer during tokenization.
         create_candidate_relations: Whether to create candidate relations for training. If True, the
             task module creates all possible pairs of entities in the text as candidate relations.
@@ -490,6 +499,13 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             end_marker = construct_argument_marker(pos=END, label=label_or_none)
             positions_and_markers.append((labeled_span.end, end_marker))
 
+        if isinstance(document, TextDocumentWithLabeledPartitions):
+            # create "dummy" markers for the partitions so that entries for these positions are created
+            # in original2new_pos
+            for labeled_partition in document.labeled_partitions:
+                positions_and_markers.append((labeled_partition.start, ""))
+                positions_and_markers.append((labeled_partition.end, ""))
+
         # inject markers into the text
         marked_text, original2new_pos = inject_markers_into_text(
             document.text, positions_and_markers
@@ -517,13 +533,19 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             old2new_relations[relation] = new_relation
 
         # construct new document
-        new_document = TextDocumentWithLabeledSpansAndBinaryRelations(
+        new_document = type(document)(
             id=document.id,
             metadata=deepcopy(document.metadata),
             text=marked_text,
         )
         new_document.labeled_spans.extend(old2new_spans.values())
         new_document.binary_relations.extend(old2new_relations.values())
+        if isinstance(document, TextDocumentWithLabeledPartitions):
+            for labeled_partition in document.labeled_partitions:
+                new_start = original2new_pos[labeled_partition.start]
+                new_end = original2new_pos[labeled_partition.end]
+                new_labeled_partitions = labeled_partition.copy(start=new_start, end=new_end)
+                new_document.labeled_partitions.append(new_labeled_partitions)
 
         new2old_spans = {new_span: old_span for old_span, new_span in old2new_spans.items()}
         return new_document, new2old_spans
@@ -593,10 +615,14 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                 "span_end_indices": span_end_indices,
                 "tuple_indices": tuple_indices,
             }
+            inputs_tensors = {k: to_tensor(k, v) for k, v in inputs.items()}
+            # adjust the shape for empty tuple_indices, other wise pad_sequence will fail
+            if inputs_tensors["tuple_indices"].shape == (0,):
+                inputs_tensors["tuple_indices"] = inputs_tensors["tuple_indices"].reshape(0, 1)
             task_encodings.append(
                 TaskEncoding(
                     document=document,
-                    inputs={k: to_tensor(k, v) for k, v in inputs.items()},
+                    inputs=inputs_tensors,
                     metadata={
                         "tokenized_document": tokenized_doc,
                         "injected2original_spans": injected2original_spans,
