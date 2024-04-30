@@ -46,6 +46,7 @@ from pytorch_ie.documents import (
     TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
+from tokenizers import AddedToken
 from torch import LongTensor, Tensor
 from torch.nn.utils.rnn import pad_sequence
 from torchmetrics import ClasswiseWrapper, F1Score, Metric, MetricCollection
@@ -64,17 +65,16 @@ from pie_modules.taskmodules.metrics import WrappedMetricWithPrepareFunction
 from pie_modules.utils.span import distance as get_span_distance
 
 PAD_VALUES = {
-    # input_ids and attention_mask should come already padded from the tokenizer
-    # "input_ids": 0,
-    # "attention_mask": 0,
+    "input_ids": 0,
+    "attention_mask": 0,
     "span_start_indices": 0,
     "span_end_indices": 0,
     "tuple_indices": 0,
     "labels": -100,
 }
 DTYPES = {
-    # "input_ids": torch.long,
-    # "attention_mask": torch.long,
+    "input_ids": torch.long,
+    "attention_mask": torch.long,
     "span_start_indices": torch.long,
     "span_end_indices": torch.long,
     "tuple_indices": torch.long,
@@ -175,7 +175,7 @@ def get_relation_argument_spans_and_roles(
         )
 
 
-def construct_argument_marker(pos: str, label: Optional[str] = None, role: str = "ARG") -> str:
+def construct_argument_marker(pos: str, label: Optional[str] = None, role: str = "SPAN") -> str:
     if pos not in [START, END]:
         raise ValueError(f"pos must be one of {START} or {END}, but got: {pos}")
     start_or_end_marker = "" if pos == START else "/"
@@ -195,6 +195,18 @@ def inject_markers_into_text(
         offset += len(marker)
         original2new_pos[original_pos] = original_pos + offset
     return text, original2new_pos
+
+
+def to_tensor(key: str, value: Any) -> Tensor:
+    return torch.tensor(value, dtype=DTYPES[key])
+
+
+def pad_or_stack(key: str, values: List[LongTensor]) -> Tensor:
+    if key in PAD_VALUES:
+        result = pad_sequence(values, batch_first=True, padding_value=PAD_VALUES[key])
+    else:
+        result = torch.stack(values, dim=0)
+    return result
 
 
 @TaskModule.register()
@@ -253,7 +265,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         create_candidate_relations_kwargs: Optional[Dict[str, Any]] = None,
         labels: Optional[List[str]] = None,
         entity_labels: Optional[List[str]] = None,
-        add_type_to_marker: bool = False,
+        add_type_to_marker: bool = True,
         log_first_n_examples: int = 0,
         collect_statistics: bool = False,
         **kwargs,
@@ -426,7 +438,14 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         self.id_to_label = {v: k for k, v in self.label_to_id.items()}
 
         self.argument_markers = self.collect_argument_markers(self.entity_labels)
-        self.tokenizer.add_tokens(self.argument_markers, special_tokens=True)
+        num_added = self.tokenizer.add_special_tokens(
+            {"additional_special_tokens": self.argument_markers}
+        )
+        if len(self.argument_markers) != num_added:
+            logger.warning(
+                f"expected to add {len(self.argument_markers)} argument markers, but added {num_added}. It seems "
+                f"that the tokenizer already contains some of the argument markers."
+            )
 
         self.argument_markers_to_id = {
             marker: self.tokenizer.vocab[marker] for marker in self.argument_markers
@@ -465,9 +484,10 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         # collect markers and injection positions
         positions_and_markers = []
         for labeled_span in document.labeled_spans:
-            start_marker = construct_argument_marker(pos=START, label=labeled_span.label)
+            label_or_none = labeled_span.label if self.add_type_to_marker else None
+            start_marker = construct_argument_marker(pos=START, label=label_or_none)
             positions_and_markers.append((labeled_span.start, start_marker))
-            end_marker = construct_argument_marker(pos=END, label=labeled_span.label)
+            end_marker = construct_argument_marker(pos=END, label=label_or_none)
             positions_and_markers.append((labeled_span.end, end_marker))
 
         # inject markers into the text
@@ -536,8 +556,6 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             if self.partition_annotation is not None
             else None,
             strict_span_conversion=False,
-            # TODO: does this work as expected? e.g. when using return_overflowing_tokens?
-            return_tensors="pt",
             **self.tokenize_kwargs,
         )
 
@@ -567,20 +585,18 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                     current_args_indices.append(arg_idx)
                 tuple_indices.append(current_args_indices)
 
-            # TODO: can we do this? i.e. converting to a dict and adding the new keys?
-            inputs = dict(tokenized_doc.metadata["tokenizer_encoding"])
-            inputs["span_start_indices"] = torch.tensor(span_start_indices).to(
-                dtype=DTYPES["span_start_indices"]
-            )
-            inputs["span_end_indices"] = torch.tensor(span_end_indices).to(
-                dtype=DTYPES["span_end_indices"]
-            )
-            inputs["tuple_indices"] = torch.tensor(tuple_indices).to(dtype=DTYPES["tuple_indices"])
-
+            encoding = tokenized_doc.metadata["tokenizer_encoding"]
+            inputs = {
+                "input_ids": encoding.ids,
+                "attention_mask": encoding.attention_mask,
+                "span_start_indices": span_start_indices,
+                "span_end_indices": span_end_indices,
+                "tuple_indices": tuple_indices,
+            }
             task_encodings.append(
                 TaskEncoding(
                     document=document,
-                    inputs=inputs,
+                    inputs={k: to_tensor(k, v) for k, v in inputs.items()},
                     metadata={
                         "tokenized_document": tokenized_doc,
                         "injected2original_spans": injected2original_spans,
@@ -624,9 +640,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             valid_candidate_relations.append(candidate_relation)
 
         task_encoding.metadata["candidate_relations"] = valid_candidate_relations
-        target: TargetEncodingType = {
-            "labels": torch.tensor(label_indices).to(dtype=DTYPES["labels"]),
-        }
+        target: TargetEncodingType = {"labels": to_tensor("labels", label_indices)}
 
         self._maybe_log_example(task_encoding=task_encoding, target=target)
 
@@ -645,37 +659,28 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             tokens = self.tokenizer.convert_ids_to_tokens(input_ids)
             logger.info("*** Example ***")
             logger.info(f"doc id: {task_encoding.document.id}")
-            logger.info(f"tokens: {' '.join([str(x) for x in tokens])}")
-            logger.info(f"input_ids: {' '.join([str(x) for x in input_ids])}")
+            logger.info(f"tokens: {' '.join([x for x in tokens])}")
+            logger.info(f"input_ids: {' '.join([str(x) for x in input_ids.tolist()])}")
             # target data
             span_start_indices = task_encoding.inputs["span_start_indices"]
             span_end_indices = task_encoding.inputs["span_end_indices"]
-            labels = [self.id_to_label[label] for label in target["labels"]]
+            labels = [self.id_to_label[label] for label in target["labels"].tolist()]
             for i, (label, tuple_indices) in enumerate(
                 zip(labels, task_encoding.inputs["tuple_indices"])
             ):
                 logger.info(f"relation {i}: {label}")
                 for j, arg_idx in enumerate(tuple_indices):
                     arg_tokens = tokens[span_start_indices[arg_idx] : span_end_indices[arg_idx]]
-                    logger.info(f"\targ {i}: {' '.join([str(x) for x in arg_tokens])}")
+                    logger.info(f"\targ {j}: {' '.join([str(x) for x in arg_tokens])}")
 
             self._logged_examples_counter += 1
-
-    def pad_or_stack(self, key: str, values: List[LongTensor]) -> Tensor:
-        if key in PAD_VALUES:
-            result = pad_sequence(values, batch_first=True, padding_value=PAD_VALUES[key])
-        else:
-            result = torch.stack(values, dim=0)
-        return result
 
     def collate(
         self, task_encodings: Sequence[TaskEncodingType]
     ) -> Tuple[ModelInputType, Optional[ModelTargetType]]:
         input_keys = task_encodings[0].inputs.keys()
         inputs: ModelInputType = {  # type: ignore
-            key: self.pad_or_stack(
-                key, [task_encoding.inputs[key] for task_encoding in task_encodings]
-            )
+            key: pad_or_stack(key, [task_encoding.inputs[key] for task_encoding in task_encodings])
             for key in input_keys
         }
 
@@ -683,7 +688,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         if task_encodings[0].has_targets:
             target_keys = task_encodings[0].targets.keys()
             targets: ModelTargetType = {  # type: ignore
-                key: self.pad_or_stack(
+                key: pad_or_stack(
                     key, [task_encoding.targets[key] for task_encoding in task_encodings]
                 )
                 for key in target_keys
@@ -714,11 +719,11 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
     def decode_annotations(
         self,
         task_output: TaskOutputType,
-        tokenized_document: TokenDocumentWithLabeledSpansAndBinaryRelations,
+        task_encoding: TaskEncodingType,
     ) -> Dict[str, List[Annotation]]:
         new_relations = []
         for candidate_relation, label, probability in zip(
-            tokenized_document.metadata["candidate_relations"],
+            task_encoding.metadata["candidate_relations"],
             task_output["labels"],
             task_output["probabilities"],
         ):
@@ -735,7 +740,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         tokenized_document = task_encoding.metadata["tokenized_document"]
 
         decoded_annotations = self.decode_annotations(
-            task_output=task_output, tokenized_document=tokenized_document
+            task_output=task_output, task_encoding=task_encoding
         )
 
         # Note: token_based_document_to_text_based() does not yet consider predictions, so we need to clear
@@ -757,9 +762,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             if isinstance(relation, BinaryRelation):
                 original_head = injected2original_spans[relation.head]
                 original_tail = injected2original_spans[relation.tail]
-                new_relation = BinaryRelation(
-                    head=original_head, tail=original_tail, label=relation.label
-                )
+                new_relation = relation.copy(head=original_head, tail=original_tail)
             else:
                 raise NotImplementedError(
                     f"the taskmodule does not yet support relations of type {type(relation)}"
