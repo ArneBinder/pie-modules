@@ -20,6 +20,7 @@ Available models:
 - [TokenClassificationModelWithSeq2SeqEncoderAndCrf](src/pie_modules/models/token_classification_with_seq2seq_encoder_and_crf.py)
 - [SimpleExtractiveQuestionAnsweringModel](src/pie_modules/models/simple_extractive_question_answering.py)
 - [SimpleGenerativeModel](src/pie_modules/models/simple_generative.py)
+- [SpanTupleClassificationModel](src/pie_modules/models/span_tuple_classification.py)
 
 Available taskmodules:
 
@@ -28,6 +29,7 @@ Available taskmodules:
 - [ExtractiveQuestionAnsweringTaskModule](src/pie_modules/taskmodules/extractive_question_answering.py)
 - [TextToTextTaskModule](src/pie_modules/taskmodules/text_to_text.py)
 - [PointerNetworkTaskModuleForEnd2EndRE](src/pie_modules/taskmodules/pointer_network_for_end2end_re.py)
+- [RESpanPairClassificationTaskModule](src/pie_modules/taskmodules/re_span_pair_classification.py)
 
 Available metrics:
 
