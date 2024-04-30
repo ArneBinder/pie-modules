@@ -256,3 +256,18 @@ def test_create_annotations_from_output(
         assert layer_name == taskmodule.relation_annotation
         assert predicted_relation == original_relation.copy()
         assert predicted_relation.score == scores[i]
+
+
+def test_configure_model_metrics(taskmodule, model_output):
+    metrics = taskmodule.configure_model_metric(stage="train")
+    assert metrics is not None
+    metric_values = metrics(model_output, model_output)
+    metric_values_converted = {key: value.item() for key, value in metric_values.items()}
+    assert metric_values_converted == {
+        "macro/f1": 1.0,
+        "micro/f1": 1.0,
+        "no_relation/f1": 0.0,
+        "org:founded_by/f1": 1.0,
+        "per:employee_of/f1": 1.0,
+        "per:founder/f1": 1.0,
+    }
