@@ -390,7 +390,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
 
     def finalize_statistics(self):
         if self.collect_statistics:
-            all_relations = set(self._collected_relations["available"])
+            all_relations = set(self._collected_relations["available_tokenized"])
             used_relations = set(self._collected_relations["used"])
             skipped_other = all_relations - used_relations
             for key, rels in self._collected_relations.items():
@@ -399,7 +399,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                     skipped_other -= rels_set
                 elif key.startswith("used_"):
                     pass
-                elif key in ["available", "used"]:
+                elif key in ["available", "available_tokenized", "used"]:
                     pass
                 else:
                     raise ValueError(f"unknown key: {key}")
@@ -555,8 +555,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         document: DocumentType,
         is_training: bool = False,
     ) -> Optional[Union[TaskEncodingType, Sequence[TaskEncodingType]]]:
-        all_relations: Sequence[Annotation] = self.get_relation_layer(document)
-        self.collect_all_relations("available", all_relations)
+        self.collect_all_relations("available", self.get_relation_layer(document))
 
         # 1. inject start and end markers for each entity into the text
         #   - save mapping from new entities to original entities
@@ -583,6 +582,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
 
         task_encodings: List[TaskEncodingType] = []
         for tokenized_doc in tokenized_docs:
+            self.collect_all_relations("available_tokenized", tokenized_doc.binary_relations)
             # collect start- and end-token positions for each entity
             span_start_indices = []
             span_end_indices = []
@@ -664,6 +664,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                     self.collect_relation("skipped_same_arguments", gold_relation)
                 continue
             valid_candidate_relations.append(candidate_relation)
+            self.collect_relation("used", candidate_relation)
 
         task_encoding.metadata["candidate_relations"] = valid_candidate_relations
         target: TargetEncodingType = {"labels": to_tensor("labels", label_indices)}

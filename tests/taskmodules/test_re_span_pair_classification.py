@@ -27,6 +27,7 @@ def unprepared_taskmodule(cfg):
         relation_annotation="relations",
         tokenizer_name_or_path=tokenizer_name_or_path,
         log_first_n_examples=10,
+        collect_statistics=True,
         **cfg,
     )
     assert not taskmodule.is_from_pretrained
@@ -95,6 +96,9 @@ def test_taskmodule(taskmodule: RESpanPairClassificationTaskModule):
         "[SPAN:ORG]",
     ]
     assert taskmodule.tokenizer.additional_special_tokens_ids == [28996, 28997, 28998, 28999]
+
+    # because this is not the standard value for relation_annotation, we can not determine the document type
+    assert taskmodule.document_type is None
 
 
 @pytest.fixture(scope="module")
@@ -283,6 +287,36 @@ def test_maybe_log_example(taskmodule, task_encodings, caplog, cfg):
             "\targ 0: [CLS] En ##ti ##ty G [/SPAN:PER]",
             "\targ 1: [SPAN:ORG] H [/SPAN:ORG]",
         ]
+    else:
+        raise ValueError(f"unexpected config: {cfg}")
+
+
+def test_encode_with_statistics(taskmodule, fixed_documents, cfg, caplog):
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        taskmodule.encode(fixed_documents, encode_target=True)
+    assert len(caplog.messages) > 0
+    statistics = caplog.messages[-1]
+    if cfg == {}:
+        assert (
+            statistics
+            == """statistics:
+|                     |   org:founded_by |   per:employee_of |   per:founder |
+|:--------------------|-----------------:|------------------:|--------------:|
+| available           |                2 |                 3 |             2 |
+| available_tokenized |                2 |                 3 |             2 |
+| used                |                2 |                 3 |             2 |"""
+        )
+    elif cfg == {"partition_annotation": "sentences"}:
+        assert (
+            statistics
+            == """statistics:
+|                     |   org:founded_by |   per:employee_of |   per:founder |
+|:--------------------|-----------------:|------------------:|--------------:|
+| available           |                2 |                 3 |             2 |
+| available_tokenized |                1 |                 3 |             1 |
+| used                |                1 |                 3 |             1 |"""
+        )
     else:
         raise ValueError(f"unexpected config: {cfg}")
 
