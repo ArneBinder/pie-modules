@@ -48,6 +48,7 @@ from pytorch_ie.documents import (
 )
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
 from torch import LongTensor
+from torch.nn.utils.rnn import pad_sequence
 from torchmetrics import ClasswiseWrapper, F1Score, Metric, MetricCollection
 from transformers import AutoTokenizer
 from typing_extensions import TypeAlias
@@ -61,6 +62,16 @@ from pie_modules.documents import (
     TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
 from pie_modules.taskmodules.metrics import WrappedMetricWithPrepareFunction
+
+PAD_VALUES = {
+    # input_ids and attention_mask should come already padded from the tokenizer
+    # "input_ids": 0,
+    # "attention_mask": 0,
+    "start_marker_positions": -1,
+    "end_marker_positions": -1,
+    "arg_indices": -1,
+    "labels": -1,
+}
 
 
 class InputEncodingType(TypedDict, total=False):
@@ -249,6 +260,34 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             )
             return None
 
+    @property
+    def tokenized_document_type(self) -> Type[TokenDocumentWithLabeledSpansAndBinaryRelations]:
+        if self.partition_annotation is None:
+            tokenized_document_type = TokenDocumentWithLabeledSpansAndBinaryRelations
+        else:
+            tokenized_document_type = (
+                TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
+            )
+        return tokenized_document_type
+
+    def normalize_document_type(self, document) -> TextDocumentWithLabeledSpansAndBinaryRelations:
+        span_layer_name = self.get_span_layer_name(document)
+        if self.partition_annotation is None:
+            casted_document_type = TextDocumentWithLabeledSpansAndBinaryRelations
+            field_mapping = {
+                span_layer_name: "labeled_spans",
+                self.relation_annotation: "binary_relations",
+            }
+        else:
+            casted_document_type = TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
+            field_mapping = {
+                span_layer_name: "labeled_spans",
+                self.relation_annotation: "binary_relations",
+                self.partition_annotation: "labeled_partitions",
+            }
+        casted_document = document.as_type(casted_document_type, field_mapping=field_mapping)
+        return casted_document
+
     def get_relation_layer(self, document: Document) -> AnnotationList[BinaryRelation]:
         return document[self.relation_annotation]
 
@@ -365,11 +404,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
 
     def inject_markers(
         self, document: TextDocumentWithLabeledSpansAndBinaryRelations
-    ) -> Tuple[
-        TextDocumentWithLabeledSpansAndBinaryRelations,
-        Dict[LabeledSpan, LabeledSpan],
-        Dict[BinaryRelation, BinaryRelation],
-    ]:
+    ) -> Tuple[TextDocumentWithLabeledSpansAndBinaryRelations, Dict[LabeledSpan, LabeledSpan]]:
         # collect markers and injection positions
         positions_and_markers = []
         for labeled_span in document.labeled_spans:
@@ -401,13 +436,14 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         # construct new relations
         old2new_relations = dict()
         for relation in document.binary_relations:
-            if not isinstance(relation, BinaryRelation):
+            if isinstance(relation, BinaryRelation):
+                head = old2new_spans[relation.head]
+                tail = old2new_spans[relation.tail]
+                new_relation = BinaryRelation(head=head, tail=tail, label=relation.label)
+            else:
                 raise NotImplementedError(
                     f"the taskmodule does not yet support relations of type {type(relation)}"
                 )
-            head = old2new_spans[relation.head]
-            tail = old2new_spans[relation.tail]
-            new_relation = BinaryRelation(head=head, tail=tail, label=relation.label)
             old2new_relations[relation] = new_relation
 
         # construct new document
@@ -420,10 +456,23 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         new_document.binary_relations.extend(old2new_relations.values())
 
         new2old_spans = {new_span: old_span for old_span, new_span in old2new_spans.items()}
-        new2old_relations = {
-            new_relation: old_relation for old_relation, new_relation in old2new_relations.items()
-        }
-        return new_document, new2old_spans, new2old_relations
+        return new_document, new2old_spans
+
+    def create_candidate_relations(
+        self, document: TokenDocumentWithLabeledSpansAndBinaryRelations
+    ) -> Sequence[Annotation]:
+        # TODO: ensure that the relation layer type is BinaryRelation!
+        labeled_spans = document.labeled_spans
+        candidate_relations = []
+        for i, head in enumerate(labeled_spans):
+            for j, tail in enumerate(labeled_spans):
+                if i == j:
+                    continue
+                # TODO: implement windowing!
+                candidate_relations.append(
+                    BinaryRelation(head=head, tail=tail, label=self.no_relation_label)
+                )
+        return candidate_relations
 
     def encode_input(
         self,
@@ -431,7 +480,6 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         is_training: bool = False,
     ) -> Optional[Union[TaskEncodingType, Sequence[TaskEncodingType]]]:
         all_relations: Sequence[Annotation] = self.get_relation_layer(document)
-        all_entities: Sequence[Span] = self.get_entity_layer(document)
         self.collect_all_relations("available", all_relations)
 
         # 1. inject start and end markers for each entity into the text
@@ -442,35 +490,12 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         # 3. get start- and end-token positions for each entity
         # 4. construct task encoding from tokenized text and entity positions
 
-        span_layer_name = self.get_span_layer_name(document)
-
-        if self.partition_annotation is None:
-            tokenized_document_type = TokenDocumentWithLabeledSpansAndBinaryRelations
-            casted_document_type = TextDocumentWithLabeledSpansAndBinaryRelations
-            field_mapping = {
-                span_layer_name: "labeled_spans",
-                self.relation_annotation: "binary_relations",
-            }
-        else:
-            tokenized_document_type = (
-                TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
-            )
-            casted_document_type = TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
-            field_mapping = {
-                span_layer_name: "labeled_spans",
-                self.relation_annotation: "binary_relations",
-                self.partition_annotation: "labeled_partitions",
-            }
-        casted_document = document.as_type(casted_document_type, field_mapping=field_mapping)
-        (
-            document_with_markers,
-            injected2original_spans,
-            injected2original_relations,
-        ) = self.inject_markers(casted_document)
+        casted_document = self.normalize_document_type(document)
+        document_with_markers, injected2original_spans = self.inject_markers(casted_document)
         tokenized_docs = tokenize_document(
             document_with_markers,
             tokenizer=self.tokenizer,
-            result_document_type=tokenized_document_type,
+            result_document_type=self.tokenized_document_type,
             partition_layer="labeled_partitions"
             if self.partition_annotation is not None
             else None,
@@ -491,21 +516,20 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                 # the end marker is one token after the end of the span, but the end index is exclusive
                 end_marker_positions.append(labeled_span.end)
 
-            # TODO: can we do this? i.e. converting to a dict and adding the new keys?
-            inputs = dict(tokenized_doc.metadata["tokenizer_encoding"])
-            inputs["start_marker_positions"] = torch.tensor(start_marker_positions)
-            inputs["end_marker_positions"] = torch.tensor(end_marker_positions)
-            # inputs["num_spans"] = torch.tensor(len(tokenized_doc.labeled_spans))
             labeled_span2idx = {span: idx for idx, span in enumerate(tokenized_doc.labeled_spans)}
             arg_indices = []  # list of lists of argument indices: [[head_idx, tail_idx], ...]
-            # TODO: correctly create candidate relations!
-            candidate_relations = tokenized_doc.binary_relations
+            candidate_relations = self.create_candidate_relations(tokenized_doc)
             for relation in candidate_relations:
                 current_args_indices = []
                 for _, arg_span in get_relation_argument_spans_and_roles(relation):
                     arg_idx = labeled_span2idx[arg_span]
                     current_args_indices.append(arg_idx)
                 arg_indices.append(current_args_indices)
+
+            # TODO: can we do this? i.e. converting to a dict and adding the new keys?
+            inputs = dict(tokenized_doc.metadata["tokenizer_encoding"])
+            inputs["start_marker_positions"] = torch.tensor(start_marker_positions)
+            inputs["end_marker_positions"] = torch.tensor(end_marker_positions)
             inputs["arg_indices"] = torch.tensor(arg_indices).to(torch.long)
 
             task_encodings.append(
@@ -515,7 +539,6 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                     metadata={
                         "tokenized_document": tokenized_doc,
                         "injected2original_spans": injected2original_spans,
-                        "injected2original_relations": injected2original_relations,
                         "candidate_relations": candidate_relations,
                     },
                 )
@@ -527,9 +550,25 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         self,
         task_encoding: TaskEncodingType,
     ) -> TargetEncodingType:
+        gold_relations = task_encoding.metadata["tokenized_document"].binary_relations
+        gold_roles_and_args2relation = defaultdict(list)
+        for relation in gold_relations:
+            gold_roles_and_args2relation[get_relation_argument_spans_and_roles(relation)].append(
+                relation
+            )
         label_indices = []  # list of label indices
-        for candidate_relations in task_encoding.metadata["candidate_relations"]:
-            label_indices.append(self.label_to_id[candidate_relations.label])
+        for candidate_relation in task_encoding.metadata["candidate_relations"]:
+            candidate_roles_and_args = get_relation_argument_spans_and_roles(candidate_relation)
+            gold_relations = gold_roles_and_args2relation.get(candidate_roles_and_args, [])
+            if len(gold_relations) == 0:
+                label_indices.append(self.label_to_id[candidate_relation.label])
+            elif len(gold_relations) == 1:
+                label_indices.append(self.label_to_id[gold_relations[0].label])
+            else:
+                logger.warning(
+                    f"skip the candidate relation because there are more than one gold relation "
+                    f"for its args and roles: {gold_relations}"
+                )
 
         target: TargetEncodingType = {
             "labels": torch.tensor(label_indices).to(torch.long),
@@ -551,9 +590,9 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             input_ids = task_encoding.inputs["input_ids"]
             tokens = self.tokenizer.convert_ids_to_tokens(input_ids)
             logger.info("*** Example ***")
-            logger.info("doc id: %s", task_encoding.document.id)
-            logger.info("tokens: %s", " ".join([str(x) for x in tokens]))
-            logger.info("input_ids: %s", " ".join([str(x) for x in input_ids]))
+            logger.info(f"doc id: {task_encoding.document.id}")
+            logger.info(f"tokens: {' '.join([str(x) for x in tokens])}")
+            logger.info(f"input_ids: {' '.join([str(x) for x in input_ids])}")
             # target data
             start_marker_positions = task_encoding.inputs["start_marker_positions"]
             end_marker_positions = task_encoding.inputs["end_marker_positions"]
@@ -561,26 +600,31 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             for i, (label, arg_indices) in enumerate(
                 zip(labels, task_encoding.inputs["arg_indices"])
             ):
-                head_idx, tail_idx = arg_indices
-                head_tokens = tokens[
-                    start_marker_positions[head_idx] : end_marker_positions[head_idx]
-                ]
-                tail_tokens = tokens[
-                    start_marker_positions[tail_idx] : end_marker_positions[tail_idx]
-                ]
-                logger.info("relation %d: %s", i, label)
-                logger.info("\thead: %s", head_tokens)
-                logger.info("\ttail: %s", tail_tokens)
+                logger.info(f"relation {i}: {label}")
+                for j, arg_idx in enumerate(arg_indices):
+                    arg_tokens = tokens[
+                        start_marker_positions[arg_idx] : end_marker_positions[arg_idx]
+                    ]
+                    logger.info(f"\targ {i}: {' '.join([str(x) for x in arg_tokens])}")
 
             self._logged_examples_counter += 1
+
+    def pad_or_stack(self, key: str, values: List[LongTensor]) -> LongTensor:
+        if key in PAD_VALUES:
+            return pad_sequence(values, batch_first=True, padding_value=PAD_VALUES[key]).to(
+                torch.long
+            )
+        else:
+            return torch.stack(values, dim=0).to(torch.long)
 
     def collate(
         self, task_encodings: Sequence[TaskEncodingType]
     ) -> Tuple[ModelInputType, Optional[ModelTargetType]]:
         input_keys = task_encodings[0].inputs.keys()
-        # TODO: do we need padding for the marker positions?
         inputs: ModelInputType = {  # type: ignore
-            key: torch.stack([task_encoding.inputs[key] for task_encoding in task_encodings])
+            key: self.pad_or_stack(
+                key, [task_encoding.inputs[key] for task_encoding in task_encodings]
+            )
             for key in input_keys
         }
 
@@ -588,7 +632,9 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         if task_encodings[0].has_targets:
             target_keys = task_encodings[0].targets.keys()
             targets: ModelTargetType = {  # type: ignore
-                key: torch.stack([task_encoding.targets[key] for task_encoding in task_encodings])
+                key: self.pad_or_stack(
+                    key, [task_encoding.targets[key] for task_encoding in task_encodings]
+                )
                 for key in target_keys
             }
 
@@ -625,12 +671,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             task_output["labels"],
             task_output["probabilities"],
         ):
-            new_annotation = BinaryRelation(
-                head=candidate_relation.head,
-                tail=candidate_relation.tail,
-                label=label,
-                score=probability,
-            )
+            new_annotation = candidate_relation.copy(label=label, score=probability)
             new_relations.append(new_annotation)
 
         return {"binary_relations": new_relations}
@@ -670,11 +711,16 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         injected2original_spans = task_encoding.metadata["injected2original_spans"]
         for relation in untokenized_document.binary_relations:
             # map back from spans over the marker-injected text to the original spans
-            original_head = injected2original_spans[relation.head]
-            original_tail = injected2original_spans[relation.tail]
-            new_relation = BinaryRelation(
-                head=original_head, tail=original_tail, label=relation.label
-            )
+            if isinstance(relation, BinaryRelation):
+                original_head = injected2original_spans[relation.head]
+                original_tail = injected2original_spans[relation.tail]
+                new_relation = BinaryRelation(
+                    head=original_head, tail=original_tail, label=relation.label
+                )
+            else:
+                raise NotImplementedError(
+                    f"the taskmodule does not yet support relations of type {type(relation)}"
+                )
             yield self.relation_annotation, new_relation
 
     def configure_model_metric(self, stage: str) -> Metric:
