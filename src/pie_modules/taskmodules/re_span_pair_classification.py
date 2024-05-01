@@ -600,6 +600,11 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                 )
             else:
                 candidate_relations = tokenized_doc.binary_relations
+
+            # if there are no candidate relations, skip the whole (tokenized) document
+            if len(candidate_relations) == 0:
+                continue
+
             for relation in candidate_relations:
                 current_args_indices = []
                 for _, arg_span in get_relation_argument_spans_and_roles(relation):
@@ -616,9 +621,6 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                 "tuple_indices": tuple_indices,
             }
             inputs_tensors = {k: to_tensor(k, v) for k, v in inputs.items()}
-            # adjust the shape for empty tuple_indices, other wise pad_sequence will fail
-            if inputs_tensors["tuple_indices"].shape == (0,):
-                inputs_tensors["tuple_indices"] = inputs_tensors["tuple_indices"].reshape(0, 1)
             task_encodings.append(
                 TaskEncoding(
                     document=document,

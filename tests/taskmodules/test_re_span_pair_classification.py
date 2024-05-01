@@ -210,7 +210,7 @@ def test_encode_input(task_encodings, document, taskmodule, cfg):
             [["[SPAN:ORG]", "I", "[/SPAN:ORG]"], ["[SPAN:ORG]", "H", "[/SPAN:ORG]"]],
         ]
     elif cfg == {"partition_annotation": "sentences"}:
-        assert len(task_encodings) == 3
+        assert len(task_encodings) == 1
         for idx, encoding in enumerate(task_encodings):
             inputs = encoding.inputs
             tokens = taskmodule.tokenizer.convert_ids_to_tokens(inputs["input_ids"])
@@ -222,10 +222,6 @@ def test_encode_input(task_encodings, document, taskmodule, cfg):
                 [span_tokens[idx] for idx in indices] for indices in inputs["tuple_indices"]
             ]
             if idx == 0:
-                assert tokens == ["[CLS]", "First", "sentence", ".", "[SEP]"]
-                assert span_tokens == []
-                assert tuple_spans == []
-            elif idx == 1:
                 assert tokens == [
                     "[CLS]",
                     "En",
@@ -251,19 +247,7 @@ def test_encode_input(task_encodings, document, taskmodule, cfg):
                         ["[SPAN:ORG]", "H", "[/SPAN:ORG]"],
                     ]
                 ]
-            elif idx == 2:
-                assert tokens == [
-                    "[CLS]",
-                    "And",
-                    "founded",
-                    "[SPAN:ORG]",
-                    "I",
-                    "[/SPAN:ORG]",
-                    ".",
-                    "[SEP]",
-                ]
-                assert span_tokens == [["[SPAN:ORG]", "I", "[/SPAN:ORG]"]]
-                assert tuple_spans == []
+
             else:
                 raise ValueError(f"unexpected idx: {idx}")
     else:
@@ -277,16 +261,12 @@ def test_encode_target(taskmodule, task_encodings, cfg):
         labels = [taskmodule.id_to_label[label] for label in targets["labels"].tolist()]
         assert labels == ["per:employee_of", "per:founder", "org:founded_by"]
     elif cfg == {"partition_annotation": "sentences"}:
-        assert len(task_encodings) == 3
+        assert len(task_encodings) == 1
         for idx, encoding in enumerate(task_encodings):
             targets = encoding.targets
             labels = [taskmodule.id_to_label[label] for label in targets["labels"].tolist()]
             if idx == 0:
-                assert labels == []
-            elif idx == 1:
                 assert labels == ["per:employee_of"]
-            elif idx == 2:
-                assert labels == []
             else:
                 raise ValueError(f"unexpected idx: {idx}")
     else:
@@ -315,7 +295,7 @@ def test_maybe_log_example(taskmodule, task_encodings, caplog, cfg):
         ]
     elif cfg == {"partition_annotation": "sentences"}:
         with caplog.at_level(logging.INFO):
-            taskmodule._maybe_log_example(task_encodings[1], target=task_encodings[1].targets)
+            taskmodule._maybe_log_example(task_encodings[0], target=task_encodings[0].targets)
         assert caplog.messages == [
             "*** Example ***",
             "doc id: train_doc5",
@@ -413,37 +393,27 @@ def test_collate(taskmodule, task_encodings, cfg):
         torch.testing.assert_close(
             inputs["input_ids"],
             tensor(
-                [
-                    [101, 1752, 5650, 119, 102, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [101, 13832, 3121, 2340, 144, 28998, 1759, 1120, 28999, 145, 28997, 119, 102],
-                    [101, 1262, 1771, 28999, 146, 28997, 119, 102, 0, 0, 0, 0, 0],
-                ]
+                [[101, 13832, 3121, 2340, 144, 28998, 1759, 1120, 28999, 145, 28997, 119, 102]]
             ),
         )
         torch.testing.assert_close(
             inputs["attention_mask"],
-            tensor(
-                [
-                    [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
-                ]
-            ),
+            tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]),
         )
         torch.testing.assert_close(
             inputs["span_start_indices"],
-            tensor([[0, 0], [0, 8], [3, 0]]),
+            tensor([[0, 8]]),
         )
         torch.testing.assert_close(
             inputs["span_end_indices"],
-            tensor([[0, 0], [6, 11], [6, 0]]),
+            tensor([[6, 11]]),
         )
         torch.testing.assert_close(
             inputs["tuple_indices"],
-            tensor([[[-1, -1]], [[0, 1]], [[-1, -1]]]),
+            tensor([[[0, 1]]]),
         )
         assert set(targets) == {"labels"}
-        torch.testing.assert_close(targets["labels"], tensor([[-100], [2], [-100]]))
+        torch.testing.assert_close(targets["labels"], tensor([[2]]))
     else:
         raise ValueError(f"unexpected config: {cfg}")
 
