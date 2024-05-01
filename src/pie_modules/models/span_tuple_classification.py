@@ -92,6 +92,8 @@ class SpanTupleClassificationModel(
         multi_label_threshold: The threshold for the multi-label classifier, i.e. the probability
             above which a class is predicted.
         freeze_base_model: If True, the base model parameters are frozen.
+        label_pad_value: The padding value for the labels.
+        probability_pad_value: The padding value for the probabilities.
         **kwargs: Additional keyword arguments passed to the parent class,
             see :class:`ModelWithBoilerplate`.
     """
