@@ -22,25 +22,12 @@ class SpanPairClassifierOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided) :
             Classification loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, num_input_pairs, config.num_labels)`):
+        logits (`torch.FloatTensor` of shape `(num_valid_input_pairs_in_batch, config.num_labels)`):
             Classification scores (before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # model inputs / outputs / targets
@@ -124,6 +111,8 @@ class SpanTupleClassificationModel(
         multi_label: bool = False,
         multi_label_threshold: float = 0.5,
         freeze_base_model: bool = False,
+        label_pad_value: int = -100,
+        probability_pad_value: float = -1.0,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -134,6 +123,8 @@ class SpanTupleClassificationModel(
         self.task_learning_rate = task_learning_rate
         self.warmup_proportion = warmup_proportion
         self.freeze_base_model = freeze_base_model
+        self.label_pad_value = label_pad_value
+        self.probability_pad_value = probability_pad_value
 
         config = AutoConfig.from_pretrained(model_name_or_path)
         if self.is_from_pretrained:
@@ -294,16 +285,16 @@ class SpanTupleClassificationModel(
 
         output = self.model(**model_inputs)
         hidden_state = output.last_hidden_state
-        pooled_output_flat = self.pooler(hidden_state, **pooler_inputs)
-        pooled_output_flat = self.dropout(pooled_output_flat)
-        logits_flat = self.classifier(pooled_output_flat)
+        pooled_output_valid = self.pooler(hidden_state, **pooler_inputs)
+        pooled_output_valid = self.dropout(pooled_output_valid)
+        logits_valid = self.classifier(pooled_output_valid)
 
-        result = {"logits": logits_flat}
+        result = {"logits": logits_valid}
         if targets is not None:
             labels = targets["labels"]
-            labels_flat = labels.view(-1)
-            valid_labels = labels_flat[labels_flat >= 0]
-            loss = self.loss_fct(logits_flat, valid_labels)
+            mask = inputs["tuple_indices_mask"]
+            valid_labels = labels[mask]
+            loss = self.loss_fct(logits_valid, valid_labels)
             result["loss"] = loss
 
         return SpanPairClassifierOutput(**result)
@@ -317,15 +308,20 @@ class SpanTupleClassificationModel(
             labels_flat = (probabilities_flat > self.multi_label_threshold).to(torch.long)
 
         # re-construct the original shape
-        mask_valid = inputs["tuple_indices_mask"]
+        mask = inputs["tuple_indices_mask"]
         # create "empty" labels and probabilities tensors
-        labels = torch.ones(mask_valid.shape, dtype=torch.long, device=labels_flat.device) * -100
-        probabilities = (
-            torch.ones(mask_valid.shape, dtype=torch.float, device=probabilities_flat.device)
-            * -1.0
+        labels = (
+            torch.ones(mask.shape, dtype=torch.long, device=labels_flat.device)
+            * self.label_pad_value
         )
-        labels[mask_valid] = labels_flat
-        probabilities[mask_valid] = probabilities_flat
+        probabilities = (
+            torch.ones(mask.shape, dtype=torch.float, device=probabilities_flat.device)
+            * self.probability_pad_value
+        )
+        # fill in the valid values
+        labels[mask] = labels_flat
+        probabilities[mask] = probabilities_flat
+
         return {"labels": labels, "probabilities": probabilities}
 
     def base_model_named_parameters(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
