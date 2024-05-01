@@ -48,7 +48,7 @@ from pytorch_ie.documents import (
 )
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
 from tokenizers import AddedToken
-from torch import LongTensor, Tensor
+from torch import BoolTensor, LongTensor, Tensor
 from torch.nn.utils.rnn import pad_sequence
 from torchmetrics import ClasswiseWrapper, F1Score, Metric, MetricCollection
 from transformers import AutoTokenizer
@@ -72,6 +72,7 @@ PAD_VALUES = {
     "span_end_indices": 0,
     "tuple_indices": -1,
     "labels": -100,
+    "tuple_indices_mask": False,
 }
 DTYPES = {
     "input_ids": torch.long,
@@ -80,6 +81,7 @@ DTYPES = {
     "span_end_indices": torch.long,
     "tuple_indices": torch.long,
     "labels": torch.long,
+    "tuple_indices_mask": torch.bool,
 }
 
 
@@ -95,6 +97,7 @@ class InputEncodingType(TypedDict, total=False):
     # list of lists of argument indices: [[head_idx, tail_idx], ...]
     # NOTE: these indices point into span_start_indices and span_end_indices!
     tuple_indices: LongTensor
+    tuple_indices_mask: BoolTensor
 
 
 class TargetEncodingType(TypedDict, total=False):
@@ -121,6 +124,7 @@ class ModelInputType(TypedDict, total=False):
     span_start_indices: LongTensor
     span_end_indices: LongTensor
     tuple_indices: LongTensor
+    tuple_indices_mask: BoolTensor
 
 
 class ModelTargetType(TypedDict, total=False):
@@ -619,6 +623,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                 "span_start_indices": span_start_indices,
                 "span_end_indices": span_end_indices,
                 "tuple_indices": tuple_indices,
+                "tuple_indices_mask": [True] * len(tuple_indices),
             }
             inputs_tensors = {k: to_tensor(k, v) for k, v in inputs.items()}
             task_encodings.append(

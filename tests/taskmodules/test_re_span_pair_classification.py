@@ -160,6 +160,14 @@ def test_encode_input(task_encodings, document, taskmodule, cfg):
     if cfg == {}:
         assert len(task_encodings) == 1
         inputs = task_encodings[0].inputs
+        assert set(inputs) == {
+            "input_ids",
+            "attention_mask",
+            "span_start_indices",
+            "span_end_indices",
+            "tuple_indices",
+            "tuple_indices_mask",
+        }
         tokens = taskmodule.tokenizer.convert_ids_to_tokens(inputs["input_ids"])
         assert tokens == [
             "[CLS]",
@@ -209,10 +217,19 @@ def test_encode_input(task_encodings, document, taskmodule, cfg):
             ],
             [["[SPAN:ORG]", "I", "[/SPAN:ORG]"], ["[SPAN:ORG]", "H", "[/SPAN:ORG]"]],
         ]
+        assert inputs["tuple_indices_mask"].tolist() == [True, True, True]
     elif cfg == {"partition_annotation": "sentences"}:
         assert len(task_encodings) == 1
         for idx, encoding in enumerate(task_encodings):
             inputs = encoding.inputs
+            assert set(inputs) == {
+                "input_ids",
+                "attention_mask",
+                "span_start_indices",
+                "span_end_indices",
+                "tuple_indices",
+                "tuple_indices_mask",
+            }
             tokens = taskmodule.tokenizer.convert_ids_to_tokens(inputs["input_ids"])
             span_tokens = [
                 tokens[start:end]
@@ -247,7 +264,7 @@ def test_encode_input(task_encodings, document, taskmodule, cfg):
                         ["[SPAN:ORG]", "H", "[/SPAN:ORG]"],
                     ]
                 ]
-
+                assert inputs["tuple_indices_mask"].tolist() == [True]
             else:
                 raise ValueError(f"unexpected idx: {idx}")
     else:
@@ -349,6 +366,7 @@ def test_collate(taskmodule, task_encodings, cfg):
         "span_start_indices",
         "span_end_indices",
         "tuple_indices",
+        "tuple_indices_mask",
     }
     if cfg == {}:
         torch.testing.assert_close(
@@ -387,6 +405,7 @@ def test_collate(taskmodule, task_encodings, cfg):
         torch.testing.assert_close(inputs["span_start_indices"], tensor([[4, 12, 18]]))
         torch.testing.assert_close(inputs["span_end_indices"], tensor([[10, 15, 21]]))
         torch.testing.assert_close(inputs["tuple_indices"], tensor([[[0, 1], [0, 2], [2, 1]]]))
+        torch.testing.assert_close(inputs["tuple_indices_mask"], tensor([[True, True, True]]))
         assert set(targets) == {"labels"}
         torch.testing.assert_close(targets["labels"], tensor([[2, 3, 1]]))
     elif cfg == {"partition_annotation": "sentences"}:
@@ -397,21 +416,12 @@ def test_collate(taskmodule, task_encodings, cfg):
             ),
         )
         torch.testing.assert_close(
-            inputs["attention_mask"],
-            tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]),
+            inputs["attention_mask"], tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         )
-        torch.testing.assert_close(
-            inputs["span_start_indices"],
-            tensor([[0, 8]]),
-        )
-        torch.testing.assert_close(
-            inputs["span_end_indices"],
-            tensor([[6, 11]]),
-        )
-        torch.testing.assert_close(
-            inputs["tuple_indices"],
-            tensor([[[0, 1]]]),
-        )
+        torch.testing.assert_close(inputs["span_start_indices"], tensor([[0, 8]]))
+        torch.testing.assert_close(inputs["span_end_indices"], tensor([[6, 11]]))
+        torch.testing.assert_close(inputs["tuple_indices"], tensor([[[0, 1]]]))
+        torch.testing.assert_close(inputs["tuple_indices_mask"], tensor([[True]]))
         assert set(targets) == {"labels"}
         torch.testing.assert_close(targets["labels"], tensor([[2]]))
     else:

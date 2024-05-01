@@ -216,12 +216,18 @@ class SpanTupleClassificationModel(
 
         return span_embeddings
 
-    def tuple_pooler(self, span_embeddings: FloatTensor, tuple_indices: LongTensor) -> FloatTensor:
+    def tuple_pooler(
+        self,
+        span_embeddings: FloatTensor,
+        tuple_indices: LongTensor,
+        tuple_indices_mask: BoolTensor,
+    ) -> FloatTensor:
         """Pool the span embeddings for the tuples.
 
         Args:
             span_embeddings: The span embeddings. shape: (batch_size, num_spans, span_embedding_size)
             tuple_indices: The indices of the spans in the tuples. shape: (batch_size, num_tuples, num_tuple_entries)
+            tuple_indices_mask: A mask indicating which tuples are valid. shape: (batch_size, num_tuples)
 
         Returns:
             The pooled tuple embeddings. shape: (num_tuples_in_batch, num_tuple_entries * span_embedding_size)
@@ -231,18 +237,26 @@ class SpanTupleClassificationModel(
             raise ValueError(
                 f"Number of entries in tuple_indices should be equal to num_tuple_entries={self.num_tuple_entries}"
             )
-        # shape: (batch_size, num_tuples)
-        mask_valid_indices = self.get_valid_indices_mask(tuple_indices)
-        # number of entries per tuple
-        num_entries = tuple_indices.shape[-1]
-        # mask out invalid tuple indices
+        batch_size = tuple_indices.shape[0]
+        # we need to add the batch offsets to the tuple indices to get the correct indices in the
+        # flattened span_embeddings
+        batch_offsets = (
+            torch.arange(batch_size, device=tuple_indices.device).unsqueeze(-1) * batch_size
+        )
+        tuple_indices_with_offsets = tuple_indices + batch_offsets
         # shape: (num_tuples_in_batch, num_entries)
-        valid_tuple_indices = tuple_indices.view(-1, num_entries)[mask_valid_indices.view(-1)]
+        valid_tuple_indices_flat = tuple_indices_with_offsets[tuple_indices_mask]
+
+        # we need to flatten the span_embeddings to get the embeddings at the tuple indices
+        # shape: (batch_size * num_spans, span_embedding_size)
+        span_embeddings_flat = span_embeddings.view(-1, span_embeddings.size(-1))
 
         tuple_embeddings_list: List[FloatTensor] = []
-        for i in range(valid_tuple_indices.shape[-1]):
-            current_tuple_indices = valid_tuple_indices[:, :, i]
-            current_embeddings = get_embeddings_at_indices(span_embeddings, current_tuple_indices)
+        for i in range(valid_tuple_indices_flat.shape[-1]):
+            # shape: (num_tuples_in_batch)
+            current_tuple_indices = valid_tuple_indices_flat[:, i]
+            # shape: (num_tuples_in_batch, span_embedding_size)
+            current_embeddings = span_embeddings_flat[current_tuple_indices]
             tuple_embeddings_list.append(current_embeddings)
         if self.tuple_pooler_mode == "concat":
             tuple_embeddings = torch.cat(tuple_embeddings_list, dim=-1).to(span_embeddings.dtype)
@@ -250,28 +264,30 @@ class SpanTupleClassificationModel(
             raise ValueError(f"Invalid value for tuple_pooler_mode: {self.tuple_pooler_mode}")
         return tuple_embeddings
 
-    def get_valid_indices_mask(self, indices: LongTensor) -> BoolTensor:
-        # Mask out invalid tuple indices, i.e. tuples where all indices are below 0. These result from
-        # the padding. Note that either all indices are below 0 or all are above 0, so we can just check
-        # if the sum is greater than 0.
-        # shape: (batch_size, num_tuples)
-        return indices.sum(dim=-1) > 0
-
     def pooler(
-        self, hidden_states: FloatTensor, tuple_indices: LongTensor, **span_pooler_inputs
+        self,
+        hidden_states: FloatTensor,
+        tuple_indices: LongTensor,
+        tuple_indices_mask: BoolTensor,
+        **span_pooler_inputs,
     ) -> FloatTensor:
         # get the span embeddings from the hidden states and the start and end marker positions
         span_embeddings = self.span_pooler(hidden_states, **span_pooler_inputs)
         # get the tuple embeddings from the span embeddings and the tuple indices
         # this flattens the batch dimension!
-        tuple_embeddings = self.tuple_pooler(span_embeddings, tuple_indices)
+        tuple_embeddings = self.tuple_pooler(span_embeddings, tuple_indices, tuple_indices_mask)
         return tuple_embeddings
 
     def forward(self, inputs: InputType, targets: Optional[TargetType] = None) -> OutputType:
         pooler_inputs = {}
         model_inputs = {}
         for k, v in inputs.items():
-            if k in ["span_start_indices", "span_end_indices", "tuple_indices"]:
+            if k in [
+                "span_start_indices",
+                "span_end_indices",
+                "tuple_indices",
+                "tuple_indices_mask",
+            ]:
                 pooler_inputs[k] = v
             else:
                 model_inputs[k] = v
@@ -301,7 +317,7 @@ class SpanTupleClassificationModel(
             labels_flat = (probabilities_flat > self.multi_label_threshold).to(torch.long)
 
         # re-construct the original shape
-        mask_valid = self.get_valid_indices_mask(inputs["tuple_indices"])
+        mask_valid = inputs["tuple_indices_mask"]
         # create "empty" labels and probabilities tensors
         labels = torch.ones(mask_valid.shape, dtype=torch.long, device=labels_flat.device) * -100
         probabilities = (
