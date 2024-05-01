@@ -224,24 +224,24 @@ class SpanTupleClassificationModel(
             tuple_indices: The indices of the spans in the tuples. shape: (batch_size, num_tuples, num_tuple_entries)
 
         Returns:
-            The pooled tuple embeddings. shape: (batch_size, num_tuples, num_tuple_entries * span_embedding_size)
+            The pooled tuple embeddings. shape: (num_tuples_in_batch, num_tuple_entries * span_embedding_size)
         """
 
         if not tuple_indices.shape[-1] == self.num_tuple_entries:
             raise ValueError(
                 f"Number of entries in tuple_indices should be equal to num_tuple_entries={self.num_tuple_entries}"
             )
-        # Mask out invalid tuple indices, i.e. tuples where all indices are below 0. These result from
-        # the padding. Note that either all indices are below 0 or all are above 0, so we can just check
-        # if the sum is greater than 0. shape: (batch_size, num_tuples)
-        mask_valid = self.get_valid_indices_mask(tuple_indices)
-        # copy the tuple indices and set all invalid indices to 0
-        tuple_indices_copy = tuple_indices.clone()
-        tuple_indices_copy[~mask_valid] = 0
+        # shape: (batch_size, num_tuples)
+        mask_valid_indices = self.get_valid_indices_mask(tuple_indices)
+        # number of entries per tuple
+        num_entries = tuple_indices.shape[-1]
+        # mask out invalid tuple indices
+        # shape: (num_tuples_in_batch, num_entries)
+        valid_tuple_indices = tuple_indices.view(-1, num_entries)[mask_valid_indices.view(-1)]
 
         tuple_embeddings_list: List[FloatTensor] = []
-        for i in range(tuple_indices_copy.shape[-1]):
-            current_tuple_indices = tuple_indices_copy[:, :, i]
+        for i in range(valid_tuple_indices.shape[-1]):
+            current_tuple_indices = valid_tuple_indices[:, :, i]
             current_embeddings = get_embeddings_at_indices(span_embeddings, current_tuple_indices)
             tuple_embeddings_list.append(current_embeddings)
         if self.tuple_pooler_mode == "concat":
@@ -251,7 +251,10 @@ class SpanTupleClassificationModel(
         return tuple_embeddings
 
     def get_valid_indices_mask(self, indices: LongTensor) -> BoolTensor:
-        # create a mask to mask out padding tuples
+        # Mask out invalid tuple indices, i.e. tuples where all indices are below 0. These result from
+        # the padding. Note that either all indices are below 0 or all are above 0, so we can just check
+        # if the sum is greater than 0.
+        # shape: (batch_size, num_tuples)
         return indices.sum(dim=-1) > 0
 
     def pooler(
@@ -260,6 +263,7 @@ class SpanTupleClassificationModel(
         # get the span embeddings from the hidden states and the start and end marker positions
         span_embeddings = self.span_pooler(hidden_states, **span_pooler_inputs)
         # get the tuple embeddings from the span embeddings and the tuple indices
+        # this flattens the batch dimension!
         tuple_embeddings = self.tuple_pooler(span_embeddings, tuple_indices)
         return tuple_embeddings
 
@@ -273,34 +277,39 @@ class SpanTupleClassificationModel(
                 model_inputs[k] = v
 
         output = self.model(**model_inputs)
-
         hidden_state = output.last_hidden_state
+        pooled_output_flat = self.pooler(hidden_state, **pooler_inputs)
+        pooled_output_flat = self.dropout(pooled_output_flat)
+        logits_flat = self.classifier(pooled_output_flat)
 
-        pooled_output = self.pooler(hidden_state, **pooler_inputs)
-
-        pooled_output = self.dropout(pooled_output)
-
-        logits = self.classifier(pooled_output)
-
-        result = {"logits": logits}
+        result = {"logits": logits_flat}
         if targets is not None:
             labels = targets["labels"]
-            loss = self.loss_fct(logits, labels)
+            labels_flat = labels.view(-1)
+            valid_labels = labels_flat[labels_flat >= 0]
+            loss = self.loss_fct(logits_flat, valid_labels)
             result["loss"] = loss
 
         return SpanPairClassifierOutput(**result)
 
     def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
         if not self.multi_label:
-            labels = torch.argmax(outputs.logits, dim=-1).to(torch.long)
-            probabilities = torch.softmax(outputs.logits, dim=-1)
+            labels_flat = torch.argmax(outputs.logits, dim=-1).to(torch.long)
+            probabilities_flat = torch.softmax(outputs.logits, dim=-1)
         else:
-            probabilities = torch.sigmoid(outputs.logits)
-            labels = (probabilities > self.multi_label_threshold).to(torch.long)
-        # mask out invalid indices (padded tuples)
+            probabilities_flat = torch.sigmoid(outputs.logits)
+            labels_flat = (probabilities_flat > self.multi_label_threshold).to(torch.long)
+
+        # re-construct the original shape
         mask_valid = self.get_valid_indices_mask(inputs["tuple_indices"])
-        labels[~mask_valid] = -100
-        probabilities[~mask_valid] = -1.0
+        # create "empty" labels and probabilities tensors
+        labels = torch.ones(mask_valid.shape, dtype=torch.long, device=labels_flat.device) * -100
+        probabilities = (
+            torch.ones(mask_valid.shape, dtype=torch.float, device=probabilities_flat.device)
+            * -1.0
+        )
+        labels[mask_valid] = labels_flat
+        probabilities[mask_valid] = probabilities_flat
         return {"labels": labels, "probabilities": probabilities}
 
     def base_model_named_parameters(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
