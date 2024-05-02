@@ -42,10 +42,19 @@ class SpanPairClassifierOutput(ModelOutput):
             Classification loss.
         logits (`torch.FloatTensor` of shape `(num_valid_input_pairs_in_batch, config.num_labels)`):
             Classification scores (before SoftMax).
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
+            The last hidden state of the transformer model. Returned if `return_embeddings=True`.
+        span_embeddings (`torch.FloatTensor` of shape `(batch_size, num_spans, span_embedding_dim)`, *optional*):
+            The embeddings of the spans. Returned if `return_embeddings=True`.
+        tuple_embeddings (`torch.FloatTensor` of shape `(num_valid_input_pairs_in_batch, tuple_embedding_dim)`, *optional*):
+            The embeddings of the tuples. Returned if `return_embeddings=True`.
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    span_embeddings: Optional[torch.FloatTensor] = None
+    tuple_embeddings: Optional[torch.FloatTensor] = None
 
 
 # model inputs / outputs / targets
@@ -101,8 +110,8 @@ class SpanTupleClassificationModel(
             embeddings of the first two entries). Note that "multiply2_and_concat" requires
             `num_tuple_entries=2`. Default: "multiply2_and_concat".
         num_tuple_entries: The number of entries in the tuples.
-        tuple_entry_dim: The dimension of the embeddings for each tuple entry, i.e. the output
-            dimension of the individual MLPs that map the span embeddings.
+        tuple_entry_hidden_dim: If provided, the tuple entries (i.e. the span embeddings at the tuple indices)
+            are mapped to this dimensionality before combining them. Default: 768.
         tokenizer_vocab_size: The size of the tokenizer vocabulary. If provided, the model's
             tokenizer embeddings are resized to this size.
         classifier_dropout: The dropout probability for the classifier. If not provided, the
@@ -128,7 +137,7 @@ class SpanTupleClassificationModel(
         span_embedding_mode: str = "start_and_end_token",
         tuple_embedding_mode: str = "multiply2_and_concat",
         num_tuple_entries: int = 2,
-        tuple_entry_dim: int = 768,
+        tuple_entry_hidden_dim: Optional[int] = 768,
         tokenizer_vocab_size: Optional[int] = None,
         classifier_dropout: Optional[float] = None,
         learning_rate: float = 1e-5,
@@ -187,19 +196,27 @@ class SpanTupleClassificationModel(
 
         # embedder for the tuples
         self.num_tuple_entries = num_tuple_entries
-        self.tuple_entry_dim = tuple_entry_dim
-        self.tuple_entry_embedders = nn.ModuleList(
-            [MLP(self.span_embedding_dim, self.tuple_entry_dim) for _ in range(num_tuple_entries)]
-        )
+        self.tuple_entry_hidden_dim = tuple_entry_hidden_dim
+        if self.tuple_entry_hidden_dim is not None:
+            self.tuple_entry_embedders = nn.ModuleList(
+                [
+                    MLP(self.span_embedding_dim, self.tuple_entry_hidden_dim)
+                    for _ in range(num_tuple_entries)
+                ]
+            )
+            tuple_entry_dim = self.tuple_entry_hidden_dim
+        else:
+            self.tuple_entry_embedders = None
+            tuple_entry_dim = self.span_embedding_dim
         self.tuple_embedding_mode = tuple_embedding_mode
         if self.tuple_embedding_mode == "concat":
-            tuple_embedding_dim = self.tuple_entry_dim * self.num_tuple_entries
+            tuple_embedding_dim = tuple_entry_dim * self.num_tuple_entries
         elif self.tuple_embedding_mode == "multiply2_and_concat":
             if self.num_tuple_entries != 2:
                 raise ValueError(
                     "tuple_embedding_mode='multiply2_and_concat' requires num_tuple_entries=2"
                 )
-            tuple_embedding_dim = self.tuple_entry_dim * 3
+            tuple_embedding_dim = tuple_entry_dim * 3
         else:
             raise ValueError(
                 f"Invalid value for tuple_embedding_mode: {self.tuple_embedding_mode}"
@@ -284,10 +301,15 @@ class SpanTupleClassificationModel(
 
         # map the span embeddings individually for each tuple entry
         # each entry has the shape: (batch_size * num_spans, tuple_entry_dim)
-        span_embeddings_mapped = [mlp(span_embeddings_flat) for mlp in self.tuple_entry_embedders]
+        if self.tuple_entry_embedders is not None:
+            span_embeddings_mapped = [
+                mlp(span_embeddings_flat) for mlp in self.tuple_entry_embedders
+            ]
+        else:
+            span_embeddings_mapped = [span_embeddings_flat] * self.num_tuple_entries
 
         tuple_embeddings_list: List[FloatTensor] = []
-        for i in range(valid_tuple_indices_flat.shape[-1]):
+        for i in range(self.num_tuple_entries):
             # shape: (num_tuples_in_batch)
             current_tuple_indices = valid_tuple_indices_flat[:, i]
             # get the embeddings that were mapped with the mlp for the current entry
@@ -313,7 +335,12 @@ class SpanTupleClassificationModel(
             )
         return tuple_embeddings
 
-    def forward(self, inputs: InputType, targets: Optional[TargetType] = None) -> OutputType:
+    def forward(
+        self,
+        inputs: InputType,
+        targets: Optional[TargetType] = None,
+        return_embeddings: bool = False,
+    ) -> OutputType:
         span_embedder_inputs = {}
         tuple_embedder_inputs = {}
         base_model_inputs = {}
@@ -326,10 +353,12 @@ class SpanTupleClassificationModel(
                 base_model_inputs[k] = v
 
         output = self.model(**base_model_inputs)
-        hidden_states = self.dropout(output.last_hidden_state)
+        last_hidden_state = self.dropout(output.last_hidden_state)
 
         # get the span embeddings from the hidden states and the start and end marker positions
-        span_embeddings = self.span_embedder(hidden_state=hidden_states, **span_embedder_inputs)
+        span_embeddings = self.span_embedder(
+            hidden_state=last_hidden_state, **span_embedder_inputs
+        )
         # get the tuple embeddings from the span embeddings and the tuple indices
         # Note that this flattens the batch dimension to not compute embeddings for padding tuples!
         tuple_embeddings_flat = self.tuple_embedder(
@@ -345,6 +374,11 @@ class SpanTupleClassificationModel(
             valid_labels = labels[mask]
             loss = self.loss_fct(logits_valid, valid_labels)
             result["loss"] = loss
+
+        if return_embeddings:
+            result["last_hidden_state"] = last_hidden_state
+            result["tuple_embeddings"] = tuple_embeddings_flat
+            result["span_embeddings"] = span_embeddings
 
         return SpanPairClassifierOutput(**result)
 
