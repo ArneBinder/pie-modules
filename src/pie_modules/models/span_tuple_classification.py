@@ -86,17 +86,20 @@ class SpanTupleClassificationModel(
 ):
     """A span tuple classification model that uses a pooler to get a representation of the input
     spans and then applies a linear classifier to that representation. The pooler can be configured
-    via the `span_pooler_mode` and `tuple_pooler_mode` arguments. It expects the input to contain
-    the indices of the start and end tokens of the spans (for the span pooler) and the indices of
-    the spans in the tuples to classify (for the tuple pooler).
+    via the `span_embedding_mode` and `tuple_embedding_mode` arguments. It expects the input to
+    contain the indices of the start and end tokens of the spans (for the span pooler) and the
+    indices of the spans in the tuples to classify (for the tuple pooler).
 
     Args:
         model_name_or_path: The name or path of the HuggingFace model to use.
         num_classes: The number of classes for the classification task.
-        span_pooler_mode: The mode to pool the hidden states for the spans. One of "start_token",
+        span_embedding_mode: The mode to pool the hidden states for the spans. One of "start_token",
             "end_token", "start_and_end_token".
-        tuple_pooler_mode: The mode to pool the span embeddings for the tuples. Currently only
-            "concat" is supported.
+        tuple_embedding_mode: The mode to pool the span embeddings for the tuples. Possible values are
+            "concat" (concatenate the embeddings of the tuple entries) and "multiply2_and_concat"
+            (multiply the embeddings of the first two entries and concatenate them with the
+            embeddings of the first two entries). Note that "multiply2_and_concat" requires
+            `num_tuple_entries=2`. Default: "multiply2_and_concat".
         num_tuple_entries: The number of entries in the tuples.
         tuple_entry_dim: The dimension of the embeddings for each tuple entry, i.e. the output
             dimension of the individual MLPs that map the span embeddings.
@@ -122,8 +125,8 @@ class SpanTupleClassificationModel(
         self,
         model_name_or_path: str,
         num_classes: int,
-        span_pooler_mode: str = "start_and_end_token",
-        tuple_pooler_mode: str = "concat",
+        span_embedding_mode: str = "start_and_end_token",
+        tuple_embedding_mode: str = "multiply2_and_concat",
         num_tuple_entries: int = 2,
         tuple_entry_dim: int = 768,
         tokenizer_vocab_size: Optional[int] = None,
@@ -173,44 +176,53 @@ class SpanTupleClassificationModel(
             classifier_dropout = getattr(config, classifier_dropout_attr) or 0.0
         self.dropout = nn.Dropout(classifier_dropout)
 
-        self.span_pooler_mode = span_pooler_mode
-        if self.span_pooler_mode in ["start_token", "end_token"]:
-            span_pooler_factor = 1
-        elif self.span_pooler_mode in ["start_and_end_token"]:
-            span_pooler_factor = 2
+        # embedder for the spans
+        self.span_embedding_mode = span_embedding_mode
+        if self.span_embedding_mode in ["start_token", "end_token"]:
+            self.span_embedding_dim = self.model.config.hidden_size
+        elif self.span_embedding_mode in ["start_and_end_token"]:
+            self.span_embedding_dim = self.model.config.hidden_size * 2
         else:
-            raise ValueError(f"Invalid value for span_pooler_mode: {self.span_pooler_mode}")
+            raise ValueError(f"Invalid value for span_embedding_mode: {self.span_embedding_mode}")
 
+        # embedder for the tuples
         self.num_tuple_entries = num_tuple_entries
         self.tuple_entry_dim = tuple_entry_dim
         self.tuple_entry_embedders = nn.ModuleList(
-            [
-                MLP(self.tuple_entry_dim * span_pooler_factor, self.tuple_entry_dim)
-                for _ in range(num_tuple_entries)
-            ]
+            [MLP(self.span_embedding_dim, self.tuple_entry_dim) for _ in range(num_tuple_entries)]
         )
-        self.tuple_pooler_mode = tuple_pooler_mode
-        if self.tuple_pooler_mode == "concat":
-            tuple_pooler_factor = self.num_tuple_entries
+        self.tuple_embedding_mode = tuple_embedding_mode
+        if self.tuple_embedding_mode == "concat":
+            tuple_embedding_dim = self.tuple_entry_dim * self.num_tuple_entries
+        elif self.tuple_embedding_mode == "multiply2_and_concat":
+            if self.num_tuple_entries != 2:
+                raise ValueError(
+                    "tuple_embedding_mode='multiply2_and_concat' requires num_tuple_entries=2"
+                )
+            tuple_embedding_dim = self.tuple_entry_dim * 3
         else:
-            raise ValueError(f"Invalid value for tuple_pooler_mode: {self.tuple_pooler_mode}")
+            raise ValueError(
+                f"Invalid value for tuple_embedding_mode: {self.tuple_embedding_mode}"
+            )
 
+        # classifier
         # TODO: do sth more sophisticated here
-        self.classifier = nn.Linear(self.tuple_entry_dim * tuple_pooler_factor, num_classes)
+        self.classifier = nn.Linear(tuple_embedding_dim, num_classes)
+
         self.multi_label = multi_label
         self.multi_label_threshold = multi_label_threshold
         self.loss_fct = nn.BCEWithLogitsLoss() if self.multi_label else nn.CrossEntropyLoss()
 
     def span_embedder(
         self,
-        hidden_states: FloatTensor,
+        hidden_state: FloatTensor,
         span_start_indices: LongTensor,
         span_end_indices: LongTensor,
     ) -> FloatTensor:
-        """Pool the hidden states for the spans using the specified mode.
+        """Create the span embeddings from the hidden states and the span start and end indices.
 
         Args:
-            hidden_states: The hidden states from the transformer model. shape: (batch_size, seq_len, hidden_size)
+            hidden_state: The last hidden state from the transformer model. shape: (batch_size, seq_len, hidden_size)
             span_start_indices: The indices of the start tokens of the spans. shape: (batch_size, num_spans)
             span_end_indices: The indices of the end tokens of the spans. shape: (batch_size, num_spans)
 
@@ -218,20 +230,20 @@ class SpanTupleClassificationModel(
             The pooled span embeddings. shape: (batch_size, num_spans, hidden_size)
         """
 
-        if self.span_pooler_mode == "start_token":
-            span_embeddings = get_embeddings_at_indices(hidden_states, span_start_indices)
-        elif self.span_pooler_mode == "end_token":
-            span_embeddings = get_embeddings_at_indices(hidden_states, span_end_indices)
-        elif self.span_pooler_mode == "start_and_end_token":
+        if self.span_embedding_mode == "start_token":
+            span_embeddings = get_embeddings_at_indices(hidden_state, span_start_indices)
+        elif self.span_embedding_mode == "end_token":
+            span_embeddings = get_embeddings_at_indices(hidden_state, span_end_indices)
+        elif self.span_embedding_mode == "start_and_end_token":
             span_embeddings = torch.cat(
                 [
-                    get_embeddings_at_indices(hidden_states, span_start_indices),
-                    get_embeddings_at_indices(hidden_states, span_end_indices),
+                    get_embeddings_at_indices(hidden_state, span_start_indices),
+                    get_embeddings_at_indices(hidden_state, span_end_indices),
                 ],
                 dim=-1,
             )
         else:
-            raise ValueError(f"Invalid value for span_pooler_mode: {self.span_pooler_mode}")
+            raise ValueError(f"Invalid value for span_embedding_mode: {self.span_embedding_mode}")
 
         return span_embeddings
 
@@ -241,7 +253,7 @@ class SpanTupleClassificationModel(
         tuple_indices: LongTensor,
         tuple_indices_mask: BoolTensor,
     ) -> FloatTensor:
-        """Pool the span embeddings for the tuples.
+        """Create the tuple embeddings from the span embeddings and the tuple indices.
 
         Args:
             span_embeddings: The span embeddings. shape: (batch_size, num_spans, span_embedding_size)
@@ -284,45 +296,47 @@ class SpanTupleClassificationModel(
             # shape: (num_tuples_in_batch, tuple_entry_dim)
             current_embeddings = span_embeddings_mapped_for_entry[current_tuple_indices]
             tuple_embeddings_list.append(current_embeddings)
-        if self.tuple_pooler_mode == "concat":
+        if self.tuple_embedding_mode == "concat":
             tuple_embeddings = torch.cat(tuple_embeddings_list, dim=-1).to(span_embeddings.dtype)
+        elif self.tuple_embedding_mode == "multiply2_and_concat":
+            tuple_embeddings = torch.cat(
+                [
+                    tuple_embeddings_list[0] * tuple_embeddings_list[1],
+                    tuple_embeddings_list[0],
+                    tuple_embeddings_list[1],
+                ],
+                dim=-1,
+            )
         else:
-            raise ValueError(f"Invalid value for tuple_pooler_mode: {self.tuple_pooler_mode}")
-        return tuple_embeddings
-
-    def pooler(
-        self,
-        hidden_states: FloatTensor,
-        tuple_indices: LongTensor,
-        tuple_indices_mask: BoolTensor,
-        **span_pooler_inputs,
-    ) -> FloatTensor:
-        # get the span embeddings from the hidden states and the start and end marker positions
-        span_embeddings = self.span_embedder(hidden_states, **span_pooler_inputs)
-        # get the tuple embeddings from the span embeddings and the tuple indices
-        # this flattens the batch dimension!
-        tuple_embeddings = self.tuple_embedder(span_embeddings, tuple_indices, tuple_indices_mask)
+            raise ValueError(
+                f"Invalid value for tuple_embedding_mode: {self.tuple_embedding_mode}"
+            )
         return tuple_embeddings
 
     def forward(self, inputs: InputType, targets: Optional[TargetType] = None) -> OutputType:
-        pooler_inputs = {}
-        model_inputs = {}
+        span_embedder_inputs = {}
+        tuple_embedder_inputs = {}
+        base_model_inputs = {}
         for k, v in inputs.items():
-            if k in [
-                "span_start_indices",
-                "span_end_indices",
-                "tuple_indices",
-                "tuple_indices_mask",
-            ]:
-                pooler_inputs[k] = v
+            if k.startswith("span_"):
+                span_embedder_inputs[k] = v
+            elif k.startswith("tuple_"):
+                tuple_embedder_inputs[k] = v
             else:
-                model_inputs[k] = v
+                base_model_inputs[k] = v
 
-        output = self.model(**model_inputs)
-        hidden_state = output.last_hidden_state
-        pooled_output_valid = self.pooler(hidden_state, **pooler_inputs)
-        pooled_output_valid = self.dropout(pooled_output_valid)
-        logits_valid = self.classifier(pooled_output_valid)
+        output = self.model(**base_model_inputs)
+        hidden_states = self.dropout(output.last_hidden_state)
+
+        # get the span embeddings from the hidden states and the start and end marker positions
+        span_embeddings = self.span_embedder(hidden_state=hidden_states, **span_embedder_inputs)
+        # get the tuple embeddings from the span embeddings and the tuple indices
+        # Note that this flattens the batch dimension to not compute embeddings for padding tuples!
+        tuple_embeddings_flat = self.tuple_embedder(
+            span_embeddings=span_embeddings, **tuple_embedder_inputs
+        )
+
+        logits_valid = self.classifier(tuple_embeddings_flat)
 
         result = {"logits": logits_valid}
         if targets is not None:
