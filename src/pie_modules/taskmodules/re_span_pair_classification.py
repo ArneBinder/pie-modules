@@ -660,8 +660,10 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             gold_relations = gold_roles_and_args2relation.get(candidate_roles_and_args, [])
             if len(gold_relations) == 0:
                 label_indices.append(self.label_to_id[candidate_relation.label])
+                self.collect_relation("used", candidate_relation)
             elif len(gold_relations) == 1:
                 label_indices.append(self.label_to_id[gold_relations[0].label])
+                self.collect_relation("used", gold_relations[0])
             else:
                 logger.warning(
                     f"skip the candidate relation because there are more than one gold relation "
@@ -671,7 +673,6 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                     self.collect_relation("skipped_same_arguments", gold_relation)
                 continue
             valid_candidate_relations.append(candidate_relation)
-            self.collect_relation("used", candidate_relation)
 
         task_encoding.metadata["candidate_relations"] = valid_candidate_relations
         target: TargetEncodingType = {"labels": to_tensor("labels", label_indices)}
