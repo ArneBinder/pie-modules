@@ -6,13 +6,31 @@ import torch
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
 from torch import BoolTensor, FloatTensor, LongTensor, Tensor, nn
-from torch.nn import Parameter
+from torch.nn import Dropout, Parameter
 from torch.optim import AdamW
 from transformers import AutoConfig, AutoModel, get_linear_schedule_with_warmup
 from transformers.utils import ModelOutput
 from typing_extensions import TypeAlias
 
 from .common import ModelWithBoilerplate
+
+
+class MLP(nn.Module):
+    def __init__(self, n_in, n_out, dropout=0, activation=nn.GELU()):
+        super().__init__()
+        self.linear = nn.Linear(n_in, n_out)
+        self.f = activation
+        self.dropout = Dropout(p=dropout)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.xavier_normal_(self.linear.weight)
+        nn.init.zeros_(self.linear.bias)
+
+    def forward(self, x):
+        x = self.f(self.linear(x))
+        x = self.dropout(x)
+        return x
 
 
 @dataclass
@@ -168,8 +186,8 @@ class SpanTupleClassificationModel(
             raise ValueError(f"Invalid value for tuple_pooler_mode: {self.tuple_pooler_mode}")
 
         # TODO: do sth more sophisticated here
-        self.classifier = nn.Linear(
-            config.hidden_size * tuple_pooler_factor * span_pooler_factor, num_classes
+        self.classifier = MLP(
+            n_in=config.hidden_size * tuple_pooler_factor * span_pooler_factor, n_out=num_classes
         )
         self.multi_label = multi_label
         self.multi_label_threshold = multi_label_threshold
