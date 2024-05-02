@@ -98,6 +98,8 @@ class SpanTupleClassificationModel(
         tuple_pooler_mode: The mode to pool the span embeddings for the tuples. Currently only
             "concat" is supported.
         num_tuple_entries: The number of entries in the tuples.
+        tuple_entry_dim: The dimension of the embeddings for each tuple entry, i.e. the output
+            dimension of the individual MLPs that map the span embeddings.
         tokenizer_vocab_size: The size of the tokenizer vocabulary. If provided, the model's
             tokenizer embeddings are resized to this size.
         classifier_dropout: The dropout probability for the classifier. If not provided, the
@@ -123,6 +125,7 @@ class SpanTupleClassificationModel(
         span_pooler_mode: str = "start_and_end_token",
         tuple_pooler_mode: str = "concat",
         num_tuple_entries: int = 2,
+        tuple_entry_dim: int = 768,
         tokenizer_vocab_size: Optional[int] = None,
         classifier_dropout: Optional[float] = None,
         learning_rate: float = 1e-5,
@@ -179,21 +182,26 @@ class SpanTupleClassificationModel(
             raise ValueError(f"Invalid value for span_pooler_mode: {self.span_pooler_mode}")
 
         self.num_tuple_entries = num_tuple_entries
+        self.tuple_entry_dim = tuple_entry_dim
+        self.tuple_entry_embedders = nn.ModuleList(
+            [
+                MLP(self.tuple_entry_dim * span_pooler_factor, self.tuple_entry_dim)
+                for _ in range(num_tuple_entries)
+            ]
+        )
         self.tuple_pooler_mode = tuple_pooler_mode
         if self.tuple_pooler_mode == "concat":
-            tuple_pooler_factor = num_tuple_entries
+            tuple_pooler_factor = self.num_tuple_entries
         else:
             raise ValueError(f"Invalid value for tuple_pooler_mode: {self.tuple_pooler_mode}")
 
         # TODO: do sth more sophisticated here
-        self.classifier = MLP(
-            n_in=config.hidden_size * tuple_pooler_factor * span_pooler_factor, n_out=num_classes
-        )
+        self.classifier = nn.Linear(self.tuple_entry_dim * tuple_pooler_factor, num_classes)
         self.multi_label = multi_label
         self.multi_label_threshold = multi_label_threshold
         self.loss_fct = nn.BCEWithLogitsLoss() if self.multi_label else nn.CrossEntropyLoss()
 
-    def span_pooler(
+    def span_embedder(
         self,
         hidden_states: FloatTensor,
         span_start_indices: LongTensor,
@@ -227,7 +235,7 @@ class SpanTupleClassificationModel(
 
         return span_embeddings
 
-    def tuple_pooler(
+    def tuple_embedder(
         self,
         span_embeddings: FloatTensor,
         tuple_indices: LongTensor,
@@ -262,12 +270,19 @@ class SpanTupleClassificationModel(
         # shape: (batch_size * num_spans, span_embedding_size)
         span_embeddings_flat = span_embeddings.view(-1, span_embeddings.size(-1))
 
+        # map the span embeddings individually for each tuple entry
+        # each entry has the shape: (batch_size * num_spans, tuple_entry_dim)
+        span_embeddings_mapped = [mlp(span_embeddings_flat) for mlp in self.tuple_entry_embedders]
+
         tuple_embeddings_list: List[FloatTensor] = []
         for i in range(valid_tuple_indices_flat.shape[-1]):
             # shape: (num_tuples_in_batch)
             current_tuple_indices = valid_tuple_indices_flat[:, i]
-            # shape: (num_tuples_in_batch, span_embedding_size)
-            current_embeddings = span_embeddings_flat[current_tuple_indices]
+            # get the embeddings that were mapped with the mlp for the current entry
+            # shape: (batch_size * num_spans, tuple_entry_dim)
+            span_embeddings_mapped_for_entry = span_embeddings_mapped[i]
+            # shape: (num_tuples_in_batch, tuple_entry_dim)
+            current_embeddings = span_embeddings_mapped_for_entry[current_tuple_indices]
             tuple_embeddings_list.append(current_embeddings)
         if self.tuple_pooler_mode == "concat":
             tuple_embeddings = torch.cat(tuple_embeddings_list, dim=-1).to(span_embeddings.dtype)
@@ -283,10 +298,10 @@ class SpanTupleClassificationModel(
         **span_pooler_inputs,
     ) -> FloatTensor:
         # get the span embeddings from the hidden states and the start and end marker positions
-        span_embeddings = self.span_pooler(hidden_states, **span_pooler_inputs)
+        span_embeddings = self.span_embedder(hidden_states, **span_pooler_inputs)
         # get the tuple embeddings from the span embeddings and the tuple indices
         # this flattens the batch dimension!
-        tuple_embeddings = self.tuple_pooler(span_embeddings, tuple_indices, tuple_indices_mask)
+        tuple_embeddings = self.tuple_embedder(span_embeddings, tuple_indices, tuple_indices_mask)
         return tuple_embeddings
 
     def forward(self, inputs: InputType, targets: Optional[TargetType] = None) -> OutputType:
