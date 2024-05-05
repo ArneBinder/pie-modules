@@ -404,8 +404,9 @@ class SpanTupleClassificationModel(
             torch.ones(mask.shape, dtype=torch.long, device=labels_flat.device)
             * self.label_pad_value
         )
+        prob_shape = list(mask.shape) + [probabilities_flat.shape[-1]]
         probabilities = (
-            torch.ones(mask.shape, dtype=torch.float, device=probabilities_flat.device)
+            torch.ones(prob_shape, dtype=torch.float, device=probabilities_flat.device)
             * self.probability_pad_value
         )
         # fill in the valid values
