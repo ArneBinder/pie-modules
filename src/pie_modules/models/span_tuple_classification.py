@@ -105,9 +105,10 @@ class SpanTupleClassificationModel(
         span_embedding_mode: The mode to pool the hidden states for the spans. One of "start_token",
             "end_token", "start_and_end_token".
         tuple_embedding_mode: The mode to pool the span embeddings for the tuples. Possible values are
-            "concat" (concatenate the embeddings of the tuple entries) and "multiply2_and_concat"
+            "concat" (concatenate the embeddings of the tuple entries), "multiply2_and_concat"
             (multiply the embeddings of the first two entries and concatenate them with the
-            embeddings of the first two entries). Note that "multiply2_and_concat" requires
+            embeddings of the first two entries) and "index_{idx}" (use the embedding of the entry
+            at index {idx} as the tuple embedding). Note that "multiply2_and_concat" requires
             `num_tuple_entries=2`. Default: "multiply2_and_concat".
         num_tuple_entries: The number of entries in the tuples.
         tuple_entry_hidden_dim: If provided, the tuple entries (i.e. the span embeddings at the tuple indices)
@@ -217,6 +218,8 @@ class SpanTupleClassificationModel(
                     "tuple_embedding_mode='multiply2_and_concat' requires num_tuple_entries=2"
                 )
             tuple_embedding_dim = tuple_entry_dim * 3
+        elif self.tuple_embedding_mode.startswith("index_"):
+            tuple_embedding_dim = tuple_entry_dim
         else:
             raise ValueError(
                 f"Invalid value for tuple_embedding_mode: {self.tuple_embedding_mode}"
@@ -285,11 +288,12 @@ class SpanTupleClassificationModel(
             raise ValueError(
                 f"Number of entries in tuple_indices should be equal to num_tuple_entries={self.num_tuple_entries}"
             )
-        batch_size = tuple_indices.shape[0]
+        batch_size, max_num_spans = span_embeddings.shape[:2]
         # we need to add the batch offsets to the tuple indices to get the correct indices in the
         # flattened span_embeddings
         batch_offsets = (
-            torch.arange(batch_size, device=tuple_indices.device).unsqueeze(-1) * batch_size
+            torch.arange(batch_size, device=tuple_indices.device).unsqueeze(-1).unsqueeze(-1)
+            * max_num_spans
         )
         tuple_indices_with_offsets = tuple_indices + batch_offsets
         # shape: (num_tuples_in_batch, num_entries)
@@ -329,6 +333,9 @@ class SpanTupleClassificationModel(
                 ],
                 dim=-1,
             )
+        elif self.tuple_embedding_mode.startswith("index_"):
+            index = int(self.tuple_embedding_mode.split("_")[1])
+            tuple_embeddings = tuple_embeddings_list[index]
         else:
             raise ValueError(
                 f"Invalid value for tuple_embedding_mode: {self.tuple_embedding_mode}"
