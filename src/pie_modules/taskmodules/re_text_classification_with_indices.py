@@ -397,7 +397,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
                 to_show["all_relations"] = to_show.loc[:, to_show.columns != "no_relation"].sum(
                     axis=1
                 )
-            if "used" in to_show.index:
+            if "used" in to_show.index and "available" in to_show.index:
                 to_show.loc["used %"] = 100 * to_show.loc["used"] / to_show.loc["available"]
             logger.info(f"statistics:\n{to_show.to_markdown()}")
 
