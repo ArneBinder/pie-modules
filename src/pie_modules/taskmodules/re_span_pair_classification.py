@@ -155,7 +155,9 @@ logger = logging.getLogger(__name__)
 def _get_label_ids_from_model_output(
     model_output: ModelTargetType,
 ) -> LongTensor:
-    return model_output["labels"]
+    # only return valid labels
+    labels = model_output["labels"]
+    return labels[labels >= 0]
 
 
 def get_relation_argument_spans_and_roles(
