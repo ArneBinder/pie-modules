@@ -398,7 +398,9 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
                     axis=1
                 )
             if "used" in to_show.index and "available" in to_show.index:
-                to_show.loc["used %"] = 100 * to_show.loc["used"] / to_show.loc["available"]
+                to_show.loc["used %"] = (
+                    100 * to_show.loc["used"] / to_show.loc["available"]
+                ).round()
             logger.info(f"statistics:\n{to_show.to_markdown()}")
 
     def increase_counter(self, key: Tuple[Any, ...], value: Optional[int] = 1):
