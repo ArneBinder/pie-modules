@@ -219,6 +219,12 @@ class SpanTupleClassificationModel(
                 )
             tuple_embedding_dim = tuple_entry_dim * 3
         elif self.tuple_embedding_mode.startswith("index_"):
+            idx = int(self.tuple_embedding_mode.split("_")[1])
+            if idx >= self.num_tuple_entries:
+                raise ValueError(
+                    f"Invalid index IDX={idx} for tuple_embedding_mode='index_IDX'. "
+                    f"Number of entries in tuple: {self.num_tuple_entries}"
+                )
             tuple_embedding_dim = tuple_entry_dim
         else:
             raise ValueError(
