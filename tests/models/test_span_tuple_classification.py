@@ -185,7 +185,7 @@ def model(batch, config, taskmodule_config) -> SpanTupleClassificationModel:
         model_name_or_path="prajjwal1/bert-tiny",
         num_classes=NUM_CLASSES,
         taskmodule_config=taskmodule_config,
-        # metric_stages=["val", "test"],
+        metric_stages=["val", "test"],
         **config,
     )
     return model
@@ -231,23 +231,6 @@ def test_tune_base_model():
     assert len(task_params) > 0
     for param in task_params.values():
         assert param.requires_grad
-
-
-# TODO: parametrize span_embedding_mode and tuple_embedding_mode
-@pytest.fixture
-def simple_model(batch, config, taskmodule_config) -> SpanTupleClassificationModel:
-    torch.manual_seed(42)
-    model = SpanTupleClassificationModel(
-        model_name_or_path="prajjwal1/bert-tiny",
-        num_classes=NUM_CLASSES,
-        # disable the tuple mlp to allow for checking the intermediate embeddings via the indices
-        tuple_entry_hidden_dim=None,
-        taskmodule_config=taskmodule_config,
-        span_embedding_mode="start_and_end_token",
-        tuple_embedding_mode="concat",
-        **config,
-    )
-    return model
 
 
 @pytest.mark.parametrize(
@@ -426,8 +409,7 @@ def test_step(batch, model, config):
     loss = model._step("train", batch)
     assert loss is not None
     if config == {}:
-        # TODO: adjust when model is fixed
-        torch.testing.assert_close(loss, torch.tensor(59.975791931152344))
+        torch.testing.assert_close(loss, torch.tensor(1.624246597290039))
     else:
         raise ValueError(f"Unknown config: {config}")
 
@@ -438,8 +420,7 @@ def test_training_step_and_on_epoch_end(batch, model, config):
     loss = model.training_step(batch, batch_idx=0)
     assert loss is not None
     if config == {}:
-        # TODO: adjust when model is fixed
-        torch.testing.assert_close(loss, torch.tensor(59.42658996582031))
+        torch.testing.assert_close(loss, torch.tensor(1.624246597290039))
     else:
         raise ValueError(f"Unknown config: {config}")
 
@@ -453,23 +434,14 @@ def test_validation_step_and_on_epoch_end(batch, model, config):
     assert loss is not None
     metric_values = {k: v.item() for k, v in metric.compute().items()}
     if config == {}:
-        # TODO: adjust when model is fixed
-        torch.testing.assert_close(loss, torch.tensor(59.42658996582031))
+        torch.testing.assert_close(loss, torch.tensor(1.624246597290039))
         assert metric_values == {
-            "token/macro/f1": 0.3919413983821869,
-            "token/micro/f1": 0.5333333611488342,
-            "span/PER/f1": 0.0833333358168602,
-            "span/PER/recall": 0.0476190485060215,
-            "span/PER/precision": 0.3333333432674408,
-            "span/ORG/f1": 0.0,
-            "span/ORG/recall": 0.0,
-            "span/ORG/precision": 0.0,
-            "span/macro/f1": 0.0416666679084301,
-            "span/macro/precision": 0.1666666716337204,
-            "span/macro/recall": 0.02380952425301075,
-            "span/micro/f1": 0.06666667014360428,
-            "span/micro/recall": 0.0416666679084301,
-            "span/micro/precision": 0.1666666716337204,
+            "macro/f1": 0.125,
+            "micro/f1": 0.2857142984867096,
+            "no_relation/f1": 0.0,
+            "org:founded_by/f1": 0.0,
+            "per:employee_of/f1": 0.0,
+            "per:founder/f1": 0.5,
         }
     else:
         raise ValueError(f"Unknown config: {config}")
@@ -484,23 +456,14 @@ def test_test_step_and_on_epoch_end(batch, model, config):
     assert loss is not None
     metric_values = {k: v.item() for k, v in metric.compute().items()}
     if config == {}:
-        # TODO: adjust when model is fixed
-        torch.testing.assert_close(loss, torch.tensor(59.42658996582031))
+        torch.testing.assert_close(loss, torch.tensor(1.624246597290039))
         assert metric_values == {
-            "token/macro/f1": 0.3919413983821869,
-            "token/micro/f1": 0.5333333611488342,
-            "span/ORG/f1": 0.0,
-            "span/ORG/recall": 0.0,
-            "span/ORG/precision": 0.0,
-            "span/PER/f1": 0.0833333358168602,
-            "span/PER/recall": 0.0476190485060215,
-            "span/PER/precision": 0.3333333432674408,
-            "span/macro/f1": 0.0416666679084301,
-            "span/macro/precision": 0.1666666716337204,
-            "span/macro/recall": 0.02380952425301075,
-            "span/micro/f1": 0.06666667014360428,
-            "span/micro/recall": 0.0416666679084301,
-            "span/micro/precision": 0.1666666716337204,
+            "macro/f1": 0.125,
+            "micro/f1": 0.2857142984867096,
+            "no_relation/f1": 0.0,
+            "org:founded_by/f1": 0.0,
+            "per:employee_of/f1": 0.0,
+            "per:founder/f1": 0.5,
         }
     else:
         raise ValueError(f"Unknown config: {config}")
