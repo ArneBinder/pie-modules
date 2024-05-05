@@ -253,7 +253,9 @@ def simple_model(batch, config, taskmodule_config) -> SpanTupleClassificationMod
 @pytest.mark.parametrize(
     "span_embedding_mode", ["start_and_end_token", "start_token", "end_token"]
 )
-@pytest.mark.parametrize("tuple_embedding_mode", ["concat", "multiply2_and_concat"])
+@pytest.mark.parametrize(
+    "tuple_embedding_mode", ["concat", "multiply2_and_concat", "index_0", "index_1"]
+)
 def test_forward_embeddings(batch, taskmodule_config, span_embedding_mode, tuple_embedding_mode):
     torch.manual_seed(42)
     simple_model = SpanTupleClassificationModel(
@@ -328,18 +330,20 @@ def test_forward_embeddings(batch, taskmodule_config, span_embedding_mode, tuple
                 elif simple_model.tuple_embedding_mode == "multiply2_and_concat":
                     expected_current_tuple_embedding = torch.cat(
                         [
-                            current_expected_tuple_embedding_list[0],
-                            current_expected_tuple_embedding_list[1],
                             current_expected_tuple_embedding_list[0]
                             * current_expected_tuple_embedding_list[1],
+                            current_expected_tuple_embedding_list[0],
+                            current_expected_tuple_embedding_list[1],
                         ],
                         dim=-1,
                     )
+                elif simple_model.tuple_embedding_mode.startswith("index_"):
+                    idx = int(simple_model.tuple_embedding_mode.split("_")[1])
+                    expected_current_tuple_embedding = current_expected_tuple_embedding_list[idx]
                 else:
                     raise ValueError(
                         f"Unknown tuple_embedding_mode: {simple_model.tuple_embedding_mode}"
                     )
-                # TODO: this fails for tuple_idx > 0. Fix the model!
                 current_tuple_embedding = output["tuple_embeddings"][tuple_idx]
                 torch.testing.assert_close(
                     current_tuple_embedding, expected_current_tuple_embedding
