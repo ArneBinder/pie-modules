@@ -229,13 +229,13 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
 
     This task module frames relation extraction as a span pair classification task where all candidate
     pairs in a given text are classified at once. The task module injects start and end markers for
-    each entity into the text and tokenizes the text (the markers are handled as special tokens, and
-    thus, kept as they are). It then collects the start- and end-marker positions for each entity and
-    constructs a model input encoding from the tokenized text and these positions. The model target
-    encoding consists of a list of label indices and a list of tuples (head and tail) of argument
-    indices that point into the start- and end-marker positions from the model inputs. The model
-    output is expected to be of the same format as the model target encoding, but with probabilities
-    for each label.
+    each entity (i.e. "[SPAN]" and "[/SPAN]") into the text and tokenizes the text (the markers are
+    handled as special tokens, and thus, kept as they are). It then collects the start- and end-marker
+    positions for each entity and constructs a model input encoding from the tokenized text and these
+    positions. The model target encoding consists of a list of label indices and a list of tuples
+    (head and tail) of argument indices that point into the start- and end-marker positions from the
+    model inputs. The model output is expected to be of the same format as the model target encoding,
+    but with probabilities for each label.
 
     This means, that the model should return only positive relations (argument indices + label) and
     discard all negative ones.
@@ -258,9 +258,9 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             from the documents during preparation. Defaults to None.
         entity_labels: The list of entity labels. If not provided, the task module will collect the
             entity labels from the documents during preparation. Defaults to None.
-        add_type_to_marker: Whether to add the entity type to the marker. If True, the marker will
-            look like this: [START:entity_type] and [END:entity_type]. If False, the marker will look
-            like this: [START] and [END]. Defaults to False.
+        add_type_to_marker: Whether to add the entity type to the markers. If True, the markers will
+            look like this: "[SPAN:entity_type]" and "[/SPAN:entity_type]" where entity_type is the
+            type of the respective entity. Defaults to False.
         log_first_n_examples: The number of examples to log during training. If 0, no examples are logged.
             Defaults to 0.
         collect_statistics: Whether to collect statistics during preparation. If True, the task module
