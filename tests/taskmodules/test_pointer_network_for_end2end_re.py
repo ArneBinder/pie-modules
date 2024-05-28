@@ -154,11 +154,11 @@ def test_taskmodule(taskmodule):
         "topic": 5,
     }
     assert taskmodule.label_embedding_weight_mapping == {
-        50265: [45260],
-        50266: [39763],
-        50267: [354, 1215, 9006],
-        50268: [5970],
-        50269: [10166],
+        50265: [354, 1215, 9006],
+        50266: [10166],
+        50267: [5970],
+        50268: [45260],
+        50269: [39763],
     }
     assert taskmodule.target_tokens == [
         "<s>",
@@ -169,7 +169,7 @@ def test_taskmodule(taskmodule):
         "<<topic>>",
         "<<is_about>>",
     ]
-    assert taskmodule.target_token_ids == [0, 2, 50266, 50269, 50268, 50265, 50267]
+    assert taskmodule.target_token_ids == [0, 2, 50269, 50266, 50267, 50268, 50265]
 
 
 def test_taskmodule_with_wrong_annotation_field_mapping():
