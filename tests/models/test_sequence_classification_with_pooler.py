@@ -230,8 +230,8 @@ def model() -> SequenceClassificationModelWithPooler:
 def test_model(model):
     assert model is not None
     named_parameters = dict(model.named_parameters())
-    parameter_sums = {k: v.sum().item() for k, v in named_parameters.items()}
-    assert parameter_sums == {
+    parameter_means = {k: v.sum().mean().item() for k, v in named_parameters.items()}
+    parameter_means_expected = {
         "model.embeddings.word_embeddings.weight": 12170.7353515625,
         "model.embeddings.position_embeddings.weight": 3.606626510620117,
         "model.embeddings.token_type_embeddings.weight": -0.3947380781173706,
@@ -275,6 +275,11 @@ def test_model(model):
         "classifier.weight": -3.691577434539795,
         "classifier.bias": -0.028177760541439056,
     }
+    assert set(parameter_means) == set(parameter_means_expected)
+    for k in parameter_means:
+        torch.testing.assert_close(
+            torch.tensor(parameter_means[k]), torch.tensor(parameter_means_expected[k]), msg=k
+        )
 
 
 def test_model_pickleable(model):

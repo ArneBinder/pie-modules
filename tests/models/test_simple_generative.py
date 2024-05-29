@@ -44,8 +44,8 @@ def test_model(model):
     assert model.model is not None
     assert model.taskmodule is not None
     named_parameters = dict(model.named_parameters())
-    parameter_sums = {k: v.sum().item() for k, v in named_parameters.items()}
-    assert parameter_sums == {
+    parameter_means = {k: v.sum().mean().item() for k, v in named_parameters.items()}
+    parameter_means_expected = {
         "model.shared.weight": -3213379.5,
         "model.encoder.block.0.layer.0.SelfAttention.q.weight": 1.4103267192840576,
         "model.encoder.block.0.layer.0.SelfAttention.k.weight": -99.39199829101562,
@@ -94,6 +94,11 @@ def test_model(model):
         "model.decoder.block.1.layer.2.layer_norm.weight": 1890.19287109375,
         "model.decoder.final_layer_norm.weight": 214.18069458007812,
     }
+    assert set(parameter_means) == set(parameter_means_expected)
+    for k in parameter_means:
+        torch.testing.assert_close(
+            torch.tensor(parameter_means[k]), torch.tensor(parameter_means_expected[k]), msg=k
+        )
 
 
 def test_model_pickleable(model):

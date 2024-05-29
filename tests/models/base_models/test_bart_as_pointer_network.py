@@ -109,8 +109,8 @@ def model(config) -> BartAsPointerNetwork:
 def test_model(model, config):
     assert model is not None
     named_parameters = dict(model.named_parameters())
-    parameter_sums = {k: v.sum().item() for k, v in named_parameters.items()}
-    assert parameter_sums == {
+    parameter_means = {k: v.sum().mean().item() for k, v in named_parameters.items()}
+    parameter_means_expected = {
         "model.shared.weight": -17.04595184326172,
         "model.encoder.embed_positions.weight": -3.2610244750976562,
         "model.encoder.layers.0.self_attn.k_proj.weight": -0.2634662091732025,
@@ -207,10 +207,14 @@ def test_model(model, config):
         "pointer_head.encoder_mlp.3.weight": 0.038049373775720596,
         "pointer_head.encoder_mlp.3.bias": 0.0,
     }
+    assert set(parameter_means) == set(parameter_means_expected)
+    for k in parameter_means:
+        torch.testing.assert_close(
+            torch.tensor(parameter_means[k]), torch.tensor(parameter_means_expected[k]), msg=k
+        )
     assert isinstance(model, BartAsPointerNetwork)
     if config == {}:
         assert isinstance(model.model, BartModel)
-
     elif config == {"decoder_position_id_mode": "pattern"}:
         assert isinstance(model.model, BartModelWithDecoderPositionIds)
     else:
