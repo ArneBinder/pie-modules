@@ -120,6 +120,67 @@ def model(batch, config, taskmodule_config) -> TokenClassificationModelWithSeq2S
     return model
 
 
+def test_model(model, config):
+    assert model is not None
+    named_parameters = dict(model.named_parameters())
+    parameter_sums = {k: v.sum().item() for k, v in named_parameters.items()}
+    expected_parameter_sums = {
+        "model.embeddings.word_embeddings.weight": 12170.7353515625,
+        "model.embeddings.position_embeddings.weight": 3.606626510620117,
+        "model.embeddings.token_type_embeddings.weight": -0.3947380781173706,
+        "model.embeddings.LayerNorm.weight": 167.98016357421875,
+        "model.embeddings.LayerNorm.bias": -3.770991802215576,
+        "model.encoder.layer.0.attention.self.query.weight": -6.470536231994629,
+        "model.encoder.layer.0.attention.self.query.bias": 2.377533197402954,
+        "model.encoder.layer.0.attention.self.key.weight": 6.329642295837402,
+        "model.encoder.layer.0.attention.self.key.bias": 0.26313379406929016,
+        "model.encoder.layer.0.attention.self.value.weight": 0.6919102668762207,
+        "model.encoder.layer.0.attention.self.value.bias": 0.8373411893844604,
+        "model.encoder.layer.0.attention.output.dense.weight": 0.49442875385284424,
+        "model.encoder.layer.0.attention.output.dense.bias": 0.09227573871612549,
+        "model.encoder.layer.0.attention.output.LayerNorm.weight": 153.578369140625,
+        "model.encoder.layer.0.attention.output.LayerNorm.bias": 7.791545867919922,
+        "model.encoder.layer.0.intermediate.dense.weight": -76.88616943359375,
+        "model.encoder.layer.0.intermediate.dense.bias": -62.461891174316406,
+        "model.encoder.layer.0.output.dense.weight": -14.502220153808594,
+        "model.encoder.layer.0.output.dense.bias": -0.16679829359054565,
+        "model.encoder.layer.0.output.LayerNorm.weight": 158.97149658203125,
+        "model.encoder.layer.0.output.LayerNorm.bias": 0.6777646541595459,
+        "model.encoder.layer.1.attention.self.query.weight": -11.995692253112793,
+        "model.encoder.layer.1.attention.self.query.bias": -4.587489128112793,
+        "model.encoder.layer.1.attention.self.key.weight": 2.184123992919922,
+        "model.encoder.layer.1.attention.self.key.bias": 0.5768023133277893,
+        "model.encoder.layer.1.attention.self.value.weight": 1.6588367223739624,
+        "model.encoder.layer.1.attention.self.value.bias": -0.09081585705280304,
+        "model.encoder.layer.1.attention.output.dense.weight": -0.3981654644012451,
+        "model.encoder.layer.1.attention.output.dense.bias": 0.5305149555206299,
+        "model.encoder.layer.1.attention.output.LayerNorm.weight": 132.8300018310547,
+        "model.encoder.layer.1.attention.output.LayerNorm.bias": 5.6734418869018555,
+        "model.encoder.layer.1.intermediate.dense.weight": -88.08584594726562,
+        "model.encoder.layer.1.intermediate.dense.bias": -63.859588623046875,
+        "model.encoder.layer.1.output.dense.weight": -3.4885454177856445,
+        "model.encoder.layer.1.output.dense.bias": 0.08666694164276123,
+        "model.encoder.layer.1.output.LayerNorm.weight": 130.19674682617188,
+        "model.encoder.layer.1.output.LayerNorm.bias": -6.072861671447754,
+        "model.pooler.dense.weight": 2.1221072673797607,
+        "model.pooler.dense.bias": -0.6665999889373779,
+        "seq2seq_encoder.weight": -5.621519088745117,
+        "seq2seq_encoder.bias": 0.1506434828042984,
+        "classifier.weight": 0.22692888975143433,
+        "classifier.bias": 0.6613337993621826,
+    }
+    if config.get("use_crf", True):
+        expected_parameter_sums.update(
+            {
+                "crf.start_transitions": 0.21824201941490173,
+                "crf.end_transitions": -0.04744189605116844,
+                "crf.transitions": 0.1701669543981552,
+            }
+        )
+
+    assert parameter_sums == expected_parameter_sums
+
+
 def test_model_pickleable(model):
     import pickle
 

@@ -43,6 +43,57 @@ def test_model(model):
     assert model is not None
     assert model.model is not None
     assert model.taskmodule is not None
+    named_parameters = dict(model.named_parameters())
+    parameter_sums = {k: v.sum().item() for k, v in named_parameters.items()}
+    assert parameter_sums == {
+        "model.shared.weight": -3213379.5,
+        "model.encoder.block.0.layer.0.SelfAttention.q.weight": 1.4103267192840576,
+        "model.encoder.block.0.layer.0.SelfAttention.k.weight": -99.39199829101562,
+        "model.encoder.block.0.layer.0.SelfAttention.v.weight": -122.13032531738281,
+        "model.encoder.block.0.layer.0.SelfAttention.o.weight": 56.757991790771484,
+        "model.encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight": -361.335693359375,
+        "model.encoder.block.0.layer.0.layer_norm.weight": 57.98170471191406,
+        "model.encoder.block.0.layer.1.DenseReluDense.wi.weight": 908.3580932617188,
+        "model.encoder.block.0.layer.1.DenseReluDense.wo.weight": 44.574432373046875,
+        "model.encoder.block.0.layer.1.layer_norm.weight": 308.4140625,
+        "model.encoder.block.1.layer.0.SelfAttention.q.weight": -5.168671607971191,
+        "model.encoder.block.1.layer.0.SelfAttention.k.weight": -113.32646179199219,
+        "model.encoder.block.1.layer.0.SelfAttention.v.weight": -168.3751678466797,
+        "model.encoder.block.1.layer.0.SelfAttention.o.weight": 31.725296020507812,
+        "model.encoder.block.1.layer.0.layer_norm.weight": 103.01976776123047,
+        "model.encoder.block.1.layer.1.DenseReluDense.wi.weight": 318.46270751953125,
+        "model.encoder.block.1.layer.1.DenseReluDense.wo.weight": -145.50942993164062,
+        "model.encoder.block.1.layer.1.layer_norm.weight": 504.828125,
+        "model.encoder.final_layer_norm.weight": 333.976318359375,
+        "model.decoder.block.0.layer.0.SelfAttention.q.weight": 2.7615132331848145,
+        "model.decoder.block.0.layer.0.SelfAttention.k.weight": 45.513877868652344,
+        "model.decoder.block.0.layer.0.SelfAttention.v.weight": -8.495063781738281,
+        "model.decoder.block.0.layer.0.SelfAttention.o.weight": 137.4838409423828,
+        "model.decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight": -75.12335205078125,
+        "model.decoder.block.0.layer.0.layer_norm.weight": 50.14404296875,
+        "model.decoder.block.0.layer.1.EncDecAttention.q.weight": 0.5128352642059326,
+        "model.decoder.block.0.layer.1.EncDecAttention.k.weight": -9.239250183105469,
+        "model.decoder.block.0.layer.1.EncDecAttention.v.weight": -71.90103149414062,
+        "model.decoder.block.0.layer.1.EncDecAttention.o.weight": 175.31907653808594,
+        "model.decoder.block.0.layer.1.layer_norm.weight": 16.86767578125,
+        "model.decoder.block.0.layer.2.DenseReluDense.wi.weight": 330.0903015136719,
+        "model.decoder.block.0.layer.2.DenseReluDense.wo.weight": 882.955322265625,
+        "model.decoder.block.0.layer.2.layer_norm.weight": 764.71484375,
+        "model.decoder.block.1.layer.0.SelfAttention.q.weight": 4.039071083068848,
+        "model.decoder.block.1.layer.0.SelfAttention.k.weight": 27.05837631225586,
+        "model.decoder.block.1.layer.0.SelfAttention.v.weight": -25.415212631225586,
+        "model.decoder.block.1.layer.0.SelfAttention.o.weight": -265.144775390625,
+        "model.decoder.block.1.layer.0.layer_norm.weight": 285.88543701171875,
+        "model.decoder.block.1.layer.1.EncDecAttention.q.weight": -8.171785354614258,
+        "model.decoder.block.1.layer.1.EncDecAttention.k.weight": 87.50703430175781,
+        "model.decoder.block.1.layer.1.EncDecAttention.v.weight": -160.01060485839844,
+        "model.decoder.block.1.layer.1.EncDecAttention.o.weight": -6.447116851806641,
+        "model.decoder.block.1.layer.1.layer_norm.weight": 19.337772369384766,
+        "model.decoder.block.1.layer.2.DenseReluDense.wi.weight": -1200.2591552734375,
+        "model.decoder.block.1.layer.2.DenseReluDense.wo.weight": 2665.6357421875,
+        "model.decoder.block.1.layer.2.layer_norm.weight": 1890.19287109375,
+        "model.decoder.final_layer_norm.weight": 214.18069458007812,
+    }
 
 
 def test_model_pickleable(model):
