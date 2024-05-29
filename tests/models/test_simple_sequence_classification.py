@@ -8,6 +8,7 @@ from transformers.modeling_outputs import SequenceClassifierOutput
 
 from pie_modules.models import SimpleSequenceClassificationModel
 from pie_modules.models.simple_sequence_classification import OutputType
+from tests.models import trunc_number
 
 NUM_CLASSES = 4
 
@@ -221,49 +222,49 @@ def model() -> SimpleSequenceClassificationModel:
 def test_model(model):
     assert model is not None
     named_parameters = dict(model.named_parameters())
-    parameter_means = {k: round(v.mean().item(), 8) for k, v in named_parameters.items()}
+    parameter_means = {k: trunc_number(v.mean().item(), 8) for k, v in named_parameters.items()}
     parameter_means_expected = {
-        "model.bert.embeddings.word_embeddings.weight": 0.00311526,
-        "model.bert.embeddings.position_embeddings.weight": 5.503e-05,
-        "model.bert.embeddings.token_type_embeddings.weight": -0.00154195,
-        "model.bert.embeddings.LayerNorm.weight": 1.31234503,
         "model.bert.embeddings.LayerNorm.bias": -0.02946087,
-        "model.bert.encoder.layer.0.attention.self.query.weight": -0.00039493,
-        "model.bert.encoder.layer.0.attention.self.query.bias": 0.01857448,
-        "model.bert.encoder.layer.0.attention.self.key.weight": 0.00038633,
-        "model.bert.encoder.layer.0.attention.self.key.bias": 0.00205573,
-        "model.bert.encoder.layer.0.attention.self.value.weight": 4.223e-05,
-        "model.bert.encoder.layer.0.attention.self.value.bias": 0.00654173,
-        "model.bert.encoder.layer.0.attention.output.dense.weight": 3.018e-05,
-        "model.bert.encoder.layer.0.attention.output.dense.bias": 0.0007209,
-        "model.bert.encoder.layer.0.attention.output.LayerNorm.weight": 1.19983101,
+        "model.bert.embeddings.LayerNorm.weight": 1.31234502,
+        "model.bert.embeddings.position_embeddings.weight": 5.503e-05,
+        "model.bert.embeddings.token_type_embeddings.weight": -0.00154194,
+        "model.bert.embeddings.word_embeddings.weight": 0.00311525,
         "model.bert.encoder.layer.0.attention.output.LayerNorm.bias": 0.06087145,
-        "model.bert.encoder.layer.0.intermediate.dense.weight": -0.00117319,
+        "model.bert.encoder.layer.0.attention.output.LayerNorm.weight": 1.199831,
+        "model.bert.encoder.layer.0.attention.output.dense.bias": 0.0007209,
+        "model.bert.encoder.layer.0.attention.output.dense.weight": 3.017e-05,
+        "model.bert.encoder.layer.0.attention.self.key.bias": 0.00205573,
+        "model.bert.encoder.layer.0.attention.self.key.weight": 0.00038633,
+        "model.bert.encoder.layer.0.attention.self.query.bias": 0.01857447,
+        "model.bert.encoder.layer.0.attention.self.query.weight": -0.00039493,
+        "model.bert.encoder.layer.0.attention.self.value.bias": 0.00654172,
+        "model.bert.encoder.layer.0.attention.self.value.weight": 4.223e-05,
         "model.bert.encoder.layer.0.intermediate.dense.bias": -0.12199588,
-        "model.bert.encoder.layer.0.output.dense.weight": -0.00022129,
+        "model.bert.encoder.layer.0.intermediate.dense.weight": -0.00117318,
+        "model.bert.encoder.layer.0.output.LayerNorm.bias": 0.00529503,
+        "model.bert.encoder.layer.0.output.LayerNorm.weight": 1.24196481,
         "model.bert.encoder.layer.0.output.dense.bias": -0.00130311,
-        "model.bert.encoder.layer.0.output.LayerNorm.weight": 1.24196482,
-        "model.bert.encoder.layer.0.output.LayerNorm.bias": 0.00529504,
-        "model.bert.encoder.layer.1.attention.self.query.weight": -0.00073216,
-        "model.bert.encoder.layer.1.attention.self.query.bias": -0.03583976,
-        "model.bert.encoder.layer.1.attention.self.key.weight": 0.00013331,
-        "model.bert.encoder.layer.1.attention.self.key.bias": 0.00450627,
-        "model.bert.encoder.layer.1.attention.self.value.weight": 0.00010125,
-        "model.bert.encoder.layer.1.attention.self.value.bias": -0.0007095,
-        "model.bert.encoder.layer.1.attention.output.dense.weight": -2.43e-05,
-        "model.bert.encoder.layer.1.attention.output.dense.bias": 0.00414465,
-        "model.bert.encoder.layer.1.attention.output.LayerNorm.weight": 1.03773439,
+        "model.bert.encoder.layer.0.output.dense.weight": -0.00022128,
         "model.bert.encoder.layer.1.attention.output.LayerNorm.bias": 0.04432376,
+        "model.bert.encoder.layer.1.attention.output.LayerNorm.weight": 1.03773438,
+        "model.bert.encoder.layer.1.attention.output.dense.bias": 0.00414464,
+        "model.bert.encoder.layer.1.attention.output.dense.weight": -2.43e-05,
+        "model.bert.encoder.layer.1.attention.self.key.bias": 0.00450626,
+        "model.bert.encoder.layer.1.attention.self.key.weight": 0.0001333,
+        "model.bert.encoder.layer.1.attention.self.query.bias": -0.03583975,
+        "model.bert.encoder.layer.1.attention.self.query.weight": -0.00073215,
+        "model.bert.encoder.layer.1.attention.self.value.bias": -0.00070949,
+        "model.bert.encoder.layer.1.attention.self.value.weight": 0.00010124,
+        "model.bert.encoder.layer.1.intermediate.dense.bias": -0.12472575,
         "model.bert.encoder.layer.1.intermediate.dense.weight": -0.00134408,
-        "model.bert.encoder.layer.1.intermediate.dense.bias": -0.12472576,
-        "model.bert.encoder.layer.1.output.dense.weight": -5.323e-05,
-        "model.bert.encoder.layer.1.output.dense.bias": 0.00067709,
-        "model.bert.encoder.layer.1.output.LayerNorm.weight": 1.01716208,
         "model.bert.encoder.layer.1.output.LayerNorm.bias": -0.04744423,
-        "model.bert.pooler.dense.weight": 0.00012952,
+        "model.bert.encoder.layer.1.output.LayerNorm.weight": 1.01716208,
+        "model.bert.encoder.layer.1.output.dense.bias": 0.00067708,
+        "model.bert.encoder.layer.1.output.dense.weight": -5.323e-05,
         "model.bert.pooler.dense.bias": -0.00520781,
-        "model.classifier.weight": 0.0007019,
+        "model.bert.pooler.dense.weight": 0.00012952,
         "model.classifier.bias": 0.0,
+        "model.classifier.weight": 0.00070189,
     }
     assert parameter_means == parameter_means_expected
 

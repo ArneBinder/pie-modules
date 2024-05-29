@@ -6,6 +6,7 @@ from pie_modules.models import TokenClassificationModelWithSeq2SeqEncoderAndCrf
 from pie_modules.models.common import TESTING, TRAINING, VALIDATION
 from pie_modules.taskmodules import LabeledSpanExtractionByTokenClassificationTaskModule
 from tests import _config_to_str
+from tests.models import trunc_number
 
 CONFIGS = [{}, {"use_crf": False}]
 CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
@@ -123,58 +124,58 @@ def model(batch, config, taskmodule_config) -> TokenClassificationModelWithSeq2S
 def test_model(model, config):
     assert model is not None
     named_parameters = dict(model.named_parameters())
-    parameter_means = {k: round(v.mean().item(), 8) for k, v in named_parameters.items()}
+    parameter_means = {k: trunc_number(v.mean().item(), 8) for k, v in named_parameters.items()}
     parameter_means_expected = {
-        "model.embeddings.word_embeddings.weight": 0.00311526,
-        "model.embeddings.position_embeddings.weight": 5.503e-05,
-        "model.embeddings.token_type_embeddings.weight": -0.00154195,
-        "model.embeddings.LayerNorm.weight": 1.31234503,
+        "classifier.bias": 0.13226675,
+        "classifier.weight": 0.00453857,
         "model.embeddings.LayerNorm.bias": -0.02946087,
-        "model.encoder.layer.0.attention.self.query.weight": -0.00039493,
-        "model.encoder.layer.0.attention.self.query.bias": 0.01857448,
-        "model.encoder.layer.0.attention.self.key.weight": 0.00038633,
-        "model.encoder.layer.0.attention.self.key.bias": 0.00205573,
-        "model.encoder.layer.0.attention.self.value.weight": 4.223e-05,
-        "model.encoder.layer.0.attention.self.value.bias": 0.00654173,
-        "model.encoder.layer.0.attention.output.dense.weight": 3.018e-05,
-        "model.encoder.layer.0.attention.output.dense.bias": 0.0007209,
-        "model.encoder.layer.0.attention.output.LayerNorm.weight": 1.19983101,
+        "model.embeddings.LayerNorm.weight": 1.31234502,
+        "model.embeddings.position_embeddings.weight": 5.503e-05,
+        "model.embeddings.token_type_embeddings.weight": -0.00154194,
+        "model.embeddings.word_embeddings.weight": 0.00311525,
         "model.encoder.layer.0.attention.output.LayerNorm.bias": 0.06087145,
-        "model.encoder.layer.0.intermediate.dense.weight": -0.00117319,
+        "model.encoder.layer.0.attention.output.LayerNorm.weight": 1.199831,
+        "model.encoder.layer.0.attention.output.dense.bias": 0.0007209,
+        "model.encoder.layer.0.attention.output.dense.weight": 3.017e-05,
+        "model.encoder.layer.0.attention.self.key.bias": 0.00205573,
+        "model.encoder.layer.0.attention.self.key.weight": 0.00038633,
+        "model.encoder.layer.0.attention.self.query.bias": 0.01857447,
+        "model.encoder.layer.0.attention.self.query.weight": -0.00039493,
+        "model.encoder.layer.0.attention.self.value.bias": 0.00654172,
+        "model.encoder.layer.0.attention.self.value.weight": 4.223e-05,
         "model.encoder.layer.0.intermediate.dense.bias": -0.12199588,
-        "model.encoder.layer.0.output.dense.weight": -0.00022129,
+        "model.encoder.layer.0.intermediate.dense.weight": -0.00117318,
+        "model.encoder.layer.0.output.LayerNorm.bias": 0.00529503,
+        "model.encoder.layer.0.output.LayerNorm.weight": 1.24196481,
         "model.encoder.layer.0.output.dense.bias": -0.00130311,
-        "model.encoder.layer.0.output.LayerNorm.weight": 1.24196482,
-        "model.encoder.layer.0.output.LayerNorm.bias": 0.00529504,
-        "model.encoder.layer.1.attention.self.query.weight": -0.00073216,
-        "model.encoder.layer.1.attention.self.query.bias": -0.03583976,
-        "model.encoder.layer.1.attention.self.key.weight": 0.00013331,
-        "model.encoder.layer.1.attention.self.key.bias": 0.00450627,
-        "model.encoder.layer.1.attention.self.value.weight": 0.00010125,
-        "model.encoder.layer.1.attention.self.value.bias": -0.0007095,
-        "model.encoder.layer.1.attention.output.dense.weight": -2.43e-05,
-        "model.encoder.layer.1.attention.output.dense.bias": 0.00414465,
-        "model.encoder.layer.1.attention.output.LayerNorm.weight": 1.03773439,
+        "model.encoder.layer.0.output.dense.weight": -0.00022128,
         "model.encoder.layer.1.attention.output.LayerNorm.bias": 0.04432376,
+        "model.encoder.layer.1.attention.output.LayerNorm.weight": 1.03773438,
+        "model.encoder.layer.1.attention.output.dense.bias": 0.00414464,
+        "model.encoder.layer.1.attention.output.dense.weight": -2.43e-05,
+        "model.encoder.layer.1.attention.self.key.bias": 0.00450626,
+        "model.encoder.layer.1.attention.self.key.weight": 0.0001333,
+        "model.encoder.layer.1.attention.self.query.bias": -0.03583975,
+        "model.encoder.layer.1.attention.self.query.weight": -0.00073215,
+        "model.encoder.layer.1.attention.self.value.bias": -0.00070949,
+        "model.encoder.layer.1.attention.self.value.weight": 0.00010124,
+        "model.encoder.layer.1.intermediate.dense.bias": -0.12472575,
         "model.encoder.layer.1.intermediate.dense.weight": -0.00134408,
-        "model.encoder.layer.1.intermediate.dense.bias": -0.12472576,
-        "model.encoder.layer.1.output.dense.weight": -5.323e-05,
-        "model.encoder.layer.1.output.dense.bias": 0.00067709,
-        "model.encoder.layer.1.output.LayerNorm.weight": 1.01716208,
         "model.encoder.layer.1.output.LayerNorm.bias": -0.04744423,
-        "model.pooler.dense.weight": 0.00012952,
+        "model.encoder.layer.1.output.LayerNorm.weight": 1.01716208,
+        "model.encoder.layer.1.output.dense.bias": 0.00067708,
+        "model.encoder.layer.1.output.dense.weight": -5.323e-05,
         "model.pooler.dense.bias": -0.00520781,
+        "model.pooler.dense.weight": 0.00012952,
+        "seq2seq_encoder.bias": 0.01506434,
         "seq2seq_encoder.weight": -0.00439181,
-        "seq2seq_encoder.bias": 0.01506435,
-        "classifier.weight": 0.00453858,
-        "classifier.bias": 0.13226676,
     }
     if config.get("use_crf", True):
         parameter_means_expected.update(
             {
+                "crf.end_transitions": -0.00948837,
                 "crf.start_transitions": 0.0436484,
-                "crf.end_transitions": -0.00948838,
-                "crf.transitions": 0.00680668,
+                "crf.transitions": 0.00680667,
             }
         )
     assert parameter_means == parameter_means_expected
