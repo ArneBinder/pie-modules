@@ -123,7 +123,12 @@ class SequenceClassificationModelWithPooler(
         self.multi_label_threshold = multi_label_threshold
         self.loss_fct = nn.BCEWithLogitsLoss() if self.multi_label else nn.CrossEntropyLoss()
 
-    def forward(self, inputs: InputType, targets: Optional[TargetType] = None) -> OutputType:
+    def forward(
+        self,
+        inputs: InputType,
+        targets: Optional[TargetType] = None,
+        return_hidden_states: bool = False,
+    ) -> OutputType:
         pooler_inputs = {}
         model_inputs = {}
         for k, v in inputs.items():
@@ -147,6 +152,9 @@ class SequenceClassificationModelWithPooler(
             labels = targets["labels"]
             loss = self.loss_fct(logits, labels)
             result["loss"] = loss
+        if return_hidden_states:
+            # just the last hidden state for now
+            result["hidden_states"] = (hidden_state,)
 
         return SequenceClassifierOutput(**result)
 
