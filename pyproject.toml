@@ -34,7 +34,7 @@ networkx = "^3.0.0"
 # because of BartModelWithDecoderPositionIds
 # TODO: we get different results when switching from 4.35.x to 4.36.0
 transformers = ">=4.35.0,<4.36.0"
-# instal lfrom branch fxmarty:torch-sdpa-preliminary-support
+# install from branch fxmarty:torch-sdpa-preliminary-support
 #transformers = {git = "https://github.com/fxmarty/transformers.git", branch = "torch-sdpa-preliminary-support"}
 # for NltkSentenceSplitter
 nltk = "^3.8.1"
