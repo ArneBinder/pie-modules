@@ -5,6 +5,7 @@ from pie_modules.models import SimpleTokenClassificationModel
 from pie_modules.models.common import TESTING, TRAINING, VALIDATION
 from pie_modules.taskmodules import LabeledSpanExtractionByTokenClassificationTaskModule
 from tests import _config_to_str
+from tests.models import trunc_number
 
 CONFIGS = [{}]
 CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
@@ -113,6 +114,54 @@ def model(monkeypatch, batch, config, taskmodule_config) -> SimpleTokenClassific
         metric_stages=["val", "test"],
     )
     return model
+
+
+def test_model(model):
+    assert model is not None
+    named_parameters = dict(model.named_parameters())
+    parameter_means = {k: trunc_number(v.mean().item(), 7) for k, v in named_parameters.items()}
+    parameter_means_expected = {
+        "model.bert.embeddings.word_embeddings.weight": 0.0031152,
+        "model.bert.embeddings.position_embeddings.weight": 5.5e-05,
+        "model.bert.embeddings.token_type_embeddings.weight": -0.0015419,
+        "model.bert.embeddings.LayerNorm.weight": 1.312345,
+        "model.bert.embeddings.LayerNorm.bias": -0.0294608,
+        "model.bert.encoder.layer.0.attention.self.query.weight": -0.0003949,
+        "model.bert.encoder.layer.0.attention.self.query.bias": 0.0185744,
+        "model.bert.encoder.layer.0.attention.self.key.weight": 0.0003863,
+        "model.bert.encoder.layer.0.attention.self.key.bias": 0.0020557,
+        "model.bert.encoder.layer.0.attention.self.value.weight": 4.22e-05,
+        "model.bert.encoder.layer.0.attention.self.value.bias": 0.0065417,
+        "model.bert.encoder.layer.0.attention.output.dense.weight": 3.01e-05,
+        "model.bert.encoder.layer.0.attention.output.dense.bias": 0.0007209,
+        "model.bert.encoder.layer.0.attention.output.LayerNorm.weight": 1.199831,
+        "model.bert.encoder.layer.0.attention.output.LayerNorm.bias": 0.0608714,
+        "model.bert.encoder.layer.0.intermediate.dense.weight": -0.0011731,
+        "model.bert.encoder.layer.0.intermediate.dense.bias": -0.1219958,
+        "model.bert.encoder.layer.0.output.dense.weight": -0.0002212,
+        "model.bert.encoder.layer.0.output.dense.bias": -0.0013031,
+        "model.bert.encoder.layer.0.output.LayerNorm.weight": 1.2419648,
+        "model.bert.encoder.layer.0.output.LayerNorm.bias": 0.005295,
+        "model.bert.encoder.layer.1.attention.self.query.weight": -0.0007321,
+        "model.bert.encoder.layer.1.attention.self.query.bias": -0.0358397,
+        "model.bert.encoder.layer.1.attention.self.key.weight": 0.0001333,
+        "model.bert.encoder.layer.1.attention.self.key.bias": 0.0045062,
+        "model.bert.encoder.layer.1.attention.self.value.weight": 0.0001012,
+        "model.bert.encoder.layer.1.attention.self.value.bias": -0.0007094,
+        "model.bert.encoder.layer.1.attention.output.dense.weight": -2.43e-05,
+        "model.bert.encoder.layer.1.attention.output.dense.bias": 0.0041446,
+        "model.bert.encoder.layer.1.attention.output.LayerNorm.weight": 1.0377343,
+        "model.bert.encoder.layer.1.attention.output.LayerNorm.bias": 0.0443237,
+        "model.bert.encoder.layer.1.intermediate.dense.weight": -0.001344,
+        "model.bert.encoder.layer.1.intermediate.dense.bias": -0.1247257,
+        "model.bert.encoder.layer.1.output.dense.weight": -5.32e-05,
+        "model.bert.encoder.layer.1.output.dense.bias": 0.000677,
+        "model.bert.encoder.layer.1.output.LayerNorm.weight": 1.017162,
+        "model.bert.encoder.layer.1.output.LayerNorm.bias": -0.0474442,
+        "model.classifier.weight": 0.0007805,
+        "model.classifier.bias": 0.0,
+    }
+    assert parameter_means == parameter_means_expected
 
 
 def test_model_pickleable(model):

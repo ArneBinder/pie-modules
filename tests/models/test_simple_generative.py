@@ -9,6 +9,7 @@ from torch.optim import Optimizer
 from pie_modules.models import SimpleGenerativeModel
 from pie_modules.models.common import TESTING, VALIDATION
 from pie_modules.taskmodules import TextToTextTaskModule
+from tests.models import trunc_number
 
 MODEL_ID = "google/t5-efficient-tiny-nl2"
 
@@ -43,6 +44,58 @@ def test_model(model):
     assert model is not None
     assert model.model is not None
     assert model.taskmodule is not None
+    named_parameters = dict(model.named_parameters())
+    parameter_means = {k: trunc_number(v.mean().item(), 7) for k, v in named_parameters.items()}
+    parameter_means_expected = {
+        "model.shared.weight": -0.3906954,
+        "model.encoder.block.0.layer.0.SelfAttention.q.weight": 2.15e-05,
+        "model.encoder.block.0.layer.0.SelfAttention.k.weight": -0.0015166,
+        "model.encoder.block.0.layer.0.SelfAttention.v.weight": -0.0018635,
+        "model.encoder.block.0.layer.0.SelfAttention.o.weight": 0.000866,
+        "model.encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight": -2.8229351,
+        "model.encoder.block.0.layer.0.layer_norm.weight": 0.226491,
+        "model.encoder.block.0.layer.1.DenseReluDense.wi.weight": 0.0034651,
+        "model.encoder.block.0.layer.1.DenseReluDense.wo.weight": 0.00017,
+        "model.encoder.block.0.layer.1.layer_norm.weight": 1.2047424,
+        "model.encoder.block.1.layer.0.SelfAttention.q.weight": -7.88e-05,
+        "model.encoder.block.1.layer.0.SelfAttention.k.weight": -0.0017292,
+        "model.encoder.block.1.layer.0.SelfAttention.v.weight": -0.0025692,
+        "model.encoder.block.1.layer.0.SelfAttention.o.weight": 0.000484,
+        "model.encoder.block.1.layer.0.layer_norm.weight": 0.4024209,
+        "model.encoder.block.1.layer.1.DenseReluDense.wi.weight": 0.0012148,
+        "model.encoder.block.1.layer.1.DenseReluDense.wo.weight": -0.000555,
+        "model.encoder.block.1.layer.1.layer_norm.weight": 1.9719848,
+        "model.encoder.final_layer_norm.weight": 1.3045949,
+        "model.decoder.block.0.layer.0.SelfAttention.q.weight": 4.21e-05,
+        "model.decoder.block.0.layer.0.SelfAttention.k.weight": 0.0006944,
+        "model.decoder.block.0.layer.0.SelfAttention.v.weight": -0.0001296,
+        "model.decoder.block.0.layer.0.SelfAttention.o.weight": 0.0020978,
+        "model.decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight": -0.5869011,
+        "model.decoder.block.0.layer.0.layer_norm.weight": 0.1958751,
+        "model.decoder.block.0.layer.1.EncDecAttention.q.weight": 7.8e-06,
+        "model.decoder.block.0.layer.1.EncDecAttention.k.weight": -0.0001409,
+        "model.decoder.block.0.layer.1.EncDecAttention.v.weight": -0.0010971,
+        "model.decoder.block.0.layer.1.EncDecAttention.o.weight": 0.0026751,
+        "model.decoder.block.0.layer.1.layer_norm.weight": 0.0658893,
+        "model.decoder.block.0.layer.2.DenseReluDense.wi.weight": 0.0012591,
+        "model.decoder.block.0.layer.2.DenseReluDense.wo.weight": 0.0033682,
+        "model.decoder.block.0.layer.2.layer_norm.weight": 2.9871673,
+        "model.decoder.block.1.layer.0.SelfAttention.q.weight": 6.16e-05,
+        "model.decoder.block.1.layer.0.SelfAttention.k.weight": 0.0004128,
+        "model.decoder.block.1.layer.0.SelfAttention.v.weight": -0.0003878,
+        "model.decoder.block.1.layer.0.SelfAttention.o.weight": -0.0040457,
+        "model.decoder.block.1.layer.0.layer_norm.weight": 1.1167399,
+        "model.decoder.block.1.layer.1.EncDecAttention.q.weight": -0.0001246,
+        "model.decoder.block.1.layer.1.EncDecAttention.k.weight": 0.0013352,
+        "model.decoder.block.1.layer.1.EncDecAttention.v.weight": -0.0024415,
+        "model.decoder.block.1.layer.1.EncDecAttention.o.weight": -9.83e-05,
+        "model.decoder.block.1.layer.1.layer_norm.weight": 0.0755381,
+        "model.decoder.block.1.layer.2.DenseReluDense.wi.weight": -0.0045786,
+        "model.decoder.block.1.layer.2.DenseReluDense.wo.weight": 0.0101685,
+        "model.decoder.block.1.layer.2.layer_norm.weight": 7.3835659,
+        "model.decoder.final_layer_norm.weight": 0.8366433,
+    }
+    assert parameter_means == parameter_means_expected
 
 
 def test_model_pickleable(model):
