@@ -233,48 +233,48 @@ def test_model(model):
     named_parameters = dict(model.named_parameters())
     parameter_means = {k: trunc_number(v.mean().item(), 7) for k, v in named_parameters.items()}
     parameter_means_expected = {
-        "model.embeddings.word_embeddings.weight": 0.0031152,
+        "classifier.bias": -0.0253964,
+        "classifier.weight": -0.000511,
+        "model.embeddings.LayerNorm.bias": -0.0294608,
+        "model.embeddings.LayerNorm.weight": 1.312345,
         "model.embeddings.position_embeddings.weight": 5.5e-05,
         "model.embeddings.token_type_embeddings.weight": -0.0015419,
-        "model.embeddings.LayerNorm.weight": 1.312345,
-        "model.embeddings.LayerNorm.bias": -0.0294608,
-        "model.encoder.layer.0.attention.self.query.weight": -0.0003949,
-        "model.encoder.layer.0.attention.self.query.bias": 0.0185744,
-        "model.encoder.layer.0.attention.self.key.weight": 0.0003863,
-        "model.encoder.layer.0.attention.self.key.bias": 0.0020557,
-        "model.encoder.layer.0.attention.self.value.weight": 4.22e-05,
-        "model.encoder.layer.0.attention.self.value.bias": 0.0065417,
-        "model.encoder.layer.0.attention.output.dense.weight": 3.01e-05,
-        "model.encoder.layer.0.attention.output.dense.bias": 0.0007209,
-        "model.encoder.layer.0.attention.output.LayerNorm.weight": 1.199831,
+        "model.embeddings.word_embeddings.weight": 0.0031152,
         "model.encoder.layer.0.attention.output.LayerNorm.bias": 0.0608714,
-        "model.encoder.layer.0.intermediate.dense.weight": -0.0011731,
+        "model.encoder.layer.0.attention.output.LayerNorm.weight": 1.199831,
+        "model.encoder.layer.0.attention.output.dense.bias": 0.0007209,
+        "model.encoder.layer.0.attention.output.dense.weight": 3.01e-05,
+        "model.encoder.layer.0.attention.self.key.bias": 0.0020557,
+        "model.encoder.layer.0.attention.self.key.weight": 0.0003863,
+        "model.encoder.layer.0.attention.self.query.bias": 0.0185744,
+        "model.encoder.layer.0.attention.self.query.weight": -0.0003949,
+        "model.encoder.layer.0.attention.self.value.bias": 0.0065417,
+        "model.encoder.layer.0.attention.self.value.weight": 4.22e-05,
         "model.encoder.layer.0.intermediate.dense.bias": -0.1219958,
-        "model.encoder.layer.0.output.dense.weight": -0.0002212,
-        "model.encoder.layer.0.output.dense.bias": -0.0013031,
-        "model.encoder.layer.0.output.LayerNorm.weight": 1.2419648,
+        "model.encoder.layer.0.intermediate.dense.weight": -0.0011731,
         "model.encoder.layer.0.output.LayerNorm.bias": 0.005295,
-        "model.encoder.layer.1.attention.self.query.weight": -0.0007321,
-        "model.encoder.layer.1.attention.self.query.bias": -0.0358397,
-        "model.encoder.layer.1.attention.self.key.weight": 0.0001333,
-        "model.encoder.layer.1.attention.self.key.bias": 0.0045062,
-        "model.encoder.layer.1.attention.self.value.weight": 0.0001012,
-        "model.encoder.layer.1.attention.self.value.bias": -0.0007094,
-        "model.encoder.layer.1.attention.output.dense.weight": -2.43e-05,
-        "model.encoder.layer.1.attention.output.dense.bias": 0.0041446,
-        "model.encoder.layer.1.attention.output.LayerNorm.weight": 1.0377343,
+        "model.encoder.layer.0.output.LayerNorm.weight": 1.2419648,
+        "model.encoder.layer.0.output.dense.bias": -0.0013031,
+        "model.encoder.layer.0.output.dense.weight": -0.0002212,
         "model.encoder.layer.1.attention.output.LayerNorm.bias": 0.0443237,
-        "model.encoder.layer.1.intermediate.dense.weight": -0.001344,
+        "model.encoder.layer.1.attention.output.LayerNorm.weight": 1.0377343,
+        "model.encoder.layer.1.attention.output.dense.bias": 0.0041446,
+        "model.encoder.layer.1.attention.output.dense.weight": -2.43e-05,
+        "model.encoder.layer.1.attention.self.key.bias": 0.0045062,
+        "model.encoder.layer.1.attention.self.key.weight": 0.0001333,
+        "model.encoder.layer.1.attention.self.query.bias": -0.0358397,
+        "model.encoder.layer.1.attention.self.query.weight": -0.0007321,
+        "model.encoder.layer.1.attention.self.value.bias": -0.0007094,
+        "model.encoder.layer.1.attention.self.value.weight": 0.0001012,
         "model.encoder.layer.1.intermediate.dense.bias": -0.1247257,
-        "model.encoder.layer.1.output.dense.weight": -5.32e-05,
-        "model.encoder.layer.1.output.dense.bias": 0.000677,
-        "model.encoder.layer.1.output.LayerNorm.weight": 1.017162,
+        "model.encoder.layer.1.intermediate.dense.weight": -0.001344,
         "model.encoder.layer.1.output.LayerNorm.bias": -0.0474442,
-        "model.pooler.dense.weight": 0.0001295,
+        "model.encoder.layer.1.output.LayerNorm.weight": 1.017162,
+        "model.encoder.layer.1.output.dense.bias": 0.000677,
+        "model.encoder.layer.1.output.dense.weight": -5.32e-05,
         "model.pooler.dense.bias": -0.0052078,
-        "pooler.pooler.missing_embeddings": -0.0056074,
-        "classifier.weight": -0.003605,
-        "classifier.bias": -0.0070444,
+        "model.pooler.dense.weight": 0.0001295,
+        "pooler.pooler.missing_embeddings": 0.0630417,
     }
     assert parameter_means == parameter_means_expected
 
@@ -621,33 +621,48 @@ def test_forward_logits(model_output, inputs):
         logits,
         torch.tensor(
             [
-                [-0.5805037021636963, 0.12570726871490479, 1.187800407409668, 0.5867480635643005],
-                [-0.5103899836540222, -0.4129180312156677, 1.222808599472046, 0.767367422580719],
                 [
-                    -0.5193025469779968,
-                    0.007931053638458252,
-                    1.2698432207107544,
-                    0.6175908446311951,
+                    -0.29492446780204773,
+                    -0.804599940776825,
+                    -0.19659805297851562,
+                    -1.0868580341339111,
                 ],
                 [
-                    -0.10545363277196884,
-                    -0.17329390347003937,
-                    1.101582407951355,
-                    0.49733155965805054,
+                    -0.3601434826850891,
+                    -0.7454482316970825,
+                    0.4882846474647522,
+                    -1.0253472328186035,
                 ],
                 [
-                    -0.48656341433525085,
-                    -0.4286993145942688,
-                    1.2574571371078491,
-                    0.7629366517066956,
+                    -0.40172430872917175,
+                    -1.2119399309158325,
+                    0.5856620669364929,
+                    -1.0999149084091187,
                 ],
                 [
-                    -0.3718412220478058,
-                    0.09046845138072968,
-                    0.8015384674072266,
-                    0.24329520761966705,
+                    -0.09260234981775284,
+                    -1.0742112398147583,
+                    0.3299948275089264,
+                    -0.5182554125785828,
                 ],
-                [-0.20474043488502502, -0.1895218938589096, 0.8438000679016113, 0.441173791885376],
+                [
+                    -0.40149545669555664,
+                    -0.7731614708900452,
+                    0.4616103768348694,
+                    -1.0583568811416626,
+                ],
+                [
+                    -0.14356234669685364,
+                    -1.2634986639022827,
+                    0.31660008430480957,
+                    -0.7487461566925049,
+                ],
+                [
+                    -0.11717557162046432,
+                    -0.971996009349823,
+                    0.3477852940559387,
+                    -0.5993944406509399,
+                ],
             ]
         ),
     )
@@ -669,13 +684,13 @@ def test_decode(model, model_output, inputs):
         probabilities.round(decimals=4),
         torch.tensor(
             [
-                [0.0826, 0.1675, 0.4844, 0.2655],
-                [0.0881, 0.0971, 0.4986, 0.3162],
-                [0.0848, 0.1436, 0.5073, 0.2643],
-                [0.1407, 0.1315, 0.4706, 0.2572],
-                [0.0887, 0.0940, 0.5076, 0.3096],
-                [0.1304, 0.2070, 0.4215, 0.2412],
-                [0.1476, 0.1498, 0.4211, 0.2815],
+                [0.3168, 0.1903, 0.3495, 0.1435],
+                [0.2207, 0.1502, 0.5156, 0.1135],
+                [0.2161, 0.0961, 0.5802, 0.1075],
+                [0.2814, 0.1054, 0.4294, 0.1838],
+                [0.2184, 0.1506, 0.5177, 0.1132],
+                [0.2893, 0.0944, 0.4583, 0.1580],
+                [0.2751, 0.1170, 0.4380, 0.1699],
             ]
         ),
     )
@@ -698,13 +713,13 @@ def test_decode_with_multi_label(model_output, inputs):
         labels,
         torch.tensor(
             [
-                [0, 1, 1, 1],
-                [0, 0, 1, 1],
-                [0, 1, 1, 1],
-                [0, 0, 1, 1],
-                [0, 0, 1, 1],
-                [0, 1, 1, 1],
-                [0, 0, 1, 1],
+                [0, 0, 0, 0],
+                [0, 0, 1, 0],
+                [0, 0, 1, 0],
+                [0, 0, 1, 0],
+                [0, 0, 1, 0],
+                [0, 0, 1, 0],
+                [0, 0, 1, 0],
             ]
         ),
     )
@@ -714,13 +729,13 @@ def test_decode_with_multi_label(model_output, inputs):
         probabilities.round(decimals=4),
         torch.tensor(
             [
-                [0.3588, 0.5314, 0.7663, 0.6426],
-                [0.3751, 0.3982, 0.7726, 0.6830],
-                [0.3730, 0.5020, 0.7807, 0.6497],
-                [0.4737, 0.4568, 0.7506, 0.6218],
-                [0.3807, 0.3944, 0.7786, 0.6820],
-                [0.4081, 0.5226, 0.6903, 0.5605],
-                [0.4490, 0.4528, 0.6993, 0.6085],
+                [0.4268, 0.3090, 0.4510, 0.2522],
+                [0.4109, 0.3218, 0.6197, 0.2640],
+                [0.4009, 0.2294, 0.6424, 0.2498],
+                [0.4769, 0.2546, 0.5818, 0.3733],
+                [0.4010, 0.3158, 0.6134, 0.2576],
+                [0.4642, 0.2204, 0.5785, 0.3211],
+                [0.4707, 0.2745, 0.5861, 0.3545],
             ]
         ),
     )
@@ -736,7 +751,7 @@ def test_training_step(batch, model):
     torch.manual_seed(42)
     loss = model.training_step(batch, batch_idx=0)
     assert loss is not None
-    torch.testing.assert_close(loss, torch.tensor(1.6224687099456787))
+    torch.testing.assert_close(loss, torch.tensor(1.3899686336517334))
 
 
 def test_validation_step(batch, model):
@@ -744,7 +759,7 @@ def test_validation_step(batch, model):
     torch.manual_seed(42)
     loss = model.validation_step(batch, batch_idx=0)
     assert loss is not None
-    torch.testing.assert_close(loss, torch.tensor(1.6224687099456787))
+    torch.testing.assert_close(loss, torch.tensor(1.3899686336517334))
 
 
 def test_test_step(batch, model):
@@ -752,7 +767,7 @@ def test_test_step(batch, model):
     torch.manual_seed(42)
     loss = model.test_step(batch, batch_idx=0)
     assert loss is not None
-    torch.testing.assert_close(loss, torch.tensor(1.6224687099456787))
+    torch.testing.assert_close(loss, torch.tensor(1.3899686336517334))
 
 
 def test_base_model_named_parameters(model):

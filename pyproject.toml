@@ -30,12 +30,8 @@ torchmetrics = "^1"
 pytorch-crf = ">=0.7.2"
 # for SpansViaRelationMerger
 networkx = "^3.0.0"
-#tokenizers = "0.10.3"
-# because of BartModelWithDecoderPositionIds
-# TODO: we get different results when switching from 4.35.x to 4.36.0
-transformers = ">=4.35.0,<4.36.0"
-# install from branch fxmarty:torch-sdpa-preliminary-support
-#transformers = {git = "https://github.com/fxmarty/transformers.git", branch = "torch-sdpa-preliminary-support"}
+# >=4.35 because of BartModelWithDecoderPositionIds
+transformers = ">=4.36.0,<4.37.0"
 # for NltkSentenceSplitter
 nltk = "^3.8.1"
 
