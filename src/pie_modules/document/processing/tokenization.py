@@ -338,10 +338,11 @@ def tokenize_document(
     result_document_type: Type[ToD],
     partition_layer: Optional[str] = None,
     strict_span_conversion: bool = True,
+    added_annotations: Optional[List[Dict[str, Dict[Annotation, Annotation]]]] = None,
     verbose: bool = True,
     **tokenize_kwargs,
 ) -> List[ToD]:
-    added_annotations: Dict[str, List[Annotation]] = defaultdict(list)
+    added_annotation_lists: Dict[str, List[Annotation]] = defaultdict(list)
     result = []
     partitions: Iterable[Span]
     if partition_layer is None:
@@ -388,7 +389,9 @@ def tokenize_document(
             tokenized_document.metadata["tokenizer_encoding"] = batch_encoding
             result.append(tokenized_document)
             for k, v in current_added_annotations.items():
-                added_annotations[k].extend(v)
+                added_annotation_lists[k].extend(v)
+            if added_annotations is not None:
+                added_annotations.append(current_added_annotations)
 
     missed_annotations = defaultdict(set)
     if strict_span_conversion or verbose:
@@ -400,7 +403,7 @@ def tokenize_document(
             # and entries get quite probably removed when windowing is applied, so this just pollutes the logs
             if annotation_field.name != partition_layer:
                 current_missed_annotations = set(doc[annotation_field.name]) - set(
-                    added_annotations[annotation_field.name]
+                    added_annotation_lists[annotation_field.name]
                 )
                 if len(current_missed_annotations) > 0:
                     missed_annotations[annotation_field.name] = current_missed_annotations

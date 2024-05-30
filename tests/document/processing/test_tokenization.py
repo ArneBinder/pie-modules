@@ -540,10 +540,12 @@ def test_token_based_document_to_text_based_wrong_annotation_type():
 
 
 def test_tokenize_document(text_document, tokenizer):
+    added_annotations = []
     tokenized_docs = tokenize_document(
         text_document,
         tokenizer=tokenizer,
         result_document_type=TokenizedTestDocument,
+        added_annotations=added_annotations,
     )
     assert len(tokenized_docs) == 1
     tokenized_doc = tokenized_docs[0]
@@ -595,8 +597,13 @@ def test_tokenize_document(text_document, tokenizer):
         ("('it',)", "per:founder", "('O',)"),
     ]
 
+    assert len(added_annotations) == 1
+    first_added_annotations = added_annotations[0]
+    _assert_added_annotations(text_document, tokenized_doc, first_added_annotations)
+
 
 def test_tokenize_document_max_length(text_document, tokenizer, caplog):
+    added_annotations = []
     caplog.clear()
     with caplog.at_level("WARNING"):
         tokenized_docs = tokenize_document(
@@ -607,6 +614,7 @@ def test_tokenize_document_max_length(text_document, tokenizer, caplog):
             strict_span_conversion=False,
             max_length=10,
             return_overflowing_tokens=True,
+            added_annotations=added_annotations,
         )
     assert len(caplog.records) == 1
     assert (
@@ -620,6 +628,7 @@ def test_tokenize_document_max_length(text_document, tokenizer, caplog):
         "}"
     )
     assert len(tokenized_docs) == 2
+    assert len(added_annotations) == 2
     tokenized_doc = tokenized_docs[0]
 
     # check (de-)serialization
@@ -649,6 +658,20 @@ def test_tokenize_document_max_length(text_document, tokenizer, caplog):
     entities = [str(entity) for entity in tokenized_doc.entities]
     assert entities == ["('En', '##ti', '##ty', 'M')"]
     assert len(tokenized_doc.relations) == 0
+    # check annotation mapping
+    current_added_annotations = added_annotations[0]
+    # no relations are added in the first tokenized document
+    assert set(current_added_annotations) == {"sentences", "entities"}
+    # check sentences
+    sentence_mapping = {
+        k.resolve(): v.resolve() for k, v in current_added_annotations["sentences"].items()
+    }
+    assert sentence_mapping == {"First sentence.": ("First", "sentence", ".")}
+    # check entities
+    entity_mapping = {
+        k.resolve(): v.resolve() for k, v in current_added_annotations["entities"].items()
+    }
+    assert entity_mapping == {("per", "Entity M"): ("per", ("En", "##ti", "##ty", "M"))}
 
     tokenized_doc = tokenized_docs[1]
 
@@ -683,6 +706,33 @@ def test_tokenize_document_max_length(text_document, tokenizer, caplog):
         (str(rel.head), rel.label, str(rel.tail)) for rel in tokenized_doc.relations
     ]
     assert relation_tuples == [("('it',)", "per:founder", "('O',)")]
+    # check annotation mapping
+    current_added_annotations = added_annotations[1]
+    assert set(current_added_annotations) == {"sentences", "entities", "relations"}
+    # check sentences
+    sentence_mapping = {
+        k.resolve(): v.resolve() for k, v in current_added_annotations["sentences"].items()
+    }
+    assert sentence_mapping == {"And it founded O.": ("And", "it", "founded", "O", ".")}
+    # check entities
+    entity_mapping = {
+        k.resolve(): v.resolve() for k, v in current_added_annotations["entities"].items()
+    }
+    assert entity_mapping == {
+        ("org", "N"): ("org", ("N",)),
+        ("per", "it"): ("per", ("it",)),
+        ("org", "O"): ("org", ("O",)),
+    }
+    # check relations
+    relation_mapping = {
+        k.resolve(): v.resolve() for k, v in current_added_annotations["relations"].items()
+    }
+    assert relation_mapping == {
+        ("per:founder", (("per", "it"), ("org", "O"))): (
+            "per:founder",
+            (("per", ("it",)), ("org", ("O",))),
+        )
+    }
 
 
 def test_tokenize_document_max_length_strict(text_document, tokenizer):
@@ -709,13 +759,16 @@ def test_tokenize_document_max_length_strict(text_document, tokenizer):
 
 
 def test_tokenize_document_partition(text_document, tokenizer):
+    added_annotations = []
     tokenized_docs = tokenize_document(
         text_document,
         tokenizer=tokenizer,
         result_document_type=TokenizedTestDocument,
         partition_layer="sentences",
+        added_annotations=added_annotations,
     )
     assert len(tokenized_docs) == 3
+    assert len(added_annotations) == 3
     tokenized_doc = tokenized_docs[0]
 
     # check (de-)serialization
@@ -730,6 +783,15 @@ def test_tokenize_document_partition(text_document, tokenizer):
     assert len(tokenized_doc.sentences) == 1
     assert len(tokenized_doc.entities) == 0
     assert len(tokenized_doc.relations) == 0
+
+    # check annotation mapping
+    current_added_annotations = added_annotations[0]
+    assert set(current_added_annotations) == {"sentences"}
+    # check sentences
+    sentence_mapping = {
+        k.resolve(): v.resolve() for k, v in current_added_annotations["sentences"].items()
+    }
+    assert sentence_mapping == {"First sentence.": ("First", "sentence", ".")}
 
     tokenized_doc = tokenized_docs[1]
 
@@ -765,6 +827,35 @@ def test_tokenize_document_partition(text_document, tokenizer):
     ]
     assert relation_tuples == [("('En', '##ti', '##ty', 'M')", "per:employee_of", "('N',)")]
 
+    # check annotation mapping
+    current_added_annotations = added_annotations[1]
+    assert set(current_added_annotations) == {"sentences", "entities", "relations"}
+    # check sentences
+    sentence_mapping = {
+        k.resolve(): v.resolve() for k, v in current_added_annotations["sentences"].items()
+    }
+    assert sentence_mapping == {
+        "Entity M works at N.": ("En", "##ti", "##ty", "M", "works", "at", "N", ".")
+    }
+    # check entities
+    entity_mapping = {
+        k.resolve(): v.resolve() for k, v in current_added_annotations["entities"].items()
+    }
+    assert entity_mapping == {
+        ("per", "Entity M"): ("per", ("En", "##ti", "##ty", "M")),
+        ("org", "N"): ("org", ("N",)),
+    }
+    # check relations
+    relation_mapping = {
+        k.resolve(): v.resolve() for k, v in current_added_annotations["relations"].items()
+    }
+    assert relation_mapping == {
+        ("per:employee_of", (("per", "Entity M"), ("org", "N"))): (
+            "per:employee_of",
+            (("per", ("En", "##ti", "##ty", "M")), ("org", ("N",))),
+        )
+    }
+
     tokenized_doc = tokenized_docs[2]
 
     # check (de-)serialization
@@ -787,3 +878,27 @@ def test_tokenize_document_partition(text_document, tokenizer):
         (str(rel.head), rel.label, str(rel.tail)) for rel in tokenized_doc.relations
     ]
     assert relation_tuples == [("('it',)", "per:founder", "('O',)")]
+
+    # check annotation mapping
+    current_added_annotations = added_annotations[2]
+    assert set(current_added_annotations) == {"sentences", "entities", "relations"}
+    # check sentences
+    sentence_mapping = {
+        k.resolve(): v.resolve() for k, v in current_added_annotations["sentences"].items()
+    }
+    assert sentence_mapping == {"And it founded O.": ("And", "it", "founded", "O", ".")}
+    # check entities
+    entity_mapping = {
+        k.resolve(): v.resolve() for k, v in current_added_annotations["entities"].items()
+    }
+    assert entity_mapping == {("per", "it"): ("per", ("it",)), ("org", "O"): ("org", ("O",))}
+    # check relations
+    relation_mapping = {
+        k.resolve(): v.resolve() for k, v in current_added_annotations["relations"].items()
+    }
+    assert relation_mapping == {
+        ("per:founder", (("per", "it"), ("org", "O"))): (
+            "per:founder",
+            (("per", ("it",)), ("org", ("O",))),
+        )
+    }
