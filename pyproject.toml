@@ -30,8 +30,9 @@ torchmetrics = "^1"
 pytorch-crf = ">=0.7.2"
 # for SpansViaRelationMerger
 networkx = "^3.0.0"
-# >=4.35 because of BartModelWithDecoderPositionIds
-transformers = ">=4.36.0,<4.37.0"
+# >=4.35 because of BartModelWithDecoderPositionIds, <4.37 because of generation config
+# created from model config in BartAsPointerNetwork
+transformers = ">=4.35.0,<4.37.0"
 # for NltkSentenceSplitter
 nltk = "^3.8.1"
 
