@@ -203,9 +203,9 @@ def test_model(model, config):
         "model.decoder.layers.1.final_layer_norm.bias": 0.0,
         "model.decoder.layernorm_embedding.weight": 1.0,
         "model.decoder.layernorm_embedding.bias": 0.0,
-        "pointer_head.encoder_mlp.0.weight": -0.0005021,
+        "pointer_head.encoder_mlp.0.weight": 0.0004805,
         "pointer_head.encoder_mlp.0.bias": 0.0,
-        "pointer_head.encoder_mlp.3.weight": 6.6e-05,
+        "pointer_head.encoder_mlp.3.weight": 0.0001837,
         "pointer_head.encoder_mlp.3.bias": 0.0,
     }
     assert parameter_means == parameter_means_expected
@@ -315,34 +315,34 @@ def test_forward(model, batch, decoder_input_ids, config):
                 [
                     -1.0000000138484279e24,
                     -0.23238050937652588,
-                    0.2958170473575592,
-                    0.05529244616627693,
-                    0.042530909180641174,
-                    0.10081343352794647,
-                    -0.07145103812217712,
-                    0.1258169263601303,
-                    -0.08469001948833466,
-                    0.09224237501621246,
-                    0.022736266255378723,
-                    -0.056650951504707336,
-                    0.00475323386490345,
-                    0.0679982528090477,
-                    0.04947580397129059,
-                    -0.08609804511070251,
+                    0.2958170175552368,
+                    0.05529244244098663,
+                    0.04253090173006058,
+                    0.10081345587968826,
+                    -0.07145103067159653,
+                    0.12317530065774918,
+                    -0.06861806660890579,
+                    0.07819556444883347,
+                    0.006490768864750862,
+                    -0.040455855429172516,
+                    0.03176971897482872,
+                    0.05362509936094284,
+                    0.04528001323342323,
+                    -0.0684177577495575,
                     -1.0000000331813535e32,
                 ],
                 [
                     -1.0000000138484279e24,
-                    -0.23274853825569153,
+                    -0.23274855315685272,
                     0.2960396707057953,
                     0.05556505173444748,
-                    0.04273711144924164,
-                    0.10071950405836105,
-                    -0.07135685533285141,
-                    0.12565924227237701,
-                    0.06317455321550369,
-                    0.06436678022146225,
-                    -0.07508281618356705,
+                    0.04273710399866104,
+                    0.10071954131126404,
+                    -0.071356862783432,
+                    0.12314081937074661,
+                    0.06498698145151138,
+                    0.07938676327466965,
+                    -0.07943986356258392,
                     -1.0000000331813535e32,
                     -1.0000000331813535e32,
                     -1.0000000331813535e32,
@@ -360,16 +360,16 @@ def test_forward(model, batch, decoder_input_ids, config):
             torch.tensor(
                 [
                     -1.6000000221574846e25,
-                    -0.9064984917640686,
-                    1.1896746158599854,
-                    0.979636013507843,
-                    0.1837124079465866,
+                    -0.9064984321594238,
+                    1.189674735069275,
+                    0.9796359539031982,
+                    0.1837124526500702,
                     1.3070943355560303,
-                    -0.12108190357685089,
-                    0.625571072101593,
-                    -0.12742891907691956,
-                    0.6052249073982239,
-                    -0.4059778153896332,
+                    -0.1210818886756897,
+                    0.5316579937934875,
+                    -0.12306825071573257,
+                    0.6218758225440979,
+                    -0.4374474287033081,
                     -8.000000265450828e32,
                     -8.000000265450828e32,
                     -8.000000265450828e32,
@@ -386,15 +386,15 @@ def test_forward(model, batch, decoder_input_ids, config):
                 [
                     -1.6000000221574846e25,
                     -0.5539568662643433,
-                    0.7004714012145996,
+                    0.7004716396331787,
                     1.5720455646514893,
-                    -0.3760949671268463,
+                    -0.3760950267314911,
                     0.7738710641860962,
-                    -0.10904453694820404,
-                    0.6459492444992065,
-                    -0.013624418526887894,
-                    0.48998790979385376,
-                    -0.5045579075813293,
+                    -0.1090446263551712,
+                    0.287150502204895,
+                    -0.04344810172915459,
+                    0.3674442768096924,
+                    -0.6838937997817993,
                     -8.000000265450828e32,
                     -8.000000265450828e32,
                     -8.000000265450828e32,
@@ -419,9 +419,9 @@ def test_forward_with_labels(model, batch, config):
     outputs = model(**inputs, **targets_without_constraints)
     loss = outputs.loss
     if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(2.4492502212524414))
+        torch.testing.assert_close(loss, torch.tensor(2.4516539573669434))
     elif config == {"decoder_position_id_mode": "pattern"}:
-        torch.testing.assert_close(loss, torch.tensor(2.421541690826416))
+        torch.testing.assert_close(loss, torch.tensor(2.4184868335723877))
     else:
         raise ValueError(f"Unknown config: {config}")
 
@@ -434,9 +434,9 @@ def test_forward_with_labels_and_constraints(model, batch_with_constraints, conf
     outputs = model(**inputs, **targets)
     loss = outputs.loss
     if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(4.772888660430908))
+        torch.testing.assert_close(loss, torch.tensor(4.776531219482422))
     elif config == {"decoder_position_id_mode": "pattern"}:
-        torch.testing.assert_close(loss, torch.tensor(4.747316360473633))
+        torch.testing.assert_close(loss, torch.tensor(4.742183685302734))
     else:
         raise ValueError(f"Unknown model type {type(model.model)}")
 
@@ -943,7 +943,7 @@ def test_bart_pointer_network_beam_search(pretrained_model, taskmodule):
     torch.testing.assert_close(
         outputs,
         torch.tensor(
-            [[0, 10, 30, 44, 45, 15, 16, 17, 33, 15, 16, 17, 33, 33, 33, 35, 33, 35, 33, 35]]
+            [[0, 10, 30, 53, 54, 45, 15, 16, 17, 33, 33, 33, 35, 33, 58, 39, 41, 35, 33, 35]]
         ),
     )
 
@@ -969,11 +969,11 @@ def test_bart_pointer_network_generate_with_scores(pretrained_model, taskmodule)
         output_scores=True,
     )
     assert isinstance(outputs, BeamSearchEncoderDecoderOutput)
-    torch.testing.assert_close(outputs.sequences_scores, torch.tensor([-7.126733303070068]))
+    torch.testing.assert_close(outputs.sequences_scores, torch.tensor([-8.088160514831543]))
     torch.testing.assert_close(
         outputs.sequences,
         torch.tensor(
-            [[0, 10, 30, 44, 45, 15, 16, 17, 33, 15, 16, 35, 33, 15, 35, 41, 35, 33, 33, 33]]
+            [[0, 10, 30, 53, 54, 45, 15, 16, 17, 33, 33, 33, 35, 33, 58, 39, 41, 35, 33, 35]]
         ),
     )
 
