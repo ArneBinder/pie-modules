@@ -216,7 +216,9 @@ def text_based_document_to_token_based(
             else:
                 override_annotations[text_targeting_layer_name][char_span._id] = token_span
                 if added_annotations is not None:
-                    added_annotations[text_targeting_layer_name][char_span] = token_span
+                    added_annotations.setdefault(text_targeting_layer_name, {})[
+                        char_span
+                    ] = token_span
         valid_spans = set(override_annotations[text_targeting_layer_name].values())
         result[text_targeting_layer_name].extend(sorted(valid_spans, key=span_sort_key))
 
@@ -228,8 +230,8 @@ def text_based_document_to_token_based(
         verbose=verbose,
     )
     if added_annotations is not None:
-        for layer_name, annotations in added_annotations_from_remaining_layers.items():
-            added_annotations[layer_name].update(annotations)
+        for layer_name, annotation_mapping in added_annotations_from_remaining_layers.items():
+            added_annotations.setdefault(layer_name, {}).update(annotation_mapping)
 
     return result
 
@@ -310,7 +312,9 @@ def token_based_document_to_text_based(
             char_span = token_span_to_char_span(token_span, token_offset_mapping)
             override_annotations[token_targeting_layer_name][token_span._id] = char_span
             if added_annotations is not None:
-                added_annotations[token_targeting_layer_name][token_span] = char_span
+                added_annotations.setdefault(token_targeting_layer_name, {})[
+                    token_span
+                ] = char_span
         valid_spans = set(override_annotations[token_targeting_layer_name].values())
         result[token_targeting_layer_name].extend(sorted(valid_spans, key=span_sort_key))
 
@@ -322,8 +326,8 @@ def token_based_document_to_text_based(
         verbose=verbose,
     )
     if added_annotations is not None:
-        for layer_name, annotations in added_annotations_from_remaining_layers.items():
-            added_annotations[layer_name].update(annotations)
+        for layer_name, annotation_mapping in added_annotations_from_remaining_layers.items():
+            added_annotations.setdefault(layer_name, {}).update(annotation_mapping)
 
     return result
 
