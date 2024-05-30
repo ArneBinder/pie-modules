@@ -1,7 +1,9 @@
 import dataclasses
 from collections import defaultdict
+from typing import Dict
 
 import pytest
+from pytorch_ie import Annotation, Document
 from pytorch_ie.core import AnnotationList, annotation_field
 from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from transformers import AutoTokenizer, PreTrainedTokenizer
@@ -257,33 +259,43 @@ def test_find_token_offset_mapping(text_document, token_document):
     ]
 
 
+def _assert_added_annotations(
+    document: Document,
+    converted_document: Document,
+    added_annotations: Dict[str, Dict[Annotation, Annotation]],
+):
+    for ann_field in document.annotation_fields():
+        layer_name = ann_field.name
+        text_annotations = document[layer_name]
+        token_annotations = converted_document[layer_name]
+        expected_mapping = dict(zip(text_annotations, token_annotations))
+        assert len(expected_mapping) > 0
+        assert added_annotations[layer_name] == expected_mapping
+
+
 def test_text_based_document_to_token_based(text_document, token_document):
-    added_annotations = defaultdict(list)
+    added_annotations = defaultdict(dict)
     doc = text_based_document_to_token_based(
         text_document,
         tokens=list(token_document.tokens),
         result_document_type=TokenizedTestDocument,
         added_annotations=added_annotations,
     )
-    for ann_field in text_document.annotation_fields():
-        layer_name = ann_field.name
-        assert added_annotations[layer_name] == list(text_document[layer_name])
+    _assert_added_annotations(text_document, doc, added_annotations)
     _test_token_document(doc)
 
 
 def test_text_based_document_to_token_based_multi_span(
     text_document_with_multi_spans, token_document_with_multi_spans
 ):
-    added_annotations = defaultdict(list)
+    added_annotations = defaultdict(dict)
     doc = text_based_document_to_token_based(
         text_document_with_multi_spans,
         tokens=list(token_document_with_multi_spans.tokens),
         result_document_type=TokenizedTestDocumentWithMultiSpans,
         added_annotations=added_annotations,
     )
-    for ann_field in text_document_with_multi_spans.annotation_fields():
-        layer_name = ann_field.name
-        assert added_annotations[layer_name] == list(text_document_with_multi_spans[layer_name])
+    _assert_added_annotations(text_document_with_multi_spans, doc, added_annotations)
     _test_token_document_with_multi_spans(doc)
 
 
@@ -437,34 +449,28 @@ def test_text_based_document_to_token_based_wrong_annotation_type():
 
 
 def test_token_based_document_to_text_based(token_document, text_document):
-    added_annotations = defaultdict(list)
+    added_annotations = defaultdict(dict)
     result = token_based_document_to_text_based(
         token_document,
         text=text_document.text,
         result_document_type=TestDocument,
         added_annotations=added_annotations,
     )
-    for ann_field in token_document.annotation_fields():
-        layer_name = ann_field.name
-        assert added_annotations[layer_name] == list(token_document[layer_name])
-
+    _assert_added_annotations(token_document, result, added_annotations)
     _test_text_document(result)
 
 
 def test_token_based_document_to_text_based_multi_span(
     token_document_with_multi_spans, text_document_with_multi_spans
 ):
-    added_annotations = defaultdict(list)
+    added_annotations = defaultdict(dict)
     result = token_based_document_to_text_based(
         token_document_with_multi_spans,
         text=text_document_with_multi_spans.text,
         result_document_type=TestDocumentWithMultiSpans,
         added_annotations=added_annotations,
     )
-    for ann_field in token_document_with_multi_spans.annotation_fields():
-        layer_name = ann_field.name
-        assert added_annotations[layer_name] == list(token_document_with_multi_spans[layer_name])
-
+    _assert_added_annotations(token_document_with_multi_spans, result, added_annotations)
     _test_text_document_with_multi_spans(result)
 
 
