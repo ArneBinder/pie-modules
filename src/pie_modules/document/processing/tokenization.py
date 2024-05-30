@@ -122,8 +122,34 @@ def text_based_document_to_token_based(
     char_to_token: Optional[Callable[[int], Optional[int]]] = None,
     strict_span_conversion: bool = True,
     verbose: bool = True,
-    added_annotations: Optional[Dict[str, List[Annotation]]] = None,
+    added_annotations: Optional[Dict[str, Dict[Annotation, Annotation]]] = None,
 ) -> ToD:
+    """Convert a text based document to a token based document. Uses either tokens,
+    token_offset_mapping or char_to_token (provided explicitly or from the document metadata) to
+    convert the annotations that target the text and all that depend on these (also adds all
+    remaining annotations).
+
+    Args:
+        doc (TextBasedDocument): The text based document.
+        result_document_type (Union[Type[ToD], str]): The type of the token based document.
+        tokens (Optional[List[str]], optional): The tokens. If None, the tokens are taken from the
+            metadata. Defaults to None.
+        token_offset_mapping (Optional[List[Tuple[int, int]]], optional): The token offset mapping.
+            If None, the token offset mapping is taken from the metadata. Defaults to None.
+        char_to_token (Optional[Callable[[int], Optional[int]]], optional): The char to token function.
+            If None, the char to token function is constructed from the token offset mapping. Defaults
+            to None.
+        strict_span_conversion (bool, optional): If True, raise an error if not all annotations can
+            be converted to token based documents. Defaults to True.
+        verbose (bool, optional): If True, log warnings if annotations can not be converted. Defaults
+            to True.
+        added_annotations (Optional[Dict[str, Dict[Annotation, Annotation]]], optional): Pass an empty
+            dictionary to collect the added annotations. Defaults to None.
+
+    Returns:
+        ToD: The token based document of type result_document_type with the converted annotations.
+    """
+
     document_type = resolve_type(
         type_or_str=result_document_type, expected_super_type=TokenBasedDocument
     )
@@ -216,7 +242,9 @@ def text_based_document_to_token_based(
             else:
                 override_annotations[text_targeting_layer_name][char_span._id] = token_span
                 if added_annotations is not None:
-                    added_annotations[text_targeting_layer_name].append(char_span)
+                    added_annotations.setdefault(text_targeting_layer_name, {})[
+                        char_span
+                    ] = token_span
         valid_spans = set(override_annotations[text_targeting_layer_name].values())
         result[text_targeting_layer_name].extend(sorted(valid_spans, key=span_sort_key))
 
@@ -228,8 +256,8 @@ def text_based_document_to_token_based(
         verbose=verbose,
     )
     if added_annotations is not None:
-        for layer_name, annotations in added_annotations_from_remaining_layers.items():
-            added_annotations[layer_name].extend(annotations)
+        for layer_name, annotation_mapping in added_annotations_from_remaining_layers.items():
+            added_annotations.setdefault(layer_name, {}).update(annotation_mapping)
 
     return result
 
@@ -242,8 +270,35 @@ def token_based_document_to_text_based(
     join_tokens_with: Optional[str] = None,
     strict_span_conversion: bool = True,
     verbose: bool = True,
-    added_annotations: Optional[Dict[str, List[Annotation]]] = None,
+    added_annotations: Optional[Dict[str, Dict[Annotation, Annotation]]] = None,
 ) -> TeD:
+    """Convert a token based document to a text based document. Uses either text,
+    token_offset_mapping or char_to_token (provided explicitly or from the document metadata) to
+    convert the annotations that target the tokens and all that depend on these (also adds all
+    remaining annotations).
+
+    Args:
+        doc (TokenBasedDocument): The token based document.
+        result_document_type (Union[Type[TeD], str]): The type of the text based document.
+        text (Optional[str], optional): The text. If None, constructed from the tokens (requires
+            join_tokens_with) or taken from the metadata. Defaults to None.
+        token_offset_mapping (Optional[List[Tuple[int, int]]], optional): The token offset mapping.
+            If None, the token offset mapping is constructed from the tokens (requires join_tokens_with)
+            or taken from the metadata. Defaults to None.
+        join_tokens_with (Optional[str], optional): The token separator. If no text is provided, the
+            text and token offset mapping are constructed from the tokens by joining them with this
+            separator. Defaults to None.
+        strict_span_conversion (bool, optional): If True, raise an error if not all annotations
+            can be converted to text based documents. Defaults to True.
+        verbose (bool, optional): If True, log warnings if annotations can not be converted.
+            Defaults to True.
+        added_annotations (Optional[Dict[str, Dict[Annotation, Annotation]]], optional): Pass an
+            empty dictionary to collect the added annotations. Defaults to None.
+
+    Returns:
+        TeD: The text based document of type result_document_type with the converted annotations.
+    """
+
     document_type = resolve_type(
         type_or_str=result_document_type, expected_super_type=TextBasedDocument
     )
@@ -310,7 +365,9 @@ def token_based_document_to_text_based(
             char_span = token_span_to_char_span(token_span, token_offset_mapping)
             override_annotations[token_targeting_layer_name][token_span._id] = char_span
             if added_annotations is not None:
-                added_annotations[token_targeting_layer_name].append(token_span)
+                added_annotations.setdefault(token_targeting_layer_name, {})[
+                    token_span
+                ] = char_span
         valid_spans = set(override_annotations[token_targeting_layer_name].values())
         result[token_targeting_layer_name].extend(sorted(valid_spans, key=span_sort_key))
 
@@ -322,8 +379,8 @@ def token_based_document_to_text_based(
         verbose=verbose,
     )
     if added_annotations is not None:
-        for layer_name, annotations in added_annotations_from_remaining_layers.items():
-            added_annotations[layer_name].extend(annotations)
+        for layer_name, annotation_mapping in added_annotations_from_remaining_layers.items():
+            added_annotations.setdefault(layer_name, {}).update(annotation_mapping)
 
     return result
 
@@ -334,10 +391,32 @@ def tokenize_document(
     result_document_type: Type[ToD],
     partition_layer: Optional[str] = None,
     strict_span_conversion: bool = True,
+    added_annotations: Optional[List[Dict[str, Dict[Annotation, Annotation]]]] = None,
     verbose: bool = True,
     **tokenize_kwargs,
 ) -> List[ToD]:
-    added_annotations: Dict[str, List[Annotation]] = defaultdict(list)
+    """Tokenize a document with a given tokenizer and return a list of token based documents. The
+    document is tokenized in partitions if a partition layer is provided. The annotations that
+    target the text are converted to target the tokens and also all dependent annotations are
+    converted.
+
+    Args:
+        doc (TextBasedDocument): The document to tokenize.
+        tokenizer (PreTrainedTokenizer): The tokenizer.
+        result_document_type (Type[ToD]): The exact type of the token based documents.
+        partition_layer (Optional[str], optional): The layer to use for partitioning the document. If None, the whole
+            document is tokenized. Defaults to None.
+        strict_span_conversion (bool, optional): If True, raise an error if not all annotations can be converted to
+            token based documents. Defaults to True.
+        added_annotations (Optional[List[Dict[str, Dict[Annotation, Annotation]]]], optional): Pass an empty list to
+            collect the added annotations. Defaults to None.
+        verbose (bool, optional): If True, log warnings if annotations can not be converted. Defaults to True.
+
+    Returns:
+        List[ToD]: The token based documents of type result_document_type with the converted annotations.
+    """
+
+    added_annotation_lists: Dict[str, List[Annotation]] = defaultdict(list)
     result = []
     partitions: Iterable[Span]
     if partition_layer is None:
@@ -370,6 +449,7 @@ def tokenize_document(
                     for start, end in token_offset_mapping
                 ]
                 char_to_token = None
+            current_added_annotations: Dict[str, Dict[Annotation, Annotation]] = defaultdict(dict)
             tokenized_document = text_based_document_to_token_based(
                 doc,
                 tokens=batch_encoding.tokens,
@@ -378,10 +458,14 @@ def tokenize_document(
                 char_to_token=char_to_token,
                 strict_span_conversion=False,
                 verbose=False,
-                added_annotations=added_annotations,
+                added_annotations=current_added_annotations,
             )
             tokenized_document.metadata["tokenizer_encoding"] = batch_encoding
             result.append(tokenized_document)
+            for k, v in current_added_annotations.items():
+                added_annotation_lists[k].extend(v)
+            if added_annotations is not None:
+                added_annotations.append(current_added_annotations)
 
     missed_annotations = defaultdict(set)
     if strict_span_conversion or verbose:
@@ -393,7 +477,7 @@ def tokenize_document(
             # and entries get quite probably removed when windowing is applied, so this just pollutes the logs
             if annotation_field.name != partition_layer:
                 current_missed_annotations = set(doc[annotation_field.name]) - set(
-                    added_annotations[annotation_field.name]
+                    added_annotation_lists[annotation_field.name]
                 )
                 if len(current_missed_annotations) > 0:
                     missed_annotations[annotation_field.name] = current_missed_annotations
