@@ -124,6 +124,32 @@ def text_based_document_to_token_based(
     verbose: bool = True,
     added_annotations: Optional[Dict[str, Dict[Annotation, Annotation]]] = None,
 ) -> ToD:
+    """Convert a text based document to a token based document. Uses either tokens,
+    token_offset_mapping or char_to_token (provided explicitly or from the document metadata) to
+    convert the annotations that target the text and all that depend on these (also adds all
+    remaining annotations).
+
+    Args:
+        doc (TextBasedDocument): The text based document.
+        result_document_type (Union[Type[ToD], str]): The type of the token based document.
+        tokens (Optional[List[str]], optional): The tokens. If None, the tokens are taken from the
+            metadata. Defaults to None.
+        token_offset_mapping (Optional[List[Tuple[int, int]]], optional): The token offset mapping.
+            If None, the token offset mapping is taken from the metadata. Defaults to None.
+        char_to_token (Optional[Callable[[int], Optional[int]]], optional): The char to token function.
+            If None, the char to token function is constructed from the token offset mapping. Defaults
+            to None.
+        strict_span_conversion (bool, optional): If True, raise an error if not all annotations can
+            be converted to token based documents. Defaults to True.
+        verbose (bool, optional): If True, log warnings if annotations can not be converted. Defaults
+            to True.
+        added_annotations (Optional[Dict[str, Dict[Annotation, Annotation]]], optional): Pass an empty
+            dictionary to collect the added annotations. Defaults to None.
+
+    Returns:
+        ToD: The token based document of type result_document_type with the converted annotations.
+    """
+
     document_type = resolve_type(
         type_or_str=result_document_type, expected_super_type=TokenBasedDocument
     )
@@ -246,6 +272,33 @@ def token_based_document_to_text_based(
     verbose: bool = True,
     added_annotations: Optional[Dict[str, Dict[Annotation, Annotation]]] = None,
 ) -> TeD:
+    """Convert a token based document to a text based document. Uses either text,
+    token_offset_mapping or char_to_token (provided explicitly or from the document metadata) to
+    convert the annotations that target the tokens and all that depend on these (also adds all
+    remaining annotations).
+
+    Args:
+        doc (TokenBasedDocument): The token based document.
+        result_document_type (Union[Type[TeD], str]): The type of the text based document.
+        text (Optional[str], optional): The text. If None, constructed from the tokens (requires
+            join_tokens_with) or taken from the metadata. Defaults to None.
+        token_offset_mapping (Optional[List[Tuple[int, int]]], optional): The token offset mapping.
+            If None, the token offset mapping is constructed from the tokens (requires join_tokens_with)
+            or taken from the metadata. Defaults to None.
+        join_tokens_with (Optional[str], optional): The token separator. If no text is provided, the
+            text and token offset mapping are constructed from the tokens by joining them with this
+            separator. Defaults to None.
+        strict_span_conversion (bool, optional): If True, raise an error if not all annotations
+            can be converted to text based documents. Defaults to True.
+        verbose (bool, optional): If True, log warnings if annotations can not be converted.
+            Defaults to True.
+        added_annotations (Optional[Dict[str, Dict[Annotation, Annotation]]], optional): Pass an
+            empty dictionary to collect the added annotations. Defaults to None.
+
+    Returns:
+        TeD: The text based document of type result_document_type with the converted annotations.
+    """
+
     document_type = resolve_type(
         type_or_str=result_document_type, expected_super_type=TextBasedDocument
     )
@@ -342,6 +395,27 @@ def tokenize_document(
     verbose: bool = True,
     **tokenize_kwargs,
 ) -> List[ToD]:
+    """Tokenize a document with a given tokenizer and return a list of token based documents. The
+    document is tokenized in partitions if a partition layer is provided. The annotations that
+    target the text are converted to target the tokens and also all dependent annotations are
+    converted.
+
+    Args:
+        doc (TextBasedDocument): The document to tokenize.
+        tokenizer (PreTrainedTokenizer): The tokenizer.
+        result_document_type (Type[ToD]): The exact type of the token based documents.
+        partition_layer (Optional[str], optional): The layer to use for partitioning the document. If None, the whole
+            document is tokenized. Defaults to None.
+        strict_span_conversion (bool, optional): If True, raise an error if not all annotations can be converted to
+            token based documents. Defaults to True.
+        added_annotations (Optional[List[Dict[str, Dict[Annotation, Annotation]]]], optional): Pass an empty list to
+            collect the added annotations. Defaults to None.
+        verbose (bool, optional): If True, log warnings if annotations can not be converted. Defaults to True.
+
+    Returns:
+        List[ToD]: The token based documents of type result_document_type with the converted annotations.
+    """
+
     added_annotation_lists: Dict[str, List[Annotation]] = defaultdict(list)
     result = []
     partitions: Iterable[Span]
