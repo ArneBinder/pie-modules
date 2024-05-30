@@ -1573,14 +1573,14 @@ def test_configure_model_metric(documents, taskmodule):
         "f1_per_label/fp": [0, 0, 0, 0],
         "f1_per_label/tn": [0, 0, 0, 0],
         "f1_per_label/fn": [0, 0, 0, 0],
-        "macro/f1/tp": [0, 0, 0, 0],
+        "macro/f1/fn": [0, 0, 0, 0],
         "macro/f1/fp": [0, 0, 0, 0],
         "macro/f1/tn": [0, 0, 0, 0],
-        "macro/f1/fn": [0, 0, 0, 0],
-        "micro/f1/tp": [0],
+        "macro/f1/tp": [0, 0, 0, 0],
+        "micro/f1/fn": [0],
         "micro/f1/fp": [0],
         "micro/f1/tn": [0],
-        "micro/f1/fn": [0],
+        "micro/f1/tp": [0],
     }
     assert metric.compute() == {
         "no_relation/f1": tensor(0.0),
