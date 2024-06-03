@@ -12,6 +12,8 @@ from pie_modules.taskmodules import RESpanPairClassificationTaskModule
 from pie_modules.utils.span import distance
 from tests import _config_to_str
 
+TOKENIZER_NAME_OR_PATH = "bert-base-cased"
+
 CONFIGS = [{}, {"partition_annotation": "sentences"}]
 CONFIGS_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
 
@@ -23,10 +25,9 @@ def cfg(request):
 
 @pytest.fixture(scope="module")
 def unprepared_taskmodule(cfg):
-    tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RESpanPairClassificationTaskModule(
         relation_annotation="relations",
-        tokenizer_name_or_path=tokenizer_name_or_path,
+        tokenizer_name_or_path=TOKENIZER_NAME_OR_PATH,
         log_first_n_examples=10,
         collect_statistics=True,
         **cfg,
@@ -288,6 +289,82 @@ def test_encode_target(taskmodule, task_encodings, cfg):
                 raise ValueError(f"unexpected idx: {idx}")
     else:
         raise ValueError(f"unexpected config: {cfg}")
+
+
+def test_encode_with_no_gold_relation(document):
+    # create a new taskmodule that does create candidate relations
+    taskmodule = RESpanPairClassificationTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path=TOKENIZER_NAME_OR_PATH,
+        create_candidate_relations=True,
+        labels=["org:founded_by", "per:employee_of", "per:founder"],
+        entity_labels=["ORG", "PER"],
+    )
+    taskmodule.post_prepare()
+    # create a new document that has no relations
+    document = document.copy()
+    document.relations.clear()
+
+    encodings = taskmodule.encode(document, encode_target=True)
+
+    assert len(encodings) == 1
+    encoding = encodings[0]
+    # same number of candidate relations as there are labels
+    assert len(encoding.metadata["candidate_relations"]) == encoding.targets["labels"].numel()
+    assert all(rel.label == "no_relation" for rel in encoding.metadata["candidate_relations"])
+    assert encoding.targets["labels"].tolist() == [0, 0, 0, 0, 0, 0]
+
+
+def test_encode_with_multiple_gold_relations_with_same_arguments(document, caplog):
+    # create a new taskmodule that does create candidate relations
+    taskmodule = RESpanPairClassificationTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path=TOKENIZER_NAME_OR_PATH,
+        labels=["org:founded_by", "per:employee_of", "per:founder"],
+        entity_labels=["ORG", "PER"],
+    )
+    taskmodule.post_prepare()
+    # create a new document that has multiple relations with the same arguments
+    document = document.copy()
+    document.relations.clear()
+    head = document.entities[0]
+    tail = document.entities[1]
+    document.relations.extend(
+        [
+            BinaryRelation(head=head, tail=tail, label="org:founded_by"),
+            BinaryRelation(head=head, tail=tail, label="per:employee_of"),
+        ]
+    )
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        encodings = taskmodule.encode(document, encode_target=True)
+    assert len(caplog.messages) == 2
+    assert (
+        caplog.messages[0]
+        == "skip the candidate relation because there are more than one gold relation for "
+        "its args and roles: [BinaryRelation(head=LabeledSpan(start=5, end=10, label='PER', score=1.0), "
+        "tail=LabeledSpan(start=13, end=15, label='ORG', score=1.0), label='org:founded_by', score=1.0), "
+        "BinaryRelation(head=LabeledSpan(start=5, end=10, label='PER', score=1.0), "
+        "tail=LabeledSpan(start=13, end=15, label='ORG', score=1.0), label='per:employee_of', score=1.0)]"
+    )
+    assert (
+        caplog.messages[1]
+        == "skip the candidate relation because there are more than one gold relation for "
+        "its args and roles: [BinaryRelation(head=LabeledSpan(start=5, end=10, label='PER', score=1.0), "
+        "tail=LabeledSpan(start=13, end=15, label='ORG', score=1.0), label='org:founded_by', score=1.0), "
+        "BinaryRelation(head=LabeledSpan(start=5, end=10, label='PER', score=1.0), "
+        "tail=LabeledSpan(start=13, end=15, label='ORG', score=1.0), label='per:employee_of', score=1.0)]"
+    )
+
+    assert len(encodings) == 1
+    encoding = encodings[0]
+    candidate_relations = encoding.metadata["candidate_relations"]
+    # same number of candidate relations as there are labels
+    assert len(candidate_relations) == encoding.targets["labels"].numel()
+    assert candidate_relations[0].label == "org:founded_by"
+    assert candidate_relations[1].label == "per:employee_of"
+    assert encoding.targets["labels"].tolist() == [-100, -100]
 
 
 def test_maybe_log_example(taskmodule, task_encodings, caplog, cfg):
