@@ -155,9 +155,7 @@ logger = logging.getLogger(__name__)
 def _get_label_ids_from_model_output(
     model_output: ModelTargetType,
 ) -> LongTensor:
-    # only return valid labels
-    labels = model_output["labels"]
-    return labels[labels >= 0]
+    return model_output["labels"]
 
 
 def get_relation_argument_spans_and_roles(
@@ -656,27 +654,30 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                     get_relation_argument_spans_and_roles(relation)
                 ].append(relation)
         label_indices = []  # list of label indices
-        valid_candidate_relations = []
+        candidate_relations = []
         for candidate_relation in task_encoding.metadata["candidate_relations"]:
             candidate_roles_and_args = get_relation_argument_spans_and_roles(candidate_relation)
             gold_relations = gold_roles_and_args2relation.get(candidate_roles_and_args, [])
             if len(gold_relations) == 0:
-                label_indices.append(self.label_to_id[candidate_relation.label])
+                label_idx = self.label_to_id[candidate_relation.label]
                 self.collect_relation("used", candidate_relation)
             elif len(gold_relations) == 1:
-                label_indices.append(self.label_to_id[gold_relations[0].label])
+                label_idx = self.label_to_id[gold_relations[0].label]
                 self.collect_relation("used", gold_relations[0])
             else:
+                # TODO: or should we add all gold relations with the same arguments?
                 logger.warning(
                     f"skip the candidate relation because there are more than one gold relation "
                     f"for its args and roles: {gold_relations}"
                 )
                 for gold_relation in gold_relations:
                     self.collect_relation("skipped_same_arguments", gold_relation)
-                continue
-            valid_candidate_relations.append(candidate_relation)
+                label_idx = PAD_VALUES["labels"]
 
-        task_encoding.metadata["candidate_relations"] = valid_candidate_relations
+            label_indices.append(label_idx)
+            candidate_relations.append(candidate_relation)
+
+        task_encoding.metadata["candidate_relations"] = candidate_relations
         target: TargetEncodingType = {"labels": to_tensor("labels", label_indices)}
 
         self._maybe_log_example(task_encoding=task_encoding, target=target)
@@ -817,8 +818,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         common_metric_kwargs = {
             "num_classes": len(labels),
             "task": "multiclass",
-            # do we want to ignore the no_relation_label?
-            # "ignore_index": self.label_to_id[self.no_relation_label],
+            "ignore_index": PAD_VALUES["labels"],
         }
         return WrappedMetricWithPrepareFunction(
             metric=MetricCollection(
