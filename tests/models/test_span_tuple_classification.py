@@ -10,7 +10,7 @@ from tests import _config_to_str
 
 CONFIGS = [{}]
 CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
-NUM_CLASSES = 5
+NUM_CLASSES = 4
 
 
 @pytest.fixture(scope="module", params=CONFIG_DICT.keys())
@@ -50,6 +50,7 @@ def test_taskmodule_config(documents, taskmodule_config):
     )
     taskmodule.prepare(documents)
     assert taskmodule.config == taskmodule_config
+    assert len(taskmodule.id_to_label) == NUM_CLASSES
 
 
 def test_batch(documents, batch, taskmodule_config):
@@ -253,7 +254,6 @@ def test_forward_embeddings(batch, taskmodule_config, span_embedding_mode, tuple
 
     inputs, targets = batch
     batch_size, seq_len = inputs["input_ids"].shape
-    num_classes = int(torch.max(targets["labels"]) + 1)
 
     # set seed to make sure the output is deterministic
     torch.manual_seed(42)
@@ -351,53 +351,46 @@ def test_forward_logits(batch, model):
         tensor(
             [
                 [
-                    -0.23394562304019928,
-                    0.10513901710510254,
-                    -0.24147917330265045,
-                    0.3591884970664978,
-                    0.25288018584251404,
+                    -0.23075447976589203,
+                    0.08129829168319702,
+                    -0.26441076397895813,
+                    0.3208361268043518,
                 ],
                 [
-                    -0.22792132198810577,
-                    0.23837561905384064,
-                    -0.18316347897052765,
-                    0.3368367552757263,
-                    0.34314143657684326,
+                    -0.2247302085161209,
+                    0.21453489363193512,
+                    -0.20609508454799652,
+                    0.2984844148159027,
                 ],
                 [
-                    -0.058463528752326965,
-                    0.20703309774398804,
-                    -0.11822658032178879,
-                    0.2697277069091797,
-                    0.41055092215538025,
+                    -0.0552724152803421,
+                    0.18319237232208252,
+                    -0.14115819334983826,
+                    0.23137536644935608,
                 ],
                 [
-                    -0.29290956258773804,
-                    0.19846144318580627,
-                    -0.09711714088916779,
-                    0.2201312780380249,
-                    0.3194638192653656,
+                    -0.2897184491157532,
+                    0.17462071776390076,
+                    -0.12004873156547546,
+                    0.1817789375782013,
                 ],
                 [
-                    -0.31334054470062256,
-                    0.20629142224788666,
-                    -0.11232215166091919,
-                    0.32460397481918335,
-                    0.37849563360214233,
+                    -0.3101494312286377,
+                    0.18245069682598114,
+                    -0.13525372743606567,
+                    0.28625163435935974,
                 ],
                 [
-                    -0.3404741585254669,
-                    0.24422255158424377,
-                    -0.025299251079559326,
-                    0.29072630405426025,
-                    0.39520588517189026,
+                    -0.33728304505348206,
+                    0.22038179636001587,
+                    -0.0482308566570282,
+                    0.25237396359443665,
                 ],
                 [
-                    -0.38678234815597534,
-                    0.2293384075164795,
-                    0.17626804113388062,
-                    0.27206164598464966,
-                    0.2855021059513092,
+                    -0.3835912048816681,
+                    0.20549766719341278,
+                    0.15333643555641174,
+                    0.23370930552482605,
                 ],
             ]
         ),
@@ -409,7 +402,7 @@ def test_step(batch, model, config):
     loss = model._step("train", batch)
     assert loss is not None
     if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(1.6717431545257568))
+        torch.testing.assert_close(loss, torch.tensor(1.3911350965499878))
     else:
         raise ValueError(f"Unknown config: {config}")
 
@@ -420,7 +413,7 @@ def test_training_step_and_on_epoch_end(batch, model, config):
     loss = model.training_step(batch, batch_idx=0)
     assert loss is not None
     if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(1.6717431545257568))
+        torch.testing.assert_close(loss, torch.tensor(1.3911350965499878))
     else:
         raise ValueError(f"Unknown config: {config}")
 
@@ -434,14 +427,14 @@ def test_validation_step_and_on_epoch_end(batch, model, config):
     assert loss is not None
     metric_values = {k: v.item() for k, v in metric.compute().items()}
     if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(1.624246597290039))
+        torch.testing.assert_close(loss, torch.tensor(1.3911350965499878))
         assert metric_values == {
-            "macro/f1": 0.125,
+            "macro/f1": 0.14814814925193787,
             "micro/f1": 0.2857142984867096,
             "no_relation/f1": 0.0,
             "org:founded_by/f1": 0.0,
             "per:employee_of/f1": 0.0,
-            "per:founder/f1": 0.5,
+            "per:founder/f1": 0.4444444477558136,
         }
     else:
         raise ValueError(f"Unknown config: {config}")
@@ -456,14 +449,14 @@ def test_test_step_and_on_epoch_end(batch, model, config):
     assert loss is not None
     metric_values = {k: v.item() for k, v in metric.compute().items()}
     if config == {}:
-        torch.testing.assert_close(loss, torch.tensor(1.624246597290039))
+        torch.testing.assert_close(loss, torch.tensor(1.3911350965499878))
         assert metric_values == {
-            "macro/f1": 0.125,
+            "macro/f1": 0.14814814925193787,
             "micro/f1": 0.2857142984867096,
             "no_relation/f1": 0.0,
             "org:founded_by/f1": 0.0,
             "per:employee_of/f1": 0.0,
-            "per:founder/f1": 0.5,
+            "per:founder/f1": 0.4444444477558136,
         }
     else:
         raise ValueError(f"Unknown config: {config}")
@@ -484,25 +477,25 @@ def test_predict_and_predict_step(model, batch, config, test_step):
     assert labels.shape == batch[1]["labels"].shape
     probabilities = predictions["probabilities"]
     if config == {}:
-        torch.testing.assert_close(labels, tensor([[3, -100, -100], [3, 3, 0], [3, 3, 3]]))
+        torch.testing.assert_close(labels, tensor([[3, -100, -100], [3, 3, 3], [3, 3, 3]]))
         torch.testing.assert_close(
             probabilities.round(decimals=4),
             tensor(
                 [
                     [
-                        [0.1954, 0.1549, 0.1551, 0.2700, 0.2246],
-                        [-1.0000, -1.0000, -1.0000, -1.0000, -1.0000],
-                        [-1.0000, -1.0000, -1.0000, -1.0000, -1.0000],
+                        [0.1973, 0.2695, 0.1907, 0.3425],
+                        [-1.0000, -1.0000, -1.0000, -1.0000],
+                        [-1.0000, -1.0000, -1.0000, -1.0000],
                     ],
                     [
-                        [0.1793, 0.1674, 0.1820, 0.2485, 0.2228],
-                        [0.1769, 0.1576, 0.1693, 0.2671, 0.2291],
-                        [0.2145, 0.1880, 0.1898, 0.1941, 0.2136],
+                        [0.1902, 0.2951, 0.1938, 0.3209],
+                        [0.2213, 0.2809, 0.2031, 0.2947],
+                        [0.1859, 0.2958, 0.2203, 0.2979],
                     ],
                     [
-                        [0.1755, 0.1708, 0.1898, 0.2556, 0.2083],
-                        [0.1724, 0.1844, 0.1804, 0.2517, 0.2111],
-                        [0.2312, 0.1704, 0.1580, 0.2361, 0.2043],
+                        [0.1772, 0.2900, 0.2111, 0.3217],
+                        [0.1699, 0.2968, 0.2269, 0.3064],
+                        [0.1571, 0.2831, 0.2687, 0.2912],
                     ],
                 ],
             ),
