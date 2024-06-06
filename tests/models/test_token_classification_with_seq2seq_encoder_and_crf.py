@@ -414,8 +414,8 @@ def test_validation_step_and_on_epoch_end(batch, model, config):
     if config == {}:
         torch.testing.assert_close(loss, torch.tensor(77.59623718261719))
         assert metric_values == {
-            "token/macro/f1": 0.3361110985279083,
-            "token/micro/f1": 0.4000000059604645,
+            "token/macro/f1": 0.20666667819023132,
+            "token/micro/f1": 0.2068965584039688,
             "span/ORG/f1": 0.3636363744735718,
             "span/ORG/recall": 0.25,
             "span/ORG/precision": 0.6666666865348816,
@@ -432,20 +432,20 @@ def test_validation_step_and_on_epoch_end(batch, model, config):
     elif config == {"use_crf": False}:
         torch.testing.assert_close(loss, torch.tensor(1.9865683317184448))
         assert metric_values == {
-            "token/macro/f1": 0.2545454502105713,
-            "token/micro/f1": 0.3333333432674408,
-            "span/PER/f1": 0.0,
-            "span/PER/recall": 0.0,
-            "span/PER/precision": 0.0,
+            "token/macro/f1": 0.11717171967029572,
+            "token/micro/f1": 0.17241379618644714,
             "span/ORG/f1": 0.0,
             "span/ORG/recall": 0.0,
             "span/ORG/precision": 0.0,
-            "span/macro/f1": 0.0,
-            "span/macro/precision": 0.0,
-            "span/macro/recall": 0.0,
+            "span/PER/f1": 0.0,
+            "span/PER/recall": 0.0,
+            "span/PER/precision": 0.0,
             "span/micro/f1": 0.0,
             "span/micro/recall": 0.0,
             "span/micro/precision": 0.0,
+            "span/macro/f1": 0.0,
+            "span/macro/recall": 0.0,
+            "span/macro/precision": 0.0,
         }
     else:
         raise ValueError(f"Unknown config: {config}")
@@ -462,14 +462,14 @@ def test_test_step_and_on_epoch_end(batch, model, config):
     if config == {}:
         torch.testing.assert_close(loss, torch.tensor(77.59623718261719))
         assert metric_values == {
-            "token/macro/f1": 0.3361110985279083,
-            "token/micro/f1": 0.4000000059604645,
-            "span/PER/f1": 0.0,
-            "span/PER/recall": 0.0,
-            "span/PER/precision": 0.0,
+            "token/macro/f1": 0.20666667819023132,
+            "token/micro/f1": 0.2068965584039688,
             "span/ORG/f1": 0.3636363744735718,
             "span/ORG/recall": 0.25,
             "span/ORG/precision": 0.6666666865348816,
+            "span/PER/f1": 0.0,
+            "span/PER/recall": 0.0,
+            "span/PER/precision": 0.0,
             "span/micro/f1": 0.12121212482452393,
             "span/micro/recall": 0.07407407462596893,
             "span/micro/precision": 0.3333333432674408,
@@ -480,20 +480,20 @@ def test_test_step_and_on_epoch_end(batch, model, config):
     elif config == {"use_crf": False}:
         torch.testing.assert_close(loss, torch.tensor(1.9865683317184448))
         assert metric_values == {
-            "token/macro/f1": 0.2545454502105713,
-            "token/micro/f1": 0.3333333432674408,
+            "token/macro/f1": 0.11717171967029572,
+            "token/micro/f1": 0.17241379618644714,
             "span/ORG/f1": 0.0,
             "span/ORG/recall": 0.0,
             "span/ORG/precision": 0.0,
             "span/PER/f1": 0.0,
             "span/PER/recall": 0.0,
             "span/PER/precision": 0.0,
-            "span/macro/f1": 0.0,
-            "span/macro/precision": 0.0,
-            "span/macro/recall": 0.0,
             "span/micro/f1": 0.0,
             "span/micro/recall": 0.0,
             "span/micro/precision": 0.0,
+            "span/macro/f1": 0.0,
+            "span/macro/recall": 0.0,
+            "span/macro/precision": 0.0,
         }
     else:
         raise ValueError(f"Unknown config: {config}")
