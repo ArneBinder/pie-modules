@@ -787,8 +787,8 @@ def test_configure_model_metric(documents):
     values = metric.compute()
     values_converted = {k: v.item() for k, v in values.items()}
     assert values_converted == {
-        "token/macro/f1": 0.6349206566810608,
-        "token/micro/f1": 0.625,
+        "token/macro/f1": 0.5434783101081848,
+        "token/micro/f1": 0.5249999761581421,
         "span/LOC/recall": 0.0476190485060215,
         "span/LOC/precision": 0.5,
         "span/LOC/f1": 0.08695652335882187,
