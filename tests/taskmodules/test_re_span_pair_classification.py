@@ -1,5 +1,6 @@
 import dataclasses
 import logging
+from typing import Any, Dict, Union
 
 import pytest
 import torch
@@ -7,8 +8,10 @@ from pytorch_ie import AnnotationLayer, annotation_field
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.documents import TextBasedDocument
 from torch import tensor
+from torchmetrics import Metric, MetricCollection
 
 from pie_modules.taskmodules import RESpanPairClassificationTaskModule
+from pie_modules.utils import flatten_dict
 from pie_modules.utils.span import distance
 from tests import _config_to_str
 
@@ -552,10 +555,52 @@ def test_create_annotations_from_output(
         assert predicted_relation.score == scores[i]
 
 
+def get_metric_state(metric_or_collection: Union[Metric, MetricCollection]) -> Dict[str, Any]:
+    if isinstance(metric_or_collection, Metric):
+        return {k: v.tolist() for k, v in flatten_dict(metric_or_collection.metric_state).items()}
+    elif isinstance(metric_or_collection, MetricCollection):
+        return flatten_dict({k: get_metric_state(v) for k, v in metric_or_collection.items()})
+    else:
+        raise ValueError(f"unsupported type: {type(metric_or_collection)}")
+
+
 def test_configure_model_metrics(taskmodule, model_output):
     metrics = taskmodule.configure_model_metric(stage="train")
     assert metrics is not None
+    assert isinstance(metrics, (Metric, MetricCollection))
+    state = get_metric_state(metrics)
+    assert state == {
+        "f1_per_label/tp": [0, 0, 0, 0],
+        "f1_per_label/fp": [0, 0, 0, 0],
+        "f1_per_label/tn": [0, 0, 0, 0],
+        "f1_per_label/fn": [0, 0, 0, 0],
+        "macro/f1/tp": [0, 0, 0, 0],
+        "macro/f1/fp": [0, 0, 0, 0],
+        "macro/f1/tn": [0, 0, 0, 0],
+        "macro/f1/fn": [0, 0, 0, 0],
+        "micro/f1/tp": [0],
+        "micro/f1/fp": [0],
+        "micro/f1/tn": [0],
+        "micro/f1/fn": [0],
+    }
+
     metric_values = metrics(model_output, model_output)
+    state = get_metric_state(metrics)
+    assert state == {
+        "f1_per_label/tp": [0, 1, 1, 1],
+        "f1_per_label/fp": [0, 0, 0, 0],
+        "f1_per_label/tn": [3, 2, 2, 2],
+        "f1_per_label/fn": [0, 0, 0, 0],
+        "macro/f1/tp": [0, 1, 1, 1],
+        "macro/f1/fp": [0, 0, 0, 0],
+        "macro/f1/tn": [3, 2, 2, 2],
+        "macro/f1/fn": [0, 0, 0, 0],
+        "micro/f1/tp": [3],
+        "micro/f1/fp": [0],
+        "micro/f1/tn": [9],
+        "micro/f1/fn": [0],
+    }
+
     metric_values_converted = {key: value.item() for key, value in metric_values.items()}
     assert metric_values_converted == {
         "macro/f1": 1.0,

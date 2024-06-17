@@ -3,6 +3,7 @@ import logging
 import pickle
 import re
 from dataclasses import dataclass
+from typing import Any, Dict, Union
 
 import pytest
 import torch
@@ -1561,13 +1562,22 @@ def test_encode_with_collect_statistics(documents, caplog):
     )
 
 
+def get_metric_state(metric_or_collection: Union[Metric, MetricCollection]) -> Dict[str, Any]:
+    if isinstance(metric_or_collection, Metric):
+        return {k: v.tolist() for k, v in flatten_dict(metric_or_collection.metric_state).items()}
+    elif isinstance(metric_or_collection, MetricCollection):
+        return flatten_dict({k: get_metric_state(v) for k, v in metric_or_collection.items()})
+    else:
+        raise ValueError(f"unsupported type: {type(metric_or_collection)}")
+
+
 def test_configure_model_metric(documents, taskmodule):
     task_encodings = taskmodule.encode(documents, encode_target=True)
     batch = taskmodule.collate(task_encodings)
 
     metric = taskmodule.configure_model_metric(stage="train")
     assert isinstance(metric, (Metric, MetricCollection))
-    state = {k: v.tolist() for k, v in flatten_dict(metric.metric_state).items()}
+    state = get_metric_state(metric)
     assert state == {
         "f1_per_label/tp": [0, 0, 0, 0],
         "f1_per_label/fp": [0, 0, 0, 0],
@@ -1593,7 +1603,7 @@ def test_configure_model_metric(documents, taskmodule):
 
     targets = batch[1]
     metric.update(targets, targets)
-    state = {k: v.tolist() for k, v in flatten_dict(metric.metric_state).items()}
+    state = get_metric_state(metric)
     assert state == {
         "f1_per_label/fn": [0, 0, 0, 0],
         "f1_per_label/fp": [0, 0, 0, 0],
@@ -1622,7 +1632,7 @@ def test_configure_model_metric(documents, taskmodule):
     # three matches
     random_targets = {"labels": torch.tensor([1, 1, 3, 1, 2, 0, 0])}
     metric.update(random_targets, targets)
-    state = {k: v.tolist() for k, v in flatten_dict(metric.metric_state).items()}
+    state = get_metric_state(metric)
     assert state == {
         "f1_per_label/fn": [0, 1, 2, 1],
         "f1_per_label/fp": [2, 2, 0, 0],
