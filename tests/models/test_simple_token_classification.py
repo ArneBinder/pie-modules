@@ -343,6 +343,10 @@ def test_validation_step_and_on_epoch_end(batch, model, config):
         "span/micro/recall": 0.0,
         "token/macro/f1": 0.0,
         "token/micro/f1": 0.0,
+        "token/macro/precision": 0.0,
+        "token/macro/recall": 0.0,
+        "token/micro/precision": 0.0,
+        "token/micro/recall": 0.0,
     }
 
     model.on_validation_epoch_end()
@@ -370,6 +374,10 @@ def test_test_step_and_on_epoch_end(batch, model, config):
         "span/micro/recall": 0.0,
         "token/macro/f1": 0.0,
         "token/micro/f1": 0.0,
+        "token/macro/precision": 0.0,
+        "token/macro/recall": 0.0,
+        "token/micro/precision": 0.0,
+        "token/micro/recall": 0.0,
     }
 
     model.on_test_epoch_end()

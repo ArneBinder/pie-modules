@@ -416,6 +416,10 @@ def test_validation_step_and_on_epoch_end(batch, model, config):
         assert metric_values == {
             "token/macro/f1": 0.20666667819023132,
             "token/micro/f1": 0.2068965584039688,
+            "token/macro/precision": 0.29019609093666077,
+            "token/macro/recall": 0.2666666805744171,
+            "token/micro/precision": 0.2068965584039688,
+            "token/micro/recall": 0.2068965584039688,
             "span/ORG/f1": 0.3636363744735718,
             "span/ORG/recall": 0.25,
             "span/ORG/precision": 0.6666666865348816,
@@ -434,6 +438,10 @@ def test_validation_step_and_on_epoch_end(batch, model, config):
         assert metric_values == {
             "token/macro/f1": 0.11717171967029572,
             "token/micro/f1": 0.17241379618644714,
+            "token/macro/precision": 0.22500000894069672,
+            "token/macro/recall": 0.24444444477558136,
+            "token/micro/precision": 0.17241379618644714,
+            "token/micro/recall": 0.17241379618644714,
             "span/ORG/f1": 0.0,
             "span/ORG/recall": 0.0,
             "span/ORG/precision": 0.0,
@@ -464,6 +472,10 @@ def test_test_step_and_on_epoch_end(batch, model, config):
         assert metric_values == {
             "token/macro/f1": 0.20666667819023132,
             "token/micro/f1": 0.2068965584039688,
+            "token/macro/precision": 0.29019609093666077,
+            "token/macro/recall": 0.2666666805744171,
+            "token/micro/precision": 0.2068965584039688,
+            "token/micro/recall": 0.2068965584039688,
             "span/ORG/f1": 0.3636363744735718,
             "span/ORG/recall": 0.25,
             "span/ORG/precision": 0.6666666865348816,
@@ -482,6 +494,10 @@ def test_test_step_and_on_epoch_end(batch, model, config):
         assert metric_values == {
             "token/macro/f1": 0.11717171967029572,
             "token/micro/f1": 0.17241379618644714,
+            "token/macro/precision": 0.22500000894069672,
+            "token/macro/recall": 0.24444444477558136,
+            "token/micro/precision": 0.17241379618644714,
+            "token/micro/recall": 0.17241379618644714,
             "span/ORG/f1": 0.0,
             "span/ORG/recall": 0.0,
             "span/ORG/precision": 0.0,
