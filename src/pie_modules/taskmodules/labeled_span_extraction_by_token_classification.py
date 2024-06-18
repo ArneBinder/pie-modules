@@ -34,7 +34,7 @@ from pytorch_ie.documents import (
 )
 from pytorch_ie.utils.span import bio_tags_to_spans
 from tokenizers import Encoding
-from torchmetrics import F1Score, Metric, MetricCollection
+from torchmetrics import F1Score, Metric, MetricCollection, Precision, Recall
 from transformers import AutoTokenizer
 from typing_extensions import TypeAlias
 
@@ -250,9 +250,9 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
             casted_document,
             tokenizer=self.tokenizer,
             result_document_type=tokenized_document_type,
-            partition_layer="labeled_partitions"
-            if self.partition_annotation is not None
-            else None,
+            partition_layer=(
+                "labeled_partitions" if self.partition_annotation is not None else None
+            ),
             strict_span_conversion=False,
             **self.tokenize_kwargs,
         )
@@ -416,6 +416,22 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
                 ),
                 "token/micro/f1": WrappedMetricWithPrepareFunction(
                     metric=F1Score(average="micro", **common_metric_kwargs),
+                    prepare_function=_get_label_ids_from_model_output,
+                ),
+                "token/macro/precision": WrappedMetricWithPrepareFunction(
+                    metric=Precision(average="macro", **common_metric_kwargs),
+                    prepare_function=_get_label_ids_from_model_output,
+                ),
+                "token/macro/recall": WrappedMetricWithPrepareFunction(
+                    metric=Recall(average="macro", **common_metric_kwargs),
+                    prepare_function=_get_label_ids_from_model_output,
+                ),
+                "token/micro/precision": WrappedMetricWithPrepareFunction(
+                    metric=Precision(average="micro", **common_metric_kwargs),
+                    prepare_function=_get_label_ids_from_model_output,
+                ),
+                "token/micro/recall": WrappedMetricWithPrepareFunction(
+                    metric=Recall(average="micro", **common_metric_kwargs),
                     prepare_function=_get_label_ids_from_model_output,
                 ),
             }
