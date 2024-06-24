@@ -34,7 +34,7 @@ from pytorch_ie.documents import (
 )
 from pytorch_ie.utils.span import bio_tags_to_spans
 from tokenizers import Encoding
-from torchmetrics import F1Score, Metric, MetricCollection
+from torchmetrics import F1Score, Metric, MetricCollection, Precision, Recall
 from transformers import AutoTokenizer
 from typing_extensions import TypeAlias
 
@@ -87,13 +87,10 @@ TaskModuleType: TypeAlias = TaskModule[
 logger = logging.getLogger(__name__)
 
 
-def remove_label_pad_ids(model_output: ModelOutputType, label_pad_id: int) -> torch.LongTensor:
-    labels = model_output["labels"]
-    # remove the special tokens and padding from the predicted / target labels
-    # because the label_pad_id is usually not a valid index (e.g. -100)
-    mask = labels != label_pad_id
-    labels_valid = labels[mask]
-    return labels_valid
+def _get_label_ids_from_model_output(
+    model_output: ModelTargetType,
+) -> torch.LongTensor:
+    return model_output["labels"]
 
 
 def unbatch_and_decode_annotations(
@@ -253,9 +250,9 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
             casted_document,
             tokenizer=self.tokenizer,
             result_document_type=tokenized_document_type,
-            partition_layer="labeled_partitions"
-            if self.partition_annotation is not None
-            else None,
+            partition_layer=(
+                "labeled_partitions" if self.partition_annotation is not None else None
+            ),
             strict_span_conversion=False,
             **self.tokenize_kwargs,
         )
@@ -409,17 +406,33 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
         common_metric_kwargs = {
             "num_classes": len(self.label_to_id),
             "task": "multiclass",
-            "ignore_index": self.label_to_id["O"],
+            "ignore_index": self.label_pad_id,
         }
         token_scores = MetricCollection(
             {
                 "token/macro/f1": WrappedMetricWithPrepareFunction(
                     metric=F1Score(average="macro", **common_metric_kwargs),
-                    prepare_function=partial(remove_label_pad_ids, label_pad_id=self.label_pad_id),
+                    prepare_function=_get_label_ids_from_model_output,
                 ),
                 "token/micro/f1": WrappedMetricWithPrepareFunction(
                     metric=F1Score(average="micro", **common_metric_kwargs),
-                    prepare_function=partial(remove_label_pad_ids, label_pad_id=self.label_pad_id),
+                    prepare_function=_get_label_ids_from_model_output,
+                ),
+                "token/macro/precision": WrappedMetricWithPrepareFunction(
+                    metric=Precision(average="macro", **common_metric_kwargs),
+                    prepare_function=_get_label_ids_from_model_output,
+                ),
+                "token/macro/recall": WrappedMetricWithPrepareFunction(
+                    metric=Recall(average="macro", **common_metric_kwargs),
+                    prepare_function=_get_label_ids_from_model_output,
+                ),
+                "token/micro/precision": WrappedMetricWithPrepareFunction(
+                    metric=Precision(average="micro", **common_metric_kwargs),
+                    prepare_function=_get_label_ids_from_model_output,
+                ),
+                "token/micro/recall": WrappedMetricWithPrepareFunction(
+                    metric=Recall(average="micro", **common_metric_kwargs),
+                    prepare_function=_get_label_ids_from_model_output,
                 ),
             }
         )

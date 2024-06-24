@@ -755,7 +755,14 @@ def test_configure_model_metric(documents):
 
     metric = taskmodule.configure_model_metric(stage="test")
     values = metric.compute()
-    assert values == {"token/macro/f1": tensor(0.0), "token/micro/f1": tensor(0.0)}
+    assert values == {
+        "token/macro/f1": tensor(0.0),
+        "token/micro/f1": tensor(0.0),
+        "token/macro/precision": tensor(0.0),
+        "token/macro/recall": tensor(0.0),
+        "token/micro/precision": tensor(0.0),
+        "token/micro/recall": tensor(0.0),
+    }
 
     batch = taskmodule.collate(taskmodule.encode(documents, encode_target=True))
     targets = batch[1]
@@ -776,6 +783,10 @@ def test_configure_model_metric(documents):
         "span/micro/recall": tensor(1.0),
         "token/macro/f1": tensor(1.0),
         "token/micro/f1": tensor(1.0),
+        "token/macro/precision": tensor(1.0),
+        "token/macro/recall": tensor(1.0),
+        "token/micro/precision": tensor(1.0),
+        "token/micro/recall": tensor(1.0),
     }
 
     target_labels = targets["labels"]
@@ -787,8 +798,12 @@ def test_configure_model_metric(documents):
     values = metric.compute()
     values_converted = {k: v.item() for k, v in values.items()}
     assert values_converted == {
-        "token/macro/f1": 0.6349206566810608,
-        "token/micro/f1": 0.625,
+        "token/macro/f1": 0.5434783101081848,
+        "token/micro/f1": 0.5249999761581421,
+        "token/macro/precision": 0.773809552192688,
+        "token/macro/recall": 0.625,
+        "token/micro/precision": 0.5249999761581421,
+        "token/micro/recall": 0.5249999761581421,
         "span/LOC/recall": 0.0476190485060215,
         "span/LOC/precision": 0.5,
         "span/LOC/f1": 0.08695652335882187,

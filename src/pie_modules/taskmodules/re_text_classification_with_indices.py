@@ -991,7 +991,6 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         common_metric_kwargs = {
             "num_classes": len(labels),
             "task": "multilabel" if self.multi_label else "multiclass",
-            "ignore_index": self.label_to_id[self.none_label],
         }
         return WrappedMetricWithPrepareFunction(
             metric=MetricCollection(
