@@ -192,13 +192,14 @@ def construct_argument_marker(pos: str, label: Optional[str] = None, role: str =
 
 def inject_markers_into_text(
     text: str, positions_and_markers: List[Tuple[int, str]]
-) -> Tuple[str, Dict[int, int]]:
+) -> Tuple[str, Dict[int, Tuple[int, List[str]]]]:
     offset = 0
-    original2new_pos = dict()
+    original2new_pos: Dict[int, Tuple[int, List[str]]] = dict()
     for original_pos, marker in sorted(positions_and_markers):
         text = text[: original_pos + offset] + marker + text[original_pos + offset :]
+        previous_markers = original2new_pos.get(original_pos, (-1, []))[1]
+        original2new_pos[original_pos] = (original_pos + offset, previous_markers + [marker])
         offset += len(marker)
-        original2new_pos[original_pos] = original_pos + offset
     return text, original2new_pos
 
 
@@ -505,21 +506,23 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
 
         if isinstance(document, TextDocumentWithLabeledPartitions):
             # create "dummy" markers for the partitions so that entries for these positions are created
-            # in original2new_pos
+            # in original_pos2new_pos_and_markers
             for labeled_partition in document.labeled_partitions:
                 positions_and_markers.append((labeled_partition.start, ""))
                 positions_and_markers.append((labeled_partition.end, ""))
 
         # inject markers into the text
-        marked_text, original2new_pos = inject_markers_into_text(
+        marked_text, original_pos2new_pos_and_markers = inject_markers_into_text(
             document.text, positions_and_markers
         )
 
         # construct new spans
         old2new_spans = dict()
         for labeled_span in document.labeled_spans:
-            start = original2new_pos[labeled_span.start]
-            end = original2new_pos[labeled_span.end]
+            start_before_markers, markers = original_pos2new_pos_and_markers[labeled_span.start]
+            # we use just the span *without* the markers as new span
+            start = start_before_markers + sum(len(marker) for marker in markers)
+            end = original_pos2new_pos_and_markers[labeled_span.end][0]
             new_span = LabeledSpan(start=start, end=end, label=labeled_span.label)
             old2new_spans[labeled_span] = new_span
 
@@ -546,9 +549,13 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         new_document.binary_relations.extend(old2new_relations.values())
         if isinstance(document, TextDocumentWithLabeledPartitions):
             for labeled_partition in document.labeled_partitions:
-                new_start = original2new_pos[labeled_partition.start]
-                new_end = original2new_pos[labeled_partition.end]
-                new_labeled_partitions = labeled_partition.copy(start=new_start, end=new_end)
+                # we use the span *including* the markers as new span
+                start, _ = original_pos2new_pos_and_markers[labeled_partition.start]
+                end_before_markers, markers = original_pos2new_pos_and_markers[
+                    labeled_partition.end
+                ]
+                end = end_before_markers + sum(len(marker) for marker in markers)
+                new_labeled_partitions = labeled_partition.copy(start=start, end=end)
                 new_document.labeled_partitions.append(new_labeled_partitions)
 
         new2old_spans = {new_span: old_span for old_span, new_span in old2new_spans.items()}
@@ -711,7 +718,9 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             ):
                 logger.info(f"relation {i}: {label}")
                 for j, arg_idx in enumerate(tuple_indices):
-                    arg_tokens = tokens[span_start_indices[arg_idx] : span_end_indices[arg_idx]]
+                    arg_tokens = tokens[
+                        span_start_indices[arg_idx] : span_end_indices[arg_idx] + 1
+                    ]
                     logger.info(f"\targ {j}: {' '.join([str(x) for x in arg_tokens])}")
 
             self._logged_examples_counter += 1
