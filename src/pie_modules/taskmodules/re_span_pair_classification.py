@@ -775,7 +775,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         token2char_spans = {v: k for k, v in char2token_spans.items()}
         injected2original_spans = task_encoding.metadata["injected2original_spans"]
         new_relations = []
-        for candidate_token_relation, label, probability, is_valid in zip(
+        for candidate_relation, label, probability, is_valid in zip(
             task_encoding.metadata["candidate_relations"],
             task_output["labels"],
             task_output["probabilities"],
