@@ -664,7 +664,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                     get_relation_argument_spans_and_roles(relation)
                 ].append(relation)
         label_indices = []  # list of label indices
-        candidate_relations = []
+        # candidate_relations = []
         for candidate_relation in task_encoding.metadata["candidate_relations"]:
             candidate_roles_and_args = get_relation_argument_spans_and_roles(candidate_relation)
             gold_relations = gold_roles_and_args2relation.get(candidate_roles_and_args, [])
@@ -685,9 +685,9 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                 label_idx = PAD_VALUES["labels"]
 
             label_indices.append(label_idx)
-            candidate_relations.append(candidate_relation)
+            # candidate_relations.append(candidate_relation)
 
-        task_encoding.metadata["candidate_relations"] = candidate_relations
+        # task_encoding.metadata["candidate_relations"] = candidate_relations
         target: TargetEncodingType = {"labels": to_tensor("labels", label_indices)}
 
         self._maybe_log_example(task_encoding=task_encoding, target=target)
