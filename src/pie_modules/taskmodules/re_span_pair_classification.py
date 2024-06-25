@@ -193,6 +193,17 @@ def construct_argument_marker(pos: str, label: Optional[str] = None, role: str =
 def inject_markers_into_text(
     text: str, positions_and_markers: List[Tuple[int, str]]
 ) -> Tuple[str, Dict[int, Tuple[int, List[str]]]]:
+    """Inject markers into the text at the given positions.
+
+    Args:
+        text: The text to inject the markers into.
+        positions_and_markers: A list of tuples where each tuple contains the position in the text
+            where the marker should be injected and the marker text itself.
+
+    Returns:
+        A tuple containing the text with the markers injected and a dictionary mapping the original
+        positions to the new positions and the markers that were injected at that position.
+    """
     offset = 0
     original2new_pos: Dict[int, Tuple[int, List[str]]] = dict()
     for original_pos, marker in sorted(positions_and_markers):
