@@ -573,6 +573,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         document_with_markers, injected2original_spans = self.inject_markers_for_labeled_spans(
             normalized_document
         )
+        all_added_annotations: List[Dict[str, Dict[Annotation, Annotation]]] = []
         tokenized_docs = tokenize_document(
             document_with_markers,
             tokenizer=self.tokenizer,
@@ -580,12 +581,13 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             partition_layer="labeled_partitions"
             if self.partition_annotation is not None
             else None,
+            added_annotations=all_added_annotations,
             strict_span_conversion=False,
             **self.tokenize_kwargs,
         )
 
         task_encodings: List[TaskEncodingType] = []
-        for tokenized_doc in tokenized_docs:
+        for tokenized_doc, tokenized_annotations in zip(tokenized_docs, all_added_annotations):
             self.collect_all_relations("available_tokenized", tokenized_doc.binary_relations)
             # collect start- and end-token positions for each entity
             span_start_indices = []
@@ -634,6 +636,7 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
                         "tokenized_document": tokenized_doc,
                         "injected2original_spans": injected2original_spans,
                         "candidate_relations": candidate_relations,
+                        "tokenized_annotations": tokenized_annotations,
                     },
                 )
             )
@@ -759,14 +762,26 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         task_output: TaskOutputType,
         task_encoding: TaskEncodingType,
     ) -> Dict[str, List[Annotation]]:
+        char2token_spans = task_encoding.metadata["tokenized_annotations"]["labeled_spans"]
+        token2char_spans = {v: k for k, v in char2token_spans.items()}
+        injected2original_spans = task_encoding.metadata["injected2original_spans"]
         new_relations = []
-        for candidate_relation, label, probability in zip(
+        for candidate_relation, label, probability, is_valid in zip(
             task_encoding.metadata["candidate_relations"],
             task_output["labels"],
             task_output["probabilities"],
+            task_encoding.inputs["tuple_indices_mask"],
         ):
-            new_annotation = candidate_relation.copy(label=label, score=probability)
-            new_relations.append(new_annotation)
+            if is_valid:
+                token_head, token_tail = candidate_relation.head, candidate_relation.tail
+                char_head = token2char_spans[token_head]
+                char_tail = token2char_spans[token_tail]
+                original_head = injected2original_spans[char_head]
+                original_tail = injected2original_spans[char_tail]
+                new_annotation = candidate_relation.copy(
+                    head=original_head, tail=original_tail, label=label, score=probability
+                )
+                new_relations.append(new_annotation)
 
         return {"binary_relations": new_relations}
 
@@ -775,37 +790,12 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
         task_encoding: TaskEncodingType,
         task_output: TaskOutputType,
     ) -> Iterator[Tuple[str, Union[BinaryRelation, MultiLabeledBinaryRelation, NaryRelation]]]:
-        tokenized_document = task_encoding.metadata["tokenized_document"]
-
         decoded_annotations = self.decode_annotations(
             task_output=task_output, task_encoding=task_encoding
         )
 
-        # Note: token_based_document_to_text_based() does not yet consider predictions, so we need to clear
-        # the main annotations and attach the predictions to that
-        for layer_name, annotations in decoded_annotations.items():
-            tokenized_document[layer_name].clear()
-            for annotation in annotations:
-                tokenized_document[layer_name].append(annotation)
-
-        untokenized_document: TextDocumentWithLabeledSpansAndBinaryRelations = (
-            token_based_document_to_text_based(
-                tokenized_document, result_document_type=self.normalized_document_type
-            )
-        )
-
-        injected2original_spans = task_encoding.metadata["injected2original_spans"]
-        for relation in untokenized_document.binary_relations:
-            # map back from spans over the marker-injected text to the original spans
-            if isinstance(relation, BinaryRelation):
-                original_head = injected2original_spans[relation.head]
-                original_tail = injected2original_spans[relation.tail]
-                new_relation = relation.copy(head=original_head, tail=original_tail)
-            else:
-                raise NotImplementedError(
-                    f"the taskmodule does not yet support relations of type {type(relation)}"
-                )
-            yield self.relation_annotation, new_relation
+        for relation in decoded_annotations["binary_relations"]:
+            yield self.relation_annotation, relation
 
     def configure_model_metric(self, stage: str) -> Metric:
         if self.label_to_id is None:
