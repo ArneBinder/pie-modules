@@ -772,7 +772,12 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             task_output["probabilities"],
             task_encoding.inputs["tuple_indices_mask"],
         ):
-            if is_valid:
+            # exclude
+            # - padding entries (is_valid=False)
+            # - negative relations (if we have added them)
+            if is_valid and (
+                label != self.no_relation_label or not self.create_candidate_relations
+            ):
                 token_head, token_tail = candidate_relation.head, candidate_relation.tail
                 char_head = token2char_spans[token_head]
                 char_tail = token2char_spans[token_tail]
