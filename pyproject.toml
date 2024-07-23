@@ -35,6 +35,7 @@ networkx = "^3.0.0"
 transformers = ">=4.35.0,<4.37.0"
 # for NltkSentenceSplitter
 nltk = "^3.8.1"
+flair = "^0.13.1"
 
 [tool.poetry.group.dev.dependencies]
 torch = {version = "^2.1.0+cpu", source = "pytorch"}
