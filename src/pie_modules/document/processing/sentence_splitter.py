@@ -5,6 +5,7 @@ import ssl
 from typing import TypeVar
 
 import nltk
+from flair.splitter import SegtokSentenceSplitter
 from pytorch_ie.annotations import LabeledSpan
 from pytorch_ie.documents import TextDocumentWithLabeledPartitions
 
@@ -58,6 +59,57 @@ class NltkSentenceSplitter:
         sentence_spans = self.sentencizer.span_tokenize(text)
         sentences = [
             LabeledSpan(start=start, end=end, label="sentence") for start, end in sentence_spans
+        ]
+        partition_layer.extend(sentences)
+
+        return document
+
+
+class FlairSegtokSentenceSplitter:
+    """A document processor that adds sentence partitions to a TextDocumentWithLabeledPartitions document.
+    It uses the Flair SegtokSentenceSplitter to split the text of the document into sentences. See
+    https://github.com/flairNLP/flair/blob/master/flair/splitter.py for more information.
+
+    Args:
+        partition_layer_name: The name of the partition layer to add the sentence partitions to. This layer
+            must be an AnnotationLayer of LabeledSpan annotations.
+        text_field_name: The name of the text field in the document to split into sentences.
+        inplace: A boolean value that determines whether the sentence partitions are added to the input document
+            or a new document is created.
+    """
+
+    def __init__(
+        self,
+        partition_layer_name: str = "labeled_partitions",
+        text_field_name: str = "text",
+        inplace: bool = True,
+    ):
+        self.partition_layer_name = partition_layer_name
+        self.text_field_name = text_field_name
+        self.sentencizer = SegtokSentenceSplitter()
+        self.inplace = inplace
+
+    def __call__(self, document: D) -> D:
+        if not self.inplace:
+            document = document.copy()
+
+        partition_layer = document[self.partition_layer_name]
+        if len(partition_layer) > 0:
+            logger.warning(
+                f"Layer {self.partition_layer_name} in document {document.id} is not empty. "
+                f"Clearing it before adding new sentence partitions."
+            )
+            partition_layer.clear()
+
+        text: str = getattr(document, self.text_field_name)
+        sentence_spans = self.sentencizer.split(text)
+        sentences = [
+            LabeledSpan(
+                start=sentence.start_position,
+                end=sentence.start_position + len(sentence.text),
+                label="sentence",
+            )
+            for sentence in sentence_spans
         ]
         partition_layer.extend(sentences)
 
