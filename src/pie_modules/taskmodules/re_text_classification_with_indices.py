@@ -449,6 +449,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
             to_show = pd.Series(self._statistics)
             if len(to_show.index.names) > 1:
                 to_show = to_show.unstack()
+            to_show = to_show.fillna(0)
             if to_show.columns.size > 1:
                 to_show["all_relations"] = to_show.loc[:, to_show.columns != "no_relation"].sum(
                     axis=1
