@@ -122,6 +122,65 @@ def span_distance(
         raise ValueError(f"unknown distance_type={distance_type}. use one of: inner")
 
 
+class MarkerFactory:
+    def __init__(self, role_to_marker: Dict[str, str]):
+        self.role_to_marker = role_to_marker
+
+    def _get_role_marker(self, role: str) -> str:
+        return self.role_to_marker[role]
+
+    def _get_marker(self, role: str, is_start: bool, label: Optional[str] = None) -> str:
+        result = "["
+        if not is_start:
+            result += "/"
+        result += self._get_role_marker(role)
+        if label is not None:
+            result += f":{label}"
+        result += "]"
+        return result
+
+    def get_start_marker(self, role: str, label: Optional[str] = None) -> str:
+        return self._get_marker(role=role, is_start=True, label=label)
+
+    def get_end_marker(self, role: str, label: Optional[str] = None) -> str:
+        return self._get_marker(role=role, is_start=False, label=label)
+
+    def get_append_marker(self, role: str, label: Optional[str] = None) -> str:
+        role_marker = self._get_role_marker(role)
+        if label is None:
+            return f"[{role_marker}]"
+        else:
+            return f"[{role_marker}={label}]"
+
+    @property
+    def all_roles(self) -> Set[str]:
+        return set(self.role_to_marker)
+
+    def get_all_markers(
+        self,
+        entity_labels: List[str],
+        append_markers: bool = False,
+        add_type_to_marker: bool = False,
+    ) -> List[str]:
+        result: Set[str] = set()
+        if add_type_to_marker:
+            none_and_labels = [None] + entity_labels
+        else:
+            none_and_labels = [None]
+        for role in self.all_roles:
+            # create start and end markers without label and for all labels, if add_type_to_marker
+            for maybe_label in none_and_labels:
+                result.add(self.get_start_marker(role=role, label=maybe_label))
+                result.add(self.get_end_marker(role=role, label=maybe_label))
+            # create append markers for all labels
+            if append_markers:
+                for entity_label in entity_labels:
+                    result.add(self.get_append_marker(role=role, label=entity_label))
+
+        # sort and convert to list
+        return sorted(result)
+
+
 class RelationArgument:
     def __init__(
         self,
@@ -129,39 +188,37 @@ class RelationArgument:
         role: str,
         token_span: Span,
         add_type_to_marker: bool,
-        role_to_marker: Dict[str, str],
+        marker_factory: MarkerFactory,
     ) -> None:
-        self.entity = entity
-        self.role_to_marker = role_to_marker
-        if role not in self.role_to_marker:
+        self.marker_factory = marker_factory
+        if role not in self.marker_factory.all_roles:
             raise ValueError(
-                f"role={role} not in role_to_marker={role_to_marker} (did you initialise the taskmodule "
-                f"with the correct argument_role_to_marker dictionary?)"
+                f"role='{role}' not in known roles={sorted(self.marker_factory.all_roles)} (did you "
+                f"initialise the taskmodule with the correct argument_role_to_marker dictionary?)"
             )
+
+        self.entity = entity
+
         self.role = role
         self.token_span = token_span
         self.add_type_to_marker = add_type_to_marker
 
     @property
+    def maybe_label(self) -> Optional[str]:
+        return self.entity.label if self.add_type_to_marker else None
+
+    @property
     def as_start_marker(self) -> str:
-        return self._get_marker(is_start=True)
+        return self.marker_factory.get_start_marker(role=self.role, label=self.maybe_label)
 
     @property
     def as_end_marker(self) -> str:
-        return self._get_marker(is_start=False)
-
-    @property
-    def role_marker(self) -> str:
-        return self.role_to_marker[self.role]
-
-    def _get_marker(self, is_start: bool = True) -> str:
-        return f"[{'' if is_start else '/'}{self.role_marker}" + (
-            f":{self.entity.label}]" if self.add_type_to_marker else "]"
-        )
+        return self.marker_factory.get_end_marker(role=self.role, label=self.maybe_label)
 
     @property
     def as_append_marker(self) -> str:
-        return f"[{self.role_marker}={self.entity.label}]"
+        # Note: we add the label in either case (we use self.entity.label instead of self.label)
+        return self.marker_factory.get_append_marker(role=self.role, label=self.entity.label)
 
     def shift_token_span(self, value: int):
         self.token_span = Span(
@@ -289,10 +346,6 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
             self.argument_role_to_marker = argument_role_to_marker
         self.collect_statistics = collect_statistics
 
-        self.argument_role2idx = {
-            role: i for i, role in enumerate(sorted(self.argument_role_to_marker))
-        }
-
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
 
         self.argument_markers = None
@@ -324,6 +377,9 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
     def get_entity_layer(self, document: Document) -> AnnotationList[LabeledSpan]:
         relations: AnnotationList[BinaryRelation] = self.get_relation_layer(document)
         return relations.target_layer
+
+    def get_marker_factory(self) -> MarkerFactory:
+        return MarkerFactory(role_to_marker=self.argument_role_to_marker)
 
     def _prepare(self, documents: Sequence[DocumentType]) -> None:
         entity_labels: Set[str] = set()
@@ -414,37 +470,25 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         self.show_statistics()
         return res
 
-    def construct_argument_markers(self) -> List[str]:
-        # ignore the typing because we know that this is only called on a prepared taskmodule,
-        # i.e. self.entity_labels is already set by _prepare or __init__
-        entity_labels: List[str] = self.entity_labels  # type: ignore
-        argument_markers: Set[str] = set()
-        for arg_role, role_marker in self.argument_role_to_marker.items():
-            for arg_pos in [START, END]:
-                is_start = arg_pos == START
-                argument_markers.add(f"[{'' if is_start else '/'}{role_marker}]")
-                if self.add_type_to_marker:
-                    for entity_type in entity_labels:
-                        argument_markers.add(
-                            f"[{'' if is_start else '/'}{role_marker}"
-                            f"{':' + entity_type if self.add_type_to_marker else ''}]"
-                        )
-                if self.append_markers:
-                    for entity_type in entity_labels:
-                        argument_markers.add(f"[{role_marker}={entity_type}]")
-
-        return sorted(list(argument_markers))
-
     def _post_prepare(self):
         self.label_to_id = {label: i + 1 for i, label in enumerate(self.labels)}
         self.label_to_id[self.none_label] = 0
         self.id_to_label = {v: k for k, v in self.label_to_id.items()}
 
-        self.argument_markers = self.construct_argument_markers()
+        self.marker_factory = self.get_marker_factory()
+        self.argument_markers = self.marker_factory.get_all_markers(
+            append_markers=self.append_markers,
+            add_type_to_marker=self.add_type_to_marker,
+            entity_labels=self.entity_labels,
+        )
         self.tokenizer.add_tokens(self.argument_markers, special_tokens=True)
 
         self.argument_markers_to_id = {
             marker: self.tokenizer.vocab[marker] for marker in self.argument_markers
+        }
+
+        self.argument_role2idx = {
+            role: i for i, role in enumerate(sorted(self.marker_factory.all_roles))
         }
 
     def _add_reversed_relations(
@@ -527,7 +571,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         doc_id: Optional[str] = None,
     ) -> None:
         if self.add_candidate_relations:
-            if set(self.argument_role_to_marker) == {HEAD, TAIL}:
+            if self.marker_factory.all_roles == {HEAD, TAIL}:
                 # iterate over all possible argument candidates
                 for head in entities:
                     for tail in entities:
@@ -543,7 +587,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
             else:
                 raise NotImplementedError(
                     f"doc.id={doc_id}: the taskmodule does not yet support adding relation candidates "
-                    f"with argument roles other than 'head' and 'tail': {sorted(self.argument_role_to_marker)}"
+                    f"with argument roles other than 'head' and 'tail': {sorted(self.marker_factory.all_roles)}"
                 )
 
     def _filter_relations_by_argument_distance(
@@ -694,7 +738,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
                         role=role,
                         token_span=Span(start=token_slice[0], end=token_slice[1]),
                         add_type_to_marker=self.add_type_to_marker,
-                        role_to_marker=self.argument_role_to_marker,
+                        marker_factory=self.marker_factory,
                     )
                     for span, role, token_slice in zip(arg_spans, arg_roles, arg_token_slices)
                 ]

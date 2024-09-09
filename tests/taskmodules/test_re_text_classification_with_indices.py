@@ -948,9 +948,8 @@ def test_encode_input_argument_role_unknown(documents):
     with pytest.raises(ValueError) as excinfo:
         taskmodule.encode_input(documents[1])
     assert (
-        str(excinfo.value)
-        == "role=tail not in role_to_marker={'head': 'H'} (did you initialise the taskmodule with "
-        "the correct argument_role_to_marker dictionary?)"
+        str(excinfo.value) == "role='tail' not in known roles=['head'] (did you initialise the "
+        "taskmodule with the correct argument_role_to_marker dictionary?)"
     )
 
 
