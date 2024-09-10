@@ -1561,6 +1561,110 @@ def test_encode_with_collect_statistics(documents, caplog):
     )
 
 
+def test_get_global_attention(taskmodule, batch, cfg):
+    global_attention_mask = taskmodule._get_global_attention(input_ids=batch[0]["input_ids"])
+    tokens = [
+        taskmodule.tokenizer.convert_ids_to_tokens(token_ids)
+        for token_ids in batch[0]["input_ids"].tolist()
+    ]
+    global_attention_tokens = [
+        [tok for tok, m in zip(tkns, glob_attn_mask) if m]
+        for tkns, glob_attn_mask in zip(tokens, global_attention_mask)
+    ]
+    pad_tok = taskmodule.tokenizer.pad_token
+    not_global_attention_tokens = [
+        [tok for tok, m in zip(tkns, glob_attn_mask) if not (m or tok == pad_tok)]
+        for tkns, glob_attn_mask in zip(tokens, global_attention_mask)
+    ]
+    if not cfg.get("append_markers", False):
+        torch.testing.assert_close(
+            global_attention_mask,
+            torch.tensor(
+                [
+                    [1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0],
+                ]
+            ),
+        )
+        assert not_global_attention_tokens == [
+            ["En", "##ti", "##ty", "A", "works", "at", "B", ".", "[SEP]"],
+            [
+                "First",
+                "sentence",
+                ".",
+                "En",
+                "##ti",
+                "##ty",
+                "G",
+                "works",
+                "at",
+                "H",
+                ".",
+                "And",
+                "founded",
+                "I",
+                ".",
+                "[SEP]",
+            ],
+        ]
+    else:
+        torch.testing.assert_close(
+            global_attention_mask,
+            torch.tensor(
+                [
+                    [1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0],
+                ]
+            ),
+        )
+        assert not_global_attention_tokens == [
+            ["En", "##ti", "##ty", "A", "works", "at", "B", ".", "[SEP]", "[SEP]", "[SEP]"],
+            [
+                "First",
+                "sentence",
+                ".",
+                "En",
+                "##ti",
+                "##ty",
+                "G",
+                "works",
+                "at",
+                "H",
+                ".",
+                "And",
+                "founded",
+                "I",
+                ".",
+                "[SEP]",
+                "[SEP]",
+                "[SEP]",
+            ],
+        ]
+
+    if cfg == {"add_type_to_marker": False, "append_markers": False}:
+        assert global_attention_tokens == [
+            ["[CLS]", "[H]", "[/H]", "[T]", "[/T]"],
+            ["[CLS]", "[H]", "[/H]", "[T]", "[/T]"],
+        ]
+    elif cfg == {"add_type_to_marker": True, "append_markers": False}:
+        assert global_attention_tokens == [
+            ["[CLS]", "[H:PER]", "[/H:PER]", "[T:ORG]", "[/T:ORG]"],
+            ["[CLS]", "[H:PER]", "[/H:PER]", "[T:ORG]", "[/T:ORG]"],
+        ]
+    elif cfg == {"add_type_to_marker": False, "append_markers": True}:
+        assert global_attention_tokens == [
+            ["[CLS]", "[H]", "[/H]", "[T]", "[/T]", "[H=PER]", "[T=ORG]"],
+            ["[CLS]", "[H]", "[/H]", "[T]", "[/T]", "[H=PER]", "[T=ORG]"],
+        ]
+    elif cfg == {"add_type_to_marker": True, "append_markers": True}:
+        assert global_attention_tokens == [
+            ["[CLS]", "[H:PER]", "[/H:PER]", "[T:ORG]", "[/T:ORG]", "[H=PER]", "[T=ORG]"],
+            ["[CLS]", "[H:PER]", "[/H:PER]", "[T:ORG]", "[/T:ORG]", "[H=PER]", "[T=ORG]"],
+        ]
+    else:
+        raise ValueError(f"unexpected config: {cfg}")
+
+
 def get_metric_state(metric_or_collection: Union[Metric, MetricCollection]) -> Dict[str, Any]:
     if isinstance(metric_or_collection, Metric):
         return {k: v.tolist() for k, v in flatten_dict(metric_or_collection.metric_state).items()}

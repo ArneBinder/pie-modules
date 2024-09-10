@@ -248,6 +248,16 @@ def get_relation_argument_spans_and_roles(
         )
 
 
+def construct_mask(input_ids: torch.LongTensor, positive_ids: List[Any]) -> torch.LongTensor:
+    """Construct a mask for the input_ids where all entries in mask_ids are 1."""
+    masks = [torch.nonzero(input_ids == marker_token_id) for marker_token_id in positive_ids]
+    globs = torch.cat(masks)
+    value = torch.ones(globs.shape[0], dtype=int)
+    mask = torch.zeros(input_ids.shape, dtype=int)
+    mask.index_put_(tuple(globs.t()), value)
+    return mask
+
+
 @TaskModule.register()
 class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizerVocabSize):
     """Marker based relation extraction. This taskmodule prepares the input token ids in such a way
@@ -300,6 +310,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         max_window: Optional[int] = None,
         log_first_n_examples: int = 0,
         add_argument_indices_to_input: bool = False,
+        add_global_attention_mask_to_input: bool = False,
         collect_statistics: bool = False,
         **kwargs,
     ) -> None:
@@ -340,6 +351,7 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         # overwrite None with 0 for backward compatibility
         self.log_first_n_examples = log_first_n_examples or 0
         self.add_argument_indices_to_input = add_argument_indices_to_input
+        self.add_global_attention_mask_to_input = add_global_attention_mask_to_input
         if argument_role_to_marker is None:
             self.argument_role_to_marker = {HEAD: "H", TAIL: "T"}
         else:
@@ -988,6 +1000,16 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
             if not (self.add_candidate_relations and label == self.none_label):
                 yield self.relation_annotation, new_annotation
 
+    def _get_global_attention(self, input_ids: torch.LongTensor) -> torch.LongTensor:
+        # we want to have global attention on all marker tokens and the cls token
+        positive_token_ids = list(self.argument_markers_to_id.values()) + [
+            self.tokenizer.cls_token_id
+        ]
+        global_attention_mask = construct_mask(
+            input_ids=input_ids, positive_ids=positive_token_ids
+        )
+        return global_attention_mask
+
     def collate(
         self, task_encodings: Sequence[TaskEncodingType]
     ) -> Tuple[ModelInputType, Optional[ModelTargetType]]:
@@ -1010,6 +1032,11 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
             inputs["pooler_end_indices"] = torch.tensor(
                 [task_encoding.inputs["pooler_end_indices"] for task_encoding in task_encodings]
             ).to(torch.long)
+
+        if self.add_global_attention_mask_to_input:
+            inputs["global_attention_mask"] = self._get_global_attention(
+                input_ids=inputs["input_ids"]
+            )
 
         if not task_encodings[0].has_targets:
             return inputs, None
