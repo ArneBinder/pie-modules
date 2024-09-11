@@ -1,3 +1,4 @@
+from .cross_text_binary_coref import CrossTextBinaryCorefTaskModule
 from .extractive_question_answering import ExtractiveQuestionAnsweringTaskModule
 from .labeled_span_extraction_by_token_classification import (
     LabeledSpanExtractionByTokenClassificationTaskModule,
