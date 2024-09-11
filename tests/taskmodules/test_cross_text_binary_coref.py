@@ -243,12 +243,16 @@ def test_encode_input(task_encodings_without_target, taskmodule):
     ]
     span_tokens = [
         toks[start:end]
-        for toks, start, end in zip(tokens, inputs_dict["start"], inputs_dict["end"])
+        for toks, start, end in zip(
+            tokens, inputs_dict["pooler_start_indices"], inputs_dict["pooler_end_indices"]
+        )
     ]
     span_tokens_pair = [
         toks[start:end]
         for toks, start, end in zip(
-            tokens_pair, inputs_dict["start_pair"], inputs_dict["end_pair"]
+            tokens_pair,
+            inputs_dict["pooler_start_indices_pair"],
+            inputs_dict["pooler_end_indices_pair"],
         )
     ]
     assert span_tokens == [["she"], ["she"], ["C"], ["C"]]
@@ -277,7 +281,14 @@ def test_collate(batch, taskmodule):
     assert batch is not None
     inputs, targets = batch
     assert inputs is not None
-    assert set(inputs) == {"encoding", "encoding_pair", "start", "end", "start_pair", "end_pair"}
+    assert set(inputs) == {
+        "pooler_end_indices",
+        "encoding_pair",
+        "pooler_end_indices_pair",
+        "pooler_start_indices",
+        "encoding",
+        "pooler_start_indices_pair",
+    }
     torch.testing.assert_close(
         inputs["encoding"]["input_ids"],
         torch.tensor(
@@ -316,20 +327,21 @@ def test_collate(batch, taskmodule):
         torch.ones_like(inputs["encoding_pair"]["input_ids"]),
     )
 
-    torch.testing.assert_close(inputs["start"], torch.tensor([2, 2, 4, 4]))
-    torch.testing.assert_close(inputs["end"], torch.tensor([3, 3, 5, 5]))
-    torch.testing.assert_close(inputs["start_pair"], torch.tensor([1, 3, 1, 3]))
-    torch.testing.assert_close(inputs["end_pair"], torch.tensor([2, 5, 2, 5]))
+    torch.testing.assert_close(inputs["pooler_start_indices"], torch.tensor([[2], [2], [4], [4]]))
+    torch.testing.assert_close(inputs["pooler_end_indices"], torch.tensor([[3], [3], [5], [5]]))
+    torch.testing.assert_close(
+        inputs["pooler_start_indices_pair"], torch.tensor([[1], [3], [1], [3]])
+    )
+    torch.testing.assert_close(
+        inputs["pooler_end_indices_pair"], torch.tensor([[2], [5], [2], [5]])
+    )
 
-    torch.testing.assert_close(targets, torch.tensor([0.0, 0.0, 0.0, 0.0]))
+    torch.testing.assert_close(targets, {"labels": torch.tensor([0.0, 0.0, 0.0, 0.0])})
 
 
 def get_metric_state(metric_or_collection: Union[Metric, MetricCollection]) -> Dict[str, Any]:
     if isinstance(metric_or_collection, Metric):
-        return {
-            k: [vv.tolist() for vv in v]
-            for k, v in flatten_dict(metric_or_collection.metric_state).items()
-        }
+        return flatten_dict(metric_or_collection.metric_state)
     elif isinstance(metric_or_collection, MetricCollection):
         return flatten_dict({k: get_metric_state(v) for k, v in metric_or_collection.items()})
     else:
@@ -344,24 +356,43 @@ def test_configure_metric(taskmodule, batch):
     assert state == {"auroc/preds": [], "auroc/target": []}
 
     # targets = batch[1]
-    targets = torch.tensor([0.0, 1.0, 0.0, 0.0])
+    targets = {"labels": torch.tensor([0.0, 1.0, 0.0, 0.0])}
     metric.update(targets, targets)
 
     state = get_metric_state(metric)
-    assert state == {"auroc/preds": [[0.0, 1.0, 0.0, 0.0]], "auroc/target": [[0.0, 1.0, 0.0, 0.0]]}
+    torch.testing.assert_close(
+        state,
+        {
+            "auroc/preds": [torch.tensor([0.0, 1.0, 0.0, 0.0])],
+            "auroc/target": [torch.tensor([0.0, 1.0, 0.0, 0.0])],
+        },
+    )
 
     assert metric.compute() == {"auroc": torch.tensor(1.0)}
 
     # torch.rand_like(targets)
-    random_targets = torch.tensor([0.2703, 0.6812, 0.2582, 0.8030])
+    random_targets = {"labels": torch.tensor([0.2703, 0.6812, 0.2582, 0.8030])}
     metric.update(random_targets, targets)
     state = get_metric_state(metric)
-    assert state == {
-        "auroc/preds": [
-            [0.0, 1.0, 0.0, 0.0],
-            [0.2703000009059906, 0.6812000274658203, 0.2581999897956848, 0.8029999732971191],
-        ],
-        "auroc/target": [[0.0, 1.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]],
-    }
+    torch.testing.assert_close(
+        state,
+        {
+            "auroc/preds": [
+                torch.tensor([0.0, 1.0, 0.0, 0.0]),
+                torch.tensor(
+                    [
+                        0.2703000009059906,
+                        0.6812000274658203,
+                        0.2581999897956848,
+                        0.8029999732971191,
+                    ]
+                ),
+            ],
+            "auroc/target": [
+                torch.tensor([0.0, 1.0, 0.0, 0.0]),
+                torch.tensor([0.0, 1.0, 0.0, 0.0]),
+            ],
+        },
+    )
 
     assert metric.compute() == {"auroc": torch.tensor(0.9166666269302368)}

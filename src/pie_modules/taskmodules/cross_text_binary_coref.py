@@ -16,7 +16,7 @@ import torch
 from pytorch_ie import Annotation
 from pytorch_ie.core import TaskEncoding, TaskModule
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
-from torchmetrics import MetricCollection
+from torchmetrics import Metric, MetricCollection
 from torchmetrics.classification import BinaryAUROC
 from transformers import AutoTokenizer
 from typing_extensions import TypeAlias
@@ -25,6 +25,7 @@ from pie_modules.document.types import (
     BinaryCorefRelation,
     TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
 )
+from pie_modules.taskmodules.metrics import WrappedMetricWithPrepareFunction
 from pie_modules.utils import list_of_dicts2dict_of_lists
 
 logger = logging.getLogger(__name__)
@@ -45,8 +46,8 @@ class TaskOutputType(TypedDict, total=False):
 
 
 ModelInputType: TypeAlias = Dict[str, torch.Tensor]
-ModelTargetType: TypeAlias = torch.Tensor
-ModelOutputType: TypeAlias = torch.Tensor
+ModelTargetType: TypeAlias = Dict[str, torch.Tensor]
+ModelOutputType: TypeAlias = Dict[str, torch.Tensor]
 
 TaskModuleType: TypeAlias = TaskModule[
     # _InputEncoding, _TargetEncoding, _TaskBatchEncoding, _ModelBatchOutput, _TaskOutput
@@ -57,6 +58,10 @@ TaskModuleType: TypeAlias = TaskModule[
     ModelTargetType,
     TaskOutputType,
 ]
+
+
+def _get_labels(model_output: ModelTargetType) -> torch.Tensor:
+    return model_output["labels"]
 
 
 @TaskModule.register()
@@ -157,10 +162,10 @@ class CrossTextBinaryCorefTaskModule(TaskModuleType, ChangesTokenizerVocabSize):
                     inputs={
                         "encoding": encoding,
                         "encoding_pair": encoding_pair,
-                        "start": start,
-                        "end": end,
-                        "start_pair": start_pair,
-                        "end_pair": end_pair,
+                        "pooler_start_indices": start,
+                        "pooler_end_indices": end,
+                        "pooler_start_indices_pair": start_pair,
+                        "pooler_end_indices_pair": end_pair,
                     },
                     metadata={"candidate_annotation": coref_rel},
                 )
@@ -189,14 +194,22 @@ class CrossTextBinaryCorefTaskModule(TaskModuleType, ChangesTokenizerVocabSize):
             else torch.tensor(v)
             for k, v in inputs_dict.items()
         }
+        for k, v in inputs.items():
+            if k.startswith("pooler_start_indices") or k.startswith("pooler_end_indices"):
+                inputs[k] = v.unsqueeze(-1)
 
         if not task_encodings[0].has_targets:
             return inputs, None
-        targets = torch.tensor([task_encoding.targets for task_encoding in task_encodings])
+        targets = {
+            "labels": torch.tensor([task_encoding.targets for task_encoding in task_encodings])
+        }
         return inputs, targets
 
-    def configure_model_metric(self, stage: str) -> MetricCollection:
-        return MetricCollection({"auroc": BinaryAUROC(thresholds=None)})
+    def configure_model_metric(self, stage: str) -> Metric:
+        return WrappedMetricWithPrepareFunction(
+            metric=MetricCollection({"auroc": BinaryAUROC(thresholds=None)}),
+            prepare_function=_get_labels,
+        )
 
     def unbatch_output(self, model_output: ModelTargetType) -> Sequence[TaskOutputType]:
         raise NotImplementedError()
