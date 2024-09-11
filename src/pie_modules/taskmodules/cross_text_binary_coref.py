@@ -70,6 +70,7 @@ class CrossTextBinaryCorefTaskModule(TaskModuleType, ChangesTokenizerVocabSize):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
+        self.save_hyperparameters()
 
         self.add_negative_relations = add_negative_relations
 
