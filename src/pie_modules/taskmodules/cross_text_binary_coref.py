@@ -208,6 +208,18 @@ class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
 
         task_encodings = []
         for coref_rel in document.binary_coref_relations:
+            # TODO: This can miss instances if both texts are the same. We could check that
+            #   coref_rel.head is in document.labeled_spans (same for the tail), but would this
+            #   slow down the encoding?
+            if not (
+                coref_rel.head.target == document.text
+                or coref_rel.tail.target == document.text_pair
+            ):
+                raise ValueError(
+                    f"It is expected that coref relations go from (head) spans over 'text' "
+                    f"to (tail) spans over 'text_pair', but this is not the case for this "
+                    f"relation (i.e. it points into the other direction): {coref_rel.resolve()}"
+                )
             try:
                 current_encoding, token_span = self.truncate_encoding_around_span(
                     encoding=encoding, char_span=coref_rel.head
