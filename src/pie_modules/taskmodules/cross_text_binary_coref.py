@@ -18,7 +18,6 @@ import torch
 from pytorch_ie import Annotation
 from pytorch_ie.annotations import Span
 from pytorch_ie.core import TaskEncoding, TaskModule
-from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
 from pytorch_ie.utils.window import get_window_around_slice
 from torchmetrics import Metric, MetricCollection
 from torchmetrics.classification import BinaryAUROC
@@ -81,9 +80,7 @@ def _get_labels(model_output: ModelTargetType) -> torch.Tensor:
 
 
 @TaskModule.register()
-class CrossTextBinaryCorefTaskModule(
-    RelationStatisticsMixin, TaskModuleType, ChangesTokenizerVocabSize
-):
+class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
     DOCUMENT_TYPE = DocumentType
 
     def __init__(
@@ -97,13 +94,12 @@ class CrossTextBinaryCorefTaskModule(
         self.save_hyperparameters()
 
         self.add_negative_relations = add_negative_relations
-
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
         self.max_window = max_window if max_window is not None else self.tokenizer.model_max_length
         self.available_window = self.max_window - self.tokenizer.num_special_tokens_to_add()
-        self.num_special_tokens_before = len(self._get_special_tokens_before())
+        self.num_special_tokens_before = len(self._get_special_tokens_before_input())
 
-    def _get_special_tokens_before(self) -> List[int]:
+    def _get_special_tokens_before_input(self) -> List[int]:
         dummy_ids = self.tokenizer.build_inputs_with_special_tokens(token_ids_0=[-1])
         return dummy_ids[: dummy_ids.index(-1)]
 
