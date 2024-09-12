@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 @PyTorchIEModel.register()
-class SimpleSimilarityModel(
+class SpanSimilarityModel(
     ModelWithBoilerplate[InputType, OutputType, TargetType, StepOutputType],
     RequiresModelNameOrPath,
 ):
@@ -63,11 +63,13 @@ class SimpleSimilarityModel(
         self,
         model_name_or_path: str,
         tokenizer_vocab_size: Optional[int] = None,
+        similarity_threshold: float = 0.5,
         classifier_dropout: Optional[float] = None,
         learning_rate: float = 1e-5,
         task_learning_rate: Optional[float] = None,
         warmup_proportion: float = 0.1,
-        # TODO: use "mention_pooling" per default?
+        # TODO: use "mention_pooling" per default? But this requires
+        #  to also set num_indices=1 in the pooler_config
         pooler: Optional[Union[Dict[str, Any], str]] = None,
         freeze_base_model: bool = False,
         hidden_dim: Optional[int] = None,
@@ -77,6 +79,7 @@ class SimpleSimilarityModel(
 
         self.save_hyperparameters()
 
+        self.similarity_threshold = similarity_threshold
         self.learning_rate = learning_rate
         self.task_learning_rate = task_learning_rate
         self.warmup_proportion = warmup_proportion
@@ -108,6 +111,10 @@ class SimpleSimilarityModel(
 
         if isinstance(pooler, str):
             pooler = {"type": pooler}
+        if pooler is not None:
+            if pooler["type"] == "mention_pooling":
+                # we have only one index (span) per input to pool
+                pooler["num_indices"] = 1
         self.pooler_config = pooler or {}
         self.pooler, pooler_output_dim = get_pooler_and_output_size(
             config=self.pooler_config,
@@ -170,7 +177,7 @@ class SimpleSimilarityModel(
         return SequenceClassifierOutput(**result)
 
     def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
-        labels = (outputs.logits > 0.5).to(torch.long)
+        labels = (outputs.logits >= self.similarity_threshold).to(torch.long)
 
         return {"labels": labels, "probabilities": outputs.logits}
 
