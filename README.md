@@ -16,6 +16,7 @@ Available models:
 
 - [SimpleSequenceClassificationModel](src/pie_modules/models/simple_sequence_classification.py)
 - [SequenceClassificationModelWithPooler](src/pie_modules/models/sequence_classification_with_pooler.py)
+- [SequencePairSimilarityModelWithPooler](src/pie_modules/models/sequence_classification_with_pooler.py)
 - [SimpleTokenClassificationModel](src/pie_modules/models/simple_token_classification.py)
 - [TokenClassificationModelWithSeq2SeqEncoderAndCrf](src/pie_modules/models/token_classification_with_seq2seq_encoder_and_crf.py)
 - [SimpleExtractiveQuestionAnsweringModel](src/pie_modules/models/simple_extractive_question_answering.py)
@@ -25,6 +26,7 @@ Available models:
 Available taskmodules:
 
 - [RETextClassificationWithIndicesTaskModule](src/pie_modules/taskmodules/re_text_classification_with_indices.py)
+- [CrossTextBinaryCorefTaskModule](src/pie_modules/taskmodules/cross_text_binary_coref.py)
 - [LabeledSpanExtractionByTokenClassificationTaskModule](src/pie_modules/taskmodules/labeled_span_extraction_by_token_classification.py)
 - [ExtractiveQuestionAnsweringTaskModule](src/pie_modules/taskmodules/extractive_question_answering.py)
 - [TextToTextTaskModule](src/pie_modules/taskmodules/text_to_text.py)
