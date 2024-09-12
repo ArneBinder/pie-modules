@@ -96,114 +96,79 @@ def test_construct_negative_documents(taskmodule, positive_documents):
         "She sleeps a lot.",
     ]
     assert len(docs) == 12
+    assert all(doc.text in TEXTS for doc in docs)
+    assert all(doc.text_pair in TEXTS for doc in docs)
+
     all_scores = [[coref_rel.score for coref_rel in doc.binary_coref_relations] for doc in docs]
-    assert docs[0].text == TEXTS[1]
-    assert docs[0].text_pair == TEXTS[2]
-    assert docs[0].binary_coref_relations.resolve() == [
-        ("coref", (("PERSON", "she"), ("PERSON", "Bob"))),
-        ("coref", (("PERSON", "she"), ("ANIMAL", "his cat"))),
-        ("coref", (("COMPANY", "C"), ("PERSON", "Bob"))),
-        ("coref", (("COMPANY", "C"), ("ANIMAL", "his cat"))),
-    ]
-    assert all_scores[0] == [0.0, 0.0, 0.0, 0.0]
+    all_rels_resolved = [doc.binary_coref_relations.resolve() for doc in docs]
 
-    assert docs[1].text == TEXTS[1]
-    assert docs[1].text_pair == TEXTS[0]
-    assert docs[1].binary_coref_relations.resolve() == [
-        ("coref", (("PERSON", "she"), ("PERSON", "Entity A"))),
-        ("coref", (("PERSON", "she"), ("COMPANY", "B"))),
-        ("coref", (("COMPANY", "C"), ("PERSON", "Entity A"))),
-        ("coref", (("COMPANY", "C"), ("COMPANY", "B"))),
+    all_rels_and_scores = [
+        list(zip(scores, rels_resolved))
+        for scores, rels_resolved in zip(all_scores, all_rels_resolved)
     ]
-    assert all_scores[1] == [1.0, 0.0, 0.0, 0.0]
 
-    assert docs[2].text == TEXTS[1]
-    assert docs[2].text_pair == TEXTS[3]
-    assert docs[2].binary_coref_relations.resolve() == [
-        ("coref", (("PERSON", "she"), ("ANIMAL", "She"))),
-        ("coref", (("COMPANY", "C"), ("ANIMAL", "She"))),
+    assert all_rels_and_scores == [
+        [
+            (0.0, ("coref", (("PERSON", "she"), ("PERSON", "Bob")))),
+            (0.0, ("coref", (("PERSON", "she"), ("ANIMAL", "his cat")))),
+            (0.0, ("coref", (("COMPANY", "C"), ("PERSON", "Bob")))),
+            (0.0, ("coref", (("COMPANY", "C"), ("ANIMAL", "his cat")))),
+        ],
+        [
+            (1.0, ("coref", (("PERSON", "she"), ("PERSON", "Entity A")))),
+            (0.0, ("coref", (("PERSON", "she"), ("COMPANY", "B")))),
+            (0.0, ("coref", (("COMPANY", "C"), ("PERSON", "Entity A")))),
+            (0.0, ("coref", (("COMPANY", "C"), ("COMPANY", "B")))),
+        ],
+        [
+            (0.0, ("coref", (("PERSON", "she"), ("ANIMAL", "She")))),
+            (0.0, ("coref", (("COMPANY", "C"), ("ANIMAL", "She")))),
+        ],
+        [
+            (0.0, ("coref", (("PERSON", "Bob"), ("PERSON", "she")))),
+            (0.0, ("coref", (("PERSON", "Bob"), ("COMPANY", "C")))),
+            (0.0, ("coref", (("ANIMAL", "his cat"), ("PERSON", "she")))),
+            (0.0, ("coref", (("ANIMAL", "his cat"), ("COMPANY", "C")))),
+        ],
+        [
+            (0.0, ("coref", (("PERSON", "Bob"), ("PERSON", "Entity A")))),
+            (0.0, ("coref", (("PERSON", "Bob"), ("COMPANY", "B")))),
+            (0.0, ("coref", (("ANIMAL", "his cat"), ("PERSON", "Entity A")))),
+            (0.0, ("coref", (("ANIMAL", "his cat"), ("COMPANY", "B")))),
+        ],
+        [
+            (0.0, ("coref", (("PERSON", "Bob"), ("ANIMAL", "She")))),
+            (1.0, ("coref", (("ANIMAL", "his cat"), ("ANIMAL", "She")))),
+        ],
+        [
+            (1.0, ("coref", (("PERSON", "Entity A"), ("PERSON", "she")))),
+            (0.0, ("coref", (("PERSON", "Entity A"), ("COMPANY", "C")))),
+            (0.0, ("coref", (("COMPANY", "B"), ("PERSON", "she")))),
+            (0.0, ("coref", (("COMPANY", "B"), ("COMPANY", "C")))),
+        ],
+        [
+            (0.0, ("coref", (("PERSON", "Entity A"), ("PERSON", "Bob")))),
+            (0.0, ("coref", (("PERSON", "Entity A"), ("ANIMAL", "his cat")))),
+            (0.0, ("coref", (("COMPANY", "B"), ("PERSON", "Bob")))),
+            (0.0, ("coref", (("COMPANY", "B"), ("ANIMAL", "his cat")))),
+        ],
+        [
+            (0.0, ("coref", (("PERSON", "Entity A"), ("ANIMAL", "She")))),
+            (0.0, ("coref", (("COMPANY", "B"), ("ANIMAL", "She")))),
+        ],
+        [
+            (0.0, ("coref", (("ANIMAL", "She"), ("PERSON", "she")))),
+            (0.0, ("coref", (("ANIMAL", "She"), ("COMPANY", "C")))),
+        ],
+        [
+            (0.0, ("coref", (("ANIMAL", "She"), ("PERSON", "Bob")))),
+            (1.0, ("coref", (("ANIMAL", "She"), ("ANIMAL", "his cat")))),
+        ],
+        [
+            (0.0, ("coref", (("ANIMAL", "She"), ("PERSON", "Entity A")))),
+            (0.0, ("coref", (("ANIMAL", "She"), ("COMPANY", "B")))),
+        ],
     ]
-    assert all_scores[2] == [0.0, 0.0]
-
-    assert docs[3].text == TEXTS[2]
-    assert docs[3].text_pair == TEXTS[1]
-    assert docs[3].binary_coref_relations.resolve() == [
-        ("coref", (("PERSON", "Bob"), ("PERSON", "she"))),
-        ("coref", (("PERSON", "Bob"), ("COMPANY", "C"))),
-        ("coref", (("ANIMAL", "his cat"), ("PERSON", "she"))),
-        ("coref", (("ANIMAL", "his cat"), ("COMPANY", "C"))),
-    ]
-    assert all_scores[3] == [0.0, 0.0, 0.0, 0.0]
-
-    assert docs[4].text == TEXTS[2]
-    assert docs[4].text_pair == TEXTS[0]
-    assert docs[4].binary_coref_relations.resolve() == [
-        ("coref", (("PERSON", "Bob"), ("PERSON", "Entity A"))),
-        ("coref", (("PERSON", "Bob"), ("COMPANY", "B"))),
-        ("coref", (("ANIMAL", "his cat"), ("PERSON", "Entity A"))),
-        ("coref", (("ANIMAL", "his cat"), ("COMPANY", "B"))),
-    ]
-    assert all_scores[4] == [0.0, 0.0, 0.0, 0.0]
-
-    assert docs[5].text == TEXTS[2]
-    assert docs[5].text_pair == TEXTS[3]
-    assert docs[5].binary_coref_relations.resolve() == [
-        ("coref", (("PERSON", "Bob"), ("ANIMAL", "She"))),
-        ("coref", (("ANIMAL", "his cat"), ("ANIMAL", "She"))),
-    ]
-    assert all_scores[5] == [0.0, 1.0]
-
-    assert docs[6].text == TEXTS[0]
-    assert docs[6].text_pair == TEXTS[1]
-    assert docs[6].binary_coref_relations.resolve() == [
-        ("coref", (("PERSON", "Entity A"), ("PERSON", "she"))),
-        ("coref", (("PERSON", "Entity A"), ("COMPANY", "C"))),
-        ("coref", (("COMPANY", "B"), ("PERSON", "she"))),
-        ("coref", (("COMPANY", "B"), ("COMPANY", "C"))),
-    ]
-    assert all_scores[6] == [1.0, 0.0, 0.0, 0.0]
-
-    assert docs[7].text == TEXTS[0]
-    assert docs[7].text_pair == TEXTS[2]
-    assert docs[7].binary_coref_relations.resolve() == [
-        ("coref", (("PERSON", "Entity A"), ("PERSON", "Bob"))),
-        ("coref", (("PERSON", "Entity A"), ("ANIMAL", "his cat"))),
-        ("coref", (("COMPANY", "B"), ("PERSON", "Bob"))),
-        ("coref", (("COMPANY", "B"), ("ANIMAL", "his cat"))),
-    ]
-    assert all_scores[7] == [0.0, 0.0, 0.0, 0.0]
-
-    assert docs[8].text == TEXTS[0]
-    assert docs[8].text_pair == TEXTS[3]
-    assert docs[8].binary_coref_relations.resolve() == [
-        ("coref", (("PERSON", "Entity A"), ("ANIMAL", "She"))),
-        ("coref", (("COMPANY", "B"), ("ANIMAL", "She"))),
-    ]
-    assert all_scores[8] == [0.0, 0.0]
-
-    assert docs[9].text == TEXTS[3]
-    assert docs[9].text_pair == TEXTS[1]
-    assert docs[9].binary_coref_relations.resolve() == [
-        ("coref", (("ANIMAL", "She"), ("PERSON", "she"))),
-        ("coref", (("ANIMAL", "She"), ("COMPANY", "C"))),
-    ]
-    assert all_scores[9] == [0.0, 0.0]
-
-    assert docs[10].text == TEXTS[3]
-    assert docs[10].text_pair == TEXTS[2]
-    assert docs[10].binary_coref_relations.resolve() == [
-        ("coref", (("ANIMAL", "She"), ("PERSON", "Bob"))),
-        ("coref", (("ANIMAL", "She"), ("ANIMAL", "his cat"))),
-    ]
-    assert all_scores[10] == [0.0, 1.0]
-
-    assert docs[11].text == TEXTS[3]
-    assert docs[11].text_pair == TEXTS[0]
-    assert docs[11].binary_coref_relations.resolve() == [
-        ("coref", (("ANIMAL", "She"), ("PERSON", "Entity A"))),
-        ("coref", (("ANIMAL", "She"), ("COMPANY", "B"))),
-    ]
-    assert all_scores[11] == [0.0, 0.0]
 
 
 @pytest.fixture(scope="module")
