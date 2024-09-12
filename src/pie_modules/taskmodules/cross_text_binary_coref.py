@@ -116,6 +116,8 @@ class CrossTextBinaryCorefTaskModule(TaskModuleType, ChangesTokenizerVocabSize):
                         # exclude relations to itself
                         if text == text_pair and s.copy() == s_p.copy():
                             continue
+                        if s.label != s_p.label:
+                            continue
                         score = 1.0 if (s.copy(), s_p.copy()) in current_positives else 0.0
                         new_coref_rel = BinaryCorefRelation(head=s, tail=s_p, score=score)
                         new_doc.binary_coref_relations.append(new_coref_rel)
