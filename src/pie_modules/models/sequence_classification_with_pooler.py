@@ -272,11 +272,15 @@ class SequenceClassificationModelWithPooler(
 class SequencePairSimilarityModelWithPooler(
     SequenceClassificationModelWithPoolerBase,
 ):
-    """TODO.
+    """A span pair similarity model to detect of two spans occurring in different texts are
+    similar. It uses an encoder to independently calculate contextualized embeddings of both texts,
+    then uses a pooler to get representations of the spans and, finally, calculates the cosine to
+    get the similarity scores.
 
     Args:
         label_threshold: The threshold above which score the spans are considered as similar.
-        pooler:
+        pooler: The pooler identifier or config, see :func:`get_pooler_and_output_size` for details.
+            Defaults to "mention_pooling" (max pooling over the span token embeddings).
         **kwargs
     """
 
