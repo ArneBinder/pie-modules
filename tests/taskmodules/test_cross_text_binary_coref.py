@@ -1,3 +1,4 @@
+import json
 from typing import Any, Dict, Union
 
 import pytest
@@ -11,7 +12,7 @@ from pie_modules.document.types import (
 )
 from pie_modules.taskmodules import CrossTextBinaryCorefTaskModule
 from pie_modules.utils import flatten_dict, list_of_dicts2dict_of_lists
-from tests import _config_to_str
+from tests import FIXTURES_ROOT, _config_to_str
 
 TOKENIZER_NAME_OR_PATH = "bert-base-cased"
 
@@ -85,27 +86,23 @@ def taskmodule(unprepared_taskmodule, positive_documents):
     return unprepared_taskmodule
 
 
-@pytest.fixture(scope="module")
-def documents_with_negatives(taskmodule, positive_documents):
-    return list(taskmodule._add_negative_relations(positive_documents))
-
-
-def test_construct_negative_documents(positive_documents, documents_with_negatives):
+def test_construct_negative_documents(taskmodule, positive_documents):
     assert len(positive_documents) == 2
+    docs = list(taskmodule._add_negative_relations(positive_documents))
     TEXTS = [
         "Entity A works at B.",
         "And she founded C.",
         "Bob loves his cat.",
         "She sleeps a lot.",
     ]
-    assert len(documents_with_negatives) == 12
+    assert len(docs) == 12
     all_scores = [
         [coref_rel.score for coref_rel in doc.binary_coref_relations]
-        for doc in documents_with_negatives
+        for doc in docs
     ]
-    assert documents_with_negatives[0].text == TEXTS[1]
-    assert documents_with_negatives[0].text_pair == TEXTS[2]
-    assert documents_with_negatives[0].binary_coref_relations.resolve() == [
+    assert docs[0].text == TEXTS[1]
+    assert docs[0].text_pair == TEXTS[2]
+    assert docs[0].binary_coref_relations.resolve() == [
         ("coref", (("PERSON", "she"), ("PERSON", "Bob"))),
         ("coref", (("PERSON", "she"), ("ANIMAL", "his cat"))),
         ("coref", (("COMPANY", "C"), ("PERSON", "Bob"))),
@@ -113,9 +110,9 @@ def test_construct_negative_documents(positive_documents, documents_with_negativ
     ]
     assert all_scores[0] == [0.0, 0.0, 0.0, 0.0]
 
-    assert documents_with_negatives[1].text == TEXTS[1]
-    assert documents_with_negatives[1].text_pair == TEXTS[0]
-    assert documents_with_negatives[1].binary_coref_relations.resolve() == [
+    assert docs[1].text == TEXTS[1]
+    assert docs[1].text_pair == TEXTS[0]
+    assert docs[1].binary_coref_relations.resolve() == [
         ("coref", (("PERSON", "she"), ("PERSON", "Entity A"))),
         ("coref", (("PERSON", "she"), ("COMPANY", "B"))),
         ("coref", (("COMPANY", "C"), ("PERSON", "Entity A"))),
@@ -123,17 +120,17 @@ def test_construct_negative_documents(positive_documents, documents_with_negativ
     ]
     assert all_scores[1] == [1.0, 0.0, 0.0, 0.0]
 
-    assert documents_with_negatives[2].text == TEXTS[1]
-    assert documents_with_negatives[2].text_pair == TEXTS[3]
-    assert documents_with_negatives[2].binary_coref_relations.resolve() == [
+    assert docs[2].text == TEXTS[1]
+    assert docs[2].text_pair == TEXTS[3]
+    assert docs[2].binary_coref_relations.resolve() == [
         ("coref", (("PERSON", "she"), ("ANIMAL", "She"))),
         ("coref", (("COMPANY", "C"), ("ANIMAL", "She"))),
     ]
     assert all_scores[2] == [0.0, 0.0]
 
-    assert documents_with_negatives[3].text == TEXTS[2]
-    assert documents_with_negatives[3].text_pair == TEXTS[1]
-    assert documents_with_negatives[3].binary_coref_relations.resolve() == [
+    assert docs[3].text == TEXTS[2]
+    assert docs[3].text_pair == TEXTS[1]
+    assert docs[3].binary_coref_relations.resolve() == [
         ("coref", (("PERSON", "Bob"), ("PERSON", "she"))),
         ("coref", (("PERSON", "Bob"), ("COMPANY", "C"))),
         ("coref", (("ANIMAL", "his cat"), ("PERSON", "she"))),
@@ -141,9 +138,9 @@ def test_construct_negative_documents(positive_documents, documents_with_negativ
     ]
     assert all_scores[3] == [0.0, 0.0, 0.0, 0.0]
 
-    assert documents_with_negatives[4].text == TEXTS[2]
-    assert documents_with_negatives[4].text_pair == TEXTS[0]
-    assert documents_with_negatives[4].binary_coref_relations.resolve() == [
+    assert docs[4].text == TEXTS[2]
+    assert docs[4].text_pair == TEXTS[0]
+    assert docs[4].binary_coref_relations.resolve() == [
         ("coref", (("PERSON", "Bob"), ("PERSON", "Entity A"))),
         ("coref", (("PERSON", "Bob"), ("COMPANY", "B"))),
         ("coref", (("ANIMAL", "his cat"), ("PERSON", "Entity A"))),
@@ -151,17 +148,17 @@ def test_construct_negative_documents(positive_documents, documents_with_negativ
     ]
     assert all_scores[4] == [0.0, 0.0, 0.0, 0.0]
 
-    assert documents_with_negatives[5].text == TEXTS[2]
-    assert documents_with_negatives[5].text_pair == TEXTS[3]
-    assert documents_with_negatives[5].binary_coref_relations.resolve() == [
+    assert docs[5].text == TEXTS[2]
+    assert docs[5].text_pair == TEXTS[3]
+    assert docs[5].binary_coref_relations.resolve() == [
         ("coref", (("PERSON", "Bob"), ("ANIMAL", "She"))),
         ("coref", (("ANIMAL", "his cat"), ("ANIMAL", "She"))),
     ]
     assert all_scores[5] == [0.0, 1.0]
 
-    assert documents_with_negatives[6].text == TEXTS[0]
-    assert documents_with_negatives[6].text_pair == TEXTS[1]
-    assert documents_with_negatives[6].binary_coref_relations.resolve() == [
+    assert docs[6].text == TEXTS[0]
+    assert docs[6].text_pair == TEXTS[1]
+    assert docs[6].binary_coref_relations.resolve() == [
         ("coref", (("PERSON", "Entity A"), ("PERSON", "she"))),
         ("coref", (("PERSON", "Entity A"), ("COMPANY", "C"))),
         ("coref", (("COMPANY", "B"), ("PERSON", "she"))),
@@ -169,9 +166,9 @@ def test_construct_negative_documents(positive_documents, documents_with_negativ
     ]
     assert all_scores[6] == [1.0, 0.0, 0.0, 0.0]
 
-    assert documents_with_negatives[7].text == TEXTS[0]
-    assert documents_with_negatives[7].text_pair == TEXTS[2]
-    assert documents_with_negatives[7].binary_coref_relations.resolve() == [
+    assert docs[7].text == TEXTS[0]
+    assert docs[7].text_pair == TEXTS[2]
+    assert docs[7].binary_coref_relations.resolve() == [
         ("coref", (("PERSON", "Entity A"), ("PERSON", "Bob"))),
         ("coref", (("PERSON", "Entity A"), ("ANIMAL", "his cat"))),
         ("coref", (("COMPANY", "B"), ("PERSON", "Bob"))),
@@ -179,37 +176,58 @@ def test_construct_negative_documents(positive_documents, documents_with_negativ
     ]
     assert all_scores[7] == [0.0, 0.0, 0.0, 0.0]
 
-    assert documents_with_negatives[8].text == TEXTS[0]
-    assert documents_with_negatives[8].text_pair == TEXTS[3]
-    assert documents_with_negatives[8].binary_coref_relations.resolve() == [
+    assert docs[8].text == TEXTS[0]
+    assert docs[8].text_pair == TEXTS[3]
+    assert docs[8].binary_coref_relations.resolve() == [
         ("coref", (("PERSON", "Entity A"), ("ANIMAL", "She"))),
         ("coref", (("COMPANY", "B"), ("ANIMAL", "She"))),
     ]
     assert all_scores[8] == [0.0, 0.0]
 
-    assert documents_with_negatives[9].text == TEXTS[3]
-    assert documents_with_negatives[9].text_pair == TEXTS[1]
-    assert documents_with_negatives[9].binary_coref_relations.resolve() == [
+    assert docs[9].text == TEXTS[3]
+    assert docs[9].text_pair == TEXTS[1]
+    assert docs[9].binary_coref_relations.resolve() == [
         ("coref", (("ANIMAL", "She"), ("PERSON", "she"))),
         ("coref", (("ANIMAL", "She"), ("COMPANY", "C"))),
     ]
     assert all_scores[9] == [0.0, 0.0]
 
-    assert documents_with_negatives[10].text == TEXTS[3]
-    assert documents_with_negatives[10].text_pair == TEXTS[2]
-    assert documents_with_negatives[10].binary_coref_relations.resolve() == [
+    assert docs[10].text == TEXTS[3]
+    assert docs[10].text_pair == TEXTS[2]
+    assert docs[10].binary_coref_relations.resolve() == [
         ("coref", (("ANIMAL", "She"), ("PERSON", "Bob"))),
         ("coref", (("ANIMAL", "She"), ("ANIMAL", "his cat"))),
     ]
     assert all_scores[10] == [0.0, 1.0]
 
-    assert documents_with_negatives[11].text == TEXTS[3]
-    assert documents_with_negatives[11].text_pair == TEXTS[0]
-    assert documents_with_negatives[11].binary_coref_relations.resolve() == [
+    assert docs[11].text == TEXTS[3]
+    assert docs[11].text_pair == TEXTS[0]
+    assert docs[11].binary_coref_relations.resolve() == [
         ("coref", (("ANIMAL", "She"), ("PERSON", "Entity A"))),
         ("coref", (("ANIMAL", "She"), ("COMPANY", "B"))),
     ]
     assert all_scores[11] == [0.0, 0.0]
+
+
+@pytest.fixture(scope="module")
+def documents_with_negatives(taskmodule, positive_documents):
+    file_name = (
+        FIXTURES_ROOT / "taskmodules" / "cross_text_binary_coref" / "documents_with_negatives.json"
+    )
+
+    # result = list(taskmodule._add_negative_relations(positive_documents))
+    # result_json = [doc.asdict() for doc in result]
+    # with open(file_name, "w") as f:
+    #    json.dump(result_json, f, indent=2)
+
+    with open(file_name) as f:
+        result_json = json.load(f)
+    result = [
+        TextPairDocumentWithLabeledSpansAndBinaryCorefRelations.fromdict(doc_json)
+        for doc_json in result_json
+    ]
+
+    return result
 
 
 @pytest.fixture(scope="module")
