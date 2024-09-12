@@ -96,10 +96,7 @@ def test_construct_negative_documents(taskmodule, positive_documents):
         "She sleeps a lot.",
     ]
     assert len(docs) == 12
-    all_scores = [
-        [coref_rel.score for coref_rel in doc.binary_coref_relations]
-        for doc in docs
-    ]
+    all_scores = [[coref_rel.score for coref_rel in doc.binary_coref_relations] for doc in docs]
     assert docs[0].text == TEXTS[1]
     assert docs[0].text_pair == TEXTS[2]
     assert docs[0].binary_coref_relations.resolve() == [
@@ -282,15 +279,23 @@ def test_encode_target(task_encodings_without_target, taskmodule):
     assert target == 0.0
 
 
-@pytest.fixture(scope="module", params=[False, True])
-def batch(taskmodule, positive_documents, documents_with_negatives, request):
-    if request.param:
-        original_value = taskmodule.add_negative_relations
-        taskmodule.add_negative_relations = True
-        task_encodings = taskmodule.encode(positive_documents, encode_target=True)[:4]
-        taskmodule.add_negative_relations = original_value
-    else:
-        task_encodings = taskmodule.encode(documents_with_negatives[0], encode_target=True)
+def test_encode_with_add_negative_relations(taskmodule, positive_documents):
+    original_value = taskmodule.add_negative_relations
+    taskmodule.add_negative_relations = False
+    documents_with_negatives = list(taskmodule._add_negative_relations(positive_documents))
+    task_encodings1 = taskmodule.encode(documents_with_negatives, encode_target=True)
+    taskmodule.add_negative_relations = True
+    task_encodings2 = taskmodule.encode(positive_documents, encode_target=True)
+    taskmodule.add_negative_relations = original_value
+
+    for task_encoding1, task_encoding2 in zip(task_encodings1, task_encodings2):
+        torch.testing.assert_close(task_encoding1.inputs, task_encoding2.inputs)
+        torch.testing.assert_close(task_encoding1.targets, task_encoding2.targets)
+
+
+@pytest.fixture(scope="module")
+def batch(taskmodule, positive_documents, documents_with_negatives):
+    task_encodings = taskmodule.encode(documents_with_negatives[0], encode_target=True)
     result = taskmodule.collate(task_encodings)
     return result
 
