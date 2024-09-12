@@ -275,27 +275,29 @@ class SequencePairSimilarityModelWithPooler(
     """TODO.
 
     Args:
-        label_threshold: The threshold for the multi-label classifier, i.e. the probability
-            above which a class is predicted.
+        label_threshold: The threshold above which score the spans are considered as similar.
+        pooler:
         **kwargs
     """
 
     def __init__(
         self,
-        label_threshold: float = 0.5,
+        label_threshold: float = 0.9,
         pooler: Optional[Union[Dict[str, Any], str]] = None,
         **kwargs,
     ):
         if pooler is None:
-            # use mention pooling per default
+            # use (max) mention pooling per default
             pooler = {"type": "mention_pooling", "num_indices": 1}
         super().__init__(pooler=pooler, **kwargs)
         self.multi_label_threshold = label_threshold
 
-    def setup_classifier(self, pooler_output_dim: int) -> Callable:
+    def setup_classifier(
+        self, pooler_output_dim: int
+    ) -> Callable[[torch.FloatTensor, torch.FloatTensor], torch.FloatTensor]:
         return torch.nn.functional.cosine_similarity
 
-    def setup_loss_fct(self):
+    def setup_loss_fct(self) -> Callable:
         return nn.BCELoss()
 
     def forward(

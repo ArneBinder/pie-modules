@@ -86,6 +86,7 @@ def model() -> SequencePairSimilarityModelWithPooler:
     torch.manual_seed(42)
     result = SequencePairSimilarityModelWithPooler(
         model_name_or_path="prajjwal1/bert-tiny",
+        label_threshold=0.5,
     )
     return result
 
