@@ -266,8 +266,12 @@ def test_encode_with_collect_statistics(taskmodule, positive_documents, caplog):
 
 
 @pytest.fixture(scope="module")
-def batch(taskmodule, positive_documents, documents_with_negatives):
-    task_encodings = taskmodule.encode(documents_with_negatives[0], encode_target=True)
+def task_encodings(taskmodule, documents_with_negatives):
+    return taskmodule.encode(documents_with_negatives[0], encode_target=True)
+
+
+@pytest.fixture(scope="module")
+def batch(taskmodule, task_encodings):
     result = taskmodule.collate(task_encodings)
     return result
 
@@ -332,6 +336,46 @@ def test_collate(batch, taskmodule):
     )
 
     torch.testing.assert_close(targets, {"labels": torch.tensor([0.0, 0.0, 0.0, 0.0])})
+
+
+@pytest.fixture(scope="module")
+def unbatched_output(taskmodule):
+    model_output = {
+        "labels": torch.tensor([1, 1, 1, 1]),
+        "probabilities": torch.tensor(
+            [0.5338148474693298, 0.5866107940673828, 0.5076886415481567, 0.5946245789527893]
+        ),
+    }
+    return taskmodule.unbatch_output(model_output=model_output)
+
+
+def test_unbatch_output(unbatched_output, taskmodule):
+    assert len(unbatched_output) == 4
+    assert unbatched_output == [
+        {"is_valid": True, "score": 0.5338148474693298},
+        {"is_valid": True, "score": 0.5866107940673828},
+        {"is_valid": True, "score": 0.5076886415481567},
+        {"is_valid": True, "score": 0.5946245789527893},
+    ]
+
+
+def test_create_annotation_from_output(taskmodule, task_encodings, unbatched_output):
+    all_new_annotations = []
+    for task_encoding, task_output in zip(task_encodings, unbatched_output):
+        for new_annotation in taskmodule.create_annotations_from_output(
+            task_encoding=task_encoding, task_output=task_output
+        ):
+            all_new_annotations.append(new_annotation)
+    assert all(layer_name == "binary_coref_relations" for layer_name, ann in all_new_annotations)
+    resolve_annotations_with_scores = [
+        (round(ann.score, 4), ann.resolve()) for layer_name, ann in all_new_annotations
+    ]
+    assert resolve_annotations_with_scores == [
+        (0.5338, ("coref", (("PERSON", "she"), ("PERSON", "Bob")))),
+        (0.5866, ("coref", (("PERSON", "she"), ("ANIMAL", "his cat")))),
+        (0.5077, ("coref", (("COMPANY", "C"), ("PERSON", "Bob")))),
+        (0.5946, ("coref", (("COMPANY", "C"), ("ANIMAL", "his cat")))),
+    ]
 
 
 def get_metric_state(metric_or_collection: Union[Metric, MetricCollection]) -> Dict[str, Any]:

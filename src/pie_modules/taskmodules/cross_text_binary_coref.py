@@ -5,6 +5,7 @@ from typing import (
     Dict,
     Iterable,
     Iterator,
+    List,
     Optional,
     Sequence,
     Tuple,
@@ -43,7 +44,8 @@ TaskEncodingType: TypeAlias = TaskEncoding[
 
 
 class TaskOutputType(TypedDict, total=False):
-    scores: Sequence[str]
+    score: float
+    is_valid: bool
 
 
 ModelInputType: TypeAlias = Dict[str, torch.Tensor]
@@ -224,11 +226,20 @@ class CrossTextBinaryCorefTaskModule(
         )
 
     def unbatch_output(self, model_output: ModelTargetType) -> Sequence[TaskOutputType]:
-        raise NotImplementedError()
+        label_ids = model_output["labels"].detach().cpu().tolist()
+        probabilities = model_output["probabilities"].detach().cpu().tolist()
+        result: List[TaskOutputType] = [
+            {"is_valid": label_id != 0, "score": prob}
+            for label_id, prob in zip(label_ids, probabilities)
+        ]
+        return result
 
     def create_annotations_from_output(
         self,
         task_encoding: TaskEncoding[DocumentType, InputEncodingType, TargetEncodingType],
         task_output: TaskOutputType,
     ) -> Iterator[Tuple[str, Annotation]]:
-        raise NotImplementedError()
+        if task_output["is_valid"]:
+            score = task_output["score"]
+            new_coref_rel = task_encoding.metadata["candidate_annotation"].copy(score=score)
+            yield "binary_coref_relations", new_coref_rel
