@@ -25,6 +25,7 @@ from pie_modules.document.types import (
     BinaryCorefRelation,
     TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
 )
+from pie_modules.taskmodules.common.mixins import RelationStatisticsMixin
 from pie_modules.taskmodules.metrics import WrappedMetricWithPrepareFunction
 from pie_modules.utils import list_of_dicts2dict_of_lists
 
@@ -65,7 +66,9 @@ def _get_labels(model_output: ModelTargetType) -> torch.Tensor:
 
 
 @TaskModule.register()
-class CrossTextBinaryCorefTaskModule(TaskModuleType, ChangesTokenizerVocabSize):
+class CrossTextBinaryCorefTaskModule(
+    RelationStatisticsMixin, TaskModuleType, ChangesTokenizerVocabSize
+):
     DOCUMENT_TYPE = DocumentType
 
     def __init__(
@@ -126,18 +129,22 @@ class CrossTextBinaryCorefTaskModule(TaskModuleType, ChangesTokenizerVocabSize):
         return new_docs
 
     def encode(self, documents: Union[DocumentType, Iterable[DocumentType]], **kwargs):
+        self.reset_statistics()
         if self.add_negative_relations:
             if isinstance(documents, DocumentType):
                 documents = [documents]
             documents = self._add_negative_relations(documents)
 
-        return super().encode(documents=documents, **kwargs)
+        result = super().encode(documents=documents, **kwargs)
+        self.show_statistics()
+        return result
 
     def encode_input(
         self,
         document: DocumentType,
         is_training: bool = False,
     ) -> Optional[Union[TaskEncodingType, Sequence[TaskEncodingType]]]:
+        self.collect_all_relations(kind="available", relations=document.binary_coref_relations)
         tokenizer_kwargs = dict(
             padding=False,
             truncation=True,
@@ -158,6 +165,7 @@ class CrossTextBinaryCorefTaskModule(TaskModuleType, ChangesTokenizerVocabSize):
                 logger.warning(
                     f"Could not get token offsets for arguments of coref relation: {coref_rel.resolve()}. Skip it."
                 )
+                self.collect_relation(kind="skipped_args_not_aligned", relation=coref_rel)
                 continue
             task_encodings.append(
                 TaskEncoding(
@@ -173,6 +181,7 @@ class CrossTextBinaryCorefTaskModule(TaskModuleType, ChangesTokenizerVocabSize):
                     metadata={"candidate_annotation": coref_rel},
                 )
             )
+            self.collect_relation("used", coref_rel)
         return task_encodings
 
     def encode_target(

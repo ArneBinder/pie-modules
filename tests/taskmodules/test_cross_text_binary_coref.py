@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Any, Dict, Union
 
 import pytest
@@ -242,6 +243,26 @@ def test_encode_with_add_negative_relations(taskmodule, positive_documents):
     for task_encoding1, task_encoding2 in zip(task_encodings1, task_encodings2):
         torch.testing.assert_close(task_encoding1.inputs, task_encoding2.inputs)
         torch.testing.assert_close(task_encoding1.targets, task_encoding2.targets)
+
+
+def test_encode_with_collect_statistics(taskmodule, positive_documents, caplog):
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        original_values = taskmodule.add_negative_relations, taskmodule.collect_statistics
+        taskmodule.add_negative_relations = True
+        taskmodule.collect_statistics = True
+        taskmodule.encode(positive_documents, encode_target=True)
+        taskmodule.add_negative_relations, taskmodule.collect_statistics = original_values
+
+    assert len(caplog.messages) == 1
+    assert (
+        caplog.messages[0] == "statistics:\n"
+        "|           |   coref |   no_relation |   all_relations |\n"
+        "|:----------|--------:|--------------:|----------------:|\n"
+        "| available |       4 |             6 |               4 |\n"
+        "| used      |       4 |             6 |               4 |\n"
+        "| used %    |     100 |           100 |             100 |"
+    )
 
 
 @pytest.fixture(scope="module")
