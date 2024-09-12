@@ -1,5 +1,17 @@
 import logging
-from typing import Any, Dict, Iterator, MutableMapping, Optional, Tuple, Union
+from abc import ABC, abstractmethod
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    MutableMapping,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import torch
 from pytorch_ie.core import PyTorchIEModel
@@ -30,20 +42,34 @@ HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE = {
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T")
 
-@PyTorchIEModel.register()
-class SequenceClassificationModelWithPooler(
+
+def separate_arguments_by_prefix(
+    arguments: MutableMapping[str, T], prefixes: List[str]
+) -> Dict[str, Dict[str, T]]:
+    result: Dict[str, Dict[str, T]] = {prefix: {} for prefix in prefixes + ["remaining"]}
+    for k, v in arguments.items():
+        found = False
+        for prefix in prefixes:
+            if k.startswith(prefix):
+                result[prefix][k[len(prefix) :]] = v
+                found = True
+                break
+        if not found:
+            result["remaining"][k] = v
+    return result
+
+
+class SequenceClassificationModelWithPoolerBase(
+    ABC,
     ModelWithBoilerplate[InputType, OutputType, TargetType, StepOutputType],
     RequiresModelNameOrPath,
-    RequiresNumClasses,
 ):
-    """A sequence classification model that uses a pooler to get a representation of the input
-    sequence and then applies a linear classifier to that representation. The pooler can be
-    configured via the `pooler` argument, see :func:`get_pooler_and_output_size` for details.
+    """Abstract base model for sequence classification with a pooler.
 
     Args:
         model_name_or_path: The name or path of the HuggingFace model to use.
-        num_classes: The number of classes for the classification task.
         tokenizer_vocab_size: The size of the tokenizer vocabulary. If provided, the model's
             tokenizer embeddings are resized to this size.
         classifier_dropout: The dropout probability for the classifier. If not provided, the
@@ -52,9 +78,6 @@ class SequenceClassificationModelWithPooler(
         task_learning_rate: The learning rate for the task-specific parameters. If None, the
             learning rate for all parameters is set to `learning_rate`.
         warmup_proportion: The proportion of steps to warm up the learning rate.
-        multi_label: If True, the model is trained as a multi-label classifier.
-        multi_label_threshold: The threshold for the multi-label classifier, i.e. the probability
-            above which a class is predicted.
         pooler: The pooler configuration. If None, CLS token pooling is used.
         freeze_base_model: If True, the base model parameters are frozen.
         base_model_prefix: The prefix of the base model parameters when using a task_learning_rate
@@ -66,14 +89,11 @@ class SequenceClassificationModelWithPooler(
     def __init__(
         self,
         model_name_or_path: str,
-        num_classes: int,
         tokenizer_vocab_size: Optional[int] = None,
         classifier_dropout: Optional[float] = None,
         learning_rate: float = 1e-5,
         task_learning_rate: Optional[float] = None,
         warmup_proportion: float = 0.1,
-        multi_label: bool = False,
-        multi_label_threshold: float = 0.5,
         pooler: Optional[Union[Dict[str, Any], str]] = None,
         freeze_base_model: bool = False,
         **kwargs,
@@ -118,10 +138,23 @@ class SequenceClassificationModelWithPooler(
             config=self.pooler_config,
             input_dim=config.hidden_size,
         )
-        self.classifier = nn.Linear(pooler_output_dim, num_classes)
-        self.multi_label = multi_label
-        self.multi_label_threshold = multi_label_threshold
-        self.loss_fct = nn.BCEWithLogitsLoss() if self.multi_label else nn.CrossEntropyLoss()
+        self.classifier = self.setup_classifier(pooler_output_dim=pooler_output_dim)
+        self.loss_fct = self.setup_loss_fct()
+
+    @abstractmethod
+    def setup_classifier(self, pooler_output_dim: int) -> Callable:
+        pass
+
+    @abstractmethod
+    def setup_loss_fct(self) -> Callable:
+        pass
+
+    def get_pooled_output(self, model_inputs, pooler_inputs) -> torch.FloatTensor:
+        output = self.model(**model_inputs)
+        hidden_state = output.last_hidden_state
+        pooled_output = self.pooler(hidden_state, **pooler_inputs)
+        pooled_output = self.dropout(pooled_output)
+        return pooled_output
 
     def forward(
         self,
@@ -129,21 +162,11 @@ class SequenceClassificationModelWithPooler(
         targets: Optional[TargetType] = None,
         return_hidden_states: bool = False,
     ) -> OutputType:
-        pooler_inputs = {}
-        model_inputs = {}
-        for k, v in inputs.items():
-            if k.startswith("pooler_"):
-                pooler_inputs[k[len("pooler_") :]] = v
-            else:
-                model_inputs[k] = v
+        sanitized_inputs = separate_arguments_by_prefix(arguments=inputs, prefixes=["pooler_"])
 
-        output = self.model(**model_inputs)
-
-        hidden_state = output.last_hidden_state
-
-        pooled_output = self.pooler(hidden_state, **pooler_inputs)
-
-        pooled_output = self.dropout(pooled_output)
+        pooled_output = self.get_pooled_output(
+            model_inputs=sanitized_inputs["remaining"], pooler_inputs=sanitized_inputs["pooler_"]
+        )
 
         logits = self.classifier(pooled_output)
 
@@ -153,19 +176,13 @@ class SequenceClassificationModelWithPooler(
             loss = self.loss_fct(logits, labels)
             result["loss"] = loss
         if return_hidden_states:
-            # just the last hidden state for now
-            result["hidden_states"] = (hidden_state,)
+            raise NotImplementedError("return_hidden_states is not yet implemented")
 
         return SequenceClassifierOutput(**result)
 
+    @abstractmethod
     def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
-        if not self.multi_label:
-            labels = torch.argmax(outputs.logits, dim=-1).to(torch.long)
-            probabilities = torch.softmax(outputs.logits, dim=-1)
-        else:
-            probabilities = torch.sigmoid(outputs.logits)
-            labels = (probabilities > self.multi_label_threshold).to(torch.long)
-        return {"labels": labels, "probabilities": probabilities}
+        pass
 
     def base_model_named_parameters(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
         if prefix:
@@ -201,3 +218,51 @@ class SequenceClassificationModelWithPooler(
             return [optimizer], [{"scheduler": scheduler, "interval": "step"}]
         else:
             return optimizer
+
+
+@PyTorchIEModel.register()
+class SequenceClassificationModelWithPooler(
+    SequenceClassificationModelWithPoolerBase,
+    RequiresNumClasses,
+):
+    """A sequence classification model that uses a pooler to get a representation of the input
+    sequence and then applies a linear classifier to that representation. The pooler can be
+    configured via the `pooler` argument, see :func:`get_pooler_and_output_size` for details.
+
+    Args:
+        num_classes: The number of classes for the classification task.
+        multi_label: If True, the model is trained as a multi-label classifier.
+        multi_label_threshold: The threshold for the multi-label classifier, i.e. the probability
+            above which a class is predicted.
+        **kwargs
+    """
+
+    def __init__(
+        self,
+        num_classes: int,
+        multi_label: bool = False,
+        multi_label_threshold: float = 0.5,
+        **kwargs,
+    ):
+        # set num_classes and multi_label before call to super init because they are used there
+        # in setup_classifier and setup_loss_fct
+        self.num_classes = num_classes
+        self.multi_label = multi_label
+        super().__init__(**kwargs)
+
+        self.multi_label_threshold = multi_label_threshold
+
+    def setup_classifier(self, pooler_output_dim: int) -> Callable:
+        return nn.Linear(pooler_output_dim, self.num_classes)
+
+    def setup_loss_fct(self) -> Callable:
+        return nn.BCEWithLogitsLoss() if self.multi_label else nn.CrossEntropyLoss()
+
+    def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
+        if not self.multi_label:
+            labels = torch.argmax(outputs.logits, dim=-1).to(torch.long)
+            probabilities = torch.softmax(outputs.logits, dim=-1)
+        else:
+            probabilities = torch.sigmoid(outputs.logits)
+            labels = (probabilities > self.multi_label_threshold).to(torch.long)
+        return {"labels": labels, "probabilities": probabilities}
