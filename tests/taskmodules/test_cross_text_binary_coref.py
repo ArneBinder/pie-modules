@@ -265,6 +265,39 @@ def test_encode_with_collect_statistics(taskmodule, positive_documents, caplog):
     )
 
 
+def test_encode_with_windowing(documents_with_negatives, caplog):
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = CrossTextBinaryCorefTaskModule(
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        max_window=4,
+        collect_statistics=True,
+    )
+    assert not taskmodule.is_from_pretrained
+    taskmodule.prepare(documents_with_negatives)
+
+    assert len(documents_with_negatives) == 12
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        task_encodings = taskmodule.encode(documents_with_negatives)
+    assert len(caplog.messages) > 0
+    assert (
+        caplog.messages[-1] == "statistics:\n"
+        "|                                       |   coref |   no_relation |   all_relations |\n"
+        "|:--------------------------------------|--------:|--------------:|----------------:|\n"
+        "| available                             |       4 |            32 |               4 |\n"
+        "| skipped_span_does_not_fit_into_window |       2 |             8 |               2 |\n"
+        "| used                                  |       2 |            24 |               2 |\n"
+        "| used %                                |      50 |            75 |              50 |"
+    )
+
+    assert len(task_encodings) == 26
+    for task_encoding in task_encodings:
+        for k, v in task_encoding.inputs["encoding"].items():
+            assert len(v) <= taskmodule.max_window
+        for k, v in task_encoding.inputs["encoding_pair"].items():
+            assert len(v) <= taskmodule.max_window
+
+
 @pytest.fixture(scope="module")
 def task_encodings(taskmodule, documents_with_negatives):
     return taskmodule.encode(documents_with_negatives[0], encode_target=True)

@@ -1,3 +1,4 @@
+import copy
 import logging
 from collections import defaultdict
 from typing import (
@@ -15,11 +16,13 @@ from typing import (
 
 import torch
 from pytorch_ie import Annotation
+from pytorch_ie.annotations import Span
 from pytorch_ie.core import TaskEncoding, TaskModule
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
+from pytorch_ie.utils.window import get_window_around_slice
 from torchmetrics import Metric, MetricCollection
 from torchmetrics.classification import BinaryAUROC
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, BatchEncoding
 from typing_extensions import TypeAlias
 
 from pie_modules.document.types import (
@@ -63,6 +66,16 @@ TaskModuleType: TypeAlias = TaskModule[
 ]
 
 
+class SpanNotAlignedWithTokenException(Exception):
+    def __init__(self, span):
+        self.span = span
+
+
+class SpanDoesNotFitIntoAvailableWindow(Exception):
+    def __init__(self, span):
+        self.span = span
+
+
 def _get_labels(model_output: ModelTargetType) -> torch.Tensor:
     return model_output["labels"]
 
@@ -77,6 +90,7 @@ class CrossTextBinaryCorefTaskModule(
         self,
         tokenizer_name_or_path: str,
         add_negative_relations: bool = False,
+        max_window: Optional[int] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -85,6 +99,8 @@ class CrossTextBinaryCorefTaskModule(
         self.add_negative_relations = add_negative_relations
 
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
+        self.max_window = max_window if max_window is not None else self.tokenizer.model_max_length
+        self.available_window = self.max_window - self.tokenizer.num_special_tokens_to_add()
 
     def _add_negative_relations(self, positives: Iterable[DocumentType]) -> Iterable[DocumentType]:
         positive_tuples = defaultdict(set)
@@ -141,6 +157,35 @@ class CrossTextBinaryCorefTaskModule(
         self.show_statistics()
         return result
 
+    def truncate_encoding_around_span(
+        self, encoding: BatchEncoding, char_span: Span
+    ) -> Tuple[Dict[str, List[int]], Span]:
+        input_ids = copy.deepcopy(encoding["input_ids"])
+
+        token_start = encoding.char_to_token(char_span.start)
+        token_end_before = encoding.char_to_token(char_span.end - 1)
+        if token_start is None or token_end_before is None:
+            raise SpanNotAlignedWithTokenException(span=char_span)
+        token_end = token_end_before + 1
+
+        # truncate input_ids and shift token_start and token_end
+        if len(input_ids) > self.available_window:
+            window_slice = get_window_around_slice(
+                slice=[token_start, token_end],
+                max_window_size=self.available_window,
+                available_input_length=len(input_ids),
+            )
+            if window_slice is None:
+                raise SpanDoesNotFitIntoAvailableWindow(span=(token_start, token_end))
+            window_start, window_end = window_slice
+            input_ids = input_ids[window_start:window_end]
+            token_start -= window_start
+            token_end -= window_start
+
+        truncated_encoding = self.tokenizer.prepare_for_model(ids=input_ids)
+
+        return truncated_encoding, Span(start=token_start, end=token_end)
+
     def encode_input(
         self,
         document: DocumentType,
@@ -152,33 +197,47 @@ class CrossTextBinaryCorefTaskModule(
             truncation=True,
             max_length=self.tokenizer.model_max_length,
             return_offsets_mapping=False,
-            add_special_tokens=True,
+            add_special_tokens=False,
         )
         encoding = self.tokenizer(text=document.text, **tokenizer_kwargs)
         encoding_pair = self.tokenizer(text=document.text_pair, **tokenizer_kwargs)
 
         task_encodings = []
         for coref_rel in document.binary_coref_relations:
-            start = encoding.char_to_token(coref_rel.head.start)
-            end = encoding.char_to_token(coref_rel.head.end - 1) + 1
-            start_pair = encoding_pair.char_to_token(coref_rel.tail.start)
-            end_pair = encoding_pair.char_to_token(coref_rel.tail.end - 1) + 1
-            if any(offset is None for offset in [start, end, start_pair, end_pair]):
+            try:
+                current_encoding, token_span = self.truncate_encoding_around_span(
+                    encoding=encoding, char_span=coref_rel.head
+                )
+                current_encoding_pair, token_span_pair = self.truncate_encoding_around_span(
+                    encoding=encoding_pair, char_span=coref_rel.tail
+                )
+            except SpanNotAlignedWithTokenException as e:
                 logger.warning(
-                    f"Could not get token offsets for arguments of coref relation: {coref_rel.resolve()}. Skip it."
+                    f"Could not get token offsets for argument ({e.span}) of coref relation: "
+                    f"{coref_rel.resolve()}. Skip it."
                 )
                 self.collect_relation(kind="skipped_args_not_aligned", relation=coref_rel)
                 continue
+            except SpanDoesNotFitIntoAvailableWindow as e:
+                logger.warning(
+                    f"Argument span [{e.span}] does not fit into available token window "
+                    f"({self.available_window}). Skip it."
+                )
+                self.collect_relation(
+                    kind="skipped_span_does_not_fit_into_window", relation=coref_rel
+                )
+                continue
+
             task_encodings.append(
                 TaskEncoding(
                     document=document,
                     inputs={
-                        "encoding": encoding,
-                        "encoding_pair": encoding_pair,
-                        "pooler_start_indices": start,
-                        "pooler_end_indices": end,
-                        "pooler_pair_start_indices": start_pair,
-                        "pooler_pair_end_indices": end_pair,
+                        "encoding": current_encoding,
+                        "encoding_pair": current_encoding_pair,
+                        "pooler_start_indices": token_span.start,
+                        "pooler_end_indices": token_span.end,
+                        "pooler_pair_start_indices": token_span_pair.start,
+                        "pooler_pair_end_indices": token_span_pair.end,
                     },
                     metadata={"candidate_annotation": coref_rel},
                 )
