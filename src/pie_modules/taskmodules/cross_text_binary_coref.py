@@ -81,6 +81,10 @@ def _get_labels(model_output: ModelTargetType) -> torch.Tensor:
 
 @TaskModule.register()
 class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
+    """This taskmodule processes documents of type
+    TextPairDocumentWithLabeledSpansAndBinaryCorefRelations in preparation for a
+    SequencePairSimilarityModelWithPooler."""
+
     DOCUMENT_TYPE = DocumentType
 
     def __init__(
