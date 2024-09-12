@@ -95,79 +95,115 @@ def test_construct_negative_documents(taskmodule, positive_documents):
         "Bob loves his cat.",
         "She sleeps a lot.",
     ]
-    assert len(docs) == 12
     assert all(doc.text in TEXTS for doc in docs)
     assert all(doc.text_pair in TEXTS for doc in docs)
 
+    all_texts = [(doc.text, doc.text_pair) for doc in docs]
     all_scores = [[coref_rel.score for coref_rel in doc.binary_coref_relations] for doc in docs]
     all_rels_resolved = [doc.binary_coref_relations.resolve() for doc in docs]
 
     all_rels_and_scores = [
-        list(zip(scores, rels_resolved))
-        for scores, rels_resolved in zip(all_scores, all_rels_resolved)
+        (texts, list(zip(scores, rels_resolved)))
+        for texts, scores, rels_resolved in zip(all_texts, all_scores, all_rels_resolved)
     ]
 
     assert all_rels_and_scores == [
-        [
-            (0.0, ("coref", (("PERSON", "she"), ("PERSON", "Bob")))),
-            (0.0, ("coref", (("PERSON", "she"), ("ANIMAL", "his cat")))),
-            (0.0, ("coref", (("COMPANY", "C"), ("PERSON", "Bob")))),
-            (0.0, ("coref", (("COMPANY", "C"), ("ANIMAL", "his cat")))),
-        ],
-        [
-            (1.0, ("coref", (("PERSON", "she"), ("PERSON", "Entity A")))),
-            (0.0, ("coref", (("PERSON", "she"), ("COMPANY", "B")))),
-            (0.0, ("coref", (("COMPANY", "C"), ("PERSON", "Entity A")))),
-            (0.0, ("coref", (("COMPANY", "C"), ("COMPANY", "B")))),
-        ],
-        [
-            (0.0, ("coref", (("PERSON", "she"), ("ANIMAL", "She")))),
-            (0.0, ("coref", (("COMPANY", "C"), ("ANIMAL", "She")))),
-        ],
-        [
-            (0.0, ("coref", (("PERSON", "Bob"), ("PERSON", "she")))),
-            (0.0, ("coref", (("PERSON", "Bob"), ("COMPANY", "C")))),
-            (0.0, ("coref", (("ANIMAL", "his cat"), ("PERSON", "she")))),
-            (0.0, ("coref", (("ANIMAL", "his cat"), ("COMPANY", "C")))),
-        ],
-        [
-            (0.0, ("coref", (("PERSON", "Bob"), ("PERSON", "Entity A")))),
-            (0.0, ("coref", (("PERSON", "Bob"), ("COMPANY", "B")))),
-            (0.0, ("coref", (("ANIMAL", "his cat"), ("PERSON", "Entity A")))),
-            (0.0, ("coref", (("ANIMAL", "his cat"), ("COMPANY", "B")))),
-        ],
-        [
-            (0.0, ("coref", (("PERSON", "Bob"), ("ANIMAL", "She")))),
-            (1.0, ("coref", (("ANIMAL", "his cat"), ("ANIMAL", "She")))),
-        ],
-        [
-            (1.0, ("coref", (("PERSON", "Entity A"), ("PERSON", "she")))),
-            (0.0, ("coref", (("PERSON", "Entity A"), ("COMPANY", "C")))),
-            (0.0, ("coref", (("COMPANY", "B"), ("PERSON", "she")))),
-            (0.0, ("coref", (("COMPANY", "B"), ("COMPANY", "C")))),
-        ],
-        [
-            (0.0, ("coref", (("PERSON", "Entity A"), ("PERSON", "Bob")))),
-            (0.0, ("coref", (("PERSON", "Entity A"), ("ANIMAL", "his cat")))),
-            (0.0, ("coref", (("COMPANY", "B"), ("PERSON", "Bob")))),
-            (0.0, ("coref", (("COMPANY", "B"), ("ANIMAL", "his cat")))),
-        ],
-        [
-            (0.0, ("coref", (("PERSON", "Entity A"), ("ANIMAL", "She")))),
-            (0.0, ("coref", (("COMPANY", "B"), ("ANIMAL", "She")))),
-        ],
-        [
-            (0.0, ("coref", (("ANIMAL", "She"), ("PERSON", "she")))),
-            (0.0, ("coref", (("ANIMAL", "She"), ("COMPANY", "C")))),
-        ],
-        [
-            (0.0, ("coref", (("ANIMAL", "She"), ("PERSON", "Bob")))),
-            (1.0, ("coref", (("ANIMAL", "She"), ("ANIMAL", "his cat")))),
-        ],
-        [
-            (0.0, ("coref", (("ANIMAL", "She"), ("PERSON", "Entity A")))),
-            (0.0, ("coref", (("ANIMAL", "She"), ("COMPANY", "B")))),
-        ],
+        (
+            ("And she founded C.", "Bob loves his cat."),
+            [
+                (0.0, ("coref", (("PERSON", "she"), ("PERSON", "Bob")))),
+                (0.0, ("coref", (("PERSON", "she"), ("ANIMAL", "his cat")))),
+                (0.0, ("coref", (("COMPANY", "C"), ("PERSON", "Bob")))),
+                (0.0, ("coref", (("COMPANY", "C"), ("ANIMAL", "his cat")))),
+            ],
+        ),
+        (
+            ("And she founded C.", "Entity A works at B."),
+            [
+                (1.0, ("coref", (("PERSON", "she"), ("PERSON", "Entity A")))),
+                (0.0, ("coref", (("PERSON", "she"), ("COMPANY", "B")))),
+                (0.0, ("coref", (("COMPANY", "C"), ("PERSON", "Entity A")))),
+                (0.0, ("coref", (("COMPANY", "C"), ("COMPANY", "B")))),
+            ],
+        ),
+        (
+            ("And she founded C.", "She sleeps a lot."),
+            [
+                (0.0, ("coref", (("PERSON", "she"), ("ANIMAL", "She")))),
+                (0.0, ("coref", (("COMPANY", "C"), ("ANIMAL", "She")))),
+            ],
+        ),
+        (
+            ("Bob loves his cat.", "And she founded C."),
+            [
+                (0.0, ("coref", (("PERSON", "Bob"), ("PERSON", "she")))),
+                (0.0, ("coref", (("PERSON", "Bob"), ("COMPANY", "C")))),
+                (0.0, ("coref", (("ANIMAL", "his cat"), ("PERSON", "she")))),
+                (0.0, ("coref", (("ANIMAL", "his cat"), ("COMPANY", "C")))),
+            ],
+        ),
+        (
+            ("Bob loves his cat.", "Entity A works at B."),
+            [
+                (0.0, ("coref", (("PERSON", "Bob"), ("PERSON", "Entity A")))),
+                (0.0, ("coref", (("PERSON", "Bob"), ("COMPANY", "B")))),
+                (0.0, ("coref", (("ANIMAL", "his cat"), ("PERSON", "Entity A")))),
+                (0.0, ("coref", (("ANIMAL", "his cat"), ("COMPANY", "B")))),
+            ],
+        ),
+        (
+            ("Bob loves his cat.", "She sleeps a lot."),
+            [
+                (0.0, ("coref", (("PERSON", "Bob"), ("ANIMAL", "She")))),
+                (1.0, ("coref", (("ANIMAL", "his cat"), ("ANIMAL", "She")))),
+            ],
+        ),
+        (
+            ("Entity A works at B.", "And she founded C."),
+            [
+                (1.0, ("coref", (("PERSON", "Entity A"), ("PERSON", "she")))),
+                (0.0, ("coref", (("PERSON", "Entity A"), ("COMPANY", "C")))),
+                (0.0, ("coref", (("COMPANY", "B"), ("PERSON", "she")))),
+                (0.0, ("coref", (("COMPANY", "B"), ("COMPANY", "C")))),
+            ],
+        ),
+        (
+            ("Entity A works at B.", "Bob loves his cat."),
+            [
+                (0.0, ("coref", (("PERSON", "Entity A"), ("PERSON", "Bob")))),
+                (0.0, ("coref", (("PERSON", "Entity A"), ("ANIMAL", "his cat")))),
+                (0.0, ("coref", (("COMPANY", "B"), ("PERSON", "Bob")))),
+                (0.0, ("coref", (("COMPANY", "B"), ("ANIMAL", "his cat")))),
+            ],
+        ),
+        (
+            ("Entity A works at B.", "She sleeps a lot."),
+            [
+                (0.0, ("coref", (("PERSON", "Entity A"), ("ANIMAL", "She")))),
+                (0.0, ("coref", (("COMPANY", "B"), ("ANIMAL", "She")))),
+            ],
+        ),
+        (
+            ("She sleeps a lot.", "And she founded C."),
+            [
+                (0.0, ("coref", (("ANIMAL", "She"), ("PERSON", "she")))),
+                (0.0, ("coref", (("ANIMAL", "She"), ("COMPANY", "C")))),
+            ],
+        ),
+        (
+            ("She sleeps a lot.", "Bob loves his cat."),
+            [
+                (0.0, ("coref", (("ANIMAL", "She"), ("PERSON", "Bob")))),
+                (1.0, ("coref", (("ANIMAL", "She"), ("ANIMAL", "his cat")))),
+            ],
+        ),
+        (
+            ("She sleeps a lot.", "Entity A works at B."),
+            [
+                (0.0, ("coref", (("ANIMAL", "She"), ("PERSON", "Entity A")))),
+                (0.0, ("coref", (("ANIMAL", "She"), ("COMPANY", "B")))),
+            ],
+        ),
     ]
 
 
