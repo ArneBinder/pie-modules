@@ -175,8 +175,8 @@ class CrossTextBinaryCorefTaskModule(
                         "encoding_pair": encoding_pair,
                         "pooler_start_indices": start,
                         "pooler_end_indices": end,
-                        "pooler_start_indices_pair": start_pair,
-                        "pooler_end_indices_pair": end_pair,
+                        "pooler_pair_start_indices": start_pair,
+                        "pooler_pair_end_indices": end_pair,
                     },
                     metadata={"candidate_annotation": coref_rel},
                 )
@@ -201,13 +201,13 @@ class CrossTextBinaryCorefTaskModule(
         )
 
         inputs = {
-            k: self.tokenizer.pad(v, return_tensors="pt")
+            k: self.tokenizer.pad(v, return_tensors="pt").data
             if k in ["encoding", "encoding_pair"]
             else torch.tensor(v)
             for k, v in inputs_dict.items()
         }
         for k, v in inputs.items():
-            if k.startswith("pooler_start_indices") or k.startswith("pooler_end_indices"):
+            if k.startswith("pooler_") and k.endswith("_indices"):
                 inputs[k] = v.unsqueeze(-1)
 
         if not task_encodings[0].has_targets:

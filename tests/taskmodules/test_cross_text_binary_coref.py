@@ -218,8 +218,8 @@ def test_encode_input(task_encodings_without_target, taskmodule):
         toks[start:end]
         for toks, start, end in zip(
             tokens_pair,
-            inputs_dict["pooler_start_indices_pair"],
-            inputs_dict["pooler_end_indices_pair"],
+            inputs_dict["pooler_pair_start_indices"],
+            inputs_dict["pooler_pair_end_indices"],
         )
     ]
     assert span_tokens == [["she"], ["she"], ["C"], ["C"]]
@@ -279,10 +279,10 @@ def test_collate(batch, taskmodule):
     assert set(inputs) == {
         "pooler_end_indices",
         "encoding_pair",
-        "pooler_end_indices_pair",
+        "pooler_pair_end_indices",
         "pooler_start_indices",
         "encoding",
-        "pooler_start_indices_pair",
+        "pooler_pair_start_indices",
     }
     torch.testing.assert_close(
         inputs["encoding"]["input_ids"],
@@ -325,10 +325,10 @@ def test_collate(batch, taskmodule):
     torch.testing.assert_close(inputs["pooler_start_indices"], torch.tensor([[2], [2], [4], [4]]))
     torch.testing.assert_close(inputs["pooler_end_indices"], torch.tensor([[3], [3], [5], [5]]))
     torch.testing.assert_close(
-        inputs["pooler_start_indices_pair"], torch.tensor([[1], [3], [1], [3]])
+        inputs["pooler_pair_start_indices"], torch.tensor([[1], [3], [1], [3]])
     )
     torch.testing.assert_close(
-        inputs["pooler_end_indices_pair"], torch.tensor([[2], [5], [2], [5]])
+        inputs["pooler_pair_end_indices"], torch.tensor([[2], [5], [2], [5]])
     )
 
     torch.testing.assert_close(targets, {"labels": torch.tensor([0.0, 0.0, 0.0, 0.0])})

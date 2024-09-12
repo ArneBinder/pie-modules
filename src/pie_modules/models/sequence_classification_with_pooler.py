@@ -266,3 +266,66 @@ class SequenceClassificationModelWithPooler(
             probabilities = torch.sigmoid(outputs.logits)
             labels = (probabilities > self.multi_label_threshold).to(torch.long)
         return {"labels": labels, "probabilities": probabilities}
+
+
+@PyTorchIEModel.register()
+class SequencePairSimilarityModelWithPooler(
+    SequenceClassificationModelWithPoolerBase,
+):
+    """TODO.
+
+    Args:
+        label_threshold: The threshold for the multi-label classifier, i.e. the probability
+            above which a class is predicted.
+        **kwargs
+    """
+
+    def __init__(self, label_threshold: float = 0.5, **kwargs):
+        super().__init__(**kwargs)
+        self.multi_label_threshold = label_threshold
+
+    def setup_classifier(self, pooler_output_dim: int) -> Callable:
+        return torch.nn.functional.cosine_similarity
+
+    def setup_loss_fct(self):
+        return nn.BCELoss()
+
+    def forward(
+        self,
+        inputs: InputType,
+        targets: Optional[TargetType] = None,
+        return_hidden_states: bool = False,
+    ) -> OutputType:
+        sanitized_inputs = separate_arguments_by_prefix(
+            # Note that the order of the prefixes is important because one is a prefix of the other,
+            # so we need to start with the longer!
+            arguments=inputs,
+            prefixes=["pooler_pair_", "pooler_"],
+        )
+
+        pooled_output = self.get_pooled_output(
+            model_inputs=sanitized_inputs["remaining"]["encoding"],
+            pooler_inputs=sanitized_inputs["pooler_"],
+        )
+        pooled_output_pair = self.get_pooled_output(
+            model_inputs=sanitized_inputs["remaining"]["encoding_pair"],
+            pooler_inputs=sanitized_inputs["pooler_pair_"],
+        )
+
+        logits = self.classifier(pooled_output, pooled_output_pair)
+
+        result = {"logits": logits}
+        if targets is not None:
+            labels = targets["labels"]
+            loss = self.loss_fct(logits, labels)
+            result["loss"] = loss
+        if return_hidden_states:
+            raise NotImplementedError("return_hidden_states is not yet implemented")
+
+        return SequenceClassifierOutput(**result)
+
+    def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
+        # probabilities = torch.sigmoid(outputs.logits)
+        probabilities = outputs.logits
+        labels = (probabilities > self.multi_label_threshold).to(torch.long)
+        return {"labels": labels, "probabilities": probabilities}
