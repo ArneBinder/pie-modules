@@ -101,6 +101,11 @@ class CrossTextBinaryCorefTaskModule(
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
         self.max_window = max_window if max_window is not None else self.tokenizer.model_max_length
         self.available_window = self.max_window - self.tokenizer.num_special_tokens_to_add()
+        self.num_special_tokens_before = len(self._get_special_tokens_before())
+
+    def _get_special_tokens_before(self) -> List[int]:
+        dummy_ids = self.tokenizer.build_inputs_with_special_tokens(token_ids_0=[-1])
+        return dummy_ids[: dummy_ids.index(-1)]
 
     def _add_negative_relations(self, positives: Iterable[DocumentType]) -> Iterable[DocumentType]:
         positive_tuples = defaultdict(set)
@@ -183,6 +188,9 @@ class CrossTextBinaryCorefTaskModule(
             token_end -= window_start
 
         truncated_encoding = self.tokenizer.prepare_for_model(ids=input_ids)
+        # shift indices because we added special tokens to the input_ids
+        token_start += self.num_special_tokens_before
+        token_end += self.num_special_tokens_before
 
         return truncated_encoding, Span(start=token_start, end=token_end)
 
