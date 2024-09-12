@@ -109,6 +109,13 @@ def test_construct_negative_documents(taskmodule, positive_documents):
 
     assert all_rels_and_scores == [
         (
+            ("And she founded C.", "And she founded C."),
+            [
+                (0.0, ("coref", (("PERSON", "she"), ("COMPANY", "C")))),
+                (0.0, ("coref", (("COMPANY", "C"), ("PERSON", "she")))),
+            ],
+        ),
+        (
             ("And she founded C.", "Bob loves his cat."),
             [
                 (0.0, ("coref", (("PERSON", "she"), ("PERSON", "Bob")))),
@@ -140,6 +147,13 @@ def test_construct_negative_documents(taskmodule, positive_documents):
                 (0.0, ("coref", (("PERSON", "Bob"), ("COMPANY", "C")))),
                 (0.0, ("coref", (("ANIMAL", "his cat"), ("PERSON", "she")))),
                 (0.0, ("coref", (("ANIMAL", "his cat"), ("COMPANY", "C")))),
+            ],
+        ),
+        (
+            ("Bob loves his cat.", "Bob loves his cat."),
+            [
+                (0.0, ("coref", (("PERSON", "Bob"), ("ANIMAL", "his cat")))),
+                (0.0, ("coref", (("ANIMAL", "his cat"), ("PERSON", "Bob")))),
             ],
         ),
         (
@@ -177,6 +191,13 @@ def test_construct_negative_documents(taskmodule, positive_documents):
             ],
         ),
         (
+            ("Entity A works at B.", "Entity A works at B."),
+            [
+                (0.0, ("coref", (("PERSON", "Entity A"), ("COMPANY", "B")))),
+                (0.0, ("coref", (("COMPANY", "B"), ("PERSON", "Entity A")))),
+            ],
+        ),
+        (
             ("Entity A works at B.", "She sleeps a lot."),
             [
                 (0.0, ("coref", (("PERSON", "Entity A"), ("ANIMAL", "She")))),
@@ -204,6 +225,7 @@ def test_construct_negative_documents(taskmodule, positive_documents):
                 (0.0, ("coref", (("ANIMAL", "She"), ("COMPANY", "B")))),
             ],
         ),
+        (("She sleeps a lot.", "She sleeps a lot."), []),
     ]
 
 

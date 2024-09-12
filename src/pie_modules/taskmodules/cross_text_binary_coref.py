@@ -101,8 +101,6 @@ class CrossTextBinaryCorefTaskModule(TaskModuleType, ChangesTokenizerVocabSize):
         new_docs = []
         for text in sorted(text2spans):
             for text_pair in sorted(text2spans):
-                if text == text_pair:
-                    continue
                 current_positives = positive_tuples.get((text, text_pair), set())
                 new_doc = TextPairDocumentWithLabeledSpansAndBinaryCorefRelations(
                     text=text, text_pair=text_pair
@@ -115,6 +113,9 @@ class CrossTextBinaryCorefTaskModule(TaskModuleType, ChangesTokenizerVocabSize):
                 )
                 for s in sorted(new_doc.labeled_spans):
                     for s_p in sorted(new_doc.labeled_spans_pair):
+                        # exclude relations to itself
+                        if text == text_pair and s.copy() == s_p.copy():
+                            continue
                         score = 1.0 if (s.copy(), s_p.copy()) in current_positives else 0.0
                         new_coref_rel = BinaryCorefRelation(head=s, tail=s_p, score=score)
                         new_doc.binary_coref_relations.append(new_coref_rel)
