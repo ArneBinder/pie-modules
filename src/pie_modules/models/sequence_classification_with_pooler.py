@@ -280,8 +280,11 @@ class SequencePairSimilarityModelWithPooler(
         **kwargs
     """
 
-    def __init__(self, label_threshold: float = 0.5, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, label_threshold: float = 0.5, pooler: Optional[Union[Dict[str, Any], str]] = None, **kwargs):
+        if pooler is None:
+            # use mention pooling per default
+            pooler = {"type": "mention_pooling", "num_indices": 1}
+        super().__init__(pooler=pooler, **kwargs)
         self.multi_label_threshold = label_threshold
 
     def setup_classifier(self, pooler_output_dim: int) -> Callable:

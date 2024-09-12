@@ -11,8 +11,6 @@ from pie_modules.models import SequencePairSimilarityModelWithPooler
 from pie_modules.models.sequence_classification_with_pooler import OutputType
 from tests.models import trunc_number
 
-POOLER = {"type": "mention_pooling", "num_indices": 1}
-
 
 @pytest.fixture
 def inputs() -> Dict[str, LongTensor]:
@@ -88,7 +86,6 @@ def model() -> SequencePairSimilarityModelWithPooler:
     torch.manual_seed(42)
     result = SequencePairSimilarityModelWithPooler(
         model_name_or_path="prajjwal1/bert-tiny",
-        pooler=POOLER,
     )
     return result
 
@@ -307,9 +304,9 @@ def test_configure_optimizers_with_task_learning_rate(monkeypatch):
     param_group = optimizer.param_groups[0]
     assert len(param_group["params"]) == 39
     assert param_group["lr"] == 1e-5
-    # classifier head parameters - there is no head
+    # classifier head parameters - there is just the default embedding (which is not used)
     param_group = optimizer.param_groups[1]
-    assert len(param_group["params"]) == 0
+    assert len(param_group["params"]) == 1
     assert param_group["lr"] == 1e-3
     # ensure that all parameters are covered
     assert set(optimizer.param_groups[0]["params"] + optimizer.param_groups[1]["params"]) == set(
