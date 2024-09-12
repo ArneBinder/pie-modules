@@ -261,7 +261,9 @@ def construct_mask(input_ids: torch.LongTensor, positive_ids: List[Any]) -> torc
 
 @TaskModule.register()
 class RETextClassificationWithIndicesTaskModule(
-    RelationStatisticsMixin, TaskModuleType, ChangesTokenizerVocabSize,
+    RelationStatisticsMixin,
+    TaskModuleType,
+    ChangesTokenizerVocabSize,
 ):
     """Marker based relation extraction. This taskmodule prepares the input token ids in such a way
     that before and after the candidate head and tail entities special marker tokens are inserted.
