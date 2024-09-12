@@ -61,6 +61,7 @@ from pie_modules.models.simple_sequence_classification import (
 from pie_modules.models.simple_sequence_classification import (
     TargetType as ModelTargetType,
 )
+from pie_modules.taskmodules.common.mixins import RelationStatisticsMixin
 from pie_modules.taskmodules.metrics import WrappedMetricWithPrepareFunction
 
 InputEncodingType: TypeAlias = Dict[str, Any]
@@ -259,7 +260,9 @@ def construct_mask(input_ids: torch.LongTensor, positive_ids: List[Any]) -> torc
 
 
 @TaskModule.register()
-class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizerVocabSize):
+class RETextClassificationWithIndicesTaskModule(
+    RelationStatisticsMixin, TaskModuleType, ChangesTokenizerVocabSize,
+):
     """Marker based relation extraction. This taskmodule prepares the input token ids in such a way
     that before and after the candidate head and tail entities special marker tokens are inserted.
     Then, the modified token ids can be simply passed into a transformer based text classifier
@@ -311,7 +314,6 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
         log_first_n_examples: int = 0,
         add_argument_indices_to_input: bool = False,
         add_global_attention_mask_to_input: bool = False,
-        collect_statistics: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -356,15 +358,12 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
             self.argument_role_to_marker = {HEAD: "H", TAIL: "T"}
         else:
             self.argument_role_to_marker = argument_role_to_marker
-        self.collect_statistics = collect_statistics
 
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
 
         self.argument_markers = None
 
         self._logged_examples_counter = 0
-
-        self.reset_statistics()
 
     @property
     def document_type(self) -> Optional[Type[DocumentType]]:
@@ -421,61 +420,6 @@ class RETextClassificationWithIndicesTaskModule(TaskModuleType, ChangesTokenizer
 
         self.labels = sorted(relation_labels)
         self.entity_labels = sorted(entity_labels)
-
-    def reset_statistics(self):
-        self._statistics = defaultdict(int)
-        self._collected_relations: Dict[str, List[Annotation]] = defaultdict(list)
-
-    def collect_relation(self, kind: str, relation: Annotation):
-        if self.collect_statistics:
-            self._collected_relations[kind].append(relation)
-
-    def collect_all_relations(self, kind: str, relations: Iterable[Annotation]):
-        if self.collect_statistics:
-            self._collected_relations[kind].extend(relations)
-
-    def finalize_statistics(self):
-        if self.collect_statistics:
-            all_relations = set(self._collected_relations["available"])
-            used_relations = set(self._collected_relations["used"])
-            skipped_other = all_relations - used_relations
-            for key, rels in self._collected_relations.items():
-                rels_set = set(rels)
-                if key.startswith("skipped_"):
-                    skipped_other -= rels_set
-                elif key.startswith("used_"):
-                    pass
-                elif key in ["available", "used"]:
-                    pass
-                else:
-                    raise ValueError(f"unknown key: {key}")
-                for rel in rels_set:
-                    self.increase_counter(key=(key, rel.label))
-            for rel in skipped_other:
-                self.increase_counter(key=("skipped_other", rel.label))
-
-    def show_statistics(self):
-        if self.collect_statistics:
-            self.finalize_statistics()
-
-            to_show = pd.Series(self._statistics)
-            if len(to_show.index.names) > 1:
-                to_show = to_show.unstack()
-            to_show = to_show.fillna(0)
-            if to_show.columns.size > 1:
-                to_show["all_relations"] = to_show.loc[:, to_show.columns != "no_relation"].sum(
-                    axis=1
-                )
-            if "used" in to_show.index and "available" in to_show.index:
-                to_show.loc["used %"] = (
-                    100 * to_show.loc["used"] / to_show.loc["available"]
-                ).round()
-            logger.info(f"statistics:\n{to_show.to_markdown()}")
-
-    def increase_counter(self, key: Tuple[Any, ...], value: Optional[int] = 1):
-        if self.collect_statistics:
-            key_str = tuple(str(k) for k in key)
-            self._statistics[key_str] += value
 
     def encode(self, *args, **kwargs):
         self.reset_statistics()
