@@ -17,6 +17,7 @@ from pie_modules.utils import flatten_dict, list_of_dicts2dict_of_lists
 from tests import FIXTURES_ROOT, _config_to_str
 
 TOKENIZER_NAME_OR_PATH = "bert-base-cased"
+DOC_IDX_WITH_TASK_ENCODINGS = 2
 
 CONFIGS = [
     {},
@@ -181,7 +182,7 @@ def documents_with_negatives(taskmodule, positive_documents):
 
 @pytest.fixture(scope="module")
 def task_encodings_without_target(taskmodule, documents_with_negatives):
-    task_encodings = taskmodule.encode_input(documents_with_negatives[0])
+    task_encodings = taskmodule.encode_input(documents_with_negatives[DOC_IDX_WITH_TASK_ENCODINGS])
     return task_encodings
 
 
@@ -199,14 +200,10 @@ def test_encode_input(task_encodings_without_target, taskmodule):
     assert tokens == [
         ["[CLS]", "And", "she", "founded", "C", ".", "[SEP]"],
         ["[CLS]", "And", "she", "founded", "C", ".", "[SEP]"],
-        ["[CLS]", "And", "she", "founded", "C", ".", "[SEP]"],
-        ["[CLS]", "And", "she", "founded", "C", ".", "[SEP]"],
     ]
     assert tokens_pair == [
-        ["[CLS]", "Bob", "loves", "his", "cat", ".", "[SEP]"],
-        ["[CLS]", "Bob", "loves", "his", "cat", ".", "[SEP]"],
-        ["[CLS]", "Bob", "loves", "his", "cat", ".", "[SEP]"],
-        ["[CLS]", "Bob", "loves", "his", "cat", ".", "[SEP]"],
+        ["[CLS]", "En", "##ti", "##ty", "A", "works", "at", "B", ".", "[SEP]"],
+        ["[CLS]", "En", "##ti", "##ty", "A", "works", "at", "B", ".", "[SEP]"],
     ]
     span_tokens = [
         toks[start:end]
@@ -222,13 +219,15 @@ def test_encode_input(task_encodings_without_target, taskmodule):
             inputs_dict["pooler_pair_end_indices"],
         )
     ]
-    assert span_tokens == [["she"], ["she"], ["C"], ["C"]]
-    assert span_tokens_pair == [["Bob"], ["his", "cat"], ["Bob"], ["his", "cat"]]
+    assert span_tokens == [["she"], ["C"]]
+    assert span_tokens_pair == [["En", "##ti", "##ty", "A"], ["B"]]
 
 
 def test_encode_target(task_encodings_without_target, taskmodule):
-    target = taskmodule.encode_target(task_encodings_without_target[0])
-    assert target == 0.0
+    targets = [
+        taskmodule.encode_target(task_encoding) for task_encoding in task_encodings_without_target
+    ]
+    assert targets == [1.0, 0.0]
 
 
 def test_encode_with_collect_statistics(taskmodule, positive_documents, caplog):
@@ -261,7 +260,7 @@ def test_encode_with_windowing(documents_with_negatives, caplog):
     assert not taskmodule.is_from_pretrained
     taskmodule.prepare(documents_with_negatives)
 
-    assert len(documents_with_negatives) == 12
+    assert len(documents_with_negatives) == 16
     caplog.clear()
     with caplog.at_level(logging.INFO):
         task_encodings = taskmodule.encode(documents_with_negatives)
@@ -270,13 +269,13 @@ def test_encode_with_windowing(documents_with_negatives, caplog):
         caplog.messages[-1] == "statistics:\n"
         "|                                       |   coref |   no_relation |   all_relations |\n"
         "|:--------------------------------------|--------:|--------------:|----------------:|\n"
-        "| available                             |       4 |            32 |               4 |\n"
-        "| skipped_span_does_not_fit_into_window |       2 |             8 |               2 |\n"
-        "| used                                  |       2 |            24 |               2 |\n"
-        "| used %                                |      50 |            75 |              50 |"
+        "| available                             |       4 |             6 |               4 |\n"
+        "| skipped_span_does_not_fit_into_window |       2 |             2 |               2 |\n"
+        "| used                                  |       2 |             4 |               2 |\n"
+        "| used %                                |      50 |            67 |              50 |"
     )
 
-    assert len(task_encodings) == 26
+    assert len(task_encodings) == 6
     for task_encoding in task_encodings:
         for k, v in task_encoding.inputs["encoding"].items():
             assert len(v) <= taskmodule.max_window
@@ -286,7 +285,9 @@ def test_encode_with_windowing(documents_with_negatives, caplog):
 
 @pytest.fixture(scope="module")
 def task_encodings(taskmodule, documents_with_negatives):
-    return taskmodule.encode(documents_with_negatives[0], encode_target=True)
+    return taskmodule.encode(
+        documents_with_negatives[DOC_IDX_WITH_TASK_ENCODINGS], encode_target=True
+    )
 
 
 @pytest.fixture(scope="module")
@@ -310,12 +311,7 @@ def test_collate(batch, taskmodule):
     torch.testing.assert_close(
         inputs["encoding"]["input_ids"],
         torch.tensor(
-            [
-                [101, 1262, 1131, 1771, 140, 119, 102],
-                [101, 1262, 1131, 1771, 140, 119, 102],
-                [101, 1262, 1131, 1771, 140, 119, 102],
-                [101, 1262, 1131, 1771, 140, 119, 102],
-            ]
+            [[101, 1262, 1131, 1771, 140, 119, 102], [101, 1262, 1131, 1771, 140, 119, 102]]
         ),
     )
     torch.testing.assert_close(
@@ -329,10 +325,8 @@ def test_collate(batch, taskmodule):
         inputs["encoding_pair"]["input_ids"],
         torch.tensor(
             [
-                [101, 3162, 7871, 1117, 5855, 119, 102],
-                [101, 3162, 7871, 1117, 5855, 119, 102],
-                [101, 3162, 7871, 1117, 5855, 119, 102],
-                [101, 3162, 7871, 1117, 5855, 119, 102],
+                [101, 13832, 3121, 2340, 138, 1759, 1120, 139, 119, 102],
+                [101, 13832, 3121, 2340, 138, 1759, 1120, 139, 119, 102],
             ]
         ),
     )
@@ -345,36 +339,28 @@ def test_collate(batch, taskmodule):
         torch.ones_like(inputs["encoding_pair"]["input_ids"]),
     )
 
-    torch.testing.assert_close(inputs["pooler_start_indices"], torch.tensor([[2], [2], [4], [4]]))
-    torch.testing.assert_close(inputs["pooler_end_indices"], torch.tensor([[3], [3], [5], [5]]))
-    torch.testing.assert_close(
-        inputs["pooler_pair_start_indices"], torch.tensor([[1], [3], [1], [3]])
-    )
-    torch.testing.assert_close(
-        inputs["pooler_pair_end_indices"], torch.tensor([[2], [5], [2], [5]])
-    )
+    torch.testing.assert_close(inputs["pooler_start_indices"], torch.tensor([[2], [4]]))
+    torch.testing.assert_close(inputs["pooler_end_indices"], torch.tensor([[3], [5]]))
+    torch.testing.assert_close(inputs["pooler_pair_start_indices"], torch.tensor([[1], [7]]))
+    torch.testing.assert_close(inputs["pooler_pair_end_indices"], torch.tensor([[5], [8]]))
 
-    torch.testing.assert_close(targets, {"labels": torch.tensor([0.0, 0.0, 0.0, 0.0])})
+    torch.testing.assert_close(targets, {"labels": torch.tensor([1.0, 0.0])})
 
 
 @pytest.fixture(scope="module")
 def unbatched_output(taskmodule):
     model_output = {
-        "labels": torch.tensor([1, 1, 1, 1]),
-        "probabilities": torch.tensor(
-            [0.5338148474693298, 0.5866107940673828, 0.5076886415481567, 0.5946245789527893]
-        ),
+        "labels": torch.tensor([0, 1]),
+        "probabilities": torch.tensor([0.5338148474693298, 0.9866107940673828]),
     }
     return taskmodule.unbatch_output(model_output=model_output)
 
 
 def test_unbatch_output(unbatched_output, taskmodule):
-    assert len(unbatched_output) == 4
+    assert len(unbatched_output) == 2
     assert unbatched_output == [
-        {"is_valid": True, "score": 0.5338148474693298},
-        {"is_valid": True, "score": 0.5866107940673828},
-        {"is_valid": True, "score": 0.5076886415481567},
-        {"is_valid": True, "score": 0.5946245789527893},
+        {"is_valid": False, "score": 0.5338148474693298},
+        {"is_valid": True, "score": 0.9866107702255249},
     ]
 
 
@@ -390,10 +376,7 @@ def test_create_annotation_from_output(taskmodule, task_encodings, unbatched_out
         (round(ann.score, 4), ann.resolve()) for layer_name, ann in all_new_annotations
     ]
     assert resolve_annotations_with_scores == [
-        (0.5338, ("coref", (("PERSON", "she"), ("PERSON", "Bob")))),
-        (0.5866, ("coref", (("PERSON", "she"), ("ANIMAL", "his cat")))),
-        (0.5077, ("coref", (("COMPANY", "C"), ("PERSON", "Bob")))),
-        (0.5946, ("coref", (("COMPANY", "C"), ("ANIMAL", "his cat")))),
+        (0.9866, ("coref", (("COMPANY", "C"), ("COMPANY", "B")))),
     ]
 
 

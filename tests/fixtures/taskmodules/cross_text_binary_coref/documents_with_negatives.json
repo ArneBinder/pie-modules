@@ -1,24 +1,24 @@
 [
   {
-    "text_pair": "Bob loves his cat.",
+    "text_pair": "And she founded C.",
     "text": "And she founded C.",
     "id": null,
     "metadata": null,
     "labeled_spans": {
       "annotations": [
         {
-          "start": 4,
-          "end": 7,
-          "label": "PERSON",
-          "score": 1.0,
-          "_id": -5246751469876588720
-        },
-        {
           "start": 16,
           "end": 17,
           "label": "COMPANY",
           "score": 1.0,
-          "_id": 3043206444225553475
+          "_id": -2143209897469179365
+        },
+        {
+          "start": 4,
+          "end": 7,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": 2545181322977893893
         }
       ],
       "predictions": []
@@ -26,18 +26,66 @@
     "labeled_spans_pair": {
       "annotations": [
         {
-          "start": 10,
+          "start": 16,
           "end": 17,
-          "label": "ANIMAL",
+          "label": "COMPANY",
           "score": 1.0,
-          "_id": 5373078146820384347
+          "_id": -2143209897469179365
         },
+        {
+          "start": 4,
+          "end": 7,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": 2545181322977893893
+        }
+      ],
+      "predictions": []
+    },
+    "binary_coref_relations": {
+      "annotations": [],
+      "predictions": []
+    }
+  },
+  {
+    "text_pair": "Bob loves his cat.",
+    "text": "And she founded C.",
+    "id": null,
+    "metadata": null,
+    "labeled_spans": {
+      "annotations": [
+        {
+          "start": 16,
+          "end": 17,
+          "label": "COMPANY",
+          "score": 1.0,
+          "_id": -2143209897469179365
+        },
+        {
+          "start": 4,
+          "end": 7,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": 2545181322977893893
+        }
+      ],
+      "predictions": []
+    },
+    "labeled_spans_pair": {
+      "annotations": [
         {
           "start": 0,
           "end": 3,
           "label": "PERSON",
           "score": 1.0,
-          "_id": -3679976720952382748
+          "_id": -7091027580690283656
+        },
+        {
+          "start": 10,
+          "end": 17,
+          "label": "ANIMAL",
+          "score": 1.0,
+          "_id": -6613361595321704194
         }
       ],
       "predictions": []
@@ -45,32 +93,11 @@
     "binary_coref_relations": {
       "annotations": [
         {
-          "head": -5246751469876588720,
-          "tail": -3679976720952382748,
+          "head": 2545181322977893893,
+          "tail": -7091027580690283656,
           "label": "coref",
           "score": 0.0,
-          "_id": -1226852003320818417
-        },
-        {
-          "head": -5246751469876588720,
-          "tail": 5373078146820384347,
-          "label": "coref",
-          "score": 0.0,
-          "_id": -2897381892745677680
-        },
-        {
-          "head": 3043206444225553475,
-          "tail": -3679976720952382748,
-          "label": "coref",
-          "score": 0.0,
-          "_id": 4747715004687052922
-        },
-        {
-          "head": 3043206444225553475,
-          "tail": 5373078146820384347,
-          "label": "coref",
-          "score": 0.0,
-          "_id": 8355440541443623552
+          "_id": -1763877672186772918
         }
       ],
       "predictions": []
@@ -84,18 +111,18 @@
     "labeled_spans": {
       "annotations": [
         {
-          "start": 4,
-          "end": 7,
-          "label": "PERSON",
-          "score": 1.0,
-          "_id": -5246751469876588720
-        },
-        {
           "start": 16,
           "end": 17,
           "label": "COMPANY",
           "score": 1.0,
-          "_id": 3043206444225553475
+          "_id": -2143209897469179365
+        },
+        {
+          "start": 4,
+          "end": 7,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": 2545181322977893893
         }
       ],
       "predictions": []
@@ -103,18 +130,18 @@
     "labeled_spans_pair": {
       "annotations": [
         {
-          "start": 0,
-          "end": 8,
-          "label": "PERSON",
-          "score": 1.0,
-          "_id": 3233654095506762724
-        },
-        {
           "start": 18,
           "end": 19,
           "label": "COMPANY",
           "score": 1.0,
-          "_id": -2183238448703307780
+          "_id": 3188240167591245379
+        },
+        {
+          "start": 0,
+          "end": 8,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": -177396764231138184
         }
       ],
       "predictions": []
@@ -122,32 +149,18 @@
     "binary_coref_relations": {
       "annotations": [
         {
-          "head": -5246751469876588720,
-          "tail": 3233654095506762724,
+          "head": 2545181322977893893,
+          "tail": -177396764231138184,
           "label": "coref",
           "score": 1.0,
-          "_id": -4357456139038854264
+          "_id": 5113198133391321397
         },
         {
-          "head": -5246751469876588720,
-          "tail": -2183238448703307780,
+          "head": -2143209897469179365,
+          "tail": 3188240167591245379,
           "label": "coref",
           "score": 0.0,
-          "_id": 466813473723110234
-        },
-        {
-          "head": 3043206444225553475,
-          "tail": 3233654095506762724,
-          "label": "coref",
-          "score": 0.0,
-          "_id": -4272399218893089512
-        },
-        {
-          "head": 3043206444225553475,
-          "tail": -2183238448703307780,
-          "label": "coref",
-          "score": 0.0,
-          "_id": -5602326156476594098
+          "_id": -734219494647036300
         }
       ],
       "predictions": []
@@ -161,18 +174,18 @@
     "labeled_spans": {
       "annotations": [
         {
-          "start": 4,
-          "end": 7,
-          "label": "PERSON",
-          "score": 1.0,
-          "_id": -5246751469876588720
-        },
-        {
           "start": 16,
           "end": 17,
           "label": "COMPANY",
           "score": 1.0,
-          "_id": 3043206444225553475
+          "_id": -2143209897469179365
+        },
+        {
+          "start": 4,
+          "end": 7,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": 2545181322977893893
         }
       ],
       "predictions": []
@@ -184,28 +197,13 @@
           "end": 3,
           "label": "ANIMAL",
           "score": 1.0,
-          "_id": -190677143789164847
+          "_id": 2360667792531975882
         }
       ],
       "predictions": []
     },
     "binary_coref_relations": {
-      "annotations": [
-        {
-          "head": -5246751469876588720,
-          "tail": -190677143789164847,
-          "label": "coref",
-          "score": 0.0,
-          "_id": -8510476152511400278
-        },
-        {
-          "head": 3043206444225553475,
-          "tail": -190677143789164847,
-          "label": "coref",
-          "score": 0.0,
-          "_id": 3867128290998447006
-        }
-      ],
+      "annotations": [],
       "predictions": []
     }
   },
@@ -217,18 +215,18 @@
     "labeled_spans": {
       "annotations": [
         {
-          "start": 10,
-          "end": 17,
-          "label": "ANIMAL",
-          "score": 1.0,
-          "_id": 5373078146820384347
-        },
-        {
           "start": 0,
           "end": 3,
           "label": "PERSON",
           "score": 1.0,
-          "_id": -3679976720952382748
+          "_id": -7091027580690283656
+        },
+        {
+          "start": 10,
+          "end": 17,
+          "label": "ANIMAL",
+          "score": 1.0,
+          "_id": -6613361595321704194
         }
       ],
       "predictions": []
@@ -236,18 +234,18 @@
     "labeled_spans_pair": {
       "annotations": [
         {
-          "start": 4,
-          "end": 7,
-          "label": "PERSON",
-          "score": 1.0,
-          "_id": -5246751469876588720
-        },
-        {
           "start": 16,
           "end": 17,
           "label": "COMPANY",
           "score": 1.0,
-          "_id": 3043206444225553475
+          "_id": -2143209897469179365
+        },
+        {
+          "start": 4,
+          "end": 7,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": 2545181322977893893
         }
       ],
       "predictions": []
@@ -255,34 +253,61 @@
     "binary_coref_relations": {
       "annotations": [
         {
-          "head": -3679976720952382748,
-          "tail": -5246751469876588720,
+          "head": -7091027580690283656,
+          "tail": 2545181322977893893,
           "label": "coref",
           "score": 0.0,
-          "_id": -2767191573101294319
-        },
-        {
-          "head": -3679976720952382748,
-          "tail": 3043206444225553475,
-          "label": "coref",
-          "score": 0.0,
-          "_id": -4437612686117351921
-        },
-        {
-          "head": 5373078146820384347,
-          "tail": -5246751469876588720,
-          "label": "coref",
-          "score": 0.0,
-          "_id": 5020739476238125539
-        },
-        {
-          "head": 5373078146820384347,
-          "tail": 3043206444225553475,
-          "label": "coref",
-          "score": 0.0,
-          "_id": 3902122025380513665
+          "_id": 4323963091729289163
         }
       ],
+      "predictions": []
+    }
+  },
+  {
+    "text_pair": "Bob loves his cat.",
+    "text": "Bob loves his cat.",
+    "id": null,
+    "metadata": null,
+    "labeled_spans": {
+      "annotations": [
+        {
+          "start": 0,
+          "end": 3,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": -7091027580690283656
+        },
+        {
+          "start": 10,
+          "end": 17,
+          "label": "ANIMAL",
+          "score": 1.0,
+          "_id": -6613361595321704194
+        }
+      ],
+      "predictions": []
+    },
+    "labeled_spans_pair": {
+      "annotations": [
+        {
+          "start": 0,
+          "end": 3,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": -7091027580690283656
+        },
+        {
+          "start": 10,
+          "end": 17,
+          "label": "ANIMAL",
+          "score": 1.0,
+          "_id": -6613361595321704194
+        }
+      ],
+      "predictions": []
+    },
+    "binary_coref_relations": {
+      "annotations": [],
       "predictions": []
     }
   },
@@ -294,18 +319,18 @@
     "labeled_spans": {
       "annotations": [
         {
-          "start": 10,
-          "end": 17,
-          "label": "ANIMAL",
-          "score": 1.0,
-          "_id": 5373078146820384347
-        },
-        {
           "start": 0,
           "end": 3,
           "label": "PERSON",
           "score": 1.0,
-          "_id": -3679976720952382748
+          "_id": -7091027580690283656
+        },
+        {
+          "start": 10,
+          "end": 17,
+          "label": "ANIMAL",
+          "score": 1.0,
+          "_id": -6613361595321704194
         }
       ],
       "predictions": []
@@ -313,18 +338,18 @@
     "labeled_spans_pair": {
       "annotations": [
         {
-          "start": 0,
-          "end": 8,
-          "label": "PERSON",
-          "score": 1.0,
-          "_id": 3233654095506762724
-        },
-        {
           "start": 18,
           "end": 19,
           "label": "COMPANY",
           "score": 1.0,
-          "_id": -2183238448703307780
+          "_id": 3188240167591245379
+        },
+        {
+          "start": 0,
+          "end": 8,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": -177396764231138184
         }
       ],
       "predictions": []
@@ -332,32 +357,11 @@
     "binary_coref_relations": {
       "annotations": [
         {
-          "head": -3679976720952382748,
-          "tail": 3233654095506762724,
+          "head": -7091027580690283656,
+          "tail": -177396764231138184,
           "label": "coref",
           "score": 0.0,
-          "_id": -8901055438221583123
-        },
-        {
-          "head": -3679976720952382748,
-          "tail": -2183238448703307780,
-          "label": "coref",
-          "score": 0.0,
-          "_id": -8898764560981633135
-        },
-        {
-          "head": 5373078146820384347,
-          "tail": 3233654095506762724,
-          "label": "coref",
-          "score": 0.0,
-          "_id": -1347933737476127508
-        },
-        {
-          "head": 5373078146820384347,
-          "tail": -2183238448703307780,
-          "label": "coref",
-          "score": 0.0,
-          "_id": 3930515724475035731
+          "_id": -4269111567075058761
         }
       ],
       "predictions": []
@@ -371,18 +375,18 @@
     "labeled_spans": {
       "annotations": [
         {
-          "start": 10,
-          "end": 17,
-          "label": "ANIMAL",
-          "score": 1.0,
-          "_id": 5373078146820384347
-        },
-        {
           "start": 0,
           "end": 3,
           "label": "PERSON",
           "score": 1.0,
-          "_id": -3679976720952382748
+          "_id": -7091027580690283656
+        },
+        {
+          "start": 10,
+          "end": 17,
+          "label": "ANIMAL",
+          "score": 1.0,
+          "_id": -6613361595321704194
         }
       ],
       "predictions": []
@@ -394,7 +398,7 @@
           "end": 3,
           "label": "ANIMAL",
           "score": 1.0,
-          "_id": -190677143789164847
+          "_id": 2360667792531975882
         }
       ],
       "predictions": []
@@ -402,18 +406,11 @@
     "binary_coref_relations": {
       "annotations": [
         {
-          "head": -3679976720952382748,
-          "tail": -190677143789164847,
-          "label": "coref",
-          "score": 0.0,
-          "_id": -5159885311314414733
-        },
-        {
-          "head": 5373078146820384347,
-          "tail": -190677143789164847,
+          "head": -6613361595321704194,
+          "tail": 2360667792531975882,
           "label": "coref",
           "score": 1.0,
-          "_id": -4858368627143918533
+          "_id": 8198921634551745514
         }
       ],
       "predictions": []
@@ -427,18 +424,18 @@
     "labeled_spans": {
       "annotations": [
         {
-          "start": 0,
-          "end": 8,
-          "label": "PERSON",
-          "score": 1.0,
-          "_id": 3233654095506762724
-        },
-        {
           "start": 18,
           "end": 19,
           "label": "COMPANY",
           "score": 1.0,
-          "_id": -2183238448703307780
+          "_id": 3188240167591245379
+        },
+        {
+          "start": 0,
+          "end": 8,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": -177396764231138184
         }
       ],
       "predictions": []
@@ -446,18 +443,18 @@
     "labeled_spans_pair": {
       "annotations": [
         {
-          "start": 4,
-          "end": 7,
-          "label": "PERSON",
-          "score": 1.0,
-          "_id": -5246751469876588720
-        },
-        {
           "start": 16,
           "end": 17,
           "label": "COMPANY",
           "score": 1.0,
-          "_id": 3043206444225553475
+          "_id": -2143209897469179365
+        },
+        {
+          "start": 4,
+          "end": 7,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": 2545181322977893893
         }
       ],
       "predictions": []
@@ -465,32 +462,18 @@
     "binary_coref_relations": {
       "annotations": [
         {
-          "head": 3233654095506762724,
-          "tail": -5246751469876588720,
+          "head": -177396764231138184,
+          "tail": 2545181322977893893,
           "label": "coref",
           "score": 1.0,
-          "_id": 2444090963512005184
+          "_id": -4710872194864906092
         },
         {
-          "head": 3233654095506762724,
-          "tail": 3043206444225553475,
+          "head": 3188240167591245379,
+          "tail": -2143209897469179365,
           "label": "coref",
           "score": 0.0,
-          "_id": -7963340116969175614
-        },
-        {
-          "head": -2183238448703307780,
-          "tail": -5246751469876588720,
-          "label": "coref",
-          "score": 0.0,
-          "_id": -9120191367688252721
-        },
-        {
-          "head": -2183238448703307780,
-          "tail": 3043206444225553475,
-          "label": "coref",
-          "score": 0.0,
-          "_id": 7975222748039939420
+          "_id": 2636939255468582059
         }
       ],
       "predictions": []
@@ -504,18 +487,18 @@
     "labeled_spans": {
       "annotations": [
         {
-          "start": 0,
-          "end": 8,
-          "label": "PERSON",
-          "score": 1.0,
-          "_id": 3233654095506762724
-        },
-        {
           "start": 18,
           "end": 19,
           "label": "COMPANY",
           "score": 1.0,
-          "_id": -2183238448703307780
+          "_id": 3188240167591245379
+        },
+        {
+          "start": 0,
+          "end": 8,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": -177396764231138184
         }
       ],
       "predictions": []
@@ -523,18 +506,18 @@
     "labeled_spans_pair": {
       "annotations": [
         {
-          "start": 10,
-          "end": 17,
-          "label": "ANIMAL",
-          "score": 1.0,
-          "_id": 5373078146820384347
-        },
-        {
           "start": 0,
           "end": 3,
           "label": "PERSON",
           "score": 1.0,
-          "_id": -3679976720952382748
+          "_id": -7091027580690283656
+        },
+        {
+          "start": 10,
+          "end": 17,
+          "label": "ANIMAL",
+          "score": 1.0,
+          "_id": -6613361595321704194
         }
       ],
       "predictions": []
@@ -542,34 +525,61 @@
     "binary_coref_relations": {
       "annotations": [
         {
-          "head": 3233654095506762724,
-          "tail": -3679976720952382748,
+          "head": -177396764231138184,
+          "tail": -7091027580690283656,
           "label": "coref",
           "score": 0.0,
-          "_id": 1280608060947850168
-        },
-        {
-          "head": 3233654095506762724,
-          "tail": 5373078146820384347,
-          "label": "coref",
-          "score": 0.0,
-          "_id": -3000515518015844819
-        },
-        {
-          "head": -2183238448703307780,
-          "tail": -3679976720952382748,
-          "label": "coref",
-          "score": 0.0,
-          "_id": -4464070305304755517
-        },
-        {
-          "head": -2183238448703307780,
-          "tail": 5373078146820384347,
-          "label": "coref",
-          "score": 0.0,
-          "_id": 3298512753939125167
+          "_id": -1990964066152094896
         }
       ],
+      "predictions": []
+    }
+  },
+  {
+    "text_pair": "Entity A works at B.",
+    "text": "Entity A works at B.",
+    "id": null,
+    "metadata": null,
+    "labeled_spans": {
+      "annotations": [
+        {
+          "start": 18,
+          "end": 19,
+          "label": "COMPANY",
+          "score": 1.0,
+          "_id": 3188240167591245379
+        },
+        {
+          "start": 0,
+          "end": 8,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": -177396764231138184
+        }
+      ],
+      "predictions": []
+    },
+    "labeled_spans_pair": {
+      "annotations": [
+        {
+          "start": 18,
+          "end": 19,
+          "label": "COMPANY",
+          "score": 1.0,
+          "_id": 3188240167591245379
+        },
+        {
+          "start": 0,
+          "end": 8,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": -177396764231138184
+        }
+      ],
+      "predictions": []
+    },
+    "binary_coref_relations": {
+      "annotations": [],
       "predictions": []
     }
   },
@@ -581,18 +591,18 @@
     "labeled_spans": {
       "annotations": [
         {
-          "start": 0,
-          "end": 8,
-          "label": "PERSON",
-          "score": 1.0,
-          "_id": 3233654095506762724
-        },
-        {
           "start": 18,
           "end": 19,
           "label": "COMPANY",
           "score": 1.0,
-          "_id": -2183238448703307780
+          "_id": 3188240167591245379
+        },
+        {
+          "start": 0,
+          "end": 8,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": -177396764231138184
         }
       ],
       "predictions": []
@@ -604,28 +614,13 @@
           "end": 3,
           "label": "ANIMAL",
           "score": 1.0,
-          "_id": -190677143789164847
+          "_id": 2360667792531975882
         }
       ],
       "predictions": []
     },
     "binary_coref_relations": {
-      "annotations": [
-        {
-          "head": 3233654095506762724,
-          "tail": -190677143789164847,
-          "label": "coref",
-          "score": 0.0,
-          "_id": -3444435532096461506
-        },
-        {
-          "head": -2183238448703307780,
-          "tail": -190677143789164847,
-          "label": "coref",
-          "score": 0.0,
-          "_id": -3912955313637853940
-        }
-      ],
+      "annotations": [],
       "predictions": []
     }
   },
@@ -641,7 +636,7 @@
           "end": 3,
           "label": "ANIMAL",
           "score": 1.0,
-          "_id": -190677143789164847
+          "_id": 2360667792531975882
         }
       ],
       "predictions": []
@@ -649,39 +644,24 @@
     "labeled_spans_pair": {
       "annotations": [
         {
-          "start": 4,
-          "end": 7,
-          "label": "PERSON",
-          "score": 1.0,
-          "_id": -5246751469876588720
-        },
-        {
           "start": 16,
           "end": 17,
           "label": "COMPANY",
           "score": 1.0,
-          "_id": 3043206444225553475
+          "_id": -2143209897469179365
+        },
+        {
+          "start": 4,
+          "end": 7,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": 2545181322977893893
         }
       ],
       "predictions": []
     },
     "binary_coref_relations": {
-      "annotations": [
-        {
-          "head": -190677143789164847,
-          "tail": -5246751469876588720,
-          "label": "coref",
-          "score": 0.0,
-          "_id": -6992824161873864749
-        },
-        {
-          "head": -190677143789164847,
-          "tail": 3043206444225553475,
-          "label": "coref",
-          "score": 0.0,
-          "_id": 6180444938490764939
-        }
-      ],
+      "annotations": [],
       "predictions": []
     }
   },
@@ -697,7 +677,7 @@
           "end": 3,
           "label": "ANIMAL",
           "score": 1.0,
-          "_id": -190677143789164847
+          "_id": 2360667792531975882
         }
       ],
       "predictions": []
@@ -705,18 +685,18 @@
     "labeled_spans_pair": {
       "annotations": [
         {
-          "start": 10,
-          "end": 17,
-          "label": "ANIMAL",
-          "score": 1.0,
-          "_id": 5373078146820384347
-        },
-        {
           "start": 0,
           "end": 3,
           "label": "PERSON",
           "score": 1.0,
-          "_id": -3679976720952382748
+          "_id": -7091027580690283656
+        },
+        {
+          "start": 10,
+          "end": 17,
+          "label": "ANIMAL",
+          "score": 1.0,
+          "_id": -6613361595321704194
         }
       ],
       "predictions": []
@@ -724,18 +704,11 @@
     "binary_coref_relations": {
       "annotations": [
         {
-          "head": -190677143789164847,
-          "tail": -3679976720952382748,
-          "label": "coref",
-          "score": 0.0,
-          "_id": 2061654283494000583
-        },
-        {
-          "head": -190677143789164847,
-          "tail": 5373078146820384347,
+          "head": 2360667792531975882,
+          "tail": -6613361595321704194,
           "label": "coref",
           "score": 1.0,
-          "_id": -4650461605955518398
+          "_id": -571410837328299027
         }
       ],
       "predictions": []
@@ -753,7 +726,48 @@
           "end": 3,
           "label": "ANIMAL",
           "score": 1.0,
-          "_id": -190677143789164847
+          "_id": 2360667792531975882
+        }
+      ],
+      "predictions": []
+    },
+    "labeled_spans_pair": {
+      "annotations": [
+        {
+          "start": 18,
+          "end": 19,
+          "label": "COMPANY",
+          "score": 1.0,
+          "_id": 3188240167591245379
+        },
+        {
+          "start": 0,
+          "end": 8,
+          "label": "PERSON",
+          "score": 1.0,
+          "_id": -177396764231138184
+        }
+      ],
+      "predictions": []
+    },
+    "binary_coref_relations": {
+      "annotations": [],
+      "predictions": []
+    }
+  },
+  {
+    "text_pair": "She sleeps a lot.",
+    "text": "She sleeps a lot.",
+    "id": null,
+    "metadata": null,
+    "labeled_spans": {
+      "annotations": [
+        {
+          "start": 0,
+          "end": 3,
+          "label": "ANIMAL",
+          "score": 1.0,
+          "_id": 2360667792531975882
         }
       ],
       "predictions": []
@@ -762,38 +776,16 @@
       "annotations": [
         {
           "start": 0,
-          "end": 8,
-          "label": "PERSON",
+          "end": 3,
+          "label": "ANIMAL",
           "score": 1.0,
-          "_id": 3233654095506762724
-        },
-        {
-          "start": 18,
-          "end": 19,
-          "label": "COMPANY",
-          "score": 1.0,
-          "_id": -2183238448703307780
+          "_id": 2360667792531975882
         }
       ],
       "predictions": []
     },
     "binary_coref_relations": {
-      "annotations": [
-        {
-          "head": -190677143789164847,
-          "tail": 3233654095506762724,
-          "label": "coref",
-          "score": 0.0,
-          "_id": 8092666078797453961
-        },
-        {
-          "head": -190677143789164847,
-          "tail": -2183238448703307780,
-          "label": "coref",
-          "score": 0.0,
-          "_id": -5075628532960934416
-        }
-      ],
+      "annotations": [],
       "predictions": []
     }
   }
