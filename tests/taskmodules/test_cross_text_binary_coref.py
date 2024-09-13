@@ -7,6 +7,7 @@ import torch.testing
 from pytorch_ie.annotations import LabeledSpan
 from torchmetrics import Metric, MetricCollection
 
+from pie_modules.document.processing.text_pair import add_negative_relations
 from pie_modules.document.types import (
     BinaryCorefRelation,
     TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
@@ -19,7 +20,6 @@ TOKENIZER_NAME_OR_PATH = "bert-base-cased"
 
 CONFIGS = [
     {},
-    # {"add_negative_relations": True},
 ]
 CONFIGS_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
 
@@ -87,9 +87,9 @@ def taskmodule(unprepared_taskmodule, positive_documents):
     return unprepared_taskmodule
 
 
-def test_construct_negative_documents(taskmodule, positive_documents):
+def test_construct_negative_documents(positive_documents):
     assert len(positive_documents) == 2
-    docs = list(taskmodule._add_negative_relations(positive_documents))
+    docs = list(add_negative_relations(positive_documents))
     TEXTS = [
         "Entity A works at B.",
         "And she founded C.",
@@ -164,7 +164,7 @@ def documents_with_negatives(taskmodule, positive_documents):
         FIXTURES_ROOT / "taskmodules" / "cross_text_binary_coref" / "documents_with_negatives.json"
     )
 
-    # result = list(taskmodule._add_negative_relations(positive_documents))
+    # result = list(add_negative_relations(positive_documents))
     # result_json = [doc.asdict() for doc in result]
     # with open(file_name, "w") as f:
     #    json.dump(result_json, f, indent=2)
@@ -231,28 +231,14 @@ def test_encode_target(task_encodings_without_target, taskmodule):
     assert target == 0.0
 
 
-def test_encode_with_add_negative_relations(taskmodule, positive_documents):
-    original_value = taskmodule.add_negative_relations
-    taskmodule.add_negative_relations = False
-    documents_with_negatives = list(taskmodule._add_negative_relations(positive_documents))
-    task_encodings1 = taskmodule.encode(documents_with_negatives, encode_target=True)
-    taskmodule.add_negative_relations = True
-    task_encodings2 = taskmodule.encode(positive_documents, encode_target=True)
-    taskmodule.add_negative_relations = original_value
-
-    for task_encoding1, task_encoding2 in zip(task_encodings1, task_encodings2):
-        torch.testing.assert_close(task_encoding1.inputs, task_encoding2.inputs)
-        torch.testing.assert_close(task_encoding1.targets, task_encoding2.targets)
-
-
 def test_encode_with_collect_statistics(taskmodule, positive_documents, caplog):
+    documents_with_negatives = add_negative_relations(positive_documents)
     caplog.clear()
     with caplog.at_level(logging.INFO):
-        original_values = taskmodule.add_negative_relations, taskmodule.collect_statistics
-        taskmodule.add_negative_relations = True
+        original_values = taskmodule.collect_statistics
         taskmodule.collect_statistics = True
-        taskmodule.encode(positive_documents, encode_target=True)
-        taskmodule.add_negative_relations, taskmodule.collect_statistics = original_values
+        taskmodule.encode(documents_with_negatives, encode_target=True)
+        taskmodule.collect_statistics = original_values
 
     assert len(caplog.messages) == 1
     assert (
