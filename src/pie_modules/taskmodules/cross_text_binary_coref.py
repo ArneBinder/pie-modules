@@ -1,6 +1,5 @@
 import copy
 import logging
-from collections import defaultdict
 from typing import (
     Any,
     Dict,
@@ -24,9 +23,7 @@ from torchmetrics.classification import BinaryAUROC
 from transformers import AutoTokenizer, BatchEncoding
 from typing_extensions import TypeAlias
 
-from pie_modules.document.processing.text_pair import add_negative_relations
 from pie_modules.document.types import (
-    BinaryCorefRelation,
     TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
 )
 from pie_modules.taskmodules.common.mixins import RelationStatisticsMixin
@@ -105,9 +102,6 @@ class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
     def _get_special_tokens_before_input(self) -> List[int]:
         dummy_ids = self.tokenizer.build_inputs_with_special_tokens(token_ids_0=[-1])
         return dummy_ids[: dummy_ids.index(-1)]
-
-    def _add_negative_relations(self, positives: Iterable[DocumentType]) -> Iterable[DocumentType]:
-        return add_negative_relations(documents=positives)
 
     def encode(self, documents: Union[DocumentType, Iterable[DocumentType]], **kwargs):
         self.reset_statistics()

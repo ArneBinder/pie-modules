@@ -7,7 +7,7 @@ from pie_modules.document.types import (
 )
 
 
-def add_negative_relations(
+def add_negative_coref_relations(
     documents: Iterable[TextPairDocumentWithLabeledSpansAndBinaryCorefRelations], **kwargs
 ) -> Iterable[TextPairDocumentWithLabeledSpansAndBinaryCorefRelations]:
     positive_tuples = defaultdict(set)

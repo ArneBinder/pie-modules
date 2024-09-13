@@ -7,7 +7,7 @@ import torch.testing
 from pytorch_ie.annotations import LabeledSpan
 from torchmetrics import Metric, MetricCollection
 
-from pie_modules.document.processing.text_pair import add_negative_relations
+from pie_modules.document.processing.text_pair import add_negative_coref_relations
 from pie_modules.document.types import (
     BinaryCorefRelation,
     TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
@@ -90,7 +90,7 @@ def taskmodule(unprepared_taskmodule, positive_documents):
 
 def test_construct_negative_documents(positive_documents):
     assert len(positive_documents) == 2
-    docs = list(add_negative_relations(positive_documents))
+    docs = list(add_negative_coref_relations(positive_documents))
     TEXTS = [
         "Entity A works at B.",
         "And she founded C.",
@@ -231,7 +231,7 @@ def test_encode_target(task_encodings_without_target, taskmodule):
 
 
 def test_encode_with_collect_statistics(taskmodule, positive_documents, caplog):
-    documents_with_negatives = add_negative_relations(positive_documents)
+    documents_with_negatives = add_negative_coref_relations(positive_documents)
     caplog.clear()
     with caplog.at_level(logging.INFO):
         original_values = taskmodule.collect_statistics
