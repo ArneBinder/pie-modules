@@ -6,6 +6,7 @@ from pytorch_ie.annotations import LabeledSpan, Span
 from pytorch_ie.documents import (
     TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
+from tqdm import tqdm
 
 from pie_modules.document.types import (
     BinaryCorefRelation,
@@ -134,7 +135,7 @@ def add_negative_coref_relations(
             positive_tuples[(doc.text_pair, doc.text)].add((coref.tail.copy(), coref.head.copy()))
 
     new_docs = []
-    for text in sorted(text2spans):
+    for text in tqdm(sorted(text2spans)):
         for text_pair in sorted(text2spans):
             current_positives = positive_tuples.get((text, text_pair), set())
             new_doc = TextPairDocumentWithLabeledSpansAndBinaryCorefRelations(
