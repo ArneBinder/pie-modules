@@ -180,7 +180,6 @@ def construct_text_document_from_text_pair_coref_document(
 def add_negative_coref_relations(
     documents: Iterable[TextPairDocumentWithLabeledSpansAndBinaryCorefRelations],
     downsampling_factor: Optional[float] = None,
-    **kwargs,
 ) -> Iterable[TextPairDocumentWithLabeledSpansAndBinaryCorefRelations]:
     positive_tuples = defaultdict(set)
     text2spans = defaultdict(set)
