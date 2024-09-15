@@ -2,7 +2,7 @@ import copy
 from collections import defaultdict
 from collections.abc import Iterator
 from itertools import chain
-from typing import Dict, Iterable, List, Tuple, TypeVar
+from typing import Dict, Iterable, List, Optional, Tuple, TypeVar
 
 from pytorch_ie.annotations import LabeledSpan, Span
 from pytorch_ie.documents import (
@@ -127,7 +127,9 @@ def shift_span(span: S, offset: int) -> S:
 
 
 def construct_text_document_from_text_pair_coref_document(
-    document: TextPairDocumentWithLabeledSpansAndBinaryCorefRelations, glue_text: str
+    document: TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
+    glue_text: str,
+    relation_label_mapping: Optional[Dict[str, str]] = None,
 ) -> TextDocumentWithLabeledSpansAndBinaryRelations:
     if document.text == document.text_pair:
         new_doc = TextDocumentWithLabeledSpansAndBinaryRelations(
@@ -159,7 +161,12 @@ def construct_text_document_from_text_pair_coref_document(
         sorted(old2new_spans.values(), key=lambda s: (s.start, s.end, s.label))
     )
     for old_rel in document.binary_coref_relations:
-        new_rel = old_rel.copy(head=old2new_spans[old_rel.head], tail=old2new_spans[old_rel.tail])
+        label = old_rel.label
+        if relation_label_mapping is not None:
+            label = relation_label_mapping.get(label, label)
+        new_rel = old_rel.copy(
+            head=old2new_spans[old_rel.head], tail=old2new_spans[old_rel.tail], label=label
+        )
         new_doc.binary_relations.append(new_rel)
 
     return new_doc
