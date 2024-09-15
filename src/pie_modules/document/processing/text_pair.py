@@ -1,4 +1,5 @@
 import copy
+import random
 from collections import defaultdict
 from collections.abc import Iterator
 from itertools import chain
@@ -177,7 +178,9 @@ def construct_text_document_from_text_pair_coref_document(
 
 
 def add_negative_coref_relations(
-    documents: Iterable[TextPairDocumentWithLabeledSpansAndBinaryCorefRelations], **kwargs
+    documents: Iterable[TextPairDocumentWithLabeledSpansAndBinaryCorefRelations],
+    downsampling_factor: Optional[float] = None,
+    **kwargs,
 ) -> Iterable[TextPairDocumentWithLabeledSpansAndBinaryCorefRelations]:
     positive_tuples = defaultdict(set)
     text2spans = defaultdict(set)
@@ -225,7 +228,22 @@ def add_negative_coref_relations(
     for rel in positive_rels:
         new_rels2new_docs[rel].binary_coref_relations.append(rel)
 
-    # TODO: implement downsampling
+    # Downsampling of negatives. This requires positive instances!
+    if downsampling_factor is not None:
+        if len(positive_rels) == 0:
+            raise ValueError(
+                f"downsampling [factor={downsampling_factor}] is enabled, "
+                f"but no positive relations are available to calculate max_num_negative"
+            )
+
+        max_num_negative = int(len(positive_rels) * downsampling_factor)
+        if max_num_negative == 0:
+            raise ValueError(
+                f"downsampling with factor={downsampling_factor} and number of "
+                f"positive relations={len(positive_rels)} does not produce any negatives"
+            )
+        random.shuffle(negative_rels)
+        negative_rels = negative_rels[:max_num_negative]
     for rel in negative_rels:
         new_rels2new_docs[rel].binary_coref_relations.append(rel)
 
