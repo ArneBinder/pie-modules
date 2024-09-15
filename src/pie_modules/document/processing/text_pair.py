@@ -192,6 +192,9 @@ def add_negative_coref_relations(
             positive_tuples[(doc.text_pair, doc.text)].add((coref.tail.copy(), coref.head.copy()))
 
     new_docs = []
+    new_rels2new_docs = {}
+    positive_rels = []
+    negative_rels = []
     for text in tqdm(sorted(text2spans)):
         for text_pair in sorted(text2spans):
             current_positives = positive_tuples.get((text, text_pair), set())
@@ -211,7 +214,21 @@ def add_negative_coref_relations(
                         continue
                     score = 1.0 if (s.copy(), s_p.copy()) in current_positives else 0.0
                     new_coref_rel = BinaryCorefRelation(head=s, tail=s_p, score=score)
-                    new_doc.binary_coref_relations.append(new_coref_rel)
+                    # new_doc.binary_coref_relations.append(new_coref_rel)
+                    new_rels2new_docs[new_coref_rel] = new_doc
+                    if score > 0.0:
+                        positive_rels.append(new_coref_rel)
+                    else:
+                        negative_rels.append(new_coref_rel)
             new_docs.append(new_doc)
 
+    for rel in positive_rels:
+        new_rels2new_docs[rel].binary_coref_relations.append(rel)
+
+    # TODO: implement down sampling
+    for rel in negative_rels:
+        new_rels2new_docs[rel].binary_coref_relations.append(rel)
+
+    # docs_with_rels = [doc for doc in new_docs if len(doc.binary_coref_relations) > 0]
+    # return docs_with_rels
     return new_docs
