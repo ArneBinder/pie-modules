@@ -771,6 +771,36 @@ def test_encode_with_windowing(documents):
     ]
 
 
+def test_encode_with_allow_discontinuous_text(documents):
+    tokenizer_name_or_path = "bert-base-cased"
+    # tokenizer_name_or_path = "allenai/longformer-scico"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        max_window=12,
+        allow_discontinuous_text=True,
+    )
+
+    assert not taskmodule.is_from_pretrained
+    taskmodule.prepare(documents)
+
+    assert len(documents) == 7
+    encodings = taskmodule.encode(documents)
+    assert len(encodings) == 3
+
+    for encoding in encodings:
+        assert len(encoding.inputs["input_ids"]) <= taskmodule.max_window
+    tokens = [
+        taskmodule.tokenizer.convert_ids_to_tokens(encoding.inputs["input_ids"])
+        for encoding in encodings
+    ]
+    assert tokens == [
+        ["[CLS]", "at", "[T]", "H", "[/T]", "[SEP]", "founded", "[H]", "I", "[/H]", "[SEP]"],
+        ["[CLS]", "And", "[H]", "it", "[/H]", "founded", "[T]", "O", "[/T]", "[SEP]"],
+        ["[CLS]", "And", "[T]", "it", "[/T]", "founded", "[H]", "O", "[/H]", "[SEP]"],
+    ]
+
+
 @pytest.fixture(scope="module")
 def taskmodule_with_add_argument_indices(documents):
     tokenizer_name_or_path = "bert-base-cased"

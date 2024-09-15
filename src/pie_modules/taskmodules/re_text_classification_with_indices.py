@@ -24,6 +24,7 @@ from typing import (
     Union,
 )
 
+import numpy as np
 import pandas as pd
 import torch
 from pytorch_ie.annotations import (
@@ -313,6 +314,7 @@ class RETextClassificationWithIndicesTaskModule(
         max_argument_distance: Optional[int] = None,
         max_argument_distance_type: str = "inner",
         max_window: Optional[int] = None,
+        allow_discontinuous_text: bool = False,
         log_first_n_examples: int = 0,
         add_argument_indices_to_input: bool = False,
         add_global_attention_mask_to_input: bool = False,
@@ -352,6 +354,8 @@ class RETextClassificationWithIndicesTaskModule(
         self.max_argument_distance = max_argument_distance
         self.max_argument_distance_type = max_argument_distance_type
         self.max_window = max_window
+        self.allow_discontinuous_text = allow_discontinuous_text
+
         # overwrite None with 0 for backward compatibility
         self.log_first_n_examples = log_first_n_examples or 0
         self.add_argument_indices_to_input = add_argument_indices_to_input
@@ -363,9 +367,18 @@ class RETextClassificationWithIndicesTaskModule(
 
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
 
+        # used when allow_discontinuous_text
+        self.glue_token_ids = self._get_glue_token_ids()
+
         self.argument_markers = None
 
         self._logged_examples_counter = 0
+
+    def _get_glue_token_ids(self):
+        dummy_ids = self.tokenizer.build_inputs_with_special_tokens(
+            token_ids_0=[-1], token_ids_1=[-2]
+        )
+        return dummy_ids[dummy_ids.index(-1) + 1 : dummy_ids.index(-2)]
 
     @property
     def document_type(self) -> Optional[Type[DocumentType]]:
@@ -720,26 +733,69 @@ class RETextClassificationWithIndicesTaskModule(
                     if self.append_markers:
                         # TODO: add test case for this
                         max_tokens -= len(args) * 2
-                    # the slice from the beginning of the first entity to the end of the second is required
-                    slice_required = (
-                        min(arg.token_span.start for arg in args),
-                        max(arg.token_span.end for arg in args),
-                    )
-                    window_slice = get_window_around_slice(
-                        slice=slice_required,
-                        max_window_size=max_tokens,
-                        available_input_length=len(input_ids),
-                    )
-                    # this happens if slice_required (all arguments) does not fit into max_tokens (the available window)
-                    if window_slice is None:
-                        self.collect_relation("skipped_too_long", rel)
-                        continue
 
-                    window_start, window_end = window_slice
-                    input_ids = input_ids[window_start:window_end]
+                    if self.allow_discontinuous_text:
+                        max_tokens_per_argument = max_tokens // len(args)
+                        max_tokens_per_argument -= len(self.glue_token_ids)
+                        if any(
+                            arg.token_span.end - arg.token_span.start > max_tokens_per_argument
+                            for arg in args
+                        ):
+                            self.collect_relation("skipped_too_long_argument", rel)
+                            continue
 
-                    for arg in args:
-                        arg.shift_token_span(-window_start)
+                        mask = np.zeros_like(input_ids)
+                        for arg in args:
+                            arg_center = (arg.token_span.end + arg.token_span.start) // 2
+                            arg_frame_start = arg_center - max_tokens_per_argument // 2
+                            arg_frame_end = arg_frame_start + max_tokens_per_argument
+                            mask[arg_frame_start:arg_frame_end] = 1
+                        offsets = np.cumsum(mask != 1)
+                        arg_cluster_offset_values = set()
+                        # sort by start indices
+                        args_sorted = sorted(args, key=lambda x: x.token_span.start)
+                        for arg in args_sorted:
+                            offset = offsets[arg.token_span.start]
+                            arg_cluster_offset_values.add(offset)
+                            arg.shift_token_span(-offset)
+                            # shift back according to inserted glue patterns
+                            num_glues = len(arg_cluster_offset_values) - 1
+                            arg.shift_token_span(num_glues * len(self.glue_token_ids))
+
+                        new_input_ids: List[int] = []
+                        for arg_cluster_offset_value in sorted(arg_cluster_offset_values):
+                            if len(new_input_ids) > 0:
+                                new_input_ids.extend(self.glue_token_ids)
+                            segment_mask = offsets == arg_cluster_offset_value
+                            segment_input_ids = [
+                                input_id
+                                for input_id, keep in zip(input_ids, mask & segment_mask)
+                                if keep
+                            ]
+                            new_input_ids.extend(segment_input_ids)
+
+                        input_ids = new_input_ids
+                    else:
+                        # the slice from the beginning of the first entity to the end of the second is required
+                        slice_required = (
+                            min(arg.token_span.start for arg in args),
+                            max(arg.token_span.end for arg in args),
+                        )
+                        window_slice = get_window_around_slice(
+                            slice=slice_required,
+                            max_window_size=max_tokens,
+                            available_input_length=len(input_ids),
+                        )
+                        # this happens if slice_required (all arguments) does not fit into max_tokens (the available window)
+                        if window_slice is None:
+                            self.collect_relation("skipped_too_long", rel)
+                            continue
+
+                        window_start, window_end = window_slice
+                        input_ids = input_ids[window_start:window_end]
+
+                        for arg in args:
+                            arg.shift_token_span(-window_start)
 
                 # collect all markers with their target positions, the source argument, and
                 marker_ids_with_positions = []
