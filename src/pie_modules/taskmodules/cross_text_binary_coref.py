@@ -10,6 +10,7 @@ from typing import (
     Sequence,
     Tuple,
     TypedDict,
+    TypeVar,
     Union,
 )
 
@@ -29,6 +30,10 @@ from pie_modules.documents import (
 from pie_modules.taskmodules.common.mixins import RelationStatisticsMixin
 from pie_modules.taskmodules.metrics import WrappedMetricWithPrepareFunction
 from pie_modules.utils import list_of_dicts2dict_of_lists
+from pie_modules.utils.tokenization import (
+    SpanNotAlignedWithTokenException,
+    get_aligned_token_span,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +68,6 @@ TaskModuleType: TypeAlias = TaskModule[
 ]
 
 
-class SpanNotAlignedWithTokenException(Exception):
-    def __init__(self, span):
-        self.span = span
-
-
 class SpanDoesNotFitIntoAvailableWindow(Exception):
     def __init__(self, span):
         self.span = span
@@ -75,6 +75,13 @@ class SpanDoesNotFitIntoAvailableWindow(Exception):
 
 def _get_labels(model_output: ModelTargetType) -> torch.Tensor:
     return model_output["labels"]
+
+
+S = TypeVar("S", bound=Span)
+
+
+def shift_span(span: S, offset: int) -> S:
+    return span.copy(start=span.start + offset, end=span.end + offset)
 
 
 @TaskModule.register()
@@ -114,32 +121,26 @@ class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
     ) -> Tuple[Dict[str, List[int]], Span]:
         input_ids = copy.deepcopy(encoding["input_ids"])
 
-        token_start = encoding.char_to_token(char_span.start)
-        token_end_before = encoding.char_to_token(char_span.end - 1)
-        if token_start is None or token_end_before is None:
-            raise SpanNotAlignedWithTokenException(span=char_span)
-        token_end = token_end_before + 1
+        token_span = get_aligned_token_span(encoding=encoding, char_span=char_span)
 
         # truncate input_ids and shift token_start and token_end
         if len(input_ids) > self.available_window:
             window_slice = get_window_around_slice(
-                slice=[token_start, token_end],
+                slice=(token_span.start, token_span.end),
                 max_window_size=self.available_window,
                 available_input_length=len(input_ids),
             )
             if window_slice is None:
-                raise SpanDoesNotFitIntoAvailableWindow(span=(token_start, token_end))
+                raise SpanDoesNotFitIntoAvailableWindow(span=token_span)
             window_start, window_end = window_slice
             input_ids = input_ids[window_start:window_end]
-            token_start -= window_start
-            token_end -= window_start
+            token_span = shift_span(token_span, offset=-window_start)
 
         truncated_encoding = self.tokenizer.prepare_for_model(ids=input_ids)
         # shift indices because we added special tokens to the input_ids
-        token_start += self.num_special_tokens_before
-        token_end += self.num_special_tokens_before
+        token_span = shift_span(token_span, offset=self.num_special_tokens_before)
 
-        return truncated_encoding, Span(start=token_start, end=token_end)
+        return truncated_encoding, token_span
 
     def encode_input(
         self,
