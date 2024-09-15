@@ -23,7 +23,7 @@ from torchmetrics.classification import BinaryAUROC
 from transformers import AutoTokenizer, BatchEncoding
 from typing_extensions import TypeAlias
 
-from pie_modules.document.types import (
+from pie_modules.documents import (
     TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
 )
 from pie_modules.taskmodules.common.mixins import RelationStatisticsMixin

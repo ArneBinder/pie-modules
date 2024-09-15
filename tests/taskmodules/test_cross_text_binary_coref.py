@@ -8,7 +8,7 @@ from pytorch_ie.annotations import LabeledSpan
 from torchmetrics import Metric, MetricCollection
 
 from pie_modules.document.processing.text_pair import add_negative_coref_relations
-from pie_modules.document.types import (
+from pie_modules.documents import (
     BinaryCorefRelation,
     TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
 )

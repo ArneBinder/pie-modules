@@ -8,7 +8,7 @@ from pytorch_ie.documents import (
 )
 from tqdm import tqdm
 
-from pie_modules.document.types import (
+from pie_modules.documents import (
     BinaryCorefRelation,
     TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
 )

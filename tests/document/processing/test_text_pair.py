@@ -11,7 +11,7 @@ from pie_modules.document.processing.text_pair import (
     add_negative_coref_relations,
     construct_text_pair_coref_documents_from_partitions_via_relations,
 )
-from pie_modules.document.types import (
+from pie_modules.documents import (
     BinaryCorefRelation,
     TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
 )
