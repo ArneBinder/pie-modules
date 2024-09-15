@@ -1,9 +1,12 @@
+import copy
 from collections import defaultdict
 from collections.abc import Iterator
+from itertools import chain
 from typing import Dict, Iterable, List, Tuple, TypeVar
 
 from pytorch_ie.annotations import LabeledSpan, Span
 from pytorch_ie.documents import (
+    TextDocumentWithLabeledSpansAndBinaryRelations,
     TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
 from tqdm import tqdm
@@ -117,6 +120,49 @@ def construct_text_pair_coref_documents_from_partitions_via_relations(
         yield from _construct_text_pair_coref_documents_from_partitions_via_relations(
             document=doc, **kwargs
         )
+
+
+def shift_span(span: S, offset: int) -> S:
+    return span.copy(start=span.start + offset, end=span.end + offset)
+
+
+def construct_text_document_from_text_pair_coref_document(
+    document: TextPairDocumentWithLabeledSpansAndBinaryCorefRelations, glue_text: str
+) -> TextDocumentWithLabeledSpansAndBinaryRelations:
+    if document.text == document.text_pair:
+        new_doc = TextDocumentWithLabeledSpansAndBinaryRelations(
+            id=document.id, metadata=copy.deepcopy(document.metadata), text=document.text
+        )
+        old2new_spans: Dict[LabeledSpan, LabeledSpan] = {}
+        new2new_spans: Dict[LabeledSpan, LabeledSpan] = {}
+        for old_span in chain(document.labeled_spans, document.labeled_spans_pair):
+            new_span = old_span.copy()
+            # when detaching / copying the span, it may be the same as a previous span from the other
+            new_span = new2new_spans.get(new_span, new_span)
+            new2new_spans[new_span] = new_span
+            old2new_spans[old_span] = new_span
+    else:
+        new_doc = TextDocumentWithLabeledSpansAndBinaryRelations(
+            text=document.text + glue_text + document.text_pair,
+            id=document.id,
+            metadata=copy.deepcopy(document.metadata),
+        )
+        old2new_spans = {}
+        old2new_spans.update({span: span.copy() for span in document.labeled_spans})
+        offset = len(document.text) + len(glue_text)
+        old2new_spans.update(
+            {span: shift_span(span.copy(), offset) for span in document.labeled_spans_pair}
+        )
+
+    # sort to make order deterministic
+    new_doc.labeled_spans.extend(
+        sorted(old2new_spans.values(), key=lambda s: (s.start, s.end, s.label))
+    )
+    for old_rel in document.binary_coref_relations:
+        new_rel = old_rel.copy(head=old2new_spans[old_rel.head], tail=old2new_spans[old_rel.tail])
+        new_doc.binary_relations.append(new_rel)
+
+    return new_doc
 
 
 def add_negative_coref_relations(

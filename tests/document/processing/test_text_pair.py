@@ -9,6 +9,7 @@ from pytorch_ie.documents import (
 
 from pie_modules.document.processing.text_pair import (
     add_negative_coref_relations,
+    construct_text_document_from_text_pair_coref_document,
     construct_text_pair_coref_documents_from_partitions_via_relations,
 )
 from pie_modules.documents import (
@@ -196,21 +197,31 @@ def test_positive_documents(positive_documents):
     ]
 
 
-def test_construct_negative_documents(positive_documents):
-    assert len(positive_documents) == 2
+@pytest.fixture(scope="module")
+def positive_and_negative_documents(positive_documents):
     docs = list(add_negative_coref_relations(positive_documents))
+    return docs
+
+
+def test_construct_negative_documents(positive_and_negative_documents):
+    assert len(positive_and_negative_documents) == 16
     TEXTS = [
         "Entity A works at B.",
         "And she founded C.",
         "Bob loves his cat.",
         "She sleeps a lot.",
     ]
-    assert all(doc.text in TEXTS for doc in docs)
-    assert all(doc.text_pair in TEXTS for doc in docs)
+    assert all(doc.text in TEXTS for doc in positive_and_negative_documents)
+    assert all(doc.text_pair in TEXTS for doc in positive_and_negative_documents)
 
-    all_texts = [(doc.text, doc.text_pair) for doc in docs]
-    all_scores = [[coref_rel.score for coref_rel in doc.binary_coref_relations] for doc in docs]
-    all_rels_resolved = [doc.binary_coref_relations.resolve() for doc in docs]
+    all_texts = [(doc.text, doc.text_pair) for doc in positive_and_negative_documents]
+    all_scores = [
+        [coref_rel.score for coref_rel in doc.binary_coref_relations]
+        for doc in positive_and_negative_documents
+    ]
+    all_rels_resolved = [
+        doc.binary_coref_relations.resolve() for doc in positive_and_negative_documents
+    ]
 
     all_rels_and_scores = [
         (texts, list(zip(scores, rels_resolved)))
@@ -265,3 +276,40 @@ def test_construct_negative_documents(positive_documents):
         (("She sleeps a lot.", "Entity A works at B."), []),
         (("She sleeps a lot.", "She sleeps a lot."), []),
     ]
+
+
+def test_construct_text_document_from_text_pair_coref_document(positive_and_negative_documents):
+    glue_text = "<s><s>"
+    docs = [
+        construct_text_document_from_text_pair_coref_document(doc, glue_text=glue_text)
+        for doc in positive_and_negative_documents
+    ]
+    assert len(docs) == 16
+    doc = docs[0]
+    assert doc.text == "And she founded C."
+    assert doc.labeled_spans.resolve() == [("PERSON", "she"), ("COMPANY", "C")]
+    assert doc.binary_relations.resolve() == []
+    assert [rel.score for rel in doc.binary_relations] == []
+
+    doc = docs[1]
+    assert doc.text == "And she founded C.<s><s>Bob loves his cat."
+    assert doc.labeled_spans.resolve() == [
+        ("PERSON", "she"),
+        ("COMPANY", "C"),
+        ("PERSON", "Bob"),
+        ("ANIMAL", "his cat"),
+    ]
+    assert doc.binary_relations.resolve() == [("coref", (("PERSON", "she"), ("PERSON", "Bob")))]
+    assert [rel.score for rel in doc.binary_relations] == [0.0]
+
+    doc = docs[7]
+    assert doc.text == "Bob loves his cat.<s><s>She sleeps a lot."
+    assert doc.labeled_spans.resolve() == [
+        ("PERSON", "Bob"),
+        ("ANIMAL", "his cat"),
+        ("ANIMAL", "She"),
+    ]
+    assert doc.binary_relations.resolve() == [
+        ("coref", (("ANIMAL", "his cat"), ("ANIMAL", "She")))
+    ]
+    assert [rel.score for rel in doc.binary_relations] == [1.0]
