@@ -129,6 +129,7 @@ def shift_span(span: S, offset: int) -> S:
 def construct_text_document_from_text_pair_coref_document(
     document: TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
     glue_text: str,
+    no_relation_label: str,
     relation_label_mapping: Optional[Dict[str, str]] = None,
 ) -> TextDocumentWithLabeledSpansAndBinaryRelations:
     if document.text == document.text_pair:
@@ -161,11 +162,14 @@ def construct_text_document_from_text_pair_coref_document(
         sorted(old2new_spans.values(), key=lambda s: (s.start, s.end, s.label))
     )
     for old_rel in document.binary_coref_relations:
-        label = old_rel.label
+        label = old_rel.label if old_rel.score > 0.0 else no_relation_label
         if relation_label_mapping is not None:
             label = relation_label_mapping.get(label, label)
         new_rel = old_rel.copy(
-            head=old2new_spans[old_rel.head], tail=old2new_spans[old_rel.tail], label=label
+            head=old2new_spans[old_rel.head],
+            tail=old2new_spans[old_rel.tail],
+            label=label,
+            score=1.0,
         )
         new_doc.binary_relations.append(new_rel)
 

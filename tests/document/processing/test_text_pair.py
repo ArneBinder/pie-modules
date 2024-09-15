@@ -282,7 +282,10 @@ def test_construct_text_document_from_text_pair_coref_document(positive_and_nega
     glue_text = "<s><s>"
     docs = [
         construct_text_document_from_text_pair_coref_document(
-            doc, glue_text=glue_text, relation_label_mapping={"coref": "semantically_same"}
+            doc,
+            glue_text=glue_text,
+            no_relation_label="no_relation",
+            relation_label_mapping={"coref": "semantically_same"},
         )
         for doc in positive_and_negative_documents
     ]
@@ -302,9 +305,9 @@ def test_construct_text_document_from_text_pair_coref_document(positive_and_nega
         ("ANIMAL", "his cat"),
     ]
     assert doc.binary_relations.resolve() == [
-        ("semantically_same", (("PERSON", "she"), ("PERSON", "Bob")))
+        ("no_relation", (("PERSON", "she"), ("PERSON", "Bob")))
     ]
-    assert [rel.score for rel in doc.binary_relations] == [0.0]
+    assert [rel.score for rel in doc.binary_relations] == [1.0]
 
     doc = docs[7]
     assert doc.text == "Bob loves his cat.<s><s>She sleeps a lot."
