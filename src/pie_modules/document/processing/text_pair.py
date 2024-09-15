@@ -225,10 +225,9 @@ def add_negative_coref_relations(
     for rel in positive_rels:
         new_rels2new_docs[rel].binary_coref_relations.append(rel)
 
-    # TODO: implement down sampling
+    # TODO: implement downsampling
     for rel in negative_rels:
         new_rels2new_docs[rel].binary_coref_relations.append(rel)
 
-    # docs_with_rels = [doc for doc in new_docs if len(doc.binary_coref_relations) > 0]
-    # return docs_with_rels
-    return new_docs
+    docs_with_rels = [doc for doc in new_docs if len(doc.binary_coref_relations) > 0]
+    return docs_with_rels

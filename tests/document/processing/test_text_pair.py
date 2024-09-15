@@ -204,7 +204,7 @@ def positive_and_negative_documents(positive_documents):
 
 
 def test_construct_negative_documents(positive_and_negative_documents):
-    assert len(positive_and_negative_documents) == 16
+    assert len(positive_and_negative_documents) == 8
     TEXTS = [
         "Entity A works at B.",
         "And she founded C.",
@@ -229,7 +229,6 @@ def test_construct_negative_documents(positive_and_negative_documents):
     ]
 
     assert all_rels_and_scores == [
-        (("And she founded C.", "And she founded C."), []),
         (
             ("And she founded C.", "Bob loves his cat."),
             [(0.0, ("coref", (("PERSON", "she"), ("PERSON", "Bob"))))],
@@ -241,12 +240,10 @@ def test_construct_negative_documents(positive_and_negative_documents):
                 (0.0, ("coref", (("COMPANY", "C"), ("COMPANY", "B")))),
             ],
         ),
-        (("And she founded C.", "She sleeps a lot."), []),
         (
             ("Bob loves his cat.", "And she founded C."),
             [(0.0, ("coref", (("PERSON", "Bob"), ("PERSON", "she"))))],
         ),
-        (("Bob loves his cat.", "Bob loves his cat."), []),
         (
             ("Bob loves his cat.", "Entity A works at B."),
             [(0.0, ("coref", (("PERSON", "Bob"), ("PERSON", "Entity A"))))],
@@ -266,15 +263,10 @@ def test_construct_negative_documents(positive_and_negative_documents):
             ("Entity A works at B.", "Bob loves his cat."),
             [(0.0, ("coref", (("PERSON", "Entity A"), ("PERSON", "Bob"))))],
         ),
-        (("Entity A works at B.", "Entity A works at B."), []),
-        (("Entity A works at B.", "She sleeps a lot."), []),
-        (("She sleeps a lot.", "And she founded C."), []),
         (
             ("She sleeps a lot.", "Bob loves his cat."),
             [(1.0, ("coref", (("ANIMAL", "She"), ("ANIMAL", "his cat"))))],
         ),
-        (("She sleeps a lot.", "Entity A works at B."), []),
-        (("She sleeps a lot.", "She sleeps a lot."), []),
     ]
 
 
@@ -289,14 +281,8 @@ def test_construct_text_document_from_text_pair_coref_document(positive_and_nega
         )
         for doc in positive_and_negative_documents
     ]
-    assert len(docs) == 16
+    assert len(docs) == 8
     doc = docs[0]
-    assert doc.text == "And she founded C."
-    assert doc.labeled_spans.resolve() == [("PERSON", "she"), ("COMPANY", "C")]
-    assert doc.binary_relations.resolve() == []
-    assert [rel.score for rel in doc.binary_relations] == []
-
-    doc = docs[1]
     assert doc.text == "And she founded C.<s><s>Bob loves his cat."
     assert doc.labeled_spans.resolve() == [
         ("PERSON", "she"),
@@ -309,7 +295,7 @@ def test_construct_text_document_from_text_pair_coref_document(positive_and_nega
     ]
     assert [rel.score for rel in doc.binary_relations] == [1.0]
 
-    doc = docs[7]
+    doc = docs[4]
     assert doc.text == "Bob loves his cat.<s><s>She sleeps a lot."
     assert doc.labeled_spans.resolve() == [
         ("PERSON", "Bob"),
