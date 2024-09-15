@@ -149,9 +149,7 @@ class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
         self.collect_all_relations(kind="available", relations=document.binary_coref_relations)
         tokenizer_kwargs = dict(
             padding=False,
-            truncation=True,
-            max_length=self.tokenizer.model_max_length,
-            return_offsets_mapping=False,
+            truncation=False,
             add_special_tokens=False,
         )
         encoding = self.tokenizer(text=document.text, **tokenizer_kwargs)
