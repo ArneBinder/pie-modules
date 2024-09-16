@@ -1,6 +1,5 @@
 import copy
 import logging
-from functools import partial
 from typing import (
     Any,
     Dict,
@@ -20,14 +19,11 @@ from pytorch_ie import Annotation
 from pytorch_ie.annotations import Span
 from pytorch_ie.core import TaskEncoding, TaskModule
 from pytorch_ie.utils.window import get_window_around_slice
-from torch.nn.functional import threshold
-from torchmetrics import ClasswiseWrapper, F1Score, Metric, MetricCollection
+from torchmetrics import MetricCollection
 from torchmetrics.classification import (
     BinaryAUROC,
     BinaryAveragePrecision,
     BinaryF1Score,
-    BinaryPrecisionRecallCurve,
-    BinaryROC,
 )
 from transformers import AutoTokenizer, BatchEncoding
 from typing_extensions import TypeAlias
