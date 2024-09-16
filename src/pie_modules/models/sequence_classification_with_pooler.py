@@ -286,7 +286,6 @@ class SequencePairSimilarityModelWithPooler(
 
     def __init__(
         self,
-        label_threshold: float = 0.9,
         pooler: Optional[Union[Dict[str, Any], str]] = None,
         **kwargs,
     ):
@@ -294,7 +293,6 @@ class SequencePairSimilarityModelWithPooler(
             # use (max) mention pooling per default
             pooler = {"type": "mention_pooling", "num_indices": 1}
         super().__init__(pooler=pooler, **kwargs)
-        self.multi_label_threshold = label_threshold
 
     def setup_classifier(
         self, pooler_output_dim: int
@@ -341,5 +339,4 @@ class SequencePairSimilarityModelWithPooler(
     def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
         # probabilities = torch.sigmoid(outputs.logits)
         scores = outputs.logits
-        labels = (scores > self.multi_label_threshold).to(torch.long)
-        return {"labels": labels, "scores": scores}
+        return {"scores": scores}

@@ -1,5 +1,6 @@
 import copy
 import logging
+from functools import partial
 from typing import (
     Any,
     Dict,
@@ -50,7 +51,7 @@ TaskEncodingType: TypeAlias = TaskEncoding[
 
 class TaskOutputType(TypedDict, total=False):
     score: float
-    is_valid: bool
+    is_similar: bool
 
 
 ModelInputType: TypeAlias = Dict[str, torch.Tensor]
@@ -73,8 +74,8 @@ class SpanDoesNotFitIntoAvailableWindow(Exception):
         self.span = span
 
 
-def _get_labels(model_output: ModelTargetType) -> torch.Tensor:
-    return model_output["labels"]
+def _get_labels(model_output: ModelTargetType, label_threshold: float) -> torch.Tensor:
+    return (model_output["scores"] > label_threshold).to(torch.int)
 
 
 def _get_scores(model_output: ModelTargetType) -> torch.Tensor:
@@ -99,6 +100,7 @@ class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
     def __init__(
         self,
         tokenizer_name_or_path: str,
+        label_threshold: float = 0.9,
         max_window: Optional[int] = None,
         **kwargs,
     ) -> None:
@@ -106,6 +108,7 @@ class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
         self.save_hyperparameters()
 
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
+        self.label_threshold = label_threshold
         self.max_window = max_window if max_window is not None else self.tokenizer.model_max_length
         self.available_window = self.max_window - self.tokenizer.num_special_tokens_to_add()
         self.num_special_tokens_before = len(self._get_special_tokens_before_input())
@@ -274,16 +277,16 @@ class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
                             ),
                         }
                     ),
-                    prepare_function=_get_labels,
+                    prepare_function=partial(_get_labels, label_threshold=self.label_threshold),
                 ),
             }
         )
 
     def unbatch_output(self, model_output: ModelTargetType) -> Sequence[TaskOutputType]:
-        label_ids = model_output["labels"].detach().cpu().tolist()
+        is_similar = (model_output["scores"] > self.label_threshold).detach().cpu().tolist()
         scores = model_output["scores"].detach().cpu().tolist()
         result: List[TaskOutputType] = [
-            {"is_valid": label_id != 0, "score": prob} for label_id, prob in zip(label_ids, scores)
+            {"is_similar": is_sim, "score": prob} for is_sim, prob in zip(is_similar, scores)
         ]
         return result
 
@@ -292,7 +295,7 @@ class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
         task_encoding: TaskEncoding[DocumentType, InputEncodingType, TargetEncodingType],
         task_output: TaskOutputType,
     ) -> Iterator[Tuple[str, Annotation]]:
-        if task_output["is_valid"]:
+        if task_output["is_similar"]:
             score = task_output["score"]
             new_coref_rel = task_encoding.metadata["candidate_annotation"].copy(score=score)
             yield "binary_coref_relations", new_coref_rel

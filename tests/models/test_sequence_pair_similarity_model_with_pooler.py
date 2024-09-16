@@ -86,7 +86,6 @@ def model() -> SequencePairSimilarityModelWithPooler:
     torch.manual_seed(42)
     result = SequencePairSimilarityModelWithPooler(
         model_name_or_path="prajjwal1/bert-tiny",
-        label_threshold=0.5,
     )
     return result
 
@@ -169,12 +168,7 @@ def test_forward_logits(model_output, inputs):
 def test_decode(model, model_output, inputs):
     decoded = model.decode(inputs=inputs, outputs=model_output)
     assert isinstance(decoded, dict)
-    assert set(decoded) == {"labels", "scores"}
-    labels = decoded["labels"]
-    torch.testing.assert_close(
-        labels,
-        torch.tensor([1, 1, 1, 1]),
-    )
+    assert set(decoded) == {"scores"}
     scores = decoded["scores"]
     torch.testing.assert_close(
         scores,

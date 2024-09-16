@@ -280,7 +280,6 @@ def test_collate(batch, taskmodule):
 @pytest.fixture(scope="module")
 def unbatched_output(taskmodule):
     model_output = {
-        "labels": torch.tensor([0, 1]),
         "scores": torch.tensor([0.5338148474693298, 0.9866107940673828]),
     }
     return taskmodule.unbatch_output(model_output=model_output)
@@ -289,8 +288,8 @@ def unbatched_output(taskmodule):
 def test_unbatch_output(unbatched_output, taskmodule):
     assert len(unbatched_output) == 2
     assert unbatched_output == [
-        {"is_valid": False, "score": 0.5338148474693298},
-        {"is_valid": True, "score": 0.9866107702255249},
+        {"is_similar": False, "score": 0.5338148474693298},
+        {"is_similar": True, "score": 0.9866107702255249},
     ]
 
 
@@ -346,7 +345,6 @@ def test_configure_metric(taskmodule, batch):
 
     # targets = batch[1]
     targets = {
-        "labels": torch.tensor([0, 1, 0, 0]),
         "scores": torch.tensor([0.0, 1.0, 0.0, 0.0]),
     }
     metric.update(targets, targets)
@@ -385,8 +383,7 @@ def test_configure_metric(taskmodule, batch):
 
     # torch.rand_like(targets)
     random_targets = {
-        "labels": torch.tensor([0, 0, 0, 1]),
-        "scores": torch.tensor([0.2703, 0.6812, 0.2582, 0.8030]),
+        "scores": torch.tensor([0.2703, 0.6812, 0.2582, 0.9030]),
     }
     metric.update(random_targets, targets)
     state = get_metric_state(metric)
@@ -395,7 +392,7 @@ def test_configure_metric(taskmodule, batch):
         {
             "continuous/auroc/preds": [
                 tensor([0.0, 1.0, 0.0, 0.0]),
-                tensor([0.2703, 0.6812, 0.2582, 0.8030]),
+                tensor([0.2703, 0.6812, 0.2582, 0.9030]),
             ],
             "continuous/auroc/target": [
                 tensor([0.0, 1.0, 0.0, 0.0]),
