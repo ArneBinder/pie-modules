@@ -330,7 +330,7 @@ class SequencePairSimilarityModelWithPooler(
 
         result = {"logits": logits}
         if targets is not None:
-            labels = targets["labels"]
+            labels = targets["scores"]
             loss = self.loss_fct(logits, labels)
             result["loss"] = loss
         if return_hidden_states:
@@ -340,6 +340,6 @@ class SequencePairSimilarityModelWithPooler(
 
     def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
         # probabilities = torch.sigmoid(outputs.logits)
-        probabilities = outputs.logits
-        labels = (probabilities > self.multi_label_threshold).to(torch.long)
-        return {"labels": labels, "probabilities": probabilities}
+        scores = outputs.logits
+        labels = (scores > self.multi_label_threshold).to(torch.long)
+        return {"labels": labels, "scores": scores}

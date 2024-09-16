@@ -78,7 +78,7 @@ def inputs() -> Dict[str, LongTensor]:
 
 @pytest.fixture
 def targets() -> Dict[str, LongTensor]:
-    return {"labels": tensor([0.0, 0.0, 0.0, 0.0])}
+    return {"scores": tensor([0.0, 0.0, 0.0, 0.0])}
 
 
 @pytest.fixture
@@ -169,15 +169,15 @@ def test_forward_logits(model_output, inputs):
 def test_decode(model, model_output, inputs):
     decoded = model.decode(inputs=inputs, outputs=model_output)
     assert isinstance(decoded, dict)
-    assert set(decoded) == {"labels", "probabilities"}
+    assert set(decoded) == {"labels", "scores"}
     labels = decoded["labels"]
     torch.testing.assert_close(
         labels,
         torch.tensor([1, 1, 1, 1]),
     )
-    probabilities = decoded["probabilities"]
+    scores = decoded["scores"]
     torch.testing.assert_close(
-        probabilities,
+        scores,
         torch.tensor(
             [0.5338148474693298, 0.5866107940673828, 0.5076886415481567, 0.5946245789527893]
         ),

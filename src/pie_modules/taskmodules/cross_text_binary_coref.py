@@ -19,7 +19,7 @@ from pytorch_ie import Annotation
 from pytorch_ie.annotations import Span
 from pytorch_ie.core import TaskEncoding, TaskModule
 from pytorch_ie.utils.window import get_window_around_slice
-from torchmetrics import Metric, MetricCollection
+from torchmetrics import ClasswiseWrapper, F1Score, Metric, MetricCollection
 from torchmetrics.classification import BinaryAUROC
 from transformers import AutoTokenizer, BatchEncoding
 from typing_extensions import TypeAlias
@@ -75,6 +75,10 @@ class SpanDoesNotFitIntoAvailableWindow(Exception):
 
 def _get_labels(model_output: ModelTargetType) -> torch.Tensor:
     return model_output["labels"]
+
+
+def _get_scores(model_output: ModelTargetType) -> torch.Tensor:
+    return model_output["scores"]
 
 
 S = TypeVar("S", bound=Span)
@@ -240,22 +244,46 @@ class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
         if not task_encodings[0].has_targets:
             return inputs, None
         targets = {
-            "labels": torch.tensor([task_encoding.targets for task_encoding in task_encodings])
+            "scores": torch.tensor([task_encoding.targets for task_encoding in task_encodings])
         }
         return inputs, targets
 
-    def configure_model_metric(self, stage: str) -> Metric:
-        return WrappedMetricWithPrepareFunction(
-            metric=MetricCollection({"auroc": BinaryAUROC(thresholds=None)}),
-            prepare_function=_get_labels,
+    def configure_model_metric(self, stage: str) -> MetricCollection:
+        # we use the length of label_to_id because that contains the none_label (in contrast to labels)
+        labels = ["no_relation", "coref"]
+        common_metric_kwargs = {
+            "num_classes": len(labels),
+            "task": "multiclass",
+        }
+
+        return MetricCollection(
+            metrics={
+                "continuous": WrappedMetricWithPrepareFunction(
+                    metric=MetricCollection({"auroc": BinaryAUROC(thresholds=None)}),
+                    prepare_function=_get_scores,
+                ),
+                "discrete": WrappedMetricWithPrepareFunction(
+                    metric=MetricCollection(
+                        {
+                            "micro/f1": F1Score(average="micro", **common_metric_kwargs),
+                            "macro/f1": F1Score(average="macro", **common_metric_kwargs),
+                            "f1_per_label": ClasswiseWrapper(
+                                F1Score(average=None, **common_metric_kwargs),
+                                labels=labels,
+                                postfix="/f1",
+                            ),
+                        }
+                    ),
+                    prepare_function=_get_labels,
+                ),
+            }
         )
 
     def unbatch_output(self, model_output: ModelTargetType) -> Sequence[TaskOutputType]:
         label_ids = model_output["labels"].detach().cpu().tolist()
-        probabilities = model_output["probabilities"].detach().cpu().tolist()
+        scores = model_output["scores"].detach().cpu().tolist()
         result: List[TaskOutputType] = [
-            {"is_valid": label_id != 0, "score": prob}
-            for label_id, prob in zip(label_ids, probabilities)
+            {"is_valid": label_id != 0, "score": prob} for label_id, prob in zip(label_ids, scores)
         ]
         return result
 

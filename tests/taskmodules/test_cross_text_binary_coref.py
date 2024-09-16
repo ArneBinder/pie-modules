@@ -5,6 +5,7 @@ from typing import Any, Dict, Union
 import pytest
 import torch.testing
 from pytorch_ie.annotations import LabeledSpan
+from torch import tensor
 from torchmetrics import Metric, MetricCollection
 
 from pie_modules.document.processing.text_pair import add_negative_coref_relations
@@ -273,14 +274,14 @@ def test_collate(batch, taskmodule):
     torch.testing.assert_close(inputs["pooler_pair_start_indices"], torch.tensor([[1], [7]]))
     torch.testing.assert_close(inputs["pooler_pair_end_indices"], torch.tensor([[5], [8]]))
 
-    torch.testing.assert_close(targets, {"labels": torch.tensor([1.0, 0.0])})
+    torch.testing.assert_close(targets, {"scores": torch.tensor([1.0, 0.0])})
 
 
 @pytest.fixture(scope="module")
 def unbatched_output(taskmodule):
     model_output = {
         "labels": torch.tensor([0, 1]),
-        "probabilities": torch.tensor([0.5338148474693298, 0.9866107940673828]),
+        "scores": torch.tensor([0.5338148474693298, 0.9866107940673828]),
     }
     return taskmodule.unbatch_output(model_output=model_output)
 
@@ -323,46 +324,105 @@ def test_configure_metric(taskmodule, batch):
 
     assert isinstance(metric, (Metric, MetricCollection))
     state = get_metric_state(metric)
-    assert state == {"auroc/preds": [], "auroc/target": []}
+    torch.testing.assert_close(
+        state,
+        {
+            "continuous/auroc/preds": [],
+            "continuous/auroc/target": [],
+            "discrete/f1_per_label/tp": tensor([0, 0]),
+            "discrete/f1_per_label/fp": tensor([0, 0]),
+            "discrete/f1_per_label/tn": tensor([0, 0]),
+            "discrete/f1_per_label/fn": tensor([0, 0]),
+            "discrete/macro/f1/tp": tensor([0, 0]),
+            "discrete/macro/f1/fp": tensor([0, 0]),
+            "discrete/macro/f1/tn": tensor([0, 0]),
+            "discrete/macro/f1/fn": tensor([0, 0]),
+            "discrete/micro/f1/tp": tensor([0]),
+            "discrete/micro/f1/fp": tensor([0]),
+            "discrete/micro/f1/tn": tensor([0]),
+            "discrete/micro/f1/fn": tensor([0]),
+        },
+    )
 
     # targets = batch[1]
-    targets = {"labels": torch.tensor([0.0, 1.0, 0.0, 0.0])}
+    targets = {
+        "labels": torch.tensor([0, 1, 0, 0]),
+        "scores": torch.tensor([0.0, 1.0, 0.0, 0.0]),
+    }
     metric.update(targets, targets)
 
     state = get_metric_state(metric)
     torch.testing.assert_close(
         state,
         {
-            "auroc/preds": [torch.tensor([0.0, 1.0, 0.0, 0.0])],
-            "auroc/target": [torch.tensor([0.0, 1.0, 0.0, 0.0])],
+            "continuous/auroc/preds": [tensor([0.0, 1.0, 0.0, 0.0])],
+            "continuous/auroc/target": [tensor([0.0, 1.0, 0.0, 0.0])],
+            "discrete/f1_per_label/tp": tensor([3, 1]),
+            "discrete/f1_per_label/fp": tensor([0, 0]),
+            "discrete/f1_per_label/tn": tensor([1, 3]),
+            "discrete/f1_per_label/fn": tensor([0, 0]),
+            "discrete/macro/f1/tp": tensor([3, 1]),
+            "discrete/macro/f1/fp": tensor([0, 0]),
+            "discrete/macro/f1/tn": tensor([1, 3]),
+            "discrete/macro/f1/fn": tensor([0, 0]),
+            "discrete/micro/f1/tp": tensor([4]),
+            "discrete/micro/f1/fp": tensor([0]),
+            "discrete/micro/f1/tn": tensor([4]),
+            "discrete/micro/f1/fn": tensor([0]),
         },
     )
 
-    assert metric.compute() == {"auroc": torch.tensor(1.0)}
+    torch.testing.assert_close(
+        metric.compute(),
+        {
+            "auroc": tensor(1.0),
+            "no_relation/f1": tensor(1.0),
+            "coref/f1": tensor(1.0),
+            "macro/f1": tensor(1.0),
+            "micro/f1": tensor(1.0),
+        },
+    )
 
     # torch.rand_like(targets)
-    random_targets = {"labels": torch.tensor([0.2703, 0.6812, 0.2582, 0.8030])}
+    random_targets = {
+        "labels": torch.tensor([0, 0, 0, 1]),
+        "scores": torch.tensor([0.2703, 0.6812, 0.2582, 0.8030]),
+    }
     metric.update(random_targets, targets)
     state = get_metric_state(metric)
     torch.testing.assert_close(
         state,
         {
-            "auroc/preds": [
-                torch.tensor([0.0, 1.0, 0.0, 0.0]),
-                torch.tensor(
-                    [
-                        0.2703000009059906,
-                        0.6812000274658203,
-                        0.2581999897956848,
-                        0.8029999732971191,
-                    ]
-                ),
+            "continuous/auroc/preds": [
+                tensor([0.0, 1.0, 0.0, 0.0]),
+                tensor([0.2703, 0.6812, 0.2582, 0.8030]),
             ],
-            "auroc/target": [
-                torch.tensor([0.0, 1.0, 0.0, 0.0]),
-                torch.tensor([0.0, 1.0, 0.0, 0.0]),
+            "continuous/auroc/target": [
+                tensor([0.0, 1.0, 0.0, 0.0]),
+                tensor([0.0, 1.0, 0.0, 0.0]),
             ],
+            "discrete/f1_per_label/tp": tensor([5, 1]),
+            "discrete/f1_per_label/fp": tensor([1, 1]),
+            "discrete/f1_per_label/tn": tensor([1, 5]),
+            "discrete/f1_per_label/fn": tensor([1, 1]),
+            "discrete/macro/f1/tp": tensor([5, 1]),
+            "discrete/macro/f1/fp": tensor([1, 1]),
+            "discrete/macro/f1/tn": tensor([1, 5]),
+            "discrete/macro/f1/fn": tensor([1, 1]),
+            "discrete/micro/f1/tp": tensor([6]),
+            "discrete/micro/f1/fp": tensor([2]),
+            "discrete/micro/f1/tn": tensor([6]),
+            "discrete/micro/f1/fn": tensor([2]),
         },
     )
 
-    assert metric.compute() == {"auroc": torch.tensor(0.9166666269302368)}
+    torch.testing.assert_close(
+        metric.compute(),
+        {
+            "auroc": tensor(0.916667),
+            "no_relation/f1": tensor(0.833333),
+            "coref/f1": tensor(0.500000),
+            "macro/f1": tensor(0.666667),
+            "micro/f1": tensor(0.750000),
+        },
+    )
