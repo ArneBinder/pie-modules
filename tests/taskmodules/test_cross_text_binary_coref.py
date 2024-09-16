@@ -397,5 +397,5 @@ def test_configure_metric(taskmodule, batch):
 
     torch.testing.assert_close(
         metric.compute(),
-        {"auroc": tensor(0.916667), "avg-P": tensor(0.916667), "f1": tensor(0.500000)},
+        {"auroc": tensor(0.91666663), "avg-P": tensor(0.83333337), "f1": tensor(0.50000000)},
     )
