@@ -20,10 +20,12 @@ from pytorch_ie import Annotation
 from pytorch_ie.annotations import Span
 from pytorch_ie.core import TaskEncoding, TaskModule
 from pytorch_ie.utils.window import get_window_around_slice
+from torch.nn.functional import threshold
 from torchmetrics import ClasswiseWrapper, F1Score, Metric, MetricCollection
 from torchmetrics.classification import (
     BinaryAUROC,
     BinaryAveragePrecision,
+    BinaryF1Score,
     BinaryPrecisionRecallCurve,
     BinaryROC,
 )
@@ -257,13 +259,6 @@ class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
         return inputs, targets
 
     def configure_model_metric(self, stage: str) -> MetricCollection:
-        # we use the length of label_to_id because that contains the none_label (in contrast to labels)
-        labels = ["no_relation", "coref"]
-        common_metric_kwargs = {
-            "num_classes": len(labels),
-            "task": "multiclass",
-        }
-
         return MetricCollection(
             metrics={
                 "continuous": WrappedMetricWithPrepareFunction(
@@ -273,25 +268,10 @@ class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
                             "avg-P": BinaryAveragePrecision(validate_args=False),
                             # "roc": BinaryROC(validate_args=False),
                             # "PRCurve": BinaryPrecisionRecallCurve(validate_args=False),
+                            "f1": BinaryF1Score(threshold=self.similarity_threshold),
                         }
                     ),
                     prepare_function=_get_scores,
-                ),
-                "discrete": WrappedMetricWithPrepareFunction(
-                    metric=MetricCollection(
-                        {
-                            "micro/f1": F1Score(average="micro", **common_metric_kwargs),
-                            "macro/f1": F1Score(average="macro", **common_metric_kwargs),
-                            "f1_per_label": ClasswiseWrapper(
-                                F1Score(average=None, **common_metric_kwargs),
-                                labels=labels,
-                                postfix="/f1",
-                            ),
-                        }
-                    ),
-                    prepare_function=partial(
-                        _get_labels, label_threshold=self.similarity_threshold
-                    ),
                 ),
             }
         )
