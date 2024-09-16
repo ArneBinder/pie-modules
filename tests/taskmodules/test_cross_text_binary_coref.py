@@ -328,6 +328,8 @@ def test_configure_metric(taskmodule, batch):
         {
             "continuous/auroc/preds": [],
             "continuous/auroc/target": [],
+            "continuous/avg-P/preds": [],
+            "continuous/avg-P/target": [],
             "discrete/f1_per_label/tp": tensor([0, 0]),
             "discrete/f1_per_label/fp": tensor([0, 0]),
             "discrete/f1_per_label/tn": tensor([0, 0]),
@@ -355,6 +357,8 @@ def test_configure_metric(taskmodule, batch):
         {
             "continuous/auroc/preds": [tensor([0.0, 1.0, 0.0, 0.0])],
             "continuous/auroc/target": [tensor([0.0, 1.0, 0.0, 0.0])],
+            "continuous/avg-P/preds": [tensor([0.0, 1.0, 0.0, 0.0])],
+            "continuous/avg-P/target": [tensor([0.0, 1.0, 0.0, 0.0])],
             "discrete/f1_per_label/tp": tensor([3, 1]),
             "discrete/f1_per_label/fp": tensor([0, 0]),
             "discrete/f1_per_label/tn": tensor([1, 3]),
@@ -374,6 +378,7 @@ def test_configure_metric(taskmodule, batch):
         metric.compute(),
         {
             "auroc": tensor(1.0),
+            "avg-P": tensor(1.0),
             "no_relation/f1": tensor(1.0),
             "coref/f1": tensor(1.0),
             "macro/f1": tensor(1.0),
@@ -398,6 +403,14 @@ def test_configure_metric(taskmodule, batch):
                 tensor([0.0, 1.0, 0.0, 0.0]),
                 tensor([0.0, 1.0, 0.0, 0.0]),
             ],
+            "continuous/avg-P/preds": [
+                tensor([0.0, 1.0, 0.0, 0.0]),
+                tensor([0.2703, 0.6812, 0.2582, 0.9030]),
+            ],
+            "continuous/avg-P/target": [
+                tensor([0.0, 1.0, 0.0, 0.0]),
+                tensor([0.0, 1.0, 0.0, 0.0]),
+            ],
             "discrete/f1_per_label/tp": tensor([5, 1]),
             "discrete/f1_per_label/fp": tensor([1, 1]),
             "discrete/f1_per_label/tn": tensor([1, 5]),
@@ -417,6 +430,7 @@ def test_configure_metric(taskmodule, batch):
         metric.compute(),
         {
             "auroc": tensor(0.916667),
+            "avg-P": tensor(0.833333),
             "no_relation/f1": tensor(0.833333),
             "coref/f1": tensor(0.500000),
             "macro/f1": tensor(0.666667),

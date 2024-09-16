@@ -21,7 +21,12 @@ from pytorch_ie.annotations import Span
 from pytorch_ie.core import TaskEncoding, TaskModule
 from pytorch_ie.utils.window import get_window_around_slice
 from torchmetrics import ClasswiseWrapper, F1Score, Metric, MetricCollection
-from torchmetrics.classification import BinaryAUROC
+from torchmetrics.classification import (
+    BinaryAUROC,
+    BinaryAveragePrecision,
+    BinaryPrecisionRecallCurve,
+    BinaryROC,
+)
 from transformers import AutoTokenizer, BatchEncoding
 from typing_extensions import TypeAlias
 
@@ -262,7 +267,14 @@ class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
         return MetricCollection(
             metrics={
                 "continuous": WrappedMetricWithPrepareFunction(
-                    metric=MetricCollection({"auroc": BinaryAUROC(thresholds=None)}),
+                    metric=MetricCollection(
+                        {
+                            "auroc": BinaryAUROC(),
+                            "avg-P": BinaryAveragePrecision(validate_args=False),
+                            # "roc": BinaryROC(validate_args=False),
+                            # "PRCurve": BinaryPrecisionRecallCurve(validate_args=False),
+                        }
+                    ),
                     prepare_function=_get_scores,
                 ),
                 "discrete": WrappedMetricWithPrepareFunction(
