@@ -100,7 +100,7 @@ class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
     def __init__(
         self,
         tokenizer_name_or_path: str,
-        label_threshold: float = 0.9,
+        similarity_threshold: float = 0.9,
         max_window: Optional[int] = None,
         **kwargs,
     ) -> None:
@@ -108,7 +108,7 @@ class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
         self.save_hyperparameters()
 
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
-        self.label_threshold = label_threshold
+        self.similarity_threshold = similarity_threshold
         self.max_window = max_window if max_window is not None else self.tokenizer.model_max_length
         self.available_window = self.max_window - self.tokenizer.num_special_tokens_to_add()
         self.num_special_tokens_before = len(self._get_special_tokens_before_input())
@@ -277,13 +277,15 @@ class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
                             ),
                         }
                     ),
-                    prepare_function=partial(_get_labels, label_threshold=self.label_threshold),
+                    prepare_function=partial(
+                        _get_labels, label_threshold=self.similarity_threshold
+                    ),
                 ),
             }
         )
 
     def unbatch_output(self, model_output: ModelTargetType) -> Sequence[TaskOutputType]:
-        is_similar = (model_output["scores"] > self.label_threshold).detach().cpu().tolist()
+        is_similar = (model_output["scores"] > self.similarity_threshold).detach().cpu().tolist()
         scores = model_output["scores"].detach().cpu().tolist()
         result: List[TaskOutputType] = [
             {"is_similar": is_sim, "score": prob} for is_sim, prob in zip(is_similar, scores)
