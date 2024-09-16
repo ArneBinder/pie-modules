@@ -63,3 +63,8 @@ class GenerativeAnswer(AnnotationWithText):
 
     score: Optional[float] = dataclasses.field(default=None, compare=False)
     question: Optional[Question] = None
+
+
+@dataclasses.dataclass(eq=True, frozen=True)
+class BinaryCorefRelation(BinaryRelation):
+    label: str = "coref"

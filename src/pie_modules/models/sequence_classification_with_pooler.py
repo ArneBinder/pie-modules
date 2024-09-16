@@ -266,3 +266,77 @@ class SequenceClassificationModelWithPooler(
             probabilities = torch.sigmoid(outputs.logits)
             labels = (probabilities > self.multi_label_threshold).to(torch.long)
         return {"labels": labels, "probabilities": probabilities}
+
+
+@PyTorchIEModel.register()
+class SequencePairSimilarityModelWithPooler(
+    SequenceClassificationModelWithPoolerBase,
+):
+    """A span pair similarity model to detect of two spans occurring in different texts are
+    similar. It uses an encoder to independently calculate contextualized embeddings of both texts,
+    then uses a pooler to get representations of the spans and, finally, calculates the cosine to
+    get the similarity scores.
+
+    Args:
+        label_threshold: The threshold above which score the spans are considered as similar.
+        pooler: The pooler identifier or config, see :func:`get_pooler_and_output_size` for details.
+            Defaults to "mention_pooling" (max pooling over the span token embeddings).
+        **kwargs
+    """
+
+    def __init__(
+        self,
+        pooler: Optional[Union[Dict[str, Any], str]] = None,
+        **kwargs,
+    ):
+        if pooler is None:
+            # use (max) mention pooling per default
+            pooler = {"type": "mention_pooling", "num_indices": 1}
+        super().__init__(pooler=pooler, **kwargs)
+
+    def setup_classifier(
+        self, pooler_output_dim: int
+    ) -> Callable[[torch.FloatTensor, torch.FloatTensor], torch.FloatTensor]:
+        return torch.nn.functional.cosine_similarity
+
+    def setup_loss_fct(self) -> Callable:
+        return nn.BCELoss()
+
+    def forward(
+        self,
+        inputs: InputType,
+        targets: Optional[TargetType] = None,
+        return_hidden_states: bool = False,
+    ) -> OutputType:
+        sanitized_inputs = separate_arguments_by_prefix(
+            # Note that the order of the prefixes is important because one is a prefix of the other,
+            # so we need to start with the longer!
+            arguments=inputs,
+            prefixes=["pooler_pair_", "pooler_"],
+        )
+
+        pooled_output = self.get_pooled_output(
+            model_inputs=sanitized_inputs["remaining"]["encoding"],
+            pooler_inputs=sanitized_inputs["pooler_"],
+        )
+        pooled_output_pair = self.get_pooled_output(
+            model_inputs=sanitized_inputs["remaining"]["encoding_pair"],
+            pooler_inputs=sanitized_inputs["pooler_pair_"],
+        )
+
+        logits = self.classifier(pooled_output, pooled_output_pair)
+
+        result = {"logits": logits}
+        if targets is not None:
+            labels = targets["scores"]
+            loss = self.loss_fct(logits, labels)
+            result["loss"] = loss
+        if return_hidden_states:
+            raise NotImplementedError("return_hidden_states is not yet implemented")
+
+        return SequenceClassifierOutput(**result)
+
+    def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
+        # probabilities = torch.sigmoid(outputs.logits)
+        scores = outputs.logits
+        return {"scores": scores}

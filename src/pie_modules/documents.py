@@ -27,6 +27,7 @@ from pytorch_ie.documents import (
 
 from pie_modules.annotations import (
     AbstractiveSummary,
+    BinaryCorefRelation,
     BinaryRelation,
     ExtractiveAnswer,
     GenerativeAnswer,
@@ -149,5 +150,65 @@ class TokenDocumentWithLabeledMultiSpansAndBinaryRelations(TokenDocumentWithLabe
 class TokenDocumentWithLabeledMultiSpansBinaryRelationsAndLabeledPartitions(
     TokenDocumentWithLabeledMultiSpansAndLabeledPartitions,
     TokenDocumentWithLabeledMultiSpansAndBinaryRelations,
+):
+    pass
+
+
+@dataclasses.dataclass
+class WithTextPair:
+    text_pair: str
+
+
+@dataclasses.dataclass
+class WithLabeledSpansPair(WithTextPair):
+    labeled_spans_pair: AnnotationLayer[LabeledSpan] = annotation_field(target="text_pair")
+
+
+@dataclasses.dataclass
+class WithLabeledPartitionsPair(WithTextPair):
+    labeled_partitions_pair: AnnotationLayer[LabeledSpan] = annotation_field(target="text_pair")
+
+
+@dataclasses.dataclass
+class TextPairBasedDocument(TextBasedDocument, WithTextPair):
+    pass
+
+
+@dataclasses.dataclass
+class TextPairDocumentWithLabeledPartitions(
+    WithLabeledPartitionsPair, TextPairBasedDocument, TextDocumentWithLabeledPartitions
+):
+    pass
+
+
+@dataclasses.dataclass
+class TextPairDocumentWithLabeledSpans(
+    WithLabeledSpansPair, TextPairBasedDocument, TextDocumentWithLabeledSpans
+):
+    pass
+
+
+@dataclasses.dataclass
+class TextPairDocumentWithLabeledSpansAndLabeledPartitions(
+    TextPairDocumentWithLabeledPartitions,
+    TextPairDocumentWithLabeledSpans,
+    TextDocumentWithLabeledSpansAndLabeledPartitions,
+):
+    pass
+
+
+@dataclasses.dataclass
+class TextPairDocumentWithLabeledSpansAndBinaryCorefRelations(
+    TextPairDocumentWithLabeledSpans, TextDocumentWithLabeledSpans
+):
+    binary_coref_relations: AnnotationLayer[BinaryCorefRelation] = annotation_field(
+        targets=["labeled_spans", "labeled_spans_pair"]
+    )
+
+
+@dataclasses.dataclass
+class TextPairDocumentWithLabeledSpansSimilarityRelationsAndLabeledPartitions(
+    TextPairDocumentWithLabeledSpansAndLabeledPartitions,
+    TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
 ):
     pass

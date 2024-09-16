@@ -185,7 +185,10 @@ class RelationStatisticsMixin:
                 else:
                     raise ValueError(f"unknown key: {key}")
                 for rel in rels_set:
-                    self.increase_counter(key=(key, rel.label))
+                    # Set "no_relation" as label when the score is zero. We encode negative relations
+                    # in such a way in the case of multi-label or binary (similarity for coref).
+                    label = rel.label if rel.score > 0 else "no_relation"
+                    self.increase_counter(key=(key, label))
             for rel in skipped_other:
                 self.increase_counter(key=("skipped_other", rel.label))
 
