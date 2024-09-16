@@ -281,10 +281,7 @@ def test_construct_negative_documents(positive_and_negative_documents):
     ]
 
 
-def test_construct_negative_documents_with_downsampling(positive_documents):
-    # set fixed seed because the negatives will get shuffled
-    random.seed(42)
-    docs = list(add_negative_coref_relations(positive_documents, downsampling_factor=1.0))
+def _get_all_all_rels_and_scores(docs):
     all_texts = [(doc.text, doc.text_pair) for doc in docs]
     all_scores = [[coref_rel.score for coref_rel in doc.binary_coref_relations] for doc in docs]
     all_rels_resolved = [doc.binary_coref_relations.resolve() for doc in docs]
@@ -293,6 +290,14 @@ def test_construct_negative_documents_with_downsampling(positive_documents):
         (texts, list(zip(scores, rels_resolved)))
         for texts, scores, rels_resolved in zip(all_texts, all_scores, all_rels_resolved)
     ]
+    return all_rels_and_scores
+
+
+def test_construct_negative_documents_with_downsampling(positive_documents, caplog):
+    # set fixed seed because the negatives will get shuffled
+    random.seed(42)
+    docs = list(add_negative_coref_relations(positive_documents, downsampling_factor=1.0))
+    all_rels_and_scores = _get_all_all_rels_and_scores(docs)
 
     # check number relations
     all_rels_flat = [rel for doc in docs for rel in doc.binary_coref_relations]
@@ -334,6 +339,39 @@ def test_construct_negative_documents_with_downsampling(positive_documents):
         ),
     ]
 
+    # sampling target is too low
+    caplog.clear()
+    docs = list(add_negative_coref_relations(positive_documents, downsampling_factor=0.0))
+    assert caplog.messages == [
+        "downsampling with factor=0.0 and number of positive relations=4 does not produce any negatives"
+    ]
+    # check number relations
+    all_rels_flat = [rel for doc in docs for rel in doc.binary_coref_relations]
+    # positives: 2 x number of positives (we add instances with swapped texts)
+    assert len([rel.score for rel in all_rels_flat if rel.score > 0.0]) == 4
+    # negatives
+    assert len([rel.score for rel in all_rels_flat if rel.score == 0.0]) == 0
+    # check actual content
+    all_rels_and_scores = _get_all_all_rels_and_scores(docs)
+    assert all_rels_and_scores == [
+        (
+            ("And she founded C.", "Entity A works at B."),
+            [(1.0, ("coref", (("PERSON", "she"), ("PERSON", "Entity A"))))],
+        ),
+        (
+            ("Bob loves his cat.", "She sleeps a lot."),
+            [(1.0, ("coref", (("ANIMAL", "his cat"), ("ANIMAL", "She"))))],
+        ),
+        (
+            ("Entity A works at B.", "And she founded C."),
+            [(1.0, ("coref", (("PERSON", "Entity A"), ("PERSON", "she"))))],
+        ),
+        (
+            ("She sleeps a lot.", "Bob loves his cat."),
+            [(1.0, ("coref", (("ANIMAL", "She"), ("ANIMAL", "his cat"))))],
+        ),
+    ]
+
     # no positives
     doc2 = TextPairDocumentWithLabeledSpansAndBinaryCorefRelations(
         id="0", text="Bob loves his cat.", text_pair="She sleeps a lot."
@@ -347,14 +385,6 @@ def test_construct_negative_documents_with_downsampling(positive_documents):
         str(e.value)
         == "downsampling [factor=1.0] is enabled, but no positive relations are available to calculate "
         "max_num_negative"
-    )
-
-    # sampling target is too low
-    with pytest.raises(ValueError) as e:
-        list(add_negative_coref_relations(positive_documents, downsampling_factor=0.0))
-    assert (
-        str(e.value)
-        == "downsampling with factor=0.0 and number of positive relations=4 does not produce any negatives"
     )
 
 

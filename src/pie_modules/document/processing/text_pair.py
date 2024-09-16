@@ -1,4 +1,5 @@
 import copy
+import logging
 import random
 from collections import defaultdict
 from collections.abc import Iterator
@@ -17,6 +18,8 @@ from pie_modules.documents import (
     TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
 )
 from pie_modules.utils.span import are_nested
+
+logger = logging.getLogger(__name__)
 
 S = TypeVar("S", bound=Span)
 S2 = TypeVar("S2", bound=Span)
@@ -237,11 +240,12 @@ def add_negative_coref_relations(
 
         max_num_negative = int(len(positive_rels) * downsampling_factor)
         if max_num_negative == 0:
-            raise ValueError(
+            logger.warning(
                 f"downsampling with factor={downsampling_factor} and number of "
                 f"positive relations={len(positive_rels)} does not produce any negatives"
             )
-        random.shuffle(negative_rels)
+        else:
+            random.shuffle(negative_rels)
         negative_rels = negative_rels[:max_num_negative]
     for rel in negative_rels:
         new_rels2new_docs[rel].binary_coref_relations.append(rel)
