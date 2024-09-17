@@ -1,7 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Generic, Optional, Sequence, TypeVar, Union
+from typing import Generic, Iterable, Iterator, Optional, Sequence, TypeVar, Union
 
 from pytorch_ie import Document, TaskEncoding, TaskModule
+from pytorch_ie.core.taskmodule import (
+    IterableTaskEncodingDataset,
+    TaskEncodingDataset,
+    TaskEncodingSequence,
+)
 from pytorch_ie.documents import TextDocumentWithLabeledSpansAndBinaryRelations
 from typing_extensions import TypeAlias
 
@@ -52,10 +57,7 @@ class TaskModuleWithDocumentConverter(
         documents_converted = (self._convert_document(doc) for doc in documents)
         super()._prepare(documents=documents_converted)
 
-    def encode_input(
-        self,
-        document: DocumentType,
-    ) -> Optional[Union[TaskEncodingType, Sequence[TaskEncodingType]]]:
+    def convert_document(self, document: DocumentType) -> ConvertedDocumentType:
         converted_document = self._convert_document(document)
         if "original_document" in converted_document.metadata:
             raise ValueError(
@@ -64,7 +66,23 @@ class TaskModuleWithDocumentConverter(
                 f"to produce documents without that key in metadata."
             )
         converted_document.metadata["original_document"] = converted_document
-        return super().encode_input(document=converted_document)
+        return converted_document
+
+    def encode(
+        self, documents: Union[DocumentType, Iterable[DocumentType]], **kwargs
+    ) -> Union[
+        Sequence[TaskEncodingType],
+        TaskEncodingSequence[TaskEncodingType, DocumentType],
+        Iterator[TaskEncodingType],
+        TaskEncodingDataset[TaskEncodingType],
+        IterableTaskEncodingDataset[TaskEncodingType],
+    ]:
+        converted_documents: Union[DocumentType, Iterable[DocumentType]]
+        if isinstance(documents, Document):
+            converted_documents = self.convert_document(documents)
+        else:
+            converted_documents = (self.convert_document(doc) for doc in documents)
+        return super().encode(documents=converted_documents, **kwargs)
 
     def decode(self, **kwargs) -> Sequence[DocumentType]:
         decoded_documents = super().decode(**kwargs)
