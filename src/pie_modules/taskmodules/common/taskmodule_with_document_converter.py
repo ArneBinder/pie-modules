@@ -65,7 +65,7 @@ class TaskModuleWithDocumentConverter(
                 f"this is not allowed. Please adjust '{type(self).__name__}._convert_document()'"
                 f"to produce documents without that key in metadata."
             )
-        converted_document.metadata["original_document"] = converted_document
+        converted_document.metadata["original_document"] = document
         return converted_document
 
     def encode(
