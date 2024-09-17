@@ -1,0 +1,78 @@
+from abc import ABC, abstractmethod
+from typing import Generic, Optional, Sequence, TypeVar, Union
+
+from pytorch_ie import Document, TaskEncoding, TaskModule
+from pytorch_ie.documents import TextDocumentWithLabeledSpansAndBinaryRelations
+from typing_extensions import TypeAlias
+
+DocumentType = TypeVar("DocumentType", bound=Document)
+ConvertedDocumentType = TypeVar("ConvertedDocumentType", bound=Document)
+InputEncodingType = TypeVar("InputEncodingType")
+TargetEncodingType = TypeVar("TargetEncodingType")
+# TaskEncoding: defined below
+TaskBatchEncodingType = TypeVar("TaskBatchEncodingType")
+# ModelBatchEncoding: defined in models
+ModelBatchOutputType = TypeVar("ModelBatchOutputType")
+TaskOutputType = TypeVar("TaskOutputType")
+
+TaskEncodingType: TypeAlias = TaskEncoding[
+    DocumentType,
+    InputEncodingType,
+    TargetEncodingType,
+]
+
+
+class TaskModuleWithDocumentConverter(
+    TaskModule,
+    ABC,
+    Generic[
+        ConvertedDocumentType,
+        DocumentType,
+        InputEncodingType,
+        TargetEncodingType,
+        TaskBatchEncodingType,
+        ModelBatchOutputType,
+        TaskOutputType,
+    ],
+):
+    @abstractmethod
+    def _convert_document(self, document: DocumentType) -> ConvertedDocumentType:
+        pass
+
+    def _prepare(self, documents: Sequence[DocumentType]) -> None:
+        # use an iterator for lazy processing
+        documents_converted = (self._convert_document(doc) for doc in documents)
+        super()._prepare(documents=documents_converted)
+
+    def encode_input(
+        self,
+        document: DocumentType,
+    ) -> Optional[Union[TaskEncodingType, Sequence[TaskEncodingType]]]:
+        converted_document = self._convert_document(document)
+        if "original_document" in converted_document.metadata:
+            raise ValueError(
+                f"metadata of converted_document has already and entry 'original_document', "
+                f"this is not allowed. Please adjust '{type(self).__name__}._convert_document()'"
+                f"to produce documents without that key in metadata."
+            )
+        converted_document.metadata["original_document"] = converted_document
+        return super().encode_input(document=converted_document)
+
+    def decode(self, **kwargs) -> Sequence[DocumentType]:
+        decoded_documents = super().decode(**kwargs)
+        result = []
+        for doc in decoded_documents:
+            original_document = doc.metadata["original_document"]
+            self._integrate_predictions_into_original_document(
+                document=doc, original_document=original_document
+            )
+            result.append(original_document)
+        return result
+
+    @abstractmethod
+    def _integrate_predictions_into_original_document(
+        self,
+        document: ConvertedDocumentType,
+        original_document: DocumentType,
+    ) -> TextDocumentWithLabeledSpansAndBinaryRelations:
+        pass
