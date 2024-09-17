@@ -89,8 +89,8 @@ class TaskModuleWithDocumentConverter(
         result = []
         for doc in decoded_documents:
             original_document = doc.metadata["original_document"]
-            self._integrate_predictions_into_original_document(
-                document=doc, original_document=original_document
+            self._integrate_predictions_from_converted_document(
+                converted_document=doc, document=original_document
             )
             result.append(original_document)
         return result
