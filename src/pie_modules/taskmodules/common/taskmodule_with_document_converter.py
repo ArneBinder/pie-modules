@@ -37,6 +37,14 @@ class TaskModuleWithDocumentConverter(
 ):
     @abstractmethod
     def _convert_document(self, document: DocumentType) -> ConvertedDocumentType:
+        """Convert a document of the taskmodule document type to the expected document type of the
+        wrapped taskmodule.
+
+        Args:
+            document: the input document
+
+        Returns: the converted document
+        """
         pass
 
     def _prepare(self, documents: Sequence[DocumentType]) -> None:
@@ -70,9 +78,16 @@ class TaskModuleWithDocumentConverter(
         return result
 
     @abstractmethod
-    def _integrate_predictions_into_original_document(
+    def _integrate_predictions_from_converted_document(
         self,
-        document: ConvertedDocumentType,
-        original_document: DocumentType,
+        document: DocumentType,
+        converted_document: ConvertedDocumentType,
     ) -> TextDocumentWithLabeledSpansAndBinaryRelations:
+        """Convert the predictions at the respective layers of the converted_document and add them
+        to the original document predictions.
+
+        Args:
+            document: document to attach the converted predictions to
+            converted_document: the document returned by the wrapped taskmodule, including predictions
+        """
         pass
