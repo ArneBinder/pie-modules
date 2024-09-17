@@ -81,7 +81,7 @@ class TaskModuleWithDocumentConverter(
         if isinstance(documents, Document):
             converted_documents = self.convert_document(documents)
         else:
-            converted_documents = (self.convert_document(doc) for doc in documents)
+            converted_documents = [self.convert_document(doc) for doc in documents]
         return super().encode(documents=converted_documents, **kwargs)
 
     def decode(self, **kwargs) -> Sequence[DocumentType]:
