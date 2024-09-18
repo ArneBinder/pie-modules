@@ -1,8 +1,9 @@
-from typing import Optional, Type, TypeAlias
+from typing import Optional, Type
 
 import pytest
 from pytorch_ie import Document
 from pytorch_ie.documents import TextDocumentWithLabeledSpansAndBinaryRelations
+from typing_extensions import TypeAlias
 
 from pie_modules.taskmodules import RETextClassificationWithIndicesTaskModule
 from pie_modules.taskmodules.common import TaskModuleWithDocumentConverter
@@ -156,7 +157,7 @@ def test_wrong_doc_converter(documents):
     assert (
         str(e.value)
         == "metadata of converted_document has already and entry 'original_document', "
-           "this is not allowed. Please adjust "
-           "'MyRETaskModuleWithWrongDocConverter._convert_document()' to produce "
-           "documents without that key in metadata."
+        "this is not allowed. Please adjust "
+        "'MyRETaskModuleWithWrongDocConverter._convert_document()' to produce "
+        "documents without that key in metadata."
     )
