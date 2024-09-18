@@ -19,7 +19,12 @@ from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClas
 from torch import FloatTensor, LongTensor, nn
 from torch.nn import Parameter
 from torch.optim import AdamW
-from transformers import AutoConfig, AutoModel, get_linear_schedule_with_warmup
+from transformers import (
+    AutoConfig,
+    AutoModel,
+    PreTrainedModel,
+    get_linear_schedule_with_warmup,
+)
 from transformers.modeling_outputs import SequenceClassifierOutput
 from typing_extensions import TypeAlias
 
@@ -138,7 +143,7 @@ class SequenceClassificationModelWithPoolerBase(
         self.classifier = self.setup_classifier(pooler_output_dim=pooler_output_dim)
         self.loss_fct = self.setup_loss_fct()
 
-    def setup_base_model(self) -> nn.Module:
+    def setup_base_model(self) -> PreTrainedModel:
         config = AutoConfig.from_pretrained(self.model_name_or_path)
         if self.is_from_pretrained:
             return AutoModel.from_config(config=config)
