@@ -68,7 +68,7 @@ class TaskModuleWithDocumentConverter(
         if "original_document" in converted_document.metadata:
             raise ValueError(
                 f"metadata of converted_document has already and entry 'original_document', "
-                f"this is not allowed. Please adjust '{type(self).__name__}._convert_document()'"
+                f"this is not allowed. Please adjust '{type(self).__name__}._convert_document()' "
                 f"to produce documents without that key in metadata."
             )
         converted_document.metadata["original_document"] = document
