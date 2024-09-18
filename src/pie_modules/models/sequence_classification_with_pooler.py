@@ -106,12 +106,9 @@ class SequenceClassificationModelWithPoolerBase(
         self.task_learning_rate = task_learning_rate
         self.warmup_proportion = warmup_proportion
         self.freeze_base_model = freeze_base_model
+        self.model_name_or_path = model_name_or_path
 
-        config = AutoConfig.from_pretrained(model_name_or_path)
-        if self.is_from_pretrained:
-            self.model = AutoModel.from_config(config=config)
-        else:
-            self.model = AutoModel.from_pretrained(model_name_or_path, config=config)
+        self.model = self.setup_base_model()
 
         if tokenizer_vocab_size is not None:
             self.model.resize_token_embeddings(tokenizer_vocab_size)
@@ -126,9 +123,9 @@ class SequenceClassificationModelWithPoolerBase(
             # of the dropout (e.g. DistilBert has one dropout prob for QA and one for Seq classification, and a
             # general one for embeddings, encoder and pooler).
             classifier_dropout_attr = HF_MODEL_TYPE_TO_CLASSIFIER_DROPOUT_ATTRIBUTE.get(
-                config.model_type, "classifier_dropout"
+                self.model.config.model_type, "classifier_dropout"
             )
-            classifier_dropout = getattr(config, classifier_dropout_attr) or 0.0
+            classifier_dropout = getattr(self.model.config, classifier_dropout_attr) or 0.0
         self.dropout = nn.Dropout(classifier_dropout)
 
         if isinstance(pooler, str):
@@ -136,10 +133,17 @@ class SequenceClassificationModelWithPoolerBase(
         self.pooler_config = pooler or {}
         self.pooler, pooler_output_dim = get_pooler_and_output_size(
             config=self.pooler_config,
-            input_dim=config.hidden_size,
+            input_dim=self.model.config.hidden_size,
         )
         self.classifier = self.setup_classifier(pooler_output_dim=pooler_output_dim)
         self.loss_fct = self.setup_loss_fct()
+
+    def setup_base_model(self) -> nn.Module:
+        config = AutoConfig.from_pretrained(self.model_name_or_path)
+        if self.is_from_pretrained:
+            return AutoModel.from_config(config=config)
+        else:
+            return AutoModel.from_pretrained(self.model_name_or_path, config=config)
 
     @abstractmethod
     def setup_classifier(self, pooler_output_dim: int) -> Callable:
