@@ -1,3 +1,4 @@
 from .interfaces import AnnotationEncoderDecoder, DecodingException
 from .mixins import BatchableMixin
+from .taskmodule_with_document_converter import TaskModuleWithDocumentConverter
 from .utils import get_first_occurrence_index
