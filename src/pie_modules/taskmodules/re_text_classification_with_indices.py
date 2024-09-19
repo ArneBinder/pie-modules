@@ -47,14 +47,14 @@ from pytorch_ie.documents import (
     TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
-from pytorch_ie.utils.span import get_token_slice, has_overlap, is_contained_in
+from pytorch_ie.utils.span import has_overlap, is_contained_in
 from pytorch_ie.utils.window import get_window_around_slice
 from torch import LongTensor
 from torchmetrics import ClasswiseWrapper, F1Score, Metric, MetricCollection
 from transformers import AutoTokenizer
 from transformers.file_utils import PaddingStrategy
 from transformers.tokenization_utils_base import TruncationStrategy
-from typing_extensions import TypeAlias
+from typing_extensions import TypeAlias, TypeVar
 
 from pie_modules.models.simple_sequence_classification import (
     InputType as ModelInputType,
@@ -64,6 +64,10 @@ from pie_modules.models.simple_sequence_classification import (
 )
 from pie_modules.taskmodules.common.mixins import RelationStatisticsMixin
 from pie_modules.taskmodules.metrics import WrappedMetricWithPrepareFunction
+from pie_modules.utils.tokenization import (
+    SpanNotAlignedWithTokenException,
+    get_aligned_token_span,
+)
 
 InputEncodingType: TypeAlias = Dict[str, Any]
 TargetEncodingType: TypeAlias = Sequence[int]
@@ -258,6 +262,13 @@ def construct_mask(input_ids: torch.LongTensor, positive_ids: List[Any]) -> torc
     mask = torch.zeros(input_ids.shape, dtype=int)
     mask.index_put_(tuple(globs.t()), value)
     return mask
+
+
+S = TypeVar("S", bound=Span)
+
+
+def shift_span(span: S, offset: int) -> S:
+    return span.copy(start=span.start + offset, end=span.end + offset)
 
 
 @TaskModule.register()
@@ -680,39 +691,41 @@ class RETextClassificationWithIndicesTaskModule(
                         f"but got {[type(arg) for arg in arg_spans]}"
                     )
 
-                # map character spans to token spans
-                arg_token_slices_including_none = [
-                    get_token_slice(
-                        character_slice=(arg.start, arg.end),
-                        char_to_token_mapper=encoding.char_to_token,
-                        character_offset=partition.start,
-                    )
-                    for arg in arg_spans
+                arg_spans_partition = [
+                    shift_span(span, offset=-partition.start) for span in arg_spans
                 ]
+                # map character spans to token spans
+                try:
+                    arg_token_spans = [
+                        get_aligned_token_span(
+                            encoding=encoding,
+                            char_span=arg,
+                        )
+                        for arg in arg_spans_partition
+                    ]
                 # Check if the mapping was successful. It may fail (and is None) if any argument start or end does not
                 # match a token start or end, respectively.
-                if any(token_slice is None for token_slice in arg_token_slices_including_none):
-                    arg_spans_dict = {arg_span: str(arg_span) for arg_span in arg_spans}
+                except SpanNotAlignedWithTokenException as e:
+                    span_original = shift_span(e.span, offset=partition.start)
+                    # the span is not attached because we shifted it above, so we can not use str(e.span)
+                    span_text = document.text[span_original.start : span_original.end]
                     logger.warning(
-                        f"doc.id={document.id}: Skipping invalid example, cannot get argument token slices for "
-                        f"{arg_spans_dict}"
+                        f"doc.id={document.id}: Skipping invalid example, cannot get argument token slice for "
+                        f'{span_original}: "{span_text}"'
                     )
                     self.collect_relation("skipped_args_not_aligned", rel)
                     continue
-
-                # ignore the typing, because we checked for None above
-                arg_token_slices: List[Tuple[int, int]] = arg_token_slices_including_none  # type: ignore
 
                 # create the argument objects
                 args = [
                     RelationArgument(
                         entity=span,
                         role=role,
-                        token_span=Span(start=token_slice[0], end=token_slice[1]),
+                        token_span=token_span,
                         add_type_to_marker=self.add_type_to_marker,
                         marker_factory=self.marker_factory,
                     )
-                    for span, role, token_slice in zip(arg_spans, arg_roles, arg_token_slices)
+                    for span, role, token_span in zip(arg_spans, arg_roles, arg_token_spans)
                 ]
 
                 input_ids = encoding["input_ids"]
