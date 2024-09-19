@@ -1513,22 +1513,27 @@ def test_encode_with_unaligned_span(caplog):
     doc = MyDocument(text="hello   space", id="doc1")
     entity1 = LabeledSpan(start=0, end=5, label="a")
     entity2 = LabeledSpan(start=7, end=13, label="a")
-    doc.entities.extend([entity1, entity2])
-    # the start of entity2 is not aligned with a token
+    entity3 = LabeledSpan(start=6, end=8, label="a")
+    doc.entities.extend([entity1, entity2, entity3])
+    # the start of entity2 is not aligned with a token, but this will get fixed
     assert str(entity2) == " space"
     doc.relations.append(BinaryRelation(head=entity1, tail=entity2, label="rel"))
+    # entity3 can not get fixed because it contains only space
+    assert str(entity3) == "  "
+    doc.relations.append(BinaryRelation(head=entity1, tail=entity3, label="rel"))
 
     task_encodings = taskmodule.encode([doc])
-    # the relation is skipped because the start of entity2 is not aligned with a token
-    assert len(task_encodings) == 0
+    # the second relation is skipped because we can not get an aligned token span for it
+    assert len(task_encodings) == 1
+    task_encoding = task_encodings[0]
+    tokens = taskmodule.tokenizer.convert_ids_to_tokens(task_encoding.inputs["input_ids"])
+    assert tokens == ["[CLS]", "[H]", "hello", "[/H]", "[T]", "space", "[/T]", "[SEP]"]
 
     assert len(caplog.records) == 1
     assert caplog.records[0].levelname == "WARNING"
     assert (
-        caplog.records[0].message
-        == "doc.id=doc1: Skipping invalid example, cannot get argument token slices for "
-        "{LabeledSpan(start=0, end=5, label='a', score=1.0): 'hello', "
-        "LabeledSpan(start=7, end=13, label='a', score=1.0): ' space'}"
+        caplog.messages[0]
+        == "doc.id=doc1: Skipping invalid example, cannot get argument token slice for LabeledSpan(start=6, end=8, label='a', score=1.0): \"  \""
     )
 
 
