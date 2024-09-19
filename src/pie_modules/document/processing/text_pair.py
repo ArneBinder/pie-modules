@@ -207,10 +207,10 @@ def add_negative_coref_relations(
         for coref in doc.binary_coref_relations:
             positive_tuples[(doc.text, doc.text_pair)].add((coref.head.copy(), coref.tail.copy()))
             positive_tuples[(doc.text_pair, doc.text)].add((coref.tail.copy(), coref.head.copy()))
-        text2original_doc_id[doc.text] = doc.metadata["original_doc_id"]
-        text2original_doc_id[doc.text_pair] = doc.metadata["original_doc_id_pair"]
-        text2span[doc.text] = doc.metadata["span"]
-        text2span[doc.text_pair] = doc.metadata["span_pair"]
+        text2original_doc_id[doc.text] = doc.metadata.get("original_doc_id")
+        text2original_doc_id[doc.text_pair] = doc.metadata.get("original_doc_id_pair")
+        text2span[doc.text] = doc.metadata.get("span")
+        text2span[doc.text_pair] = doc.metadata.get("span_pair")
 
     new_docs = []
     new_rels2new_docs = {}
@@ -220,8 +220,13 @@ def add_negative_coref_relations(
         original_doc_id = text2original_doc_id[text]
         for text_pair in sorted(text2spans):
             original_doc_id_pair = text2original_doc_id[text_pair]
-            if enforce_same_original_doc_id and original_doc_id != original_doc_id_pair:
-                continue
+            if enforce_same_original_doc_id:
+                if original_doc_id is None or original_doc_id_pair is None:
+                    raise ValueError(
+                        "enforce_same_original_doc_id is set, but original_doc_id(_pair) is None"
+                    )
+                if original_doc_id != original_doc_id_pair:
+                    continue
             current_positives = positive_tuples.get((text, text_pair), set())
             new_doc = TextPairDocumentWithLabeledSpansAndBinaryCorefRelations(
                 text=text,

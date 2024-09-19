@@ -223,7 +223,7 @@ def test_positive_documents(positive_documents):
 
 @pytest.fixture(scope="module")
 def positive_and_negative_documents(positive_documents):
-    docs = list(add_negative_coref_relations(positive_documents))
+    docs = list(add_negative_coref_relations(positive_documents, enforce_same_original_doc_id=True))
     return docs
 
 
