@@ -92,6 +92,7 @@ def _construct_text_pair_coref_documents_from_partitions_via_relations(
                 text_pair=text_pair,
                 metadata={
                     "original_doc_id": document.id,
+                    "original_doc_id_pair": document.id,
                     "span": {"start": head_partition.start, "end": head_partition.end},
                     "span_pair": {"start": tail_partition.start, "end": tail_partition.end},
                 },

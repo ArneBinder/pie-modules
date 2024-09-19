@@ -138,6 +138,7 @@ def test_construct_text_pair_coref_documents_from_partitions_via_relations(text_
 
     doc = all_docs["doc2[0:18]+doc2[19:36]"]
     assert doc.metadata["original_doc_id"] == "doc2"
+    assert doc.metadata["original_doc_id_pair"] == "doc2"
     assert doc.metadata["span"] == {"end": 18, "start": 0}
     assert doc.metadata["span_pair"] == {"end": 36, "start": 19}
     assert doc.text == "Bob loves his cat."
@@ -150,6 +151,7 @@ def test_construct_text_pair_coref_documents_from_partitions_via_relations(text_
 
     doc = all_docs["doc1[0:20]+doc1[21:39]"]
     assert doc.metadata["original_doc_id"] == "doc1"
+    assert doc.metadata["original_doc_id_pair"] == "doc1"
     assert doc.metadata["span"] == {"end": 20, "start": 0}
     assert doc.metadata["span_pair"] == {"end": 39, "start": 21}
     assert doc.text == "Entity A works at B."
@@ -167,7 +169,7 @@ def positive_documents():
         id="0",
         text="Entity A works at B.",
         text_pair="And she founded C.",
-        metadata={"original_doc_id": "doc1"},
+        metadata={"original_doc_id": "doc1", "original_doc_id_pair": "doc1"},
     )
     doc1.labeled_spans.append(LabeledSpan(start=0, end=8, label="PERSON"))
     doc1.labeled_spans.append(LabeledSpan(start=18, end=19, label="COMPANY"))
@@ -181,7 +183,7 @@ def positive_documents():
         id="1",
         text="Bob loves his cat.",
         text_pair="She sleeps a lot.",
-        metadata={"original_doc_id": "doc1"},
+        metadata={"original_doc_id": "doc1", "original_doc_id_pair": "doc1"},
     )
     doc2.labeled_spans.append(LabeledSpan(start=0, end=3, label="PERSON"))
     doc2.labeled_spans.append(LabeledSpan(start=10, end=17, label="ANIMAL"))
