@@ -183,6 +183,7 @@ def construct_text_document_from_text_pair_coref_document(
 def add_negative_coref_relations(
     documents: Iterable[TextPairDocumentWithLabeledSpansAndBinaryCorefRelations],
     downsampling_factor: Optional[float] = None,
+    random_seed: Optional[int] = None,
 ) -> Iterable[TextPairDocumentWithLabeledSpansAndBinaryCorefRelations]:
     positive_tuples = defaultdict(set)
     text2spans = defaultdict(set)
@@ -245,6 +246,8 @@ def add_negative_coref_relations(
                 f"positive relations={len(positive_rels)} does not produce any negatives"
             )
         else:
+            if random_seed is not None:
+                random.seed(random_seed)
             random.shuffle(negative_rels)
         negative_rels = negative_rels[:max_num_negative]
     for rel in negative_rels:
