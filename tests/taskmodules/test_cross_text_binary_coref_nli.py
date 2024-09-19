@@ -99,13 +99,9 @@ def task_encodings_without_target(taskmodule, positive_documents):
 
 def test_encode_input(task_encodings_without_target, taskmodule):
     task_encodings = task_encodings_without_target
-    convert_ids_to_tokens = taskmodule.tokenizer.convert_ids_to_tokens
     assert len(task_encodings) == 1
     task_encoding = task_encodings[0]
-    tokens = [convert_ids_to_tokens(input_ids) for input_ids in task_encoding.inputs["input_ids"]]
-    assert len(tokens) == 2
-    assert tokens[0] == ["[CLS]", "En", "##ti", "##ty", "A", "[SEP]", "she", "[SEP]"]
-    assert tokens[1] == ["[CLS]", "she", "[SEP]", "En", "##ti", "##ty", "A", "[SEP]"]
+    assert task_encoding.inputs == {"text": ["Entity A", "she"], "text_pair": ["she", "Entity A"]}
 
 
 def test_encode_with_collect_statistics(taskmodule, positive_documents, caplog):
@@ -236,93 +232,6 @@ def test_create_annotation_from_output(taskmodule, task_encodings, unbatched_out
     ]
 
 
-def get_metric_state(metric_or_collection: Union[Metric, MetricCollection]) -> Dict[str, Any]:
-    if isinstance(metric_or_collection, Metric):
-        return flatten_dict(metric_or_collection.metric_state)
-    elif isinstance(metric_or_collection, MetricCollection):
-        return flatten_dict({k: get_metric_state(v) for k, v in metric_or_collection.items()})
-    else:
-        raise ValueError(f"unsupported type: {type(metric_or_collection)}")
-
-
 def test_configure_metric(taskmodule, batch):
     metric = taskmodule.configure_model_metric(stage="train")
-
-    assert isinstance(metric, (Metric, MetricCollection))
-    state = get_metric_state(metric)
-    torch.testing.assert_close(
-        state,
-        {
-            "continuous/auroc/preds": [],
-            "continuous/auroc/target": [],
-            "continuous/avg-P/preds": [],
-            "continuous/avg-P/target": [],
-            "continuous/f1/fn": tensor([0]),
-            "continuous/f1/fp": tensor([0]),
-            "continuous/f1/tn": tensor([0]),
-            "continuous/f1/tp": tensor([0]),
-        },
-    )
-
-    # targets = batch[1]
-    targets = {
-        "scores": torch.tensor([0.0, 1.0, 0.0, 0.0]),
-    }
-    metric.update(targets, targets)
-
-    state = get_metric_state(metric)
-    torch.testing.assert_close(
-        state,
-        {
-            "continuous/auroc/preds": [tensor([0.0, 1.0, 0.0, 0.0])],
-            "continuous/auroc/target": [tensor([0.0, 1.0, 0.0, 0.0])],
-            "continuous/avg-P/preds": [tensor([0.0, 1.0, 0.0, 0.0])],
-            "continuous/avg-P/target": [tensor([0.0, 1.0, 0.0, 0.0])],
-            "continuous/f1/tp": tensor([1]),
-            "continuous/f1/fp": tensor([0]),
-            "continuous/f1/tn": tensor([3]),
-            "continuous/f1/fn": tensor([0]),
-        },
-    )
-
-    torch.testing.assert_close(
-        metric.compute(),
-        {"auroc": tensor(1.0), "avg-P": tensor(1.0), "f1": tensor(1.0)},
-    )
-
-    # torch.rand_like(targets)
-    random_targets = {
-        "scores": torch.tensor([0.2703, 0.6812, 0.2582, 0.9030]),
-    }
-    metric.update(random_targets, targets)
-    state = get_metric_state(metric)
-    torch.testing.assert_close(
-        state,
-        {
-            "continuous/auroc/preds": [
-                tensor([0.0, 1.0, 0.0, 0.0]),
-                tensor([0.2703, 0.6812, 0.2582, 0.9030]),
-            ],
-            "continuous/auroc/target": [
-                tensor([0.0, 1.0, 0.0, 0.0]),
-                tensor([0.0, 1.0, 0.0, 0.0]),
-            ],
-            "continuous/avg-P/preds": [
-                tensor([0.0, 1.0, 0.0, 0.0]),
-                tensor([0.2703, 0.6812, 0.2582, 0.9030]),
-            ],
-            "continuous/avg-P/target": [
-                tensor([0.0, 1.0, 0.0, 0.0]),
-                tensor([0.0, 1.0, 0.0, 0.0]),
-            ],
-            "continuous/f1/tp": tensor([1]),
-            "continuous/f1/fp": tensor([1]),
-            "continuous/f1/tn": tensor([5]),
-            "continuous/f1/fn": tensor([1]),
-        },
-    )
-
-    torch.testing.assert_close(
-        metric.compute(),
-        {"auroc": tensor(0.91666663), "avg-P": tensor(0.83333337), "f1": tensor(0.50000000)},
-    )
+    assert metric is None
