@@ -192,9 +192,12 @@ def add_negative_coref_relations(
     documents: Iterable[TextPairDocumentWithLabeledSpansAndBinaryCorefRelations],
     downsampling_factor: Optional[float] = None,
     random_seed: Optional[int] = None,
+    enforce_same_original_doc_id: bool = False,
 ) -> Iterable[TextPairDocumentWithLabeledSpansAndBinaryCorefRelations]:
     positive_tuples = defaultdict(set)
     text2spans = defaultdict(set)
+    text2original_doc_id = dict()
+    text2span = dict()
     for doc in documents:
         for labeled_span in doc.labeled_spans:
             text2spans[doc.text].add(labeled_span.copy())
@@ -204,16 +207,31 @@ def add_negative_coref_relations(
         for coref in doc.binary_coref_relations:
             positive_tuples[(doc.text, doc.text_pair)].add((coref.head.copy(), coref.tail.copy()))
             positive_tuples[(doc.text_pair, doc.text)].add((coref.tail.copy(), coref.head.copy()))
+        text2original_doc_id[doc.text] = doc.metadata["original_doc_id"]
+        text2original_doc_id[doc.text_pair] = doc.metadata["original_doc_id_pair"]
+        text2span[doc.text] = doc.metadata["span"]
+        text2span[doc.text_pair] = doc.metadata["span_pair"]
 
     new_docs = []
     new_rels2new_docs = {}
     positive_rels = []
     negative_rels = []
     for text in tqdm(sorted(text2spans)):
+        original_doc_id = text2original_doc_id[text]
         for text_pair in sorted(text2spans):
+            original_doc_id_pair = text2original_doc_id[text_pair]
+            if enforce_same_original_doc_id and original_doc_id != original_doc_id_pair:
+                continue
             current_positives = positive_tuples.get((text, text_pair), set())
             new_doc = TextPairDocumentWithLabeledSpansAndBinaryCorefRelations(
-                text=text, text_pair=text_pair
+                text=text,
+                text_pair=text_pair,
+                metadata={
+                    "original_doc_id": original_doc_id,
+                    "original_doc_id_pair": original_doc_id_pair,
+                    "span": text2span[text],
+                    "span_pair": text2span[text_pair],
+                },
             )
             new_doc.labeled_spans.extend(labeled_span.copy() for labeled_span in text2spans[text])
             new_doc.labeled_spans_pair.extend(

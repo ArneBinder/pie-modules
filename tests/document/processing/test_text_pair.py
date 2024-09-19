@@ -169,7 +169,12 @@ def positive_documents():
         id="0",
         text="Entity A works at B.",
         text_pair="And she founded C.",
-        metadata={"original_doc_id": "doc1", "original_doc_id_pair": "doc1"},
+        metadata={
+            "original_doc_id": "doc1",
+            "original_doc_id_pair": "doc1",
+            "span": {"start": 0, "end": 20},
+            "span_pair": {"start": 25, "end": 43},
+        },
     )
     doc1.labeled_spans.append(LabeledSpan(start=0, end=8, label="PERSON"))
     doc1.labeled_spans.append(LabeledSpan(start=18, end=19, label="COMPANY"))
@@ -183,7 +188,12 @@ def positive_documents():
         id="1",
         text="Bob loves his cat.",
         text_pair="She sleeps a lot.",
-        metadata={"original_doc_id": "doc1", "original_doc_id_pair": "doc1"},
+        metadata={
+            "original_doc_id": "doc1",
+            "original_doc_id_pair": "doc1",
+            "span": {"start": 0, "end": 18},
+            "span_pair": {"start": 20, "end": 37},
+        },
     )
     doc2.labeled_spans.append(LabeledSpan(start=0, end=3, label="PERSON"))
     doc2.labeled_spans.append(LabeledSpan(start=10, end=17, label="ANIMAL"))
@@ -405,7 +415,15 @@ def test_construct_negative_documents_with_downsampling(positive_documents, capl
 
     # no positives
     doc2 = TextPairDocumentWithLabeledSpansAndBinaryCorefRelations(
-        id="0", text="Bob loves his cat.", text_pair="She sleeps a lot."
+        id="0",
+        text="Bob loves his cat.",
+        text_pair="She sleeps a lot.",
+        metadata={
+            "original_doc_id": "doc1",
+            "original_doc_id_pair": "doc1",
+            "span": {"start": 0, "end": 18},
+            "span_pair": {"start": 20, "end": 37},
+        },
     )
     doc2.labeled_spans.append(LabeledSpan(start=0, end=3, label="PERSON"))
     doc2.labeled_spans.append(LabeledSpan(start=10, end=17, label="ANIMAL"))
