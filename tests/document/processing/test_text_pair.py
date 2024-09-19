@@ -1,5 +1,4 @@
 import random
-from itertools import chain
 from typing import List
 
 import pytest
@@ -296,7 +295,9 @@ def _get_all_all_rels_and_scores(docs):
 def test_construct_negative_documents_with_downsampling(positive_documents, caplog):
     # set fixed seed because the negatives will get shuffled
     random.seed(42)
-    docs = list(add_negative_coref_relations(positive_documents, downsampling_factor=1.0))
+    docs = list(
+        add_negative_coref_relations(positive_documents, downsampling_factor=1.0, random_seed=42)
+    )
     all_rels_and_scores = _get_all_all_rels_and_scores(docs)
 
     # check number relations
@@ -306,7 +307,7 @@ def test_construct_negative_documents_with_downsampling(positive_documents, capl
     # negatives (same number positives because downsampling_factor=1.0)
     assert len([rel.score for rel in all_rels_flat if rel.score == 0.0]) == 4
 
-    assert all_rels_and_scores == [
+    expected_all_rels_and_scores = [
         (
             ("And she founded C.", "Entity A works at B."),
             [
@@ -338,6 +339,22 @@ def test_construct_negative_documents_with_downsampling(positive_documents, capl
             [(1.0, ("coref", (("ANIMAL", "She"), ("ANIMAL", "his cat"))))],
         ),
     ]
+    assert all_rels_and_scores == expected_all_rels_and_scores
+
+    # different seed should produces same numbers of positives / negatives, but different ones
+    docs = list(
+        add_negative_coref_relations(
+            positive_documents, downsampling_factor=1.0, random_seed=12341234
+        )
+    )
+    all_rels_and_scores = _get_all_all_rels_and_scores(docs)
+    # check number relations
+    all_rels_flat = [rel for doc in docs for rel in doc.binary_coref_relations]
+    # positives
+    assert len([rel.score for rel in all_rels_flat if rel.score > 0.0]) == 4
+    # negatives (same number positives because downsampling_factor=1.0)
+    assert len([rel.score for rel in all_rels_flat if rel.score == 0.0]) == 4
+    assert all_rels_and_scores != expected_all_rels_and_scores
 
     # sampling target is too low
     caplog.clear()
