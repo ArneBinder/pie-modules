@@ -177,6 +177,15 @@ def test_collate(batch, taskmodule):
             ]
         ),
     )
+    tokens = [
+        taskmodule.tokenizer.convert_ids_to_tokens(input_ids) for input_ids in inputs["input_ids"]
+    ]
+    assert tokens == [
+        ["[CLS]", "En", "##ti", "##ty", "A", "[SEP]", "she", "[SEP]"],
+        ["[CLS]", "she", "[SEP]", "En", "##ti", "##ty", "A", "[SEP]"],
+        ["[CLS]", "his", "cat", "[SEP]", "She", "[SEP]", "[PAD]", "[PAD]"],
+        ["[CLS]", "She", "[SEP]", "his", "cat", "[SEP]", "[PAD]", "[PAD]"],
+    ]
 
     assert targets is None
 
