@@ -93,8 +93,11 @@ def _construct_text_pair_coref_documents_from_partitions_via_relations(
                 metadata={
                     "original_doc_id": document.id,
                     "original_doc_id_pair": document.id,
-                    "original_span": {"start": head_partition.start, "end": head_partition.end},
-                    "original_span_pair": {
+                    "original_doc_span": {
+                        "start": head_partition.start,
+                        "end": head_partition.end,
+                    },
+                    "original_doc_span_pair": {
                         "start": tail_partition.start,
                         "end": tail_partition.end,
                     },
@@ -212,8 +215,8 @@ def add_negative_coref_relations(
             positive_tuples[(doc.text_pair, doc.text)].add((coref.tail.copy(), coref.head.copy()))
         text2original_doc_id[doc.text] = doc.metadata.get("original_doc_id")
         text2original_doc_id[doc.text_pair] = doc.metadata.get("original_doc_id_pair")
-        text2span[doc.text] = doc.metadata.get("original_span")
-        text2span[doc.text_pair] = doc.metadata.get("original_span_pair")
+        text2span[doc.text] = doc.metadata.get("original_doc_span")
+        text2span[doc.text_pair] = doc.metadata.get("original_doc_span_pair")
 
     new_docs = []
     new_rels2new_docs = {}
@@ -237,8 +240,8 @@ def add_negative_coref_relations(
                 metadata={
                     "original_doc_id": original_doc_id,
                     "original_doc_id_pair": original_doc_id_pair,
-                    "original_span": text2span[text],
-                    "original_span_pair": text2span[text_pair],
+                    "original_doc_span": text2span[text],
+                    "original_doc_span_pair": text2span[text_pair],
                 },
             )
             new_doc.labeled_spans.extend(labeled_span.copy() for labeled_span in text2spans[text])
