@@ -308,4 +308,8 @@ def add_negative_coref_relations(
         new_rels2new_docs[rel].binary_coref_relations.append(rel)
 
     docs_with_rels = [doc for doc in new_docs if len(doc.binary_coref_relations) > 0]
+    logger.info(
+        f"constructed {len(negative_rels)} negative for {len(positive_rels)} "
+        f"positive relations in {len(docs_with_rels)} documents"
+    )
     return docs_with_rels
