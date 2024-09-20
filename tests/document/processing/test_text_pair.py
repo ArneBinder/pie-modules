@@ -435,7 +435,7 @@ def test_construct_negative_documents_with_downsampling(positive_documents, capl
     assert (
         str(e.value)
         == "downsampling [factor=1.0] is enabled, but no positive relations are available to calculate "
-        "max_num_negative"
+        "max_num_negatives"
     )
 
 
