@@ -439,6 +439,16 @@ def test_construct_negative_documents_with_downsampling(positive_documents, capl
     )
 
 
+def test_construct_negative_documents_with_enforce_different_original_doc_id(
+    positive_documents, caplog
+):
+    docs = list(
+        add_negative_coref_relations(positive_documents, enforce_different_original_doc_id=True)
+    )
+    # no result docs, because there is only one "original" doc
+    assert len(docs) == 0
+
+
 def test_construct_text_document_from_text_pair_coref_document(positive_and_negative_documents):
     glue_text = "<s><s>"
     docs = [

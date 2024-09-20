@@ -199,6 +199,7 @@ def add_negative_coref_relations(
     downsampling_factor: Optional[float] = None,
     random_seed: Optional[int] = None,
     enforce_same_original_doc_id: bool = False,
+    enforce_different_original_doc_id: bool = False,
 ) -> Iterable[TextPairDocumentWithLabeledSpansAndBinaryCorefRelations]:
     positive_tuples = defaultdict(set)
     text2spans = defaultdict(set)
@@ -232,6 +233,13 @@ def add_negative_coref_relations(
                         "enforce_same_original_doc_id is set, but original_doc_id(_pair) is None"
                     )
                 if original_doc_id != original_doc_id_pair:
+                    continue
+            if enforce_different_original_doc_id:
+                if original_doc_id is None or original_doc_id_pair is None:
+                    raise ValueError(
+                        "enforce_different_original_doc_id is set, but original_doc_id(_pair) is None"
+                    )
+                if original_doc_id == original_doc_id_pair:
                     continue
             current_positives = positive_tuples.get((text, text_pair), set())
             new_doc = TextPairDocumentWithLabeledSpansAndBinaryCorefRelations(
