@@ -41,4 +41,7 @@ class PrefixConstrainedLogitsProcessorWithMaximum(LogitsProcessor):
                     self._prefix_allowed_tokens_fn(batch_id, sent, mask.size(1)),
                 ] = 0
 
-        return scores + mask
+        # It may happen that all valid candidates have a score of -inf. Since we still want
+        # only valid candidates, we replace all -inf scores with a very small number.
+        scores_finite = torch.nan_to_num(scores)
+        return scores_finite + mask
