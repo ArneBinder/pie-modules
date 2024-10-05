@@ -136,10 +136,7 @@ class SequenceClassificationModelWithPoolerBase(
         if isinstance(pooler, str):
             pooler = {"type": pooler}
         self.pooler_config = pooler or {}
-        self.pooler, pooler_output_dim = get_pooler_and_output_size(
-            config=self.pooler_config,
-            input_dim=self.model.config.hidden_size,
-        )
+        self.pooler, pooler_output_dim = self.setup_pooler(input_dim=self.model.config.hidden_size)
         self.classifier = self.setup_classifier(pooler_output_dim=pooler_output_dim)
         self.loss_fct = self.setup_loss_fct()
 
@@ -157,6 +154,20 @@ class SequenceClassificationModelWithPoolerBase(
     @abstractmethod
     def setup_loss_fct(self) -> Callable:
         pass
+
+    def setup_pooler(self, input_dim: int) -> Tuple[Callable, int]:
+        """Set up the pooler. The pooler is used to get a representation of the input sequence(s)
+        that can be used by the classifier. It is a callable that takes the hidden states of the
+        base model (and additional model inputs that are prefixed with "pooler_") and returns the
+        pooled output.
+
+        Args:
+            input_dim: The input dimension of the pooler, i.e. the hidden size of the base model.
+
+        Returns:
+            A tuple with the pooler and the output dimension of the pooler.
+        """
+        return get_pooler_and_output_size(config=self.pooler_config, input_dim=input_dim)
 
     def get_pooled_output(self, model_inputs, pooler_inputs) -> torch.FloatTensor:
         output = self.model(**model_inputs)
