@@ -1,3 +1,5 @@
+from functools import partial
+
 import pytest
 from torchmetrics import Metric
 
@@ -45,6 +47,52 @@ def test_metric():
 
     metric.reset()
     metric(prediction="abc def", target="xyz def")
+    assert metric.compute() == 0.0
+
+
+def split_both_and_remove_where_both_match(
+    preds: str, targets: str, match: str
+) -> tuple[list[str], list[str]]:
+    preds = preds.split()
+    targets = targets.split()
+    not_both_none_indices = [
+        i for i, (p, t) in enumerate(zip(preds, targets)) if p != match or t != match
+    ]
+    preds = [preds[i] for i in not_both_none_indices]
+    targets = [targets[i] for i in not_both_none_indices]
+    return preds, targets
+
+
+def test_wrapped_metric_with_prepare_both_function():
+    metric = WrappedMetricWithPrepareFunction(
+        metric=TestMetric(),
+        prepare_together_function=partial(split_both_and_remove_where_both_match, match="none"),
+        prepare_does_unbatch=True,
+    )
+
+    assert metric is not None
+    assert metric.prepare_both_function is not None
+
+    assert metric.compute() == 0.0
+
+    # none is removed from both, remaining is the same
+    metric.reset()
+    metric(prediction="abc none", target="abc none")
+    assert metric.compute() == 1.0
+
+    # none is removed from both, remaining is different
+    metric.reset()
+    metric(prediction="abc none", target="def none")
+    assert metric.compute() == 0.0
+
+    # none is not removed from both, remaining is partially the same
+    metric.reset()
+    metric(prediction="abc def", target="abc none")
+    assert metric.compute() == 0.5
+
+    # none is not removed from both, remaining is different
+    metric.reset()
+    metric(prediction="abc def", target="def none")
     assert metric.compute() == 0.0
 
 
