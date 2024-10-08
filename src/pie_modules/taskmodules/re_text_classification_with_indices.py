@@ -8,7 +8,7 @@ workflow:
 """
 
 import logging
-from collections import defaultdict
+from functools import partial
 from typing import (
     Any,
     Dict,
@@ -25,7 +25,6 @@ from typing import (
 )
 
 import numpy as np
-import pandas as pd
 import torch
 from pytorch_ie.annotations import (
     BinaryRelation,
@@ -50,7 +49,7 @@ from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
 from pytorch_ie.utils.span import has_overlap, is_contained_in
 from pytorch_ie.utils.window import get_window_around_slice
 from torch import LongTensor
-from torchmetrics import ClasswiseWrapper, F1Score, Metric, MetricCollection
+from torchmetrics import ClasswiseWrapper, F1Score, MetricCollection
 from transformers import AutoTokenizer
 from transformers.file_utils import PaddingStrategy
 from transformers.tokenization_utils_base import TruncationStrategy
@@ -107,6 +106,15 @@ logger = logging.getLogger(__name__)
 
 def _get_labels(model_output: ModelTargetType) -> LongTensor:
     return model_output["labels"]
+
+
+def _get_labels_together_remove_none_label(
+    predictions: ModelTargetType, targets: ModelTargetType, none_idx: int
+) -> Tuple[LongTensor, LongTensor]:
+    mask_not_both_none = (predictions["labels"] != none_idx) | (targets["labels"] != none_idx)
+    predictions_not_none = predictions["labels"][mask_not_both_none]
+    targets_not_none = targets["labels"][mask_not_both_none]
+    return predictions_not_none, targets_not_none
 
 
 def inner_span_distance(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> int:
@@ -1066,7 +1074,7 @@ class RETextClassificationWithIndicesTaskModule(
 
         return inputs, {"labels": targets}
 
-    def configure_model_metric(self, stage: str) -> Metric:
+    def configure_model_metric(self, stage: str) -> MetricCollection:
         if self.label_to_id is None:
             raise ValueError(
                 "The taskmodule has not been prepared yet, so label_to_id is not known. "
@@ -1079,17 +1087,30 @@ class RETextClassificationWithIndicesTaskModule(
             "num_classes": len(labels),
             "task": "multilabel" if self.multi_label else "multiclass",
         }
-        return WrappedMetricWithPrepareFunction(
-            metric=MetricCollection(
-                {
-                    "micro/f1": F1Score(average="micro", **common_metric_kwargs),
-                    "macro/f1": F1Score(average="macro", **common_metric_kwargs),
-                    "f1_per_label": ClasswiseWrapper(
-                        F1Score(average=None, **common_metric_kwargs),
-                        labels=labels,
-                        postfix="/f1",
+        return MetricCollection(
+            {
+                "with_tn": WrappedMetricWithPrepareFunction(
+                    metric=MetricCollection(
+                        {
+                            "micro/f1": F1Score(average="micro", **common_metric_kwargs),
+                            "macro/f1": F1Score(average="macro", **common_metric_kwargs),
+                            "f1_per_label": ClasswiseWrapper(
+                                F1Score(average=None, **common_metric_kwargs),
+                                labels=labels,
+                                postfix="/f1",
+                            ),
+                        }
                     ),
-                }
-            ),
-            prepare_function=_get_labels,
+                    prepare_function=_get_labels,
+                ),
+                # We can not easily calculate the macro f1 here, because
+                # F1Score with average="macro" would still include the none_label.
+                "micro/f1_without_tn": WrappedMetricWithPrepareFunction(
+                    metric=F1Score(average="micro", **common_metric_kwargs),
+                    prepare_together_function=partial(
+                        _get_labels_together_remove_none_label,
+                        none_idx=self.label_to_id[self.none_label],
+                    ),
+                ),
+            }
         )

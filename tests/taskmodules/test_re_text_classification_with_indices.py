@@ -1717,18 +1717,22 @@ def test_configure_model_metric(documents, taskmodule):
     assert isinstance(metric, (Metric, MetricCollection))
     state = get_metric_state(metric)
     assert state == {
-        "f1_per_label/tp": [0, 0, 0, 0],
-        "f1_per_label/fp": [0, 0, 0, 0],
-        "f1_per_label/tn": [0, 0, 0, 0],
-        "f1_per_label/fn": [0, 0, 0, 0],
-        "macro/f1/fn": [0, 0, 0, 0],
-        "macro/f1/fp": [0, 0, 0, 0],
-        "macro/f1/tn": [0, 0, 0, 0],
-        "macro/f1/tp": [0, 0, 0, 0],
-        "micro/f1/fn": [0],
-        "micro/f1/fp": [0],
-        "micro/f1/tn": [0],
-        "micro/f1/tp": [0],
+        "micro/f1_without_tn/tp": [0],
+        "micro/f1_without_tn/fp": [0],
+        "micro/f1_without_tn/tn": [0],
+        "micro/f1_without_tn/fn": [0],
+        "with_tn/f1_per_label/tp": [0, 0, 0, 0],
+        "with_tn/f1_per_label/fp": [0, 0, 0, 0],
+        "with_tn/f1_per_label/tn": [0, 0, 0, 0],
+        "with_tn/f1_per_label/fn": [0, 0, 0, 0],
+        "with_tn/macro/f1/tp": [0, 0, 0, 0],
+        "with_tn/macro/f1/fp": [0, 0, 0, 0],
+        "with_tn/macro/f1/tn": [0, 0, 0, 0],
+        "with_tn/macro/f1/fn": [0, 0, 0, 0],
+        "with_tn/micro/f1/tp": [0],
+        "with_tn/micro/f1/fp": [0],
+        "with_tn/micro/f1/tn": [0],
+        "with_tn/micro/f1/fn": [0],
     }
     assert metric.compute() == {
         "no_relation/f1": tensor(0.0),
@@ -1737,24 +1741,29 @@ def test_configure_model_metric(documents, taskmodule):
         "per:founder/f1": tensor(0.0),
         "macro/f1": tensor(0.0),
         "micro/f1": tensor(0.0),
+        "micro/f1_without_tn": tensor(0.0),
     }
 
     targets = batch[1]
     metric.update(targets, targets)
     state = get_metric_state(metric)
     assert state == {
-        "f1_per_label/fn": [0, 0, 0, 0],
-        "f1_per_label/fp": [0, 0, 0, 0],
-        "f1_per_label/tn": [7, 5, 4, 5],
-        "f1_per_label/tp": [0, 2, 3, 2],
-        "macro/f1/fn": [0, 0, 0, 0],
-        "macro/f1/fp": [0, 0, 0, 0],
-        "macro/f1/tn": [7, 5, 4, 5],
-        "macro/f1/tp": [0, 2, 3, 2],
-        "micro/f1/fn": [0],
-        "micro/f1/fp": [0],
-        "micro/f1/tn": [21],
-        "micro/f1/tp": [7],
+        "micro/f1_without_tn/tp": [7],
+        "micro/f1_without_tn/fp": [0],
+        "micro/f1_without_tn/tn": [21],
+        "micro/f1_without_tn/fn": [0],
+        "with_tn/f1_per_label/tp": [0, 2, 3, 2],
+        "with_tn/f1_per_label/fp": [0, 0, 0, 0],
+        "with_tn/f1_per_label/tn": [7, 5, 4, 5],
+        "with_tn/f1_per_label/fn": [0, 0, 0, 0],
+        "with_tn/macro/f1/tp": [0, 2, 3, 2],
+        "with_tn/macro/f1/fp": [0, 0, 0, 0],
+        "with_tn/macro/f1/tn": [7, 5, 4, 5],
+        "with_tn/macro/f1/fn": [0, 0, 0, 0],
+        "with_tn/micro/f1/tp": [7],
+        "with_tn/micro/f1/fp": [0],
+        "with_tn/micro/f1/tn": [21],
+        "with_tn/micro/f1/fn": [0],
     }
     assert metric.compute() == {
         "no_relation/f1": tensor(0.0),
@@ -1763,37 +1772,46 @@ def test_configure_model_metric(documents, taskmodule):
         "per:founder/f1": tensor(1.0),
         "macro/f1": tensor(1.0),
         "micro/f1": tensor(1.0),
+        "micro/f1_without_tn": tensor(1.0),
     }
 
     metric.reset()
-    torch.testing.assert_close(targets["labels"], torch.tensor([2, 2, 3, 1, 2, 3, 1]))
-    # three matches
-    random_targets = {"labels": torch.tensor([1, 1, 3, 1, 2, 0, 0])}
-    metric.update(random_targets, targets)
+    modified_targets = {"labels": torch.tensor([2, 2, 3, 1, 2, 0, 1])}
+    # three positive matches and one true negative
+    random_predictions = {"labels": torch.tensor([1, 1, 3, 1, 2, 0, 0])}
+    metric.update(random_predictions, modified_targets)
     state = get_metric_state(metric)
     assert state == {
-        "f1_per_label/fn": [0, 1, 2, 1],
-        "f1_per_label/fp": [2, 2, 0, 0],
-        "f1_per_label/tn": [5, 3, 4, 5],
-        "f1_per_label/tp": [0, 1, 1, 1],
-        "macro/f1/fn": [0, 1, 2, 1],
-        "macro/f1/fp": [2, 2, 0, 0],
-        "macro/f1/tn": [5, 3, 4, 5],
-        "macro/f1/tp": [0, 1, 1, 1],
-        "micro/f1/fn": [4],
-        "micro/f1/fp": [4],
-        "micro/f1/tn": [17],
-        "micro/f1/tp": [3],
+        "micro/f1_without_tn/tp": [3],
+        "micro/f1_without_tn/fp": [3],
+        "micro/f1_without_tn/tn": [15],
+        "micro/f1_without_tn/fn": [3],
+        "with_tn/f1_per_label/tp": [1, 1, 1, 1],
+        "with_tn/f1_per_label/fp": [1, 2, 0, 0],
+        "with_tn/f1_per_label/tn": [5, 3, 4, 6],
+        "with_tn/f1_per_label/fn": [0, 1, 2, 0],
+        "with_tn/macro/f1/tp": [1, 1, 1, 1],
+        "with_tn/macro/f1/fp": [1, 2, 0, 0],
+        "with_tn/macro/f1/tn": [5, 3, 4, 6],
+        "with_tn/macro/f1/fn": [0, 1, 2, 0],
+        "with_tn/micro/f1/tp": [4],
+        "with_tn/micro/f1/fp": [3],
+        "with_tn/micro/f1/tn": [18],
+        "with_tn/micro/f1/fn": [3],
     }
-    values = {k: v.item() for k, v in metric.compute().items()}
-    assert values == {
-        "macro/f1": 0.3916666507720947,
-        "micro/f1": 0.4285714328289032,
-        "no_relation/f1": 0.0,
-        "org:founded_by/f1": 0.4000000059604645,
-        "per:employee_of/f1": 0.5,
-        "per:founder/f1": 0.6666666865348816,
-    }
+    # created with torch.set_printoptions(precision=6)
+    torch.testing.assert_close(
+        metric.compute(),
+        {
+            "no_relation/f1": tensor(0.666667),
+            "org:founded_by/f1": tensor(0.400000),
+            "per:employee_of/f1": tensor(0.500000),
+            "per:founder/f1": tensor(1.0),
+            "macro/f1": tensor(0.641667),
+            "micro/f1": tensor(0.571429),
+            "micro/f1_without_tn": tensor(0.500000),
+        },
+    )
 
     # ensure that the metric can be pickled
     pickle.dumps(metric)
