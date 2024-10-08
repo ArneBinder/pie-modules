@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Callable, Dict, Generic, List, TypeVar, Union
+from collections.abc import Collection
+from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
 from torch import Tensor
 from torchmetrics import Metric, MetricCollection
@@ -16,8 +17,11 @@ class WrappedMetricWithPrepareFunction(WrapperMetric, Generic[T]):
 
     Args:
         metric: The metric to wrap. It should be a subclass of torchmetrics.Metric.
-        prepare_function: A function that prepares the input for the metric. It is called with
-            the predictions as well as the targets.
+        prepare_function: A function that prepares the input for the metric. If provided, It is called with
+            the predictions as well as the targets (separately).
+        prepare_together_function: A function that prepares both the predictions and the targets together and
+            should return them as a tuple. If provided, it is called with the predictions and the targets as
+            arguments.
         prepare_does_unbatch: If True, the prepare_function is expected to return an iterable of
             individual inputs. This can be used to un-batch the input before passing it to the
             wrapped metric.
@@ -26,49 +30,65 @@ class WrappedMetricWithPrepareFunction(WrapperMetric, Generic[T]):
     def __init__(
         self,
         metric: Union[Metric, MetricCollection],
-        prepare_function: Callable[[T], Any],
+        prepare_function: Optional[Callable[[T], Any]] = None,
+        prepare_together_function: Optional[Callable[[T, T], Tuple[Any, Any]]] = None,
         prepare_does_unbatch: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.metric = metric
         self.prepare_function = prepare_function
+        self.prepare_both_function = prepare_together_function
         self.prepare_does_unbatch = prepare_does_unbatch
 
     def forward(self, prediction: T, target: T) -> Any:
-        prediction_prepared = self.prepare_function(prediction)
-        target_prepared = self.prepare_function(target)
+        if self.prepare_function is not None:
+            prediction = self.prepare_function(prediction)
+            target = self.prepare_function(target)
+        if self.prepare_both_function is not None:
+            prediction, target = self.prepare_both_function(prediction, target)
         if self.prepare_does_unbatch:
-            if len(prediction_prepared) != len(target_prepared):
+            if not isinstance(prediction, Collection) or not isinstance(target, Collection):
                 raise ValueError(
-                    f"Number of prepared predictions ({len(prediction_prepared)}) and targets "
-                    f"({len(target_prepared)}) do not match."
+                    "Both prediction and target need to be iterable and sized when prepare_does_unbatch=True."
                 )
-            if len(prediction_prepared) == 0:
+            if len(prediction) != len(target):
+                raise ValueError(
+                    f"Number of prepared predictions ({len(prediction)}) and targets "
+                    f"({len(target)}) do not match."
+                )
+            if len(prediction) == 0:
                 raise ValueError("Empty batch.")
             results = []
-            for prediction_str, target_str in zip(prediction_prepared, target_prepared):
+            for prediction_str, target_str in zip(prediction, target):
                 current_result = self.metric(prediction_str, target_str)
                 results.append(current_result)
             return results
         else:
-            return self.metric(prediction_prepared, target_prepared)
+            return self.metric(prediction, target)
 
     def update(self, prediction: T, target: T) -> None:
-        prediction_prepared = self.prepare_function(prediction)
-        target_prepared = self.prepare_function(target)
+        if self.prepare_function is not None:
+            prediction = self.prepare_function(prediction)
+            target = self.prepare_function(target)
+        if self.prepare_both_function is not None:
+            prediction, target = self.prepare_both_function(prediction, target)
         if self.prepare_does_unbatch:
-            if len(prediction_prepared) != len(target_prepared):
+            if not isinstance(prediction, Collection) or not isinstance(target, Collection):
                 raise ValueError(
-                    f"Number of prepared predictions ({len(prediction_prepared)}) and targets "
-                    f"({len(target_prepared)}) do not match."
+                    "Both prediction and target need to be iterable and sized when prepare_does_unbatch=True."
                 )
-            if len(prediction_prepared) == 0:
+            if len(prediction) != len(target):
+                raise ValueError(
+                    f"Number of prepared predictions ({len(prediction)}) and targets "
+                    f"({len(target)}) do not match."
+                )
+            if len(prediction) == 0:
                 raise ValueError("Empty batch.")
-            for prediction_str, target_str in zip(prediction_prepared, target_prepared):
+            for prediction_str, target_str in zip(prediction, target):
                 self.metric.update(prediction_str, target_str)
         else:
-            self.metric.update(prediction_prepared, target_prepared)
+            self.metric.update(prediction, target)
 
     def compute(self) -> Any:
         return self.metric.compute()
