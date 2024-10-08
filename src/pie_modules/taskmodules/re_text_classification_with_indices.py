@@ -1107,7 +1107,7 @@ class RETextClassificationWithIndicesTaskModule(
                 ),
                 # We can not easily calculate the macro f1 here, because
                 # F1Score with average="macro" would still include the none_label.
-                "micro/f1_without_tn": WrappedMetricWithPrepareFunction(
+                "micro_without_tn/f1": WrappedMetricWithPrepareFunction(
                     metric=F1Score(average="micro", **common_metric_kwargs),
                     prepare_together_function=partial(
                         _get_labels_together_remove_none_label,

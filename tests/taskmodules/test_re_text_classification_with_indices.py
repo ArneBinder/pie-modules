@@ -1717,10 +1717,10 @@ def test_configure_model_metric(documents, taskmodule):
     assert isinstance(metric, (Metric, MetricCollection))
     state = get_metric_state(metric)
     assert state == {
-        "micro/f1_without_tn/tp": [0],
-        "micro/f1_without_tn/fp": [0],
-        "micro/f1_without_tn/tn": [0],
-        "micro/f1_without_tn/fn": [0],
+        "micro_without_tn/f1/tp": [0],
+        "micro_without_tn/f1/fp": [0],
+        "micro_without_tn/f1/tn": [0],
+        "micro_without_tn/f1/fn": [0],
         "with_tn/f1_per_label/tp": [0, 0, 0, 0],
         "with_tn/f1_per_label/fp": [0, 0, 0, 0],
         "with_tn/f1_per_label/tn": [0, 0, 0, 0],
@@ -1741,17 +1741,17 @@ def test_configure_model_metric(documents, taskmodule):
         "per:founder/f1": tensor(0.0),
         "macro/f1": tensor(0.0),
         "micro/f1": tensor(0.0),
-        "micro/f1_without_tn": tensor(0.0),
+        "micro_without_tn/f1": tensor(0.0),
     }
 
     targets = batch[1]
     metric.update(targets, targets)
     state = get_metric_state(metric)
     assert state == {
-        "micro/f1_without_tn/tp": [7],
-        "micro/f1_without_tn/fp": [0],
-        "micro/f1_without_tn/tn": [21],
-        "micro/f1_without_tn/fn": [0],
+        "micro_without_tn/f1/tp": [7],
+        "micro_without_tn/f1/fp": [0],
+        "micro_without_tn/f1/tn": [21],
+        "micro_without_tn/f1/fn": [0],
         "with_tn/f1_per_label/tp": [0, 2, 3, 2],
         "with_tn/f1_per_label/fp": [0, 0, 0, 0],
         "with_tn/f1_per_label/tn": [7, 5, 4, 5],
@@ -1772,7 +1772,7 @@ def test_configure_model_metric(documents, taskmodule):
         "per:founder/f1": tensor(1.0),
         "macro/f1": tensor(1.0),
         "micro/f1": tensor(1.0),
-        "micro/f1_without_tn": tensor(1.0),
+        "micro_without_tn/f1": tensor(1.0),
     }
 
     metric.reset()
@@ -1782,10 +1782,10 @@ def test_configure_model_metric(documents, taskmodule):
     metric.update(random_predictions, modified_targets)
     state = get_metric_state(metric)
     assert state == {
-        "micro/f1_without_tn/tp": [3],
-        "micro/f1_without_tn/fp": [3],
-        "micro/f1_without_tn/tn": [15],
-        "micro/f1_without_tn/fn": [3],
+        "micro_without_tn/f1/tp": [3],
+        "micro_without_tn/f1/fp": [3],
+        "micro_without_tn/f1/tn": [15],
+        "micro_without_tn/f1/fn": [3],
         "with_tn/f1_per_label/tp": [1, 1, 1, 1],
         "with_tn/f1_per_label/fp": [1, 2, 0, 0],
         "with_tn/f1_per_label/tn": [5, 3, 4, 6],
@@ -1809,7 +1809,7 @@ def test_configure_model_metric(documents, taskmodule):
             "per:founder/f1": tensor(1.0),
             "macro/f1": tensor(0.641667),
             "micro/f1": tensor(0.571429),
-            "micro/f1_without_tn": tensor(0.500000),
+            "micro_without_tn/f1": tensor(0.500000),
         },
     )
 
