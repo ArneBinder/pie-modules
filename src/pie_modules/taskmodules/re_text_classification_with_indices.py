@@ -8,7 +8,6 @@ workflow:
 """
 
 import logging
-from collections import defaultdict
 from functools import partial
 from typing import (
     Any,
@@ -26,7 +25,6 @@ from typing import (
 )
 
 import numpy as np
-import pandas as pd
 import torch
 from pytorch_ie.annotations import (
     BinaryRelation,
@@ -51,7 +49,7 @@ from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
 from pytorch_ie.utils.span import has_overlap, is_contained_in
 from pytorch_ie.utils.window import get_window_around_slice
 from torch import LongTensor
-from torchmetrics import ClasswiseWrapper, F1Score, Metric, MetricCollection
+from torchmetrics import ClasswiseWrapper, F1Score, MetricCollection
 from transformers import AutoTokenizer
 from transformers.file_utils import PaddingStrategy
 from transformers.tokenization_utils_base import TruncationStrategy
