@@ -19,10 +19,10 @@ jobs:
       #       check-out repo and set-up python
       #----------------------------------------------
       - name: Check out repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4.2.1
       - name: Set up Python 3.9
         id: setup-python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5.2.0
         with:
           python-version: "3.9"
 
@@ -30,7 +30,7 @@ jobs:
       #  -----  install & configure poetry  -----
       #----------------------------------------------
       - name: Install Poetry
-        uses: snok/install-poetry@v1
+        uses: snok/install-poetry@v1.4.1
         with:
           virtualenvs-create: true
           virtualenvs-in-project: true
@@ -41,7 +41,7 @@ jobs:
       #----------------------------------------------
       - name: Load cached venv
         id: cached-poetry-dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4.1.0
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
@@ -68,6 +68,6 @@ jobs:
       # run pre-commit on modified files
       #----------------------------------------------
       - name: Run pre-commits
-        uses: pre-commit/action@v2.0.3
+        uses: pre-commit/action@v3.0.1
         with:
           extra_args: --files ${{ steps.file_changes.outputs.files}}

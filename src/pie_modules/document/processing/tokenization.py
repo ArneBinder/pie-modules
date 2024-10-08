@@ -256,7 +256,12 @@ def text_based_document_to_token_based(
         verbose=verbose,
     )
     if added_annotations is not None:
-        for layer_name, annotation_mapping in added_annotations_from_remaining_layers.items():
+        for layer_name, orig_ann_id2new_ann in added_annotations_from_remaining_layers.items():
+            ann_id2ann = {ann._id: ann for ann in doc[layer_name]}
+            annotation_mapping = {
+                ann_id2ann[orig_ann_id]: new_ann
+                for orig_ann_id, new_ann in orig_ann_id2new_ann.items()
+            }
             added_annotations.setdefault(layer_name, {}).update(annotation_mapping)
 
     return result
@@ -379,7 +384,12 @@ def token_based_document_to_text_based(
         verbose=verbose,
     )
     if added_annotations is not None:
-        for layer_name, annotation_mapping in added_annotations_from_remaining_layers.items():
+        for layer_name, orig_ann_id2new_ann in added_annotations_from_remaining_layers.items():
+            ann_id2ann = {ann._id: ann for ann in doc[layer_name]}
+            annotation_mapping = {
+                ann_id2ann[orig_ann_id]: new_ann
+                for orig_ann_id, new_ann in orig_ann_id2new_ann.items()
+            }
             added_annotations.setdefault(layer_name, {}).update(annotation_mapping)
 
     return result
