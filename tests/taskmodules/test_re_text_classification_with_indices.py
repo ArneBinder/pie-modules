@@ -1813,5 +1813,43 @@ def test_configure_model_metric(documents, taskmodule):
         },
     )
 
+    # no targets and no predictions
+    metric.reset()
+    no_targets = {"labels": torch.tensor([0, 0, 0])}
+    no_predictions = {"labels": torch.tensor([0, 0, 0])}
+    metric.update(no_targets, no_predictions)
+    state = get_metric_state(metric)
+
+    assert state == {
+        "micro/f1_without_tn/tp": [0],
+        "micro/f1_without_tn/fp": [0],
+        "micro/f1_without_tn/tn": [0],
+        "micro/f1_without_tn/fn": [0],
+        "with_tn/f1_per_label/tp": [3, 0, 0, 0],
+        "with_tn/f1_per_label/fp": [0, 0, 0, 0],
+        "with_tn/f1_per_label/tn": [0, 3, 3, 3],
+        "with_tn/f1_per_label/fn": [0, 0, 0, 0],
+        "with_tn/macro/f1/tp": [3, 0, 0, 0],
+        "with_tn/macro/f1/fp": [0, 0, 0, 0],
+        "with_tn/macro/f1/tn": [0, 3, 3, 3],
+        "with_tn/macro/f1/fn": [0, 0, 0, 0],
+        "with_tn/micro/f1/tp": [3],
+        "with_tn/micro/f1/fp": [0],
+        "with_tn/micro/f1/tn": [9],
+        "with_tn/micro/f1/fn": [0],
+    }
+    torch.testing.assert_close(
+        metric.compute(),
+        {
+            "micro/f1_without_tn": tensor(0.0),
+            "no_relation/f1": tensor(1.0),
+            "org:founded_by/f1": tensor(0.0),
+            "per:employee_of/f1": tensor(0.0),
+            "per:founder/f1": tensor(0.0),
+            "macro/f1": tensor(1.0),
+            "micro/f1": tensor(1.0),
+        },
+    )
+
     # ensure that the metric can be pickled
     pickle.dumps(metric)
