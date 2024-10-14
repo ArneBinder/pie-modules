@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Collection
+from collections.abc import Collection, Sized
 from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
 from torch import Tensor
@@ -9,6 +9,7 @@ from torchmetrics.wrappers.abstract import WrapperMetric
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
+T2 = TypeVar("T2")
 
 
 class WrappedMetricWithPrepareFunction(WrapperMetric, Generic[T]):
@@ -41,6 +42,22 @@ class WrappedMetricWithPrepareFunction(WrapperMetric, Generic[T]):
         self.prepare_both_function = prepare_together_function
         self.prepare_does_unbatch = prepare_does_unbatch
 
+    def _is_empty_batch(self, prediction: T2, target: T2) -> bool:
+        if isinstance(prediction, Sized) and isinstance(target, Sized):
+            pred_len = len(prediction)
+            target_len = len(target)
+        else:
+            raise ValueError(
+                "Both prediction and target need to be sized when prepare_does_unbatch=False."
+            )
+        if pred_len != target_len:
+            raise ValueError(
+                f"Number of elements in prediction ({pred_len}) and target ({target_len}) do not match."
+            )
+        if pred_len == 0:
+            return True
+        return False
+
     def forward(self, prediction: T, target: T) -> Any:
         if self.prepare_function is not None:
             prediction = self.prepare_function(prediction)
@@ -65,7 +82,10 @@ class WrappedMetricWithPrepareFunction(WrapperMetric, Generic[T]):
                 results.append(current_result)
             return results
         else:
-            return self.metric(prediction, target)
+            if not self._is_empty_batch(prediction, target):
+                return self.metric(prediction, target)
+            else:
+                return None
 
     def update(self, prediction: T, target: T) -> None:
         if self.prepare_function is not None:
@@ -88,7 +108,8 @@ class WrappedMetricWithPrepareFunction(WrapperMetric, Generic[T]):
             for prediction_str, target_str in zip(prediction, target):
                 self.metric.update(prediction_str, target_str)
         else:
-            self.metric.update(prediction, target)
+            if not self._is_empty_batch(prediction, target):
+                self.metric.update(prediction, target)
 
     def compute(self) -> Any:
         return self.metric.compute()
