@@ -257,7 +257,9 @@ def text_based_document_to_token_based(
     )
     if added_annotations is not None:
         for layer_name, orig_ann_id2new_ann in added_annotations_from_remaining_layers.items():
-            ann_id2ann = {ann._id: ann for ann in doc[layer_name]}
+            ann_id2ann = {
+                ann._id: ann for ann in list(doc[layer_name]) + list(doc[layer_name].predictions)
+            }
             annotation_mapping = {
                 ann_id2ann[orig_ann_id]: new_ann
                 for orig_ann_id, new_ann in orig_ann_id2new_ann.items()
@@ -385,7 +387,9 @@ def token_based_document_to_text_based(
     )
     if added_annotations is not None:
         for layer_name, orig_ann_id2new_ann in added_annotations_from_remaining_layers.items():
-            ann_id2ann = {ann._id: ann for ann in doc[layer_name]}
+            ann_id2ann = {
+                ann._id: ann for ann in list(doc[layer_name]) + list(doc[layer_name].predictions)
+            }
             annotation_mapping = {
                 ann_id2ann[orig_ann_id]: new_ann
                 for orig_ann_id, new_ann in orig_ann_id2new_ann.items()
