@@ -6,7 +6,6 @@ from pytorch_ie.core import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch import FloatTensor, LongTensor, nn
-from torchcrf import CRF
 from transformers import (
     AutoConfig,
     AutoModel,
@@ -138,7 +137,18 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
 
         self.classifier = nn.Linear(hidden_size, num_classes)
 
-        self.crf = CRF(num_tags=num_classes, batch_first=True) if use_crf else None
+        if use_crf:
+            try:
+                from torchcrf import CRF
+            except ImportError:
+                raise ImportError(
+                    "To use CRFs, the torchcrf package must be installed. "
+                    "You can install it with `pip install pytorch-crf`."
+                )
+
+            self.crf = CRF(num_tags=num_classes, batch_first=True)
+        else:
+            self.crf = None
 
     def decode(self, inputs: InputType, outputs: OutputType) -> TargetType:
         result = {}

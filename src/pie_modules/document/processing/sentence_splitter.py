@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 import logging
-import ssl
 from typing import TypeVar
 
-import nltk
-from flair.splitter import SegtokSentenceSplitter
 from pytorch_ie.annotations import LabeledSpan
 from pytorch_ie.documents import TextDocumentWithLabeledPartitions
 
@@ -36,6 +33,14 @@ class NltkSentenceSplitter:
         sentencizer_url: str = "tokenizers/punkt/PY3/english.pickle",
         inplace: bool = True,
     ):
+        try:
+            import nltk
+        except ImportError:
+            raise ImportError(
+                "NLTK must be installed to use the NltkSentenceSplitter. "
+                "You can install NLTK with `pip install nltk`."
+            )
+
         self.partition_layer_name = partition_layer_name
         self.text_field_name = text_field_name
         self.inplace = inplace
@@ -84,6 +89,14 @@ class FlairSegtokSentenceSplitter:
         text_field_name: str = "text",
         inplace: bool = True,
     ):
+        try:
+            from flair.splitter import SegtokSentenceSplitter
+        except ImportError:
+            raise ImportError(
+                "Flair must be installed to use the FlairSegtokSentenceSplitter. "
+                "You can install Flair with `pip install flair`."
+            )
+
         self.partition_layer_name = partition_layer_name
         self.text_field_name = text_field_name
         self.sentencizer = SegtokSentenceSplitter()
