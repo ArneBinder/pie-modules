@@ -33,7 +33,13 @@ class NltkSentenceSplitter:
         sentencizer_url: str = "tokenizers/punkt/PY3/english.pickle",
         inplace: bool = True,
     ):
-        import nltk
+        try:
+            import nltk
+        except ImportError:
+            raise ImportError(
+                "NLTK must be installed to use the NltkSentenceSplitter. "
+                "You can install NLTK with `pip install nltk`."
+            )
 
         self.partition_layer_name = partition_layer_name
         self.text_field_name = text_field_name
@@ -83,7 +89,13 @@ class FlairSegtokSentenceSplitter:
         text_field_name: str = "text",
         inplace: bool = True,
     ):
-        from flair.splitter import SegtokSentenceSplitter
+        try:
+            from flair.splitter import SegtokSentenceSplitter
+        except ImportError:
+            raise ImportError(
+                "Flair must be installed to use the FlairSegtokSentenceSplitter. "
+                "You can install Flair with `pip install flair`."
+            )
 
         self.partition_layer_name = partition_layer_name
         self.text_field_name = text_field_name

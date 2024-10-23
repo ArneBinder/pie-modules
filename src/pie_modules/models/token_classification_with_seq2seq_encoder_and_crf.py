@@ -138,7 +138,13 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         self.classifier = nn.Linear(hidden_size, num_classes)
 
         if use_crf:
-            from torchcrf import CRF
+            try:
+                from torchcrf import CRF
+            except ImportError:
+                raise ImportError(
+                    "To use CRFs, the torchcrf package must be installed. "
+                    "You can install it with `pip install pytorch-crf`."
+                )
 
             self.crf = CRF(num_tags=num_classes, batch_first=True)
         else:

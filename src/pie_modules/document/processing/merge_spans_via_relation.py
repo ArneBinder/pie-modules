@@ -19,7 +19,13 @@ def _merge_spans_via_relation(
     link_relation_label: str,
     create_multi_spans: bool = True,
 ) -> Tuple[Union[Set[LabeledSpan], Set[LabeledMultiSpan]], Set[BinaryRelation]]:
-    import networkx as nx
+    try:
+        import networkx as nx
+    except ImportError:
+        raise ImportError(
+            "NetworkX must be installed to use the SpansViaRelationMerger. "
+            "You can install NetworkX with `pip install networkx`."
+        )
 
     # convert list of relations to a graph to easily calculate connected components to merge
     g = nx.Graph()
