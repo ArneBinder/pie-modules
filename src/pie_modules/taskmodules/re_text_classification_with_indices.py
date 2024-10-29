@@ -769,7 +769,14 @@ class RETextClassificationWithIndicesTaskModule(
                         for arg in args:
                             arg_center = (arg.token_span.end + arg.token_span.start) // 2
                             arg_frame_start = arg_center - max_tokens_per_argument // 2
+                            # shift the frame to the right if it is out of bounds
+                            if arg_frame_start < 0:
+                                arg_frame_start = 0
                             arg_frame_end = arg_frame_start + max_tokens_per_argument
+                            # shift the frame to the left if it is out of bounds
+                            if arg_frame_end > len(input_ids):
+                                arg_frame_end = len(input_ids)
+                                arg_frame_start = arg_frame_end - max_tokens_per_argument
                             mask[arg_frame_start:arg_frame_end] = 1
                         offsets = np.cumsum(mask != 1)
                         arg_cluster_offset_values = set()
