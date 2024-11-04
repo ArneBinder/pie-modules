@@ -1,11 +1,14 @@
 import dataclasses
 import json
 import logging
+import time
 from collections import Counter, defaultdict
 from functools import cmp_to_key
 from typing import (
     Any,
     Dict,
+    Generic,
+    Hashable,
     Iterable,
     Iterator,
     List,
@@ -14,6 +17,7 @@ from typing import (
     Set,
     Tuple,
     Type,
+    TypeVar,
     Union,
 )
 
@@ -34,9 +38,11 @@ from typing_extensions import TypeAlias
 
 # import for backwards compatibility (don't remove!)
 from pie_modules.documents import (
+    TextDocumentWithLabeledMultiSpans,
     TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
 
+from ..annotations import LabeledMultiSpan
 from ..document.processing import token_based_document_to_text_based, tokenize_document
 from ..utils import resolve_type
 from .common import BatchableMixin, DecodingException, get_first_occurrence_index
@@ -46,6 +52,8 @@ from .metrics import (
 )
 from .pointer_network.annotation_encoder_decoder import (
     BinaryRelationEncoderDecoder,
+    IncompleteEncodingException,
+    LabeledMultiSpanEncoderDecoder,
     LabeledSpanEncoderDecoder,
     SpanEncoderDecoderWithOffset,
 )
@@ -83,15 +91,74 @@ TaskEncodingType: TypeAlias = TaskEncoding[
 ]
 TaskOutputType: TypeAlias = LabelsAndOptionalConstraints
 
-KEY_INVALID_CORRECT = "correct"
+
+def span_sort_key(span: Annotation) -> Tuple[int, ...]:
+    # TODO: use the full span to sort
+    # just use the (first) start index to sort
+    if isinstance(span, LabeledSpan):
+        return (span.start,)
+    elif isinstance(span, LabeledMultiSpan):
+        if len(span.slices) == 0:
+            raise Exception(f"can not sort LabeledMultiSpan with empty slices: {span}")
+        return (span.slices[0][0],)
+    else:
+        raise Exception(f"unexpected type: {type(span)}")
 
 
-def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
-    if not all(isinstance(ann, LabeledSpan) for ann in [v1.head, v1.tail, v2.head, v2.tail]):
-        raise Exception(f"expected LabeledSpan, but got: {v1}, {v2}")
-    if v1.head.start == v2.head.start:  # v1[0]["from"] == v2[0]["from"]:
-        return v1.tail.start - v2.tail.start  # v1[1]["from"] - v2[1]["from"]
-    return v1.head.start - v2.head.start  # v1[0]["from"] - v2[0]["from"]
+def binary_relation_sort_key(rel: BinaryRelation) -> Tuple[int, ...]:
+    # use the start indices of head and tail to sort
+    return span_sort_key(rel.head) + span_sort_key(rel.tail)
+
+
+def annotation_to_indices(argument_annotation: Annotation) -> Tuple[int, ...]:
+    if isinstance(argument_annotation, LabeledSpan):
+        return argument_annotation.start, argument_annotation.end
+    elif isinstance(argument_annotation, LabeledMultiSpan):
+        result: List[int] = []
+        for s in argument_annotation.slices:
+            result.extend(s)
+        return tuple(result)
+    else:
+        raise Exception(f"unexpected type: {type(argument_annotation)}")
+
+
+def annotation_to_label(annotation: Annotation) -> str:
+    if isinstance(annotation, (LabeledSpan, LabeledMultiSpan)):
+        return annotation.label
+    else:
+        raise Exception(f"unexpected type: {type(annotation)}")
+
+
+V = TypeVar("V")
+
+
+class SimpleCache(Generic[V]):
+    def __init__(self, max_size: int):
+        self.cache: Dict[Hashable, V] = dict()
+        self.time_added: Dict[Hashable, int] = dict()
+        self.max_size = max_size
+
+    def prune(self) -> None:
+        if len(self.cache) > self.max_size:
+            # remove the least recently added item
+            oldest_key = min(self.time_added, key=self.time_added.get)  # type: ignore
+            del self.cache[oldest_key]
+            del self.time_added[oldest_key]
+
+    def add(self, key: Hashable, value: V) -> None:
+        self.cache[key] = value
+        # update last access with the current time in ms
+        self.time_added[key] = time.time_ns()
+        self.prune()
+
+    def get(self, key: Hashable) -> V:
+        return self.cache[key]
+
+    def __len__(self) -> int:
+        return len(self.cache)
+
+    def __contains__(self, key: Hashable) -> bool:
+        return key in self.cache
 
 
 @TaskModule.register()
@@ -117,6 +184,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         none_label: str = "none",
         loop_dummy_relation_name: str = "loop",
         constrained_generation: bool = False,
+        constrain_with_previous_records: bool = True,
         # generic pointer network
         label_tokens: Optional[Dict[str, str]] = None,
         label_representations: Optional[Dict[str, str]] = None,
@@ -170,8 +238,9 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         self.none_label = none_label
         self.loop_dummy_relation_name = loop_dummy_relation_name
         self.constrained_generation = constrained_generation
+        self.constrain_with_previous_records = constrain_with_previous_records
         # will be set in _post_prepare()
-        self.relation_encoder_decoder: BinaryRelationEncoderDecoder
+        self.annotation_encoder_decoder: BinaryRelationEncoderDecoder
 
         # collected in prepare(), if not passed in
         self.labels_per_layer = labels_per_layer
@@ -202,6 +271,12 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
         # logging
         self.log_first_n_examples = log_first_n_examples
+
+        # cache
+        self.cache_decoded: SimpleCache[Tuple[List[BinaryRelation], List[int]]] = SimpleCache(
+            # TODO: set max_size to a reasonable value when using the cache is fixed
+            max_size=0
+        )
 
     @property
     def document_type(self) -> Type[TextBasedDocument]:
@@ -253,15 +328,25 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             )[0].labels
         else:
             unpadded_label_ids = []
-        _, _, remaining = self.decode_relations(label_ids=unpadded_label_ids)
-        # this is a binary mask
-        constraint = self._build_constraint(
-            previous_ids=remaining, input_len=maximum - self.pointer_offset
-        )
-        # convert to indices
-        allowed_indices = torch.nonzero(constraint).squeeze(1)
-        # convert to a list
-        return allowed_indices.tolist()
+
+        try:
+            follow_up_candidates = self.get_follow_up_candidates(
+                previous_ids=unpadded_label_ids, input_len=maximum - self.pointer_offset
+            )
+        except DecodingException as e:
+            # if the decoding failed, allow all tokens. Maybe the model can recover from this state
+            # TODO: remove the warning?
+            logger.warning(f"failed to get follow_up_candidates: {e}, allow all tokens")
+            return list(range(maximum))
+
+        # If there is only one candidate, we add the eos token. This is because two ids are sampled
+        # when using GenerationMixin.beam_search() and we want to avoid that a non-candidate which
+        # is "more wrong" is sampled.
+        if len(follow_up_candidates) == 1:
+            follow_up_candidates.add(self.eos_id)
+
+        # sort and convert to a list
+        return sorted(follow_up_candidates)
 
     def _prepare(self, documents: Sequence[DocumentType]) -> None:
         # collect all labels
@@ -323,17 +408,29 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             offset=self.pointer_offset, exclusive_end=False
         )
         span_labels = self.labels_per_layer[self.span_layer_name]
-        labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
-            span_encoder_decoder=span_encoder_decoder,
-            # restrict label2id to get better error messages
-            label2id={label: idx for label, idx in self.label2id.items() if label in span_labels},
-            mode="indices_label",
-        )
+        # restrict label2id to get better error messages
+        span_label2id = {
+            label: idx for label, idx in self.label2id.items() if label in span_labels
+        }
+        labeled_span_encoder_decoder: Union[
+            LabeledSpanEncoderDecoder, LabeledMultiSpanEncoderDecoder
+        ]
+        if self.use_multi_spans:
+            labeled_span_encoder_decoder = LabeledMultiSpanEncoderDecoder(
+                span_encoder_decoder=span_encoder_decoder,
+                label2id=span_label2id,
+            )
+        else:
+            labeled_span_encoder_decoder = LabeledSpanEncoderDecoder(
+                span_encoder_decoder=span_encoder_decoder,
+                label2id=span_label2id,
+                mode="indices_label",
+            )
         relation_labels = self.labels_per_layer[self.relation_layer_name] + [
             self.loop_dummy_relation_name,
             self.none_label,
         ]
-        self.relation_encoder_decoder = BinaryRelationEncoderDecoder(
+        self.annotation_encoder_decoder = BinaryRelationEncoderDecoder(
             head_encoder_decoder=labeled_span_encoder_decoder,
             tail_encoder_decoder=labeled_span_encoder_decoder,
             # restrict label2id to get better error messages
@@ -402,6 +499,10 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     def target_ids(self) -> Set[int]:
         return set(range(self.pointer_offset))
 
+    @property
+    def use_multi_spans(self) -> bool:
+        return issubclass(self.document_type, TextDocumentWithLabeledMultiSpans)
+
     def configure_model_metric(self, stage: Optional[str] = None) -> Optional[Metric]:
         layer_metrics = {
             layer_name: PrecisionRecallAndF1ForLabeledAnnotations()
@@ -412,40 +513,12 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             unbatch_function=self.unbatch_output,
             decode_layers_with_errors_function=self.decode_annotations,
             layer_metrics=layer_metrics,
-            error_key_correct=KEY_INVALID_CORRECT,
+            error_key_correct=self.annotation_encoder_decoder.KEY_INVALID_CORRECT,
         )
 
-    def decode_relations(
-        self,
-        label_ids: List[int],
-    ) -> Tuple[List[BinaryRelation], Dict[str, int], List[int]]:
-        errors: Dict[str, int] = defaultdict(int)
-        encodings = []
-        current_encoding: List[int] = []
-        valid_encoding: BinaryRelation
-        if len(label_ids):
-            for i in label_ids:
-                current_encoding.append(i)
-                # An encoding is complete when it ends with a relation_id
-                # or when it contains a none_id and has a length of 7
-                if i in self.relation_ids or (i == self.none_id and len(current_encoding) == 7):
-                    # try to decode the current relation encoding
-                    try:
-                        valid_encoding = self.relation_encoder_decoder.decode(
-                            encoding=current_encoding
-                        )
-                        encodings.append(valid_encoding)
-                        errors[KEY_INVALID_CORRECT] += 1
-                    except DecodingException as e:
-                        errors[e.identifier] += 1
-
-                    current_encoding = []
-
-        return encodings, dict(errors), current_encoding
-
-    def encode_annotations(
-        self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None
-    ) -> TaskOutputType:
+    def prepare_annotations_for_encoding(
+        self, layers: Dict[str, List[Annotation]]
+    ) -> List[BinaryRelation]:
         if not set(layers.keys()) == set(self.layer_names):
             raise Exception(f"unexpected layers: {layers.keys()}. expected: {self.layer_names}")
 
@@ -454,17 +527,15 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
         # encode relations
         all_relation_arguments = set()
-        relation_encodings = dict()
+        prepared_relations = []
         for rel in layers[self.relation_layer_name]:
             if not isinstance(rel, BinaryRelation):
                 raise Exception(f"expected BinaryRelation, but got: {rel}")
             if rel.label in self.labels_per_layer[self.relation_layer_name]:
-                encoded_relation = self.relation_encoder_decoder.encode(
-                    annotation=rel, metadata=metadata
-                )
+                encoded_relation = self.annotation_encoder_decoder.encode(annotation=rel)
                 if encoded_relation is None:
                     raise Exception(f"failed to encode relation: {rel}")
-                relation_encodings[rel] = encoded_relation
+                prepared_relations.append(rel)
                 all_relation_arguments.update([rel.head, rel.tail])
 
         # encode spans that are not arguments of any relation
@@ -475,29 +546,40 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             dummy_relation = BinaryRelation(
                 head=span, tail=span, label=self.loop_dummy_relation_name
             )
-            encoded_relation = self.relation_encoder_decoder.encode(
-                annotation=dummy_relation, metadata=metadata
-            )
+            encoded_relation = self.annotation_encoder_decoder.encode(annotation=dummy_relation)
             if encoded_relation is not None:
-                relation_encodings[dummy_relation] = encoded_relation
+                prepared_relations.append(dummy_relation)
 
-        # sort relations by start indices of head and tail # TODO: is this correct?
-        sorted_relations = sorted(relation_encodings, key=cmp_to_key(cmp_src_rel))
+        # sort relations by start indices of head and tail
+        sorted_relations = sorted(prepared_relations, key=binary_relation_sort_key)
+        return sorted_relations
+
+    def encode_annotations(
+        self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None
+    ) -> TaskOutputType:
+        prepared_annotations = self.prepare_annotations_for_encoding(layers=layers)
 
         # build target_ids
         target_ids = []
-        for rel in sorted_relations:
-            encoded_relation = relation_encodings[rel]
-            target_ids.extend(encoded_relation)
+        for rel in prepared_annotations:
+            encoded_annotation = self.annotation_encoder_decoder.encode(annotation=rel)
+            target_ids.extend(encoded_annotation)
         target_ids.append(self.eos_id)
 
+        if self.create_constraints:
+            if metadata is None or "src_len" not in metadata:
+                raise Exception("metadata with 'src_len' is required to create constraints")
+            constraints = self.build_constraints(
+                input_len=metadata["src_len"], target_ids=target_ids
+            ).tolist()
+        else:
+            constraints = None
+
+        result = LabelsAndOptionalConstraints(labels=target_ids, constraints=constraints)
+
         # sanity check
-        _, encoding_errors, remaining = self.decode_relations(label_ids=target_ids)
-        if (
-            not all(v == 0 for k, v in encoding_errors.items() if k != "correct")
-            or len(remaining) > 0
-        ):
-            decoded, invalid = self.decode_annotations(LabelsAndOptionalConstraints(target_ids))
+        decoded, decoding_errors = self.decode_annotations(encoding=result)
+        if not all(v == 0 for k, v in decoding_errors.items() if k != "correct"):
             not_encoded = {}
             for layer_name in layers:
                 # convert to dicts to make them comparable (original annotations are attached which breaks comparison)
@@ -510,50 +592,49 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                     not_encoded[layer_name] = list(filtered)
             if len(not_encoded) > 0:
                 logger.warning(
-                    f"encoding errors: {encoding_errors}, skipped annotations:\n"
+                    f"encoding errors: {decoding_errors}, skipped annotations:\n"
                     f"{json.dumps(not_encoded, sort_keys=True, indent=2)}"
                 )
-            elif len([tag for tag in remaining if tag != self.eos_id]) > 0:
-                logger.warning(
-                    f"encoding errors: {encoding_errors}, remaining encoding ids: {remaining}"
-                )
 
-        if self.create_constraints:
-            if metadata is None or "src_len" not in metadata:
-                raise Exception("metadata with 'src_len' is required to create constraints")
-            constraints = self.build_constraints(
-                input_len=metadata["src_len"], target_ids=target_ids
-            ).tolist()
-        else:
-            constraints = None
-        return LabelsAndOptionalConstraints(labels=target_ids, constraints=constraints)
+        return result
 
-    def decode_annotations(
-        self, encoding: TaskOutputType
-    ) -> Tuple[Dict[str, Iterable[Annotation]], Dict[str, int]]:
-        decoded_relations, errors, remaining = self.decode_relations(label_ids=encoding.labels)
-        relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
-        entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
-        for rel in decoded_relations:
-            head_span = (rel.head.start, rel.head.end)
-            entity_labels[head_span].append(rel.head.label)
+    def postprocess_decoded_annotations(
+        self, decoded_annotations: List[Annotation]
+    ) -> Dict[str, Iterable[Annotation]]:
+        relation_tuples: List[Tuple[Tuple[int, ...], Tuple[int, ...], str]] = []
+        entity_labels: Dict[Tuple[int, ...], List[str]] = defaultdict(list)
+        for rel in decoded_annotations:
+            if not isinstance(rel, BinaryRelation):
+                raise Exception(f"expected BinaryRelation, but got: {rel}")
+            head_indices = annotation_to_indices(rel.head)
+            head_label = annotation_to_label(rel.head)
+            entity_labels[head_indices].append(head_label)
 
             if rel.label != self.loop_dummy_relation_name:
-                tail_span = (rel.tail.start, rel.tail.end)
-                entity_labels[tail_span].append(rel.tail.label)
-                relation_tuples.append((head_span, tail_span, rel.label))
+                tail_indices = annotation_to_indices(rel.tail)
+                tail_label = annotation_to_label(rel.tail)
+                entity_labels[tail_indices].append(tail_label)
+                relation_tuples.append((head_indices, tail_indices, rel.label))
             else:
                 assert rel.head == rel.tail
 
         # It may happen that some spans take part in multiple relations, but got generated with different labels.
         # In this case, we just create one span and take the most common label.
-        entities: Dict[Tuple[int, int], LabeledSpan] = {}
-        for (start, end), labels in entity_labels.items():
+        entities: Dict[Tuple[int, ...], Union[LabeledSpan, LabeledMultiSpan]] = {}
+        for span_indices, labels in entity_labels.items():
             c = Counter(labels)
             # if len(c) > 1:
             #    logger.warning(f"multiple labels for span, take the most common: {dict(c)}")
             most_common_label = c.most_common(1)[0][0]
-            entities[(start, end)] = LabeledSpan(start=start, end=end, label=most_common_label)
+            if self.use_multi_spans:
+                slices = tuple(
+                    (span_indices[i], span_indices[i + 1]) for i in range(0, len(span_indices), 2)
+                )
+                entities[span_indices] = LabeledMultiSpan(slices=slices, label=most_common_label)
+            else:
+                entities[span_indices] = LabeledSpan(
+                    start=span_indices[0], end=span_indices[1], label=most_common_label
+                )
 
         entity_layer = list(entities.values())
         relation_layer = [
@@ -563,75 +644,75 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         return {
             self.span_layer_name: entity_layer,
             self.relation_layer_name: relation_layer,
-        }, errors
+        }
 
-    def _build_constraint(
-        self,
-        previous_ids: List[int],
-        input_len: int,
+    def decode_annotations(
+        self, encoding: TaskOutputType
+    ) -> Tuple[Dict[str, Iterable[Annotation]], Dict[str, int]]:
+        try:
+            (
+                decoded_annotations,
+                errors,
+                remaining,
+            ) = self.annotation_encoder_decoder.parse_with_error_handling(
+                encoding=encoding.labels,
+                input_length=self.tokenizer.model_max_length,
+                stop_ids=[self.eos_id],
+                disrespect_decoded_annotations=not self.constrain_with_previous_records,
+            )
+            return self.postprocess_decoded_annotations(decoded_annotations), errors
+        except Exception as e:
+            logger.error(f"failed to decode annotations: {e}")
+            return {layer_name: [] for layer_name in self.layer_names}, {"full_encoding": 1}
+
+    def follow_up_candidates_to_mask(
+        self, follow_up_candidates: Set[int], input_len: int
     ) -> torch.LongTensor:
-        result: torch.LongTensor = torch.zeros(input_len + self.pointer_offset, dtype=torch.int64)
+        result = torch.zeros(input_len + self.pointer_offset).to(torch.long)
+        result[list(follow_up_candidates)] = 1
+        return result
+
+    def get_follow_up_candidates(self, previous_ids: List[int], input_len: int) -> Set[int]:
+        # if the eos was already generated, do not allow any other token
         if self.eos_id in previous_ids:
-            # once eos is predicted, only allow padding
-            result[self.target_pad_id] = 1
-            return result
-        contains_none = self.none_id in previous_ids
-        idx = len(previous_ids)
-        if idx == 0:  # [] -> first span start or eos
-            # Allow all offsets ...
-            result[self.pointer_offset :] = 1
-            # ... and the eos token.
-            result[self.eos_id] = 1
-        elif idx == 1:  # [14] -> first span end
-            # Allow all offsets greater than the span start.
-            span_start = previous_ids[-1]
-            result[span_start:] = 1
-        elif idx == 2:  # [14,14] -> first span label
-            # Allow only span ids.
-            result[self.span_ids] = 1
-        elif idx == 3:  # [14,14,s1] -> second span start or none
-            # Allow all offsets ...
-            result[self.pointer_offset :] = 1
-            # ... and the none token (for single spans).
-            result[self.none_id] = 1
-            # But exclude offsets covered by the first span.
-            first_span_start = previous_ids[0]
-            first_span_end = previous_ids[1] + 1
-            result[first_span_start:first_span_end] = 0
-        elif idx == 4:  # [14,14,s1,23] -> second span end or none
-            # if we have a none label, allow only none
-            if contains_none:
-                result[self.none_id] = 1
-            else:
-                # Allow all offsets after the second span start ...
-                second_span_start = previous_ids[-1]
-                result[second_span_start:] = 1
-                # ... but exclude offsets covered by the first span.
-                first_span_start = previous_ids[0]
-                first_span_end = previous_ids[1] + 1
-                result[first_span_start:first_span_end] = 0
-                # Mitigate overlap of first and second span:
-                # if first span is after the second span,
-                # disallow all offsets after the first span end
-                if first_span_start > second_span_start:
-                    result[first_span_end:] = 0
-        elif idx == 5:  # [14,14,s1,23,25] -> second span label or none
-            # if we have a none label, allow only none
-            if contains_none:
-                result[self.none_id] = 1
-            else:
-                # allow only span ids
-                result[self.span_ids] = 1
-        elif idx == 6:  # [14,14,s1,23,25,s2] -> relation label or none
-            # if we have a none label, allow only none
-            if contains_none:
-                result[self.none_id] = 1
-            else:
-                # allow only relation ids
-                result[self.relation_ids] = 1
+            return {self.eos_id}
+
+        # speed up by using a cache
+        cache_key = tuple(previous_ids[:-1])
+        if cache_key in self.cache_decoded:
+            decoded_annotations, previous_successfully_decoded = self.cache_decoded.get(cache_key)
+            encoding = previous_ids[len(previous_successfully_decoded) :]
         else:
-            # any longer sequence can only be completed with padding
-            result[self.target_pad_id] = 1
+            decoded_annotations = None
+            encoding = previous_ids
+        (
+            decoded_annotations,
+            decoding_errors,
+            remaining,
+        ) = self.annotation_encoder_decoder.parse_with_error_handling(
+            encoding=encoding,
+            input_length=input_len,
+            stop_ids=[self.eos_id],
+            decoded_annotations=decoded_annotations,
+            disrespect_decoded_annotations=not self.constrain_with_previous_records,
+        )
+        successfully_decoded = previous_ids[: len(previous_ids) - len(remaining)]
+        self.cache_decoded.add(tuple(previous_ids), (decoded_annotations, successfully_decoded))
+        try:
+            self.annotation_encoder_decoder.parse(
+                encoding=remaining, decoded_annotations=decoded_annotations, text_length=input_len
+            )
+            raise Exception("expected IncompleteEncodingException")
+        except IncompleteEncodingException as e:
+            result = set(e.follow_up_candidates)
+
+        # if the encoding could be parsed completely, also allow the eos token
+        if len(remaining) == 0:
+            result.add(self.eos_id)
+
+        if len(result) == 0:
+            raise Exception(f"no follow_up_candidates found: {previous_ids}")
+
         return result
 
     def build_constraints(
@@ -639,50 +720,25 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         input_len: int,
         target_ids: List[int],
     ) -> torch.LongTensor:
-        if not (
-            isinstance(self.relation_encoder_decoder, BinaryRelationEncoderDecoder)
-            and self.relation_encoder_decoder.mode == "tail_head_label"
-            and isinstance(
-                self.relation_encoder_decoder.head_encoder_decoder, LabeledSpanEncoderDecoder
-            )
-            and self.relation_encoder_decoder.head_encoder_decoder.mode == "indices_label"
-            and isinstance(
-                self.relation_encoder_decoder.head_encoder_decoder.span_encoder_decoder,
-                SpanEncoderDecoderWithOffset,
-            )
-            and self.relation_encoder_decoder.head_encoder_decoder.span_encoder_decoder.offset
-            == self.pointer_offset
-            and not self.relation_encoder_decoder.head_encoder_decoder.span_encoder_decoder.exclusive_end
-            and self.relation_encoder_decoder.head_encoder_decoder
-            == self.relation_encoder_decoder.tail_encoder_decoder
-        ):
-            raise Exception(
-                "build_constraints() is only supported for BinaryRelationEncoderDecoder with mode 'tail_head_label' and LabeledSpanEncoderDecoder as (head|tail)_encoder_decoder with mode 'indices_label'"
-            )
         if target_ids[-1] != self.eos_id:
             raise Exception(
                 f"expected eos_id [{self.eos_id}] at the end of target_ids: {target_ids}"
             )
         labels_without_eos = target_ids[:-1]
-        if len(labels_without_eos) % 7 != 0:
-            raise Exception(
-                f"expected the number of labels_without_eos to be a multiple of 7: {target_ids}"
-            )
         constraints: List[torch.LongTensor] = []
         for idx, t in enumerate(labels_without_eos):
-            current_tuple_start = (idx // 7) * 7
-            current_tuple = target_ids[current_tuple_start:idx]
-            current_constraints = self._build_constraint(
-                previous_ids=current_tuple, input_len=input_len
+            follow_up_candidates = self.get_follow_up_candidates(
+                previous_ids=labels_without_eos[:idx], input_len=input_len
+            )
+            current_constraints = self.follow_up_candidates_to_mask(
+                follow_up_candidates=follow_up_candidates, input_len=input_len
             )
             if current_constraints[t] == 0:
                 raise Exception(
                     f"current_constraints[{t}] is 0, but should be 1: {current_constraints}"
                 )
             constraints.append(current_constraints)
-        eos_constraint: torch.LongTensor = torch.zeros(
-            input_len + self.pointer_offset, dtype=torch.int64
-        )
+        eos_constraint = torch.zeros(input_len + self.pointer_offset).to(torch.long)
         eos_constraint[self.eos_id] = 1
         constraints.append(eos_constraint)
         result: torch.LongTensor = torch.stack(constraints)
