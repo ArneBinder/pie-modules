@@ -38,19 +38,6 @@ class SpanLengthCollector(DocumentStatistic):
         self.layer = layer
         if isinstance(labels, str) and labels != "INFERRED":
             raise ValueError("labels must be a list of strings or 'INFERRED'")
-        if labels == "INFERRED":
-            logger.warning(
-                f"Inferring labels with {self.__class__.__name__} from data produces wrong results "
-                f"for certain aggregation functions (e.g. 'mean', 'std', 'min') because zero values "
-                f"are not included in the calculation. We remove these aggregation functions from "
-                f"this collector, but be aware that the results may be wrong for your own aggregation "
-                f"functions that rely on zero values."
-            )
-            self.aggregation_functions: Dict[str, Callable[[List], Any]] = {
-                name: func
-                for name, func in self.aggregation_functions.items()
-                if name not in ["mean", "std", "min"]
-            }
         self.labels = labels
         self.label_field = label_attribute
         self.tokenize = tokenize
