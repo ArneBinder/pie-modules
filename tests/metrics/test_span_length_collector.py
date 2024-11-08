@@ -52,6 +52,7 @@ def test_documents(documents):
 def test_span_length_collector(documents):
     statistic = SpanLengthCollector(layer="entities")
     values = statistic(documents)
+    assert statistic._values == [[8, 1, 2, 1], [10, 4, 8]]
     assert values == {
         "len": 7,
         "max": 10,
@@ -62,7 +63,14 @@ def test_span_length_collector(documents):
 
     statistic = SpanLengthCollector(layer="entities", labels="INFERRED")
     values = statistic(documents)
-    assert values == {"org": {"len": 4, "max": 8}, "per": {"len": 3, "max": 10}}
+    assert [dict(v) for v in statistic._values] == [
+        {"per": [8, 2], "org": [1, 1]},
+        {"per": [10], "org": [4, 8]},
+    ]
+    assert values == {
+        "org": {"len": 4, "max": 8, "mean": 3.5, "min": 1, "std": 2.8722813232690143},
+        "per": {"len": 3, "max": 10, "mean": 6.666666666666667, "min": 2, "std": 3.39934634239519},
+    }
 
 
 def test_span_length_collector_wrong_label_value():
