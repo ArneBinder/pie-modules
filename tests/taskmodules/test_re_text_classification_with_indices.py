@@ -9,7 +9,11 @@ import pytest
 import torch
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, NaryRelation
 from pytorch_ie.core import Annotation, AnnotationList, annotation_field
-from pytorch_ie.documents import TextBasedDocument, TextDocument
+from pytorch_ie.documents import (
+    TextBasedDocument,
+    TextDocument,
+    TextDocumentWithLabeledSpansAndBinaryRelations,
+)
 from torch import tensor
 from torchmetrics import Metric, MetricCollection
 
@@ -799,6 +803,72 @@ def test_encode_with_allow_discontinuous_text(documents):
         ["[CLS]", "And", "[H]", "it", "[/H]", "founded", "[T]", "O", "[/T]", "[SEP]"],
         ["[CLS]", "And", "[T]", "it", "[/T]", "founded", "[H]", "O", "[/H]", "[SEP]"],
     ]
+
+
+def test_encode_with_allow_discontinuous_text_and_binary_relations():
+    """This checks whether relation arguments at the very beginning or end of the document are encoded correctly.
+    Also, it checks whether the encoding of the consecutive spans that fit within the frame specified by max_window is correct.
+    """
+    tokenizer_name_or_path = "allenai/longformer-base-4096"
+    # tokenizer_name_or_path = "allenai/longformer-scico"
+
+    doc = TextDocumentWithLabeledSpansAndBinaryRelations(
+        text="Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt ut labore et dolore nagna aliqua.</s>Ut enin ad ninin venian, quis nostrun exercitationen ullan corporis suscipit laboriosan, nisi ut aliquid ex ea connodi consequatur.</s>Quis aute iure reprehenderit in voluptate velit esse cillun dolore eu fugiat nulla pariatur.</s>Excepteur sint obcaecat cupiditat non proident, sunt in culpa qui officia deserunt nollit anin id est laborun.",
+        id="123",
+    )
+
+    labeled_spans = [
+        LabeledSpan(start=0, end=116, label="claim", score=1.0),
+        LabeledSpan(start=120, end=251, label="sentence", score=1.0),
+        LabeledSpan(start=255, end=347, label="sentence", score=1.0),
+        LabeledSpan(start=351, end=461, label="sentence", score=1.0),
+    ]
+
+    for span in labeled_spans:
+        doc.labeled_spans.append(span)
+
+    rel_start = BinaryRelation(
+        head=doc.labeled_spans[0], tail=doc.labeled_spans[2], label="relation", score=1.0
+    )
+    doc.binary_relations.append(rel_start)
+    rel_end = BinaryRelation(
+        head=doc.labeled_spans[-1], tail=doc.labeled_spans[0], label="relation", score=1.0
+    )
+    doc.binary_relations.append(rel_end)
+    rel_consecutive = BinaryRelation(
+        head=doc.labeled_spans[2], tail=doc.labeled_spans[3], label="relation", score=1.0
+    )
+    doc.binary_relations.append(rel_consecutive)
+
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        max_window=128,
+        allow_discontinuous_text=True,
+        add_argument_indices_to_input=True,
+        add_global_attention_mask_to_input=True,
+    )
+
+    taskmodule.prepare([doc])
+    encoded = taskmodule.encode_input(doc)
+
+    decoded_arg_start = taskmodule.tokenizer.decode(encoded[0].inputs["input_ids"])
+    decoded_arg_end = taskmodule.tokenizer.decode(encoded[1].inputs["input_ids"])
+    decoded_arg_consecutive = taskmodule.tokenizer.decode(encoded[2].inputs["input_ids"])
+
+    assert (
+        decoded_arg_start
+        == "<s>[H]Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt ut labore et dolore nagna aliqua.[/H]</s>Ut enin ad ninin venian, quis nostrun exerc</s></s> ut aliquid ex ea connodi consequatur.</s>[T]Quis aute iure reprehenderit in voluptate velit esse cillun dolore eu fugiat nulla pariatur.[/T]</s>Excepteur sint obcaecat cupidit</s>"
+    )
+
+    assert (
+        decoded_arg_end
+        == "<s>[T]Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt ut labore et dolore nagna aliqua.[/T]</s>Ut enin ad ninin venian, quis nostrun exerc</s></s>ate velit esse cillun dolore eu fugiat nulla pariatur.</s>[H]Excepteur sint obcaecat cupiditat non proident, sunt in culpa qui officia deserunt nollit anin id est laborun.[/H]</s>"
+    )
+
+    assert (
+        decoded_arg_consecutive
+        == "<s> ut aliquid ex ea connodi consequatur.</s>[H]Quis aute iure reprehenderit in voluptate velit esse cillun dolore eu fugiat nulla pariatur.[/H]</s>[T]Excepteur sint obcaecat cupiditat non proident, sunt in culpa qui officia deserunt nollit anin id est laborun.[/T]</s>"
+    )
 
 
 @pytest.fixture(scope="module")
