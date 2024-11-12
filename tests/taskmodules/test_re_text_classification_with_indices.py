@@ -809,8 +809,7 @@ def test_encode_with_allow_discontinuous_text_and_binary_relations():
     """This checks whether relation arguments at the very beginning or end of the document are encoded correctly.
     Also, it checks whether the encoding of the consecutive spans that fit within the frame specified by max_window is correct.
     """
-    tokenizer_name_or_path = "allenai/longformer-base-4096"
-    # tokenizer_name_or_path = "bert-base-cased"
+    tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
         tokenizer_name_or_path=tokenizer_name_or_path,
         max_window=128,
@@ -832,9 +831,9 @@ def test_encode_with_allow_discontinuous_text_and_binary_relations():
 
     labeled_spans = [
         LabeledSpan(start=0, end=116, label="claim", score=1.0),
-        LabeledSpan(start=120, end=251, label="sentence", score=1.0),
-        LabeledSpan(start=255, end=347, label="sentence", score=1.0),
-        LabeledSpan(start=351, end=461, label="sentence", score=1.0),
+        LabeledSpan(start=121, end=252, label="sentence", score=1.0),
+        LabeledSpan(start=257, end=349, label="sentence", score=1.0),
+        LabeledSpan(start=354, end=464, label="sentence", score=1.0),
     ]
 
     for span in labeled_spans:
@@ -880,17 +879,17 @@ def test_encode_with_allow_discontinuous_text_and_binary_relations():
 
     assert (
         decoded_arg_start
-        == "<s>[H]Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt ut labore et dolore nagna aliqua.[/H]</s>Ut enin ad ninin venian, quis nostrun exerc</s></s> ut aliquid ex ea connodi consequatur.</s>[T]Quis aute iure reprehenderit in voluptate velit esse cillun dolore eu fugiat nulla pariatur.[/T]</s>Excepteur sint obcaecat cupidit</s>"
+        == "[CLS] [H] Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt ut labore et dolore nagna aliqua. [/H] [SEP] Ut enin ad ninin venian, quis [SEP] ea connodi consequatur. [SEP] [T] Quis aute iure reprehenderit in voluptate velit esse cillun dolore eu fugiat nulla pariatur. [/T] [SEP] Excepteur sint obcaecat cup [SEP]"
     )
 
     assert (
         decoded_arg_end
-        == "<s>[T]Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt ut labore et dolore nagna aliqua.[/T]</s>Ut enin ad ninin venian, quis nostrun exerc</s></s>ate velit esse cillun dolore eu fugiat nulla pariatur.</s>[H]Excepteur sint obcaecat cupiditat non proident, sunt in culpa qui officia deserunt nollit anin id est laborun.[/H]</s>"
+        == "[CLS] [T] Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt ut labore et dolore nagna aliqua. [/T] [SEP] Ut enin ad ninin venian, quis [SEP] cillun dolore eu fugiat nulla pariatur. [SEP] [H] Excepteur sint obcaecat cupiditat non proident, sunt in culpa qui officia deserunt nollit anin id est laborun. [/H] [SEP]"
     )
 
     assert (
         decoded_arg_consecutive
-        == "<s> ut aliquid ex ea connodi consequatur.</s>[H]Quis aute iure reprehenderit in voluptate velit esse cillun dolore eu fugiat nulla pariatur.[/H]</s>[T]Excepteur sint obcaecat cupiditat non proident, sunt in culpa qui officia deserunt nollit anin id est laborun.[/T]</s>"
+        == "[CLS] ea connodi consequatur. [SEP] [H] Quis aute iure reprehenderit in voluptate velit esse cillun dolore eu fugiat nulla pariatur. [/H] [SEP] [T] Excepteur sint obcaecat cupiditat non proident, sunt in culpa qui officia deserunt nollit anin id est laborun. [/T] [SEP]"
     )
 
 
