@@ -806,8 +806,11 @@ def test_encode_with_allow_discontinuous_text(documents):
 
 
 def test_encode_with_allow_discontinuous_text_and_binary_relations():
-    """This checks whether relation arguments at the very beginning or end of the document are encoded correctly.
-    Also, it checks whether the encoding of the consecutive spans that fit within the frame specified by max_window is correct.
+    """This checks whether relation arguments at the very beginning or end of the document are
+    encoded correctly.
+
+    Also, it checks whether the encoding of the consecutive spans that fit within the frame
+    specified by max_window is correct.
     """
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
