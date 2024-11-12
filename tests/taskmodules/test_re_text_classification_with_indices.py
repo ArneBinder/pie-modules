@@ -822,13 +822,16 @@ def test_encode_with_allow_discontinuous_text_and_binary_relations():
     )
     sep_token = taskmodule.tokenizer.sep_token
     doc = TextDocumentWithLabeledSpansAndBinaryRelations(
-        text="Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt ut labore et dolore nagna aliqua."
+        text="Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt "
+        "ut labore et dolore nagna aliqua."
         + sep_token
-        + "Ut enin ad ninin venian, quis nostrun exercitationen ullan corporis suscipit laboriosan, nisi ut aliquid ex ea connodi consequatur."
+        + "Ut enin ad ninin venian, quis nostrun exercitationen ullan corporis suscipit laboriosan, "
+        "nisi ut aliquid ex ea connodi consequatur."
         + sep_token
         + "Quis aute iure reprehenderit in voluptate velit esse cillun dolore eu fugiat nulla pariatur."
         + sep_token
-        + "Excepteur sint obcaecat cupiditat non proident, sunt in culpa qui officia deserunt nollit anin id est laborun.",
+        + "Excepteur sint obcaecat cupiditat non proident, sunt in culpa qui officia deserunt nollit "
+        "anin id est laborun.",
         id="123",
     )
 
@@ -844,11 +847,13 @@ def test_encode_with_allow_discontinuous_text_and_binary_relations():
     assert doc.labeled_spans.resolve() == [
         (
             "claim",
-            "Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt ut labore et dolore nagna aliqua.",
+            "Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt ut "
+            "labore et dolore nagna aliqua.",
         ),
         (
             "sentence",
-            "Ut enin ad ninin venian, quis nostrun exercitationen ullan corporis suscipit laboriosan, nisi ut aliquid ex ea connodi consequatur.",
+            "Ut enin ad ninin venian, quis nostrun exercitationen ullan corporis suscipit laboriosan, "
+            "nisi ut aliquid ex ea connodi consequatur.",
         ),
         (
             "sentence",
@@ -856,7 +861,8 @@ def test_encode_with_allow_discontinuous_text_and_binary_relations():
         ),
         (
             "sentence",
-            "Excepteur sint obcaecat cupiditat non proident, sunt in culpa qui officia deserunt nollit anin id est laborun.",
+            "Excepteur sint obcaecat cupiditat non proident, sunt in culpa qui officia deserunt nollit "
+            "anin id est laborun.",
         ),
     ]
 
@@ -882,17 +888,26 @@ def test_encode_with_allow_discontinuous_text_and_binary_relations():
 
     assert (
         decoded_arg_start
-        == "[CLS] [H] Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt ut labore et dolore nagna aliqua. [/H] [SEP] Ut enin ad ninin venian, quis [SEP] ea connodi consequatur. [SEP] [T] Quis aute iure reprehenderit in voluptate velit esse cillun dolore eu fugiat nulla pariatur. [/T] [SEP] Excepteur sint obcaecat cup [SEP]"
+        == "[CLS] [H] Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor "
+        "incidunt ut labore et dolore nagna aliqua. [/H] [SEP] Ut enin ad ninin venian, quis "
+        "[SEP] ea connodi consequatur. [SEP] [T] Quis aute iure reprehenderit in voluptate "
+        "velit esse cillun dolore eu fugiat nulla pariatur. [/T] [SEP] Excepteur sint obcaecat "
+        "cup [SEP]"
     )
 
     assert (
         decoded_arg_end
-        == "[CLS] [T] Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt ut labore et dolore nagna aliqua. [/T] [SEP] Ut enin ad ninin venian, quis [SEP] cillun dolore eu fugiat nulla pariatur. [SEP] [H] Excepteur sint obcaecat cupiditat non proident, sunt in culpa qui officia deserunt nollit anin id est laborun. [/H] [SEP]"
+        == "[CLS] [T] Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt "
+        "ut labore et dolore nagna aliqua. [/T] [SEP] Ut enin ad ninin venian, quis [SEP] cillun "
+        "dolore eu fugiat nulla pariatur. [SEP] [H] Excepteur sint obcaecat cupiditat non proident, "
+        "sunt in culpa qui officia deserunt nollit anin id est laborun. [/H] [SEP]"
     )
 
     assert (
         decoded_arg_consecutive
-        == "[CLS] ea connodi consequatur. [SEP] [H] Quis aute iure reprehenderit in voluptate velit esse cillun dolore eu fugiat nulla pariatur. [/H] [SEP] [T] Excepteur sint obcaecat cupiditat non proident, sunt in culpa qui officia deserunt nollit anin id est laborun. [/T] [SEP]"
+        == "[CLS] ea connodi consequatur. [SEP] [H] Quis aute iure reprehenderit in voluptate velit esse "
+        "cillun dolore eu fugiat nulla pariatur. [/H] [SEP] [T] Excepteur sint obcaecat cupiditat non "
+        "proident, sunt in culpa qui officia deserunt nollit anin id est laborun. [/T] [SEP]"
     )
 
 
