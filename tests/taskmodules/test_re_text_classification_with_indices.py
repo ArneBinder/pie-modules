@@ -810,10 +810,23 @@ def test_encode_with_allow_discontinuous_text_and_binary_relations():
     Also, it checks whether the encoding of the consecutive spans that fit within the frame specified by max_window is correct.
     """
     tokenizer_name_or_path = "allenai/longformer-base-4096"
-    # tokenizer_name_or_path = "allenai/longformer-scico"
-
+    # tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        max_window=128,
+        allow_discontinuous_text=True,
+        add_argument_indices_to_input=True,
+        add_global_attention_mask_to_input=True,
+    )
+    sep_token = taskmodule.tokenizer.sep_token
     doc = TextDocumentWithLabeledSpansAndBinaryRelations(
-        text="Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt ut labore et dolore nagna aliqua.</s>Ut enin ad ninin venian, quis nostrun exercitationen ullan corporis suscipit laboriosan, nisi ut aliquid ex ea connodi consequatur.</s>Quis aute iure reprehenderit in voluptate velit esse cillun dolore eu fugiat nulla pariatur.</s>Excepteur sint obcaecat cupiditat non proident, sunt in culpa qui officia deserunt nollit anin id est laborun.",
+        text="Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt ut labore et dolore nagna aliqua."
+        + sep_token
+        + "Ut enin ad ninin venian, quis nostrun exercitationen ullan corporis suscipit laboriosan, nisi ut aliquid ex ea connodi consequatur."
+        + sep_token
+        + "Quis aute iure reprehenderit in voluptate velit esse cillun dolore eu fugiat nulla pariatur."
+        + sep_token
+        + "Excepteur sint obcaecat cupiditat non proident, sunt in culpa qui officia deserunt nollit anin id est laborun.",
         id="123",
     )
 
@@ -826,6 +839,24 @@ def test_encode_with_allow_discontinuous_text_and_binary_relations():
 
     for span in labeled_spans:
         doc.labeled_spans.append(span)
+    assert doc.labeled_spans.resolve() == [
+        (
+            "claim",
+            "Loren ipsun dolor sit anet, consectetur adipisci elit, sed eiusnod tenpor incidunt ut labore et dolore nagna aliqua.",
+        ),
+        (
+            "sentence",
+            "Ut enin ad ninin venian, quis nostrun exercitationen ullan corporis suscipit laboriosan, nisi ut aliquid ex ea connodi consequatur.",
+        ),
+        (
+            "sentence",
+            "Quis aute iure reprehenderit in voluptate velit esse cillun dolore eu fugiat nulla pariatur.",
+        ),
+        (
+            "sentence",
+            "Excepteur sint obcaecat cupiditat non proident, sunt in culpa qui officia deserunt nollit anin id est laborun.",
+        ),
+    ]
 
     rel_start = BinaryRelation(
         head=doc.labeled_spans[0], tail=doc.labeled_spans[2], label="relation", score=1.0
@@ -839,14 +870,6 @@ def test_encode_with_allow_discontinuous_text_and_binary_relations():
         head=doc.labeled_spans[2], tail=doc.labeled_spans[3], label="relation", score=1.0
     )
     doc.binary_relations.append(rel_consecutive)
-
-    taskmodule = RETextClassificationWithIndicesTaskModule(
-        tokenizer_name_or_path=tokenizer_name_or_path,
-        max_window=128,
-        allow_discontinuous_text=True,
-        add_argument_indices_to_input=True,
-        add_global_attention_mask_to_input=True,
-    )
 
     taskmodule.prepare([doc])
     encoded = taskmodule.encode_input(doc)
