@@ -505,7 +505,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                     reversed_rel = BinaryRelation(
                         head=rel.tail,
                         tail=rel.head,
-                        label=rel.label + self.REVERSED_RELATION_LABEL_SUFFIX,
+                        label=reversed_label,
                     )
                     encoded_reversed_rel = self.relation_encoder_decoder.encode(
                         annotation=reversed_rel, metadata=metadata
