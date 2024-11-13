@@ -280,14 +280,13 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
         if self.add_reversed_relations:
             for rel_label in set(labels[self.relation_layer_name]):
-                reversed_label = rel_label
                 if rel_label not in self.symmetric_relations:
-                    reversed_label += self.REVERSED_RELATION_LABEL_SUFFIX
-                if reversed_label in labels[self.relation_layer_name]:
-                    raise ValueError(
-                        f"reversed relation label {reversed_label} already exists in relation layer labels"
-                    )
-                labels[self.relation_layer_name].add(reversed_label)
+                    reversed_label = rel_label + self.REVERSED_RELATION_LABEL_SUFFIX
+                    if reversed_label in labels[self.relation_layer_name]:
+                        raise ValueError(
+                            f"reversed relation label {reversed_label} already exists in relation layer labels"
+                        )
+                    labels[self.relation_layer_name].add(reversed_label)
 
         self.labels_per_layer = {
             # sort labels to ensure deterministic order
