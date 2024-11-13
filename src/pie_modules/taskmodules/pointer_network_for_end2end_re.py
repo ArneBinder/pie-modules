@@ -268,6 +268,18 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         # convert to a list
         return allowed_indices.tolist()
 
+    def add_reversed_relation_labels(self, relation_labels: Iterable[str]) -> Set[str]:
+        result = set(relation_labels)
+        for rel_label in set(relation_labels):
+            if rel_label not in self.symmetric_relations:
+                reversed_label = rel_label + self.REVERSED_RELATION_LABEL_SUFFIX
+                if reversed_label in result:
+                    raise ValueError(
+                        f"reversed relation label {reversed_label} already exists in relation layer labels"
+                    )
+                result.add(reversed_label)
+        return result
+
     def _prepare(self, documents: Sequence[DocumentType]) -> None:
         # collect all labels
         labels: Dict[str, Set[str]] = {layer_name: set() for layer_name in self.layer_names}
@@ -279,14 +291,9 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                 )
 
         if self.add_reversed_relations:
-            for rel_label in set(labels[self.relation_layer_name]):
-                if rel_label not in self.symmetric_relations:
-                    reversed_label = rel_label + self.REVERSED_RELATION_LABEL_SUFFIX
-                    if reversed_label in labels[self.relation_layer_name]:
-                        raise ValueError(
-                            f"reversed relation label {reversed_label} already exists in relation layer labels"
-                        )
-                    labels[self.relation_layer_name].add(reversed_label)
+            labels[self.relation_layer_name] = self.add_reversed_relation_labels(
+                relation_labels=labels[self.relation_layer_name]
+            )
 
         self.labels_per_layer = {
             # sort labels to ensure deterministic order

@@ -257,6 +257,17 @@ def task_encoding_without_target(taskmodule, document):
     return taskmodule.encode_input(document)[0]
 
 
+def test_add_reversed_relation_labels():
+    taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
+        tokenizer_name_or_path="facebook/bart-base",
+        symmetric_relations=["symmetric_relation"],
+    )
+
+    labels = ["is_about", "symmetric_relation"]
+    labels_with_reversed = taskmodule.add_reversed_relation_labels(labels)
+    assert labels_with_reversed == {"is_about", "is_about_reversed", "symmetric_relation"}
+
+
 def test_reverse_relation():
     taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
         tokenizer_name_or_path="facebook/bart-base",
