@@ -484,7 +484,8 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
         relations = list(layers[self.relation_layer_name])
         if self.add_reversed_relations:
-            relations.extend(self.reverse_relation(rel) for rel in relations)
+            reversed_relations = [self.reverse_relation(rel) for rel in relations]
+            relations.extend(reversed_relations)
 
         # encode relations
         all_relation_arguments = set()
