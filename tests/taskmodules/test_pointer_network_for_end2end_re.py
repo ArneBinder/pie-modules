@@ -257,16 +257,89 @@ def task_encoding_without_target(taskmodule, document):
     return taskmodule.encode_input(document)[0]
 
 
-def test_reverse_relation(taskmodule, document):
-    assert document.relations[0].resolve() == (
-        "is_about",
-        (("content", "dummy text"), ("topic", "nothing")),
+def test_reverse_relation():
+    taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
+        tokenizer_name_or_path="facebook/bart-base",
+        symmetric_relations=["symmetric_relation"],
     )
 
-    reversed_relation = taskmodule.reverse_relation(relation=document.relations[0])
-    assert reversed_relation.resolve() == (
-        "is_about_reversed",
-        (("topic", "nothing"), ("content", "dummy text")),
+    rel = BinaryRelation(
+        head=LabeledSpan(start=10, end=20, label="content"),
+        tail=LabeledSpan(start=27, end=34, label="topic"),
+        label="is_about",
+    )
+    reversed_relation = taskmodule.reverse_relation(relation=rel)
+    assert reversed_relation == BinaryRelation(
+        head=LabeledSpan(start=27, end=34, label="topic", score=1.0),
+        tail=LabeledSpan(start=10, end=20, label="content", score=1.0),
+        label="is_about_reversed",
+        score=1.0,
+    )
+
+    sym_rel = BinaryRelation(
+        head=LabeledSpan(start=10, end=20, label="content"),
+        tail=LabeledSpan(start=27, end=34, label="topic"),
+        label="symmetric_relation",
+    )
+    reversed_sym_rel = taskmodule.reverse_relation(relation=sym_rel)
+    assert reversed_sym_rel == BinaryRelation(
+        head=LabeledSpan(start=27, end=34, label="topic", score=1.0),
+        tail=LabeledSpan(start=10, end=20, label="content", score=1.0),
+        label="symmetric_relation",
+        score=1.0,
+    )
+
+
+def test_unreverse_relation():
+    taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
+        tokenizer_name_or_path="facebook/bart-base",
+        symmetric_relations=["symmetric_relation"],
+    )
+
+    # nothing should change because the relation is not reversed
+    rel = BinaryRelation(
+        head=LabeledSpan(start=10, end=20, label="content"),
+        tail=LabeledSpan(start=27, end=34, label="topic"),
+        label="is_about",
+    )
+    same_rel = taskmodule.unreverse_relation(relation=rel)
+    assert same_rel == rel
+
+    # the relation is reversed, so it should be un-reversed
+    reversed_rel = BinaryRelation(
+        head=LabeledSpan(start=10, end=20, label="content"),
+        tail=LabeledSpan(start=27, end=34, label="topic"),
+        label="is_about_reversed",
+    )
+    unreversed_relation = taskmodule.unreverse_relation(relation=reversed_rel)
+    assert unreversed_relation == BinaryRelation(
+        head=LabeledSpan(start=27, end=34, label="topic", score=1.0),
+        tail=LabeledSpan(start=10, end=20, label="content", score=1.0),
+        label="is_about",
+        score=1.0,
+    )
+
+    # nothing should change because the relation is symmetric and already ordered (head < tail)
+    ordered_sym_rel = BinaryRelation(
+        head=LabeledSpan(start=10, end=20, label="content"),
+        tail=LabeledSpan(start=27, end=34, label="topic"),
+        label="symmetric_relation",
+    )
+    unreversed_ordered_sym_rel = taskmodule.unreverse_relation(relation=ordered_sym_rel)
+    assert ordered_sym_rel == unreversed_ordered_sym_rel
+
+    # the relation is symmetric and unordered (head > tail), so it should be un-reversed
+    unordered_sym_rel = BinaryRelation(
+        head=LabeledSpan(start=27, end=34, label="topic"),
+        tail=LabeledSpan(start=10, end=20, label="content"),
+        label="symmetric_relation",
+    )
+    unreversed_unordered_sym_rel = taskmodule.unreverse_relation(relation=unordered_sym_rel)
+    assert unreversed_unordered_sym_rel == BinaryRelation(
+        head=LabeledSpan(start=10, end=20, label="content", score=1.0),
+        tail=LabeledSpan(start=27, end=34, label="topic", score=1.0),
+        label="symmetric_relation",
+        score=1.0,
     )
 
 
