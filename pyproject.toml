@@ -24,7 +24,9 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.9"
-pytorch-ie = ">=0.31.2,<0.32.0"
+#pytorch-ie = ">=0.31.4,<0.32.0"
+# install from branch from https://github.com/ArneBinder/pytorch-ie/pull/436
+pytorch-ie = { git = "https://github.com/ArneBinder/pytorch-ie", branch = "document/deduplicate_annotations" }
 pytorch-lightning = "^2.1.0"
 torchmetrics = "^1"
 # >=4.35 because of BartModelWithDecoderPositionIds, <4.37 because of generation config

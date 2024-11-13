@@ -2158,23 +2158,27 @@ files = [
 
 [[package]]
 name = "pytorch-ie"
-version = "0.31.2"
+version = "0.31.3"
 description = "State-of-the-art Information Extraction in PyTorch"
 optional = false
-python-versions = "<4.0,>=3.9"
-files = [
-    {file = "pytorch_ie-0.31.2-py3-none-any.whl", hash = "sha256:fef91fb3d4dff84b0b6fd973d5bf7e5be51e0e01393195a01d7d824688c8cb3e"},
-    {file = "pytorch_ie-0.31.2.tar.gz", hash = "sha256:cd9683ef4ba0191854ff1843f22f431f4c38c8745962ee55ba5b5c52f27afd7c"},
-]
+python-versions = "^3.9"
+files = []
+develop = false
 
 [package.dependencies]
-absl-py = ">=1.0.0,<2.0.0"
+absl-py = "^1.0.0"
 fsspec = "<2023.9.0"
-pandas = ">=2.0.0,<3.0.0"
-pytorch-lightning = ">=2,<3"
+pandas = "^2.0.0"
+pytorch-lightning = "^2"
 torch = ">=1.10"
-torchmetrics = ">=1,<2"
-transformers = ">=4.18,<5.0"
+torchmetrics = "^1"
+transformers = "^4.18"
+
+[package.source]
+type = "git"
+url = "https://github.com/ArneBinder/pytorch-ie"
+reference = "document/deduplicate_annotations"
+resolved_reference = "57bb34386a2ec9922ea7c8e7f36a0a199b02848e"
 
 [[package]]
 name = "pytorch-lightning"
@@ -3439,4 +3443,4 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "9edc2e1c448159e3f55c1d7fb1c6fa1d2baa9a11b2ef6e8aa80d5f551789ecac"
+content-hash = "ab8de51bf6d389468d923b5d391f339c6e7f383396565cf5db925039de957132"

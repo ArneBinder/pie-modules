@@ -568,7 +568,7 @@ def test_decode_with_add_reversed_relations():
     task_outputs = [task_encoding.targets for task_encoding in task_encodings]
     docs_with_predictions = taskmodule.decode(task_encodings, task_outputs)
     assert len(docs_with_predictions) == 1
-    doc_with_predictions: ExampleDocument = docs_with_predictions[0]
+    doc_with_predictions: ExampleDocument = docs_with_predictions[0].deduplicate_annotations()
     assert list(doc_with_predictions.entities.predictions) == list(doc_with_predictions.entities)
     assert list(doc_with_predictions.relations.predictions) == list(doc_with_predictions.relations)
 
