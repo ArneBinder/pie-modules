@@ -42,14 +42,15 @@ def config(config_str):
     return CONFIG_DICT[config_str]
 
 
+@dataclass
+class ExampleDocument(TextBasedDocument):
+    entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
+    relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+    sentences: AnnotationList[LabeledSpan] = annotation_field(target="text")
+
+
 @pytest.fixture(scope="module")
 def document():
-    @dataclass
-    class ExampleDocument(TextBasedDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
-        relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
-        sentences: AnnotationList[LabeledSpan] = annotation_field(target="text")
-
     doc = ExampleDocument(text="This is a dummy text about nothing. Trust me.")
     span1 = LabeledSpan(start=10, end=20, label="content")
     span2 = LabeledSpan(start=27, end=34, label="topic")
@@ -315,6 +316,131 @@ def test_target_encoding(target_encoding, taskmodule):
         }
     else:
         raise Exception(f"unknown partition_layer_name: {taskmodule.partition_layer_name}")
+
+
+def test_task_encoding_with_deduplicated_relations(caplog):
+    doc = ExampleDocument(text="This is a dummy text about nothing. Trust me.")
+    doc.entities.append(LabeledSpan(start=10, end=20, label="content"))
+    doc.entities.append(LabeledSpan(start=27, end=34, label="topic"))
+    doc.entities.append(LabeledSpan(start=42, end=44, label="person"))
+    assert doc.entities.resolve() == [
+        ("content", "dummy text"),
+        ("topic", "nothing"),
+        ("person", "me"),
+    ]
+    # add the same relation twice (just use a different score, but that should not matter)
+    doc.relations.append(
+        BinaryRelation(head=doc.entities[0], tail=doc.entities[1], label="is_about")
+    )
+    doc.relations.append(
+        BinaryRelation(head=doc.entities[0], tail=doc.entities[1], label="is_about", score=0.9)
+    )
+    assert doc.relations.resolve() == [
+        ("is_about", (("content", "dummy text"), ("topic", "nothing"))),
+        ("is_about", (("content", "dummy text"), ("topic", "nothing"))),
+    ]
+    taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
+        tokenizer_name_or_path="facebook/bart-base",
+        relation_layer_name="relations",
+        annotation_field_mapping={
+            "entities": "labeled_spans",
+            "relations": "binary_relations",
+        },
+    )
+    taskmodule.prepare(documents=[doc])
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        task_encodings = taskmodule.encode(doc, encode_target=True)
+
+    assert caplog.messages == [
+        (
+            "encoding errors: {'correct': 2}, skipped annotations:\n"
+            "{\n"
+            '  "relations": [\n'
+            '    "BinaryRelation('
+            "head=LabeledSpan(start=4, end=6, label='content', score=1.0), "
+            "tail=LabeledSpan(start=7, end=8, label='topic', score=1.0), "
+            "label='is_about', score=0.9"
+            ')"\n'
+            "  ]\n"
+            "}"
+        )
+    ]
+
+    assert len(task_encodings) == 1
+    decoded_annotations, statistics = taskmodule.decode_annotations(task_encodings[0].targets)
+    assert decoded_annotations == {
+        "entities": [
+            LabeledSpan(start=4, end=6, label="content", score=1.0),
+            LabeledSpan(start=7, end=8, label="topic", score=1.0),
+            LabeledSpan(start=10, end=11, label="person", score=1.0),
+        ],
+        "relations": [
+            BinaryRelation(
+                head=LabeledSpan(start=4, end=6, label="content", score=1.0),
+                tail=LabeledSpan(start=7, end=8, label="topic", score=1.0),
+                label="is_about",
+                score=1.0,
+            )
+        ],
+    }
+
+
+def test_task_encoding_with_conflicting_relations(caplog):
+    doc = ExampleDocument(text="This is a dummy text about nothing. Trust me.")
+    doc.entities.append(LabeledSpan(start=10, end=20, label="content"))
+    doc.entities.append(LabeledSpan(start=27, end=34, label="topic"))
+    doc.entities.append(LabeledSpan(start=42, end=44, label="person"))
+    assert doc.entities.resolve() == [
+        ("content", "dummy text"),
+        ("topic", "nothing"),
+        ("person", "me"),
+    ]
+    # add two relations with the same head and tail, but different labels
+    doc.relations.append(
+        BinaryRelation(head=doc.entities[0], tail=doc.entities[1], label="is_about")
+    )
+    doc.relations.append(
+        BinaryRelation(head=doc.entities[0], tail=doc.entities[1], label="wrong_relation")
+    )
+    assert doc.relations.resolve() == [
+        ("is_about", (("content", "dummy text"), ("topic", "nothing"))),
+        ("wrong_relation", (("content", "dummy text"), ("topic", "nothing"))),
+    ]
+    taskmodule = PointerNetworkTaskModuleForEnd2EndRE(
+        tokenizer_name_or_path="facebook/bart-base",
+        relation_layer_name="relations",
+        annotation_field_mapping={
+            "entities": "labeled_spans",
+            "relations": "binary_relations",
+        },
+    )
+    taskmodule.prepare(documents=[doc])
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        task_encodings = taskmodule.encode(doc, encode_target=True)
+    assert caplog.messages == [
+        "relation ('Ġdummy', 'Ġtext') -> ('Ġnothing',) already exists, but has another label: is_about (previous label: wrong_relation). Skipping.",
+        "encoding errors: {'correct': 2}, skipped annotations:\n{\n  \"relations\": [\n    \"BinaryRelation(head=LabeledSpan(start=4, end=6, label='content', score=1.0), tail=LabeledSpan(start=7, end=8, label='topic', score=1.0), label='wrong_relation', score=1.0)\"\n  ]\n}",
+    ]
+
+    assert len(task_encodings) == 1
+    decoded_annotations, statistics = taskmodule.decode_annotations(task_encodings[0].targets)
+    assert decoded_annotations == {
+        "entities": [
+            LabeledSpan(start=4, end=6, label="content", score=1.0),
+            LabeledSpan(start=7, end=8, label="topic", score=1.0),
+            LabeledSpan(start=10, end=11, label="person", score=1.0),
+        ],
+        "relations": [
+            BinaryRelation(
+                head=LabeledSpan(start=4, end=6, label="content", score=1.0),
+                tail=LabeledSpan(start=7, end=8, label="topic", score=1.0),
+                label="is_about",
+                score=1.0,
+            )
+        ],
+    }
 
 
 @pytest.fixture()
