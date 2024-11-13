@@ -351,21 +351,7 @@ def test_task_encoding_with_deduplicated_relations(caplog):
     caplog.clear()
     with caplog.at_level(logging.WARNING):
         task_encodings = taskmodule.encode(doc, encode_target=True)
-
-    assert caplog.messages == [
-        (
-            "encoding errors: {'correct': 2}, skipped annotations:\n"
-            "{\n"
-            '  "relations": [\n'
-            '    "BinaryRelation('
-            "head=LabeledSpan(start=4, end=6, label='content', score=1.0), "
-            "tail=LabeledSpan(start=7, end=8, label='topic', score=1.0), "
-            "label='is_about', score=0.9"
-            ')"\n'
-            "  ]\n"
-            "}"
-        )
-    ]
+    messages = list(caplog.messages)
 
     assert len(task_encodings) == 1
     decoded_annotations, statistics = taskmodule.decode_annotations(task_encodings[0].targets)
@@ -384,6 +370,21 @@ def test_task_encoding_with_deduplicated_relations(caplog):
             )
         ],
     }
+
+    assert messages == [
+        (
+            "encoding errors: {'correct': 2}, skipped annotations:\n"
+            "{\n"
+            '  "relations": [\n'
+            '    "BinaryRelation('
+            "head=LabeledSpan(start=4, end=6, label='content', score=1.0), "
+            "tail=LabeledSpan(start=7, end=8, label='topic', score=1.0), "
+            "label='is_about', score=0.9"
+            ')"\n'
+            "  ]\n"
+            "}"
+        )
+    ]
 
 
 def test_task_encoding_with_conflicting_relations(caplog):
@@ -419,10 +420,7 @@ def test_task_encoding_with_conflicting_relations(caplog):
     caplog.clear()
     with caplog.at_level(logging.WARNING):
         task_encodings = taskmodule.encode(doc, encode_target=True)
-    assert caplog.messages == [
-        "relation ('Ġdummy', 'Ġtext') -> ('Ġnothing',) already exists, but has another label: is_about (previous label: wrong_relation). Skipping.",
-        "encoding errors: {'correct': 2}, skipped annotations:\n{\n  \"relations\": [\n    \"BinaryRelation(head=LabeledSpan(start=4, end=6, label='content', score=1.0), tail=LabeledSpan(start=7, end=8, label='topic', score=1.0), label='wrong_relation', score=1.0)\"\n  ]\n}",
-    ]
+    messages = list(caplog.messages)
 
     assert len(task_encodings) == 1
     decoded_annotations, statistics = taskmodule.decode_annotations(task_encodings[0].targets)
@@ -441,6 +439,11 @@ def test_task_encoding_with_conflicting_relations(caplog):
             )
         ],
     }
+
+    assert messages == [
+        "relation ('Ġdummy', 'Ġtext') -> ('Ġnothing',) already exists, but has another label: is_about (previous label: wrong_relation). Skipping.",
+        "encoding errors: {'correct': 2}, skipped annotations:\n{\n  \"relations\": [\n    \"BinaryRelation(head=LabeledSpan(start=4, end=6, label='content', score=1.0), tail=LabeledSpan(start=7, end=8, label='topic', score=1.0), label='wrong_relation', score=1.0)\"\n  ]\n}",
+    ]
 
 
 @pytest.fixture()
