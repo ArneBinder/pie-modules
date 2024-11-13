@@ -454,11 +454,20 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
         # encode relations
         all_relation_arguments = set()
+        relation_arguments2label: Dict[Tuple[Annotation, ...], str] = dict()
         relation_encodings = dict()
         for rel in layers[self.relation_layer_name]:
             if not isinstance(rel, BinaryRelation):
                 raise Exception(f"expected BinaryRelation, but got: {rel}")
             if rel.label in self.labels_per_layer[self.relation_layer_name]:
+                if (rel.head, rel.tail) in relation_arguments2label:
+                    previous_label = relation_arguments2label[(rel.head, rel.tail)]
+                    if previous_label != rel.label:
+                        raise ValueError(
+                            f"relation {rel.head} -> {rel.tail} already exists, but has another label: "
+                            f"{previous_label} (current label: {rel.label})."
+                        )
+                    continue
                 encoded_relation = self.relation_encoder_decoder.encode(
                     annotation=rel, metadata=metadata
                 )
@@ -466,6 +475,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                     raise Exception(f"failed to encode relation: {rel}")
                 relation_encodings[rel] = encoded_relation
                 all_relation_arguments.update([rel.head, rel.tail])
+                relation_arguments2label[(rel.head, rel.tail)] = rel.label
 
         # encode spans that are not arguments of any relation
         no_relation_spans = [
