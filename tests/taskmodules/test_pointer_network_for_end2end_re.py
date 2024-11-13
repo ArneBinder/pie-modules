@@ -407,7 +407,7 @@ def test_encode_with_add_reversed_relations(taskmodule_with_reversed_relations, 
         ".",
         "</s>",
     ]
-    if not taskmodule_with_reversed_relations.symmetric_relations:
+    if "is_about" in taskmodule_with_reversed_relations.symmetric_relations:
         decoded_annotations, statistics = taskmodule_with_reversed_relations.decode_annotations(
             task_encoding.targets
         )
@@ -427,7 +427,7 @@ def test_encode_with_add_reversed_relations(taskmodule_with_reversed_relations, 
                 BinaryRelation(
                     head=LabeledSpan(start=7, end=8, label="topic", score=1.0),
                     tail=LabeledSpan(start=4, end=6, label="content", score=1.0),
-                    label="is_about_reversed",
+                    label="is_about",
                     score=1.0,
                 ),
             ],
@@ -452,7 +452,7 @@ def test_encode_with_add_reversed_relations(taskmodule_with_reversed_relations, 
                 BinaryRelation(
                     head=LabeledSpan(start=7, end=8, label="topic", score=1.0),
                     tail=LabeledSpan(start=4, end=6, label="content", score=1.0),
-                    label="is_about",
+                    label="is_about_reversed",
                     score=1.0,
                 ),
             ],
