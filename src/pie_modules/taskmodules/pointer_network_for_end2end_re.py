@@ -525,14 +525,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                 )
                 if encoded_relation is None:
                     raise Exception(f"failed to encode relation: {rel}")
-                if (rel.head, rel.tail) in relation_arguments2label:
-                    previous_label = relation_arguments2label[(rel.head, rel.tail)]
-                    if previous_label != rel.label:
-                        logger.warning(
-                            f"relation {rel.head} -> {rel.tail} already exists, but has another label: "
-                            f"{previous_label} (previous label: {rel.label}). Skipping."
-                        )
-                    continue
                 relation_encodings[rel] = encoded_relation
                 all_relation_arguments.update([rel.head, rel.tail])
                 relation_arguments2label[(rel.head, rel.tail)] = rel.label
