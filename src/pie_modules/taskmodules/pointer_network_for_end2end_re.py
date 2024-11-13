@@ -473,6 +473,21 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         else:
             raise Exception(f"reversing of relations of type {type(relation)} is not supported")
 
+    def unreverse_relation(self, relation: Annotation) -> BinaryRelation:
+        if isinstance(relation, BinaryRelation):
+            head, tail, label = relation.head, relation.tail, relation.label
+            # if the relation is symmetric, we sort head and tail to ensure consistent order
+            if relation.label in self.symmetric_relations:
+                head, tail = sorted([head, tail], key=lambda x: (x.start, x.end))
+            # if the relation was reversed, we need to reconstruct the original label and swap head and tail
+            elif label.endswith(self.REVERSED_RELATION_LABEL_SUFFIX):
+                # reconstruct the original label and swap head and tail
+                label = label[: -len(self.REVERSED_RELATION_LABEL_SUFFIX)]
+                head, tail = tail, head
+            return relation.copy(head=head, tail=tail, label=label)
+        else:
+            raise Exception(f"un-reversing of relations of type {type(relation)} is not supported")
+
     def encode_annotations(
         self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None
     ) -> TaskOutputType:
@@ -901,22 +916,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             for annotation in annotations:
                 # handle relations that may be reversed
                 if layer_name == self.relation_layer_name and self.add_reversed_relations:
-                    if not isinstance(annotation, BinaryRelation):
-                        raise Exception(
-                            f"expected BinaryRelation when handling reversed relations, but got: {annotation}"
-                        )
-                    head, tail = annotation.head, annotation.tail
-                    label = annotation.label
-                    # if the relation is symmetric, we sort head and tail to ensure consistent order
-                    if annotation.label in self.symmetric_relations:
-                        head, tail = sorted(
-                            [annotation.head, annotation.tail], key=lambda x: (x.start, x.end)
-                        )
-                    # if the relation was reversed, we need to reconstruct the original label and swap head and tail
-                    elif annotation.label.endswith(self.REVERSED_RELATION_LABEL_SUFFIX):
-                        # reconstruct the original label and swap head and tail
-                        label = annotation.label[: -len(self.REVERSED_RELATION_LABEL_SUFFIX)]
-                        head, tail = tail, head
-                    yield layer_name, annotation.copy(head=head, tail=tail, label=label)
+                    unreversed_relation = self.unreverse_relation(annotation)
+                    yield layer_name, unreversed_relation
                 else:
                     yield layer_name, annotation.copy()
