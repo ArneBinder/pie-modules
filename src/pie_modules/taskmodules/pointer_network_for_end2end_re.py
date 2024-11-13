@@ -504,16 +504,11 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         if self.labels_per_layer is None:
             raise Exception("labels_per_layer is not defined. Call prepare() first or pass it in.")
 
-        relations = list(layers[self.relation_layer_name])
-        if self.add_reversed_relations:
-            reversed_relations = [self.reverse_relation(rel) for rel in relations]
-            relations.extend(reversed_relations)
-
         # encode relations
         all_relation_arguments = set()
         relation_arguments2label: Dict[Tuple[Annotation, ...], str] = dict()
         relation_encodings = dict()
-        for rel in relations:
+        for rel in layers[self.relation_layer_name]:
             if not isinstance(rel, BinaryRelation):
                 raise Exception(f"expected BinaryRelation, but got: {rel}")
             if rel.label in self.labels_per_layer[self.relation_layer_name]:
@@ -848,6 +843,13 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                 layer_name: self.get_mapped_layer(document, layer_name=layer_name)
                 for layer_name in self.layer_names
             }
+
+            if self.add_reversed_relations:
+                reversed_relations = [
+                    self.reverse_relation(rel) for rel in layers[self.relation_layer_name]
+                ]
+                layers[self.relation_layer_name].extend(reversed_relations)
+
             result = self.encode_annotations(
                 layers=layers,
                 metadata={
