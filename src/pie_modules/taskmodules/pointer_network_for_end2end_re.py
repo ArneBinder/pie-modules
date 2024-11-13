@@ -496,7 +496,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             raise Exception(f"un-reversing of relations of type {type(relation)} is not supported")
 
     def encode_annotations(
-        self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None
+        self, layers: Dict[str, Iterable[Annotation]], metadata: Optional[Dict[str, Any]] = None
     ) -> TaskOutputType:
         if not set(layers.keys()) == set(self.layer_names):
             raise Exception(f"unexpected layers: {layers.keys()}. expected: {self.layer_names}")
