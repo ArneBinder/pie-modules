@@ -837,10 +837,10 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             }
 
             if self.add_reversed_relations:
-                reversed_relations = [
-                    self.reverse_relation(rel) for rel in layers[self.relation_layer_name]
-                ]
-                layers[self.relation_layer_name].extend(reversed_relations)
+                # create a copy to avoid modifying the annotation layer in the document
+                relations = list(layers[self.relation_layer_name])
+                reversed_relations = [self.reverse_relation(rel) for rel in relations]
+                layers[self.relation_layer_name] = relations + reversed_relations
 
             result = self.encode_annotations(
                 layers=layers,
