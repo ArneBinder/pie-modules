@@ -458,6 +458,21 @@ class PointerNetworkTaskModuleForEnd2EndRE(
 
         return encodings, dict(errors), current_encoding
 
+    def reverse_relation(self, relation: Annotation) -> BinaryRelation:
+        if isinstance(relation, BinaryRelation):
+            reversed_label = relation.label
+            if (
+                reversed_label not in self.symmetric_relations
+                and reversed_label != self.none_label
+            ):
+                reversed_label += self.REVERSED_RELATION_LABEL_SUFFIX
+            reversed_rel = relation.copy(
+                head=relation.tail, tail=relation.head, label=reversed_label
+            )
+            return reversed_rel
+        else:
+            raise Exception(f"reversing of relations of type {type(relation)} is not supported")
+
     def encode_annotations(
         self, layers: Dict[str, List[Annotation]], metadata: Optional[Dict[str, Any]] = None
     ) -> TaskOutputType:
@@ -467,11 +482,15 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         if self.labels_per_layer is None:
             raise Exception("labels_per_layer is not defined. Call prepare() first or pass it in.")
 
+        relations = list(layers[self.relation_layer_name])
+        if self.add_reversed_relations:
+            relations.extend(self.reverse_relation(rel) for rel in relations)
+
         # encode relations
         all_relation_arguments = set()
         relation_arguments2label: Dict[Tuple[Annotation, ...], str] = dict()
         relation_encodings = dict()
-        for rel in layers[self.relation_layer_name]:
+        for rel in relations:
             if not isinstance(rel, BinaryRelation):
                 raise Exception(f"expected BinaryRelation, but got: {rel}")
             if rel.label in self.labels_per_layer[self.relation_layer_name]:
@@ -488,30 +507,17 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                 )
                 if encoded_relation is None:
                     raise Exception(f"failed to encode relation: {rel}")
+                if (rel.head, rel.tail) in relation_arguments2label:
+                    previous_label = relation_arguments2label[(rel.head, rel.tail)]
+                    if previous_label != rel.label:
+                        logger.warning(
+                            f"relation {rel.head} -> {rel.tail} already exists, but has another label: "
+                            f"{previous_label} (previous label: {rel.label}). Skipping."
+                        )
+                    continue
                 relation_encodings[rel] = encoded_relation
                 all_relation_arguments.update([rel.head, rel.tail])
                 relation_arguments2label[(rel.head, rel.tail)] = rel.label
-                if self.add_reversed_relations:
-                    reversed_label = rel.label
-                    if reversed_label not in self.symmetric_relations:
-                        reversed_label += self.REVERSED_RELATION_LABEL_SUFFIX
-                    if (rel.tail, rel.head) in relation_arguments2label:
-                        previous_label = relation_arguments2label[(rel.tail, rel.head)]
-                        logger.warning(
-                            f"reversed relation already exists: {rel.tail} -> {rel.head} with "
-                            f"label {previous_label} (reversed label: {reversed_label}). Skipping."
-                        )
-                        continue
-                    reversed_rel = BinaryRelation(
-                        head=rel.tail,
-                        tail=rel.head,
-                        label=reversed_label,
-                    )
-                    encoded_reversed_rel = self.relation_encoder_decoder.encode(
-                        annotation=reversed_rel, metadata=metadata
-                    )
-                    if encoded_reversed_rel is not None:
-                        relation_encodings[reversed_rel] = encoded_reversed_rel
 
         # encode spans that are not arguments of any relation
         no_relation_spans = [

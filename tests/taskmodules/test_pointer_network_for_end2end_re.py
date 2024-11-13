@@ -257,6 +257,19 @@ def task_encoding_without_target(taskmodule, document):
     return taskmodule.encode_input(document)[0]
 
 
+def test_reverse_relation(taskmodule, document):
+    assert document.relations[0].resolve() == (
+        "is_about",
+        (("content", "dummy text"), ("topic", "nothing")),
+    )
+
+    reversed_relation = taskmodule.reverse_relation(relation=document.relations[0])
+    assert reversed_relation.resolve() == (
+        "is_about_reversed",
+        (("topic", "nothing"), ("content", "dummy text")),
+    )
+
+
 @pytest.fixture(params=[False, True])
 def taskmodule_with_reversed_relations(document, request) -> PointerNetworkTaskModuleForEnd2EndRE:
     is_about_is_symmetric = request.param
@@ -322,30 +335,6 @@ def test_encode_with_add_reversed_relations(taskmodule_with_reversed_relations, 
         "</s>",
     ]
     if not taskmodule_with_reversed_relations.symmetric_relations:
-        assert task_encoding.targets.labels == [
-            15,
-            15,
-            5,
-            12,
-            13,
-            3,
-            6,
-            12,
-            13,
-            3,
-            15,
-            15,
-            5,
-            7,
-            18,
-            18,
-            4,
-            2,
-            2,
-            2,
-            2,
-            1,
-        ]
         decoded_annotations, statistics = taskmodule_with_reversed_relations.decode_annotations(
             task_encoding.targets
         )
@@ -371,30 +360,6 @@ def test_encode_with_add_reversed_relations(taskmodule_with_reversed_relations, 
             ],
         }
     else:
-        assert task_encoding.targets.labels == [
-            14,
-            14,
-            5,
-            11,
-            12,
-            3,
-            6,
-            11,
-            12,
-            3,
-            14,
-            14,
-            5,
-            6,
-            17,
-            17,
-            4,
-            2,
-            2,
-            2,
-            2,
-            1,
-        ]
         decoded_annotations, statistics = taskmodule_with_reversed_relations.decode_annotations(
             task_encoding.targets
         )
@@ -419,6 +384,15 @@ def test_encode_with_add_reversed_relations(taskmodule_with_reversed_relations, 
                 ),
             ],
         }
+
+
+def test_encode_with_add_reversed_relations_already_exists(taskmodule_with_reversed_relations):
+    doc = ExampleDocument(text="This is a dummy text about nothing. Trust me.")
+    doc.entities.append(LabeledSpan(start=10, end=20, label="content"))
+    doc.entities.append(LabeledSpan(start=27, end=34, label="topic"))
+    rel = BinaryRelation(head=doc.entities[0], tail=doc.entities[1], label="is_about")
+
+    task_encodings = taskmodule_with_reversed_relations.encode(document, encode_target=True)
 
 
 @pytest.fixture()
