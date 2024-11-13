@@ -194,6 +194,7 @@ def test_prepared_config(taskmodule, config):
         assert taskmodule._config() == {
             "taskmodule_type": "PointerNetworkTaskModuleForEnd2EndRE",
             "relation_layer_name": "relations",
+            "symmetric_relations": None,
             "none_label": "none",
             "loop_dummy_relation_name": "loop",
             "labels_per_layer": {
@@ -208,6 +209,7 @@ def test_prepared_config(taskmodule, config):
             "tokenizer_init_kwargs": None,
             "tokenizer_kwargs": {"strict_span_conversion": False},
             "partition_layer_name": None,
+            "add_reversed_relations": False,
             "annotation_field_mapping": {
                 "entities": "labeled_spans",
                 "relations": "binary_relations",
@@ -221,6 +223,7 @@ def test_prepared_config(taskmodule, config):
         assert taskmodule._config() == {
             "taskmodule_type": "PointerNetworkTaskModuleForEnd2EndRE",
             "relation_layer_name": "relations",
+            "symmetric_relations": None,
             "none_label": "none",
             "loop_dummy_relation_name": "loop",
             "labels_per_layer": {
@@ -235,6 +238,7 @@ def test_prepared_config(taskmodule, config):
             "tokenizer_init_kwargs": None,
             "tokenizer_kwargs": {"strict_span_conversion": False},
             "partition_layer_name": "sentences",
+            "add_reversed_relations": False,
             "annotation_field_mapping": {
                 "entities": "labeled_spans",
                 "relations": "binary_relations",
