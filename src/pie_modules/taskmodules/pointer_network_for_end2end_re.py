@@ -463,9 +463,9 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                 if (rel.head, rel.tail) in relation_arguments2label:
                     previous_label = relation_arguments2label[(rel.head, rel.tail)]
                     if previous_label != rel.label:
-                        logger.warning(
+                        raise ValueError(
                             f"relation {rel.head} -> {rel.tail} already exists, but has another label: "
-                            f"{previous_label} (previous label: {rel.label}). Skipping."
+                            f"{previous_label} (current label: {rel.label})."
                         )
                     continue
                 encoded_relation = self.relation_encoder_decoder.encode(
