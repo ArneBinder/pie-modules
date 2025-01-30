@@ -55,18 +55,55 @@ def find_token_offset_mapping(text: str, tokens: Iterable[str]) -> List[Tuple[in
     return token_offset_mapping
 
 
+def get_stripped_offsets(start: int, end: int, string: str) -> Tuple[int, int]:
+    """Get the stripped offsets of a span in a string, i.e. the start and end index of the span
+    without leading and trailing whitespaces. If the span is only whitespaces, a tuple is returned
+    where start > end.
+
+    Args:
+        start (int): The start index.
+        end (int): The end index.
+        string (str): The string.
+
+    Returns:
+        Tuple[int, int]: The stripped offsets.
+    """
+    span_str = string[start:end]
+    left_offset = len(span_str) - len(span_str.lstrip())
+    right_offset = len(span_str) - len(span_str.rstrip())
+
+    return start + left_offset, end - right_offset
+
+
 def char_span_to_token_span(
     span: Annotation, char_to_token: Callable[[int], Optional[int]]
 ) -> Optional[Union[Span, MultiSpan]]:
     if isinstance(span, Span):
-        start_token_idx = char_to_token(span.start)
-        end_token_idx_inclusive = char_to_token(span.end - 1)
+        if span.is_attached:
+            char_start, char_end = get_stripped_offsets(span.start, span.end, span.target)
+        else:
+            char_start, char_end = span.start, span.end
+        # we can not convert empty and invalid spans
+        if char_start >= char_end:
+            return None
+        start_token_idx = char_to_token(char_start)
+        end_token_idx_inclusive = char_to_token(char_end - 1)
         if start_token_idx is None or end_token_idx_inclusive is None:
             return None
         return span.copy(start=start_token_idx, end=end_token_idx_inclusive + 1)
     elif isinstance(span, MultiSpan):
+        if span.is_attached:
+            stripped_slices = [
+                get_stripped_offsets(start, end, span.target) for start, end in span.slices
+            ]
+        else:
+            stripped_slices = span.slices
+        # remove empty and invalid slices
+        stripped_slices = [(start, end) for start, end in stripped_slices if start < end]
+        if len(stripped_slices) == 0:
+            return None
         slices_inclusive_end = [
-            (char_to_token(start), char_to_token(end - 1)) for start, end in span.slices
+            (char_to_token(start), char_to_token(end - 1)) for start, end in stripped_slices
         ]
         if any(start is None or end is None for start, end in slices_inclusive_end):
             return None
