@@ -80,7 +80,13 @@ def char_span_to_token_span(
 ) -> Optional[Union[Span, MultiSpan]]:
     if isinstance(span, Span):
         if span.is_attached:
-            char_start, char_end = get_stripped_offsets(span.start, span.end, span.target)
+            base_text = span.targets[0]
+            if not isinstance(base_text, str):
+                raise TypeError(
+                    f"The first target of a text targeting span must be a string, but found {type(base_text)} as first "
+                    f"target type. Can not convert the span {span}."
+                )
+            char_start, char_end = get_stripped_offsets(span.start, span.end, base_text)
         else:
             char_start, char_end = span.start, span.end
         # we can not convert empty and invalid spans
@@ -93,8 +99,14 @@ def char_span_to_token_span(
         return span.copy(start=start_token_idx, end=end_token_idx_inclusive + 1)
     elif isinstance(span, MultiSpan):
         if span.is_attached:
+            base_text = span.targets[0]
+            if not isinstance(base_text, str):
+                raise TypeError(
+                    f"The first target of a text targeting span must be a string, but found {type(base_text)} as first "
+                    f"target type. Can not convert the span {span}."
+                )
             stripped_slices = [
-                get_stripped_offsets(start, end, span.target) for start, end in span.slices
+                get_stripped_offsets(start, end, base_text) for start, end in span.slices
             ]
         else:
             stripped_slices = span.slices
