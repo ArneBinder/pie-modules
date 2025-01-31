@@ -238,9 +238,11 @@ class CrossTextBinaryCorefTaskModule(RelationStatisticsMixin, TaskModuleType):
         )
 
         inputs = {
-            k: self.tokenizer.pad(v, return_tensors="pt").data
-            if k in ["encoding", "encoding_pair"]
-            else torch.tensor(v)
+            k: (
+                self.tokenizer.pad(v, return_tensors="pt").data
+                if k in ["encoding", "encoding_pair"]
+                else torch.tensor(v)
+            )
             for k, v in inputs_dict.items()
         }
         for k, v in inputs.items():

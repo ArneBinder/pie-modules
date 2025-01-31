@@ -133,9 +133,11 @@ def test_spans_via_relation_merger(create_multi_spans):
         link_relation_label="link",
         use_predicted_spans=False,
         create_multi_spans=create_multi_spans,
-        result_document_type=TextDocumentWithLabeledMultiSpansBinaryRelationsAndLabeledPartitions
-        if create_multi_spans
-        else None,
+        result_document_type=(
+            TextDocumentWithLabeledMultiSpansBinaryRelationsAndLabeledPartitions
+            if create_multi_spans
+            else None
+        ),
         result_field_mapping={
             "labeled_spans": "labeled_multi_spans" if create_multi_spans else "labeled_spans",
             "labeled_partitions": "labeled_partitions",

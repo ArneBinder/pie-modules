@@ -74,9 +74,7 @@ class TaskModuleWithDocumentConverter(
         converted_document.metadata["original_document"] = document
         return converted_document
 
-    def encode(
-        self, documents: Union[DocumentType, Iterable[DocumentType]], **kwargs
-    ) -> Union[
+    def encode(self, documents: Union[DocumentType, Iterable[DocumentType]], **kwargs) -> Union[
         Sequence[TaskEncodingType],
         TaskEncodingSequence[TaskEncodingType, DocumentType],
         Iterator[TaskEncodingType],

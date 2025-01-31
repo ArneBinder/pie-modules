@@ -59,9 +59,11 @@ class AtIndexPooler(nn.Module):
         )
         for batch_idx, current_indices in enumerate(indices):
             current_embeddings = [
-                hidden_state[batch_idx, current_indices[i], :]
-                if current_indices[i] >= 0
-                else self.missing_embeddings[i]
+                (
+                    hidden_state[batch_idx, current_indices[i], :]
+                    if current_indices[i] >= 0
+                    else self.missing_embeddings[i]
+                )
                 for i in range(self.num_indices)
             ]
             result[batch_idx] = cat(current_embeddings, 0)
@@ -149,12 +151,16 @@ class SpanMaxPooler(nn.Module):
             current_start_indices = start_indices[batch_idx]
             current_end_indices = end_indices[batch_idx]
             current_embeddings = [
-                torch.amax(
-                    hidden_state[batch_idx, current_start_indices[i] : current_end_indices[i], :],
-                    0,
+                (
+                    torch.amax(
+                        hidden_state[
+                            batch_idx, current_start_indices[i] : current_end_indices[i], :
+                        ],
+                        0,
+                    )
+                    if current_start_indices[i] >= 0 and current_end_indices[i] >= 0
+                    else self.missing_embeddings[i]
                 )
-                if current_start_indices[i] >= 0 and current_end_indices[i] >= 0
-                else self.missing_embeddings[i]
                 for i in range(self.num_indices)
             ]
             result[batch_idx] = cat(current_embeddings, 0)

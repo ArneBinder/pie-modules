@@ -578,9 +578,9 @@ class RESpanPairClassificationTaskModule(TaskModuleType, ChangesTokenizerVocabSi
             document_with_markers,
             tokenizer=self.tokenizer,
             result_document_type=self.tokenized_document_type,
-            partition_layer="labeled_partitions"
-            if self.partition_annotation is not None
-            else None,
+            partition_layer=(
+                "labeled_partitions" if self.partition_annotation is not None else None
+            ),
             added_annotations=all_added_annotations,
             strict_span_conversion=False,
             **self.tokenize_kwargs,

@@ -18,7 +18,7 @@ logger = logging.get_logger(__name__)
 
 
 def get_layer_norm_parameters(
-    named_parameters: Iterator[Tuple[str, Parameter]]
+    named_parameters: Iterator[Tuple[str, Parameter]],
 ) -> Iterator[Parameter]:
     return (
         param for name, param in named_parameters if "layernorm" in name or "layer_norm" in name
@@ -26,7 +26,7 @@ def get_layer_norm_parameters(
 
 
 def get_non_layer_norm_parameters(
-    named_parameters: Iterator[Tuple[str, Parameter]]
+    named_parameters: Iterator[Tuple[str, Parameter]],
 ) -> Iterator[Parameter]:
     return (
         param
