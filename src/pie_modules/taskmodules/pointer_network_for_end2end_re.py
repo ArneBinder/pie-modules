@@ -761,12 +761,14 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             targets = targets or task_encoding.targets
             input_tokens = self.tokenizer.convert_ids_to_tokens(inputs.input_ids)
             label_tokens = [
-                self.targets[target_id_or_offset]
-                if target_id_or_offset < self.pointer_offset
-                else str(target_id_or_offset)
-                + " {"
-                + str(input_tokens[target_id_or_offset - self.pointer_offset])
-                + "}"
+                (
+                    self.targets[target_id_or_offset]
+                    if target_id_or_offset < self.pointer_offset
+                    else str(target_id_or_offset)
+                    + " {"
+                    + str(input_tokens[target_id_or_offset - self.pointer_offset])
+                    + "}"
+                )
                 for target_id_or_offset in targets.labels
             ]
             logger.info("*** Example ***")
