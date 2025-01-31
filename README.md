@@ -12,8 +12,6 @@
 
 Model-, taskmodule-, and metric-implementations as well as document processing utilities for [PyTorch-IE](https://github.com/ChristophAlt/pytorch-ie).
 
-REMOVE THIS
-
 Available models:
 
 - [SimpleSequenceClassificationModel](src/pie_modules/models/simple_sequence_classification.py)
