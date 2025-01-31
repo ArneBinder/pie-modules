@@ -378,11 +378,11 @@ def test_text_based_document_to_token_based_token_offset_mapping_from_metadata_i
     _test_token_document(result)
 
 
-def test_text_based_document_to_token_based_unaligned_span_strict(text_document, token_document):
+def test_text_based_document_to_token_based_space_span_strict(text_document, token_document):
     doc = TestDocument(text=text_document.text)
-    # add a span that is not aligned with the tokenization
-    doc.entities.append(LabeledSpan(start=0, end=6, label="unaligned"))
-    assert str(doc.entities[0]) == "First "
+    # add a span that is empty
+    doc.entities.append(LabeledSpan(start=5, end=6, label="unaligned"))
+    assert str(doc.entities[0]) == " "
 
     with pytest.raises(ValueError) as excinfo:
         text_based_document_to_token_based(
@@ -392,19 +392,37 @@ def test_text_based_document_to_token_based_unaligned_span_strict(text_document,
         )
     assert (
         str(excinfo.value)
-        == 'cannot find token span for character span: "First ", text="First sentence. Entity M works at N. '
+        == 'cannot find token span for character span: " ", text="First sentence. Entity M works at N. '
         'And it founded O.", token_offset_mapping=[(0, 0), (0, 5), (6, 14), (14, 15), (16, 22), (23, 24), '
         "(25, 30), (31, 33), (34, 35), (35, 36), (37, 40), (41, 43), (44, 51), (52, 53), (53, 54), (54, 54)]"
     )
 
 
-def test_text_based_document_to_token_based_unaligned_span_not_strict(
-    text_document, token_document, caplog
-):
+def test_text_based_document_to_token_based_empty_span_strict(text_document, token_document):
     doc = TestDocument(text=text_document.text)
-    # add a span that is not aligned with the tokenization
-    doc.entities.append(LabeledSpan(start=0, end=6, label="unaligned"))
-    assert str(doc.entities[0]) == "First "
+    # add a span that is empty
+    doc.entities.append(LabeledSpan(start=3, end=3, label="empty"))
+    assert str(doc.entities[0]) == ""
+
+    with pytest.raises(ValueError) as excinfo:
+        text_based_document_to_token_based(
+            doc,
+            tokens=list(token_document.tokens),
+            result_document_type=TokenizedTestDocument,
+        )
+    assert (
+        str(excinfo.value)
+        == 'cannot find token span for character span: "", text="First sentence. Entity M works at N. '
+        'And it founded O.", token_offset_mapping=[(0, 0), (0, 5), (6, 14), (14, 15), (16, 22), (23, 24), '
+        "(25, 30), (31, 33), (34, 35), (35, 36), (37, 40), (41, 43), (44, 51), (52, 53), (53, 54), (54, 54)]"
+    )
+
+
+def test_text_based_document_to_token_based_space_span(text_document, token_document, caplog):
+    doc = TestDocument(text=text_document.text)
+    # add a span that is empty
+    doc.entities.append(LabeledSpan(start=5, end=6, label="unaligned"))
+    assert str(doc.entities[0]) == " "
 
     with caplog.at_level("WARNING"):
         tokenized_doc = text_based_document_to_token_based(
@@ -416,7 +434,7 @@ def test_text_based_document_to_token_based_unaligned_span_not_strict(
     assert len(caplog.records) == 1
     assert (
         caplog.records[0].message
-        == 'cannot find token span for character span "First ", skip it (disable this warning with verbose=False)'
+        == 'cannot find token span for character span " ", skip it (disable this warning with verbose=False)'
     )
 
     # check (de-)serialization
@@ -425,6 +443,104 @@ def test_text_based_document_to_token_based_unaligned_span_not_strict(
     assert len(doc.entities) == 1
     # the unaligned span is not included in the tokenized document
     assert len(tokenized_doc.entities) == 0
+
+
+def test_text_based_document_to_token_based_strip_span(text_document, token_document):
+    doc = TestDocument(text=text_document.text)
+    # add a span that is not aligned with the tokenization
+    doc.entities.append(LabeledSpan(start=5, end=16, label="unaligned"))
+    assert str(doc.entities[0]) == " sentence. "
+
+    result_doc = text_based_document_to_token_based(
+        doc,
+        tokens=list(token_document.tokens),
+        result_document_type=TokenizedTestDocument,
+        strip_spans=True,
+    )
+    assert result_doc.entities.resolve() == [("unaligned", ("sentence", "."))]
+
+
+def test_text_based_document_to_token_based_empty_multi_span_strict(
+    token_document_with_multi_spans, text_document_with_multi_spans
+):
+    doc = TestDocumentWithMultiSpans(text=text_document_with_multi_spans.text)
+    # add a multi span that is not aligned with the tokenization
+    doc.entities.append(LabeledMultiSpan(slices=(), label="empty"))
+    assert doc.entities.resolve() == [("empty", ())]
+
+    with pytest.raises(ValueError) as excinfo:
+        text_based_document_to_token_based(
+            doc,
+            tokens=list(token_document_with_multi_spans.tokens),
+            result_document_type=TokenizedTestDocumentWithMultiSpans,
+        )
+    assert (
+        str(excinfo.value)
+        == 'cannot find token span for character span: "()", text="First sentence. Entity M works at N. '
+        'And it founded O.", token_offset_mapping=[(0, 0), (0, 5), (6, 14), (14, 15), (16, 22), (23, 24), '
+        "(25, 30), (31, 33), (34, 35), (35, 36), (37, 40), (41, 43), (44, 51), (52, 53), (53, 54), (54, 54)]"
+    )
+
+
+def test_text_based_document_to_token_based_space_multi_span_slice_strict(
+    token_document_with_multi_spans, text_document_with_multi_spans
+):
+    doc = TestDocumentWithMultiSpans(text=text_document_with_multi_spans.text)
+    # add a multi span that is not aligned with the tokenization
+    doc.entities.append(LabeledMultiSpan(slices=((5, 6),), label="unaligned"))
+    assert doc.entities.resolve() == [("unaligned", (" ",))]
+
+    with pytest.raises(ValueError) as excinfo:
+        text_based_document_to_token_based(
+            doc,
+            tokens=list(token_document_with_multi_spans.tokens),
+            result_document_type=TokenizedTestDocumentWithMultiSpans,
+        )
+    assert (
+        str(excinfo.value)
+        == 'cannot find token span for character span: "(\' \',)", text="First sentence. Entity M works at N. '
+        'And it founded O.", token_offset_mapping=[(0, 0), (0, 5), (6, 14), (14, 15), (16, 22), (23, 24), '
+        "(25, 30), (31, 33), (34, 35), (35, 36), (37, 40), (41, 43), (44, 51), (52, 53), (53, 54), (54, 54)]"
+    )
+
+
+def test_text_based_document_to_token_based_empty_multi_span_slice_strict(
+    token_document_with_multi_spans, text_document_with_multi_spans
+):
+    doc = TestDocumentWithMultiSpans(text=text_document_with_multi_spans.text)
+    # add a multi span that is not aligned with the tokenization
+    doc.entities.append(LabeledMultiSpan(slices=((3, 3),), label="empty_slice"))
+    assert doc.entities.resolve() == [("empty_slice", ("",))]
+
+    with pytest.raises(ValueError) as excinfo:
+        text_based_document_to_token_based(
+            doc,
+            tokens=list(token_document_with_multi_spans.tokens),
+            result_document_type=TokenizedTestDocumentWithMultiSpans,
+        )
+    assert (
+        str(excinfo.value)
+        == 'cannot find token span for character span: "(\'\',)", text="First sentence. Entity M works at N. '
+        'And it founded O.", token_offset_mapping=[(0, 0), (0, 5), (6, 14), (14, 15), (16, 22), (23, 24), '
+        "(25, 30), (31, 33), (34, 35), (35, 36), (37, 40), (41, 43), (44, 51), (52, 53), (53, 54), (54, 54)]"
+    )
+
+
+def test_token_based_document_to_text_based_strip_multi_span(
+    token_document_with_multi_spans, text_document_with_multi_spans
+):
+    doc = TestDocumentWithMultiSpans(text=text_document_with_multi_spans.text)
+    # add a span that is not aligned with the tokenization
+    doc.entities.append(LabeledMultiSpan(slices=((5, 16),), label="unaligned"))
+    assert doc.entities.resolve() == [("unaligned", (" sentence. ",))]
+
+    result_doc = text_based_document_to_token_based(
+        doc,
+        tokens=list(token_document_with_multi_spans.tokens),
+        result_document_type=TokenizedTestDocumentWithMultiSpans,
+        strip_spans=True,
+    )
+    assert result_doc.entities.resolve() == [("unaligned", (("sentence", "."),))]
 
 
 def test_text_based_document_to_token_based_wrong_annotation_type():

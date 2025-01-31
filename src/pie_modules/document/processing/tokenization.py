@@ -55,18 +55,67 @@ def find_token_offset_mapping(text: str, tokens: Iterable[str]) -> List[Tuple[in
     return token_offset_mapping
 
 
+def get_stripped_offsets(start: int, end: int, string: str) -> Tuple[int, int]:
+    """Get the stripped offsets of a span in a string, i.e. the start and end index of the span
+    without leading and trailing whitespaces. If the span is only whitespaces, a tuple is returned
+    where start > end.
+
+    Args:
+        start (int): The start index.
+        end (int): The end index.
+        string (str): The string.
+
+    Returns:
+        Tuple[int, int]: The stripped offsets.
+    """
+    span_str = string[start:end]
+    left_offset = len(span_str) - len(span_str.lstrip())
+    right_offset = len(span_str) - len(span_str.rstrip())
+
+    return start + left_offset, end - right_offset
+
+
 def char_span_to_token_span(
-    span: Annotation, char_to_token: Callable[[int], Optional[int]]
+    span: Annotation, char_to_token: Callable[[int], Optional[int]], strip_span: bool = False
 ) -> Optional[Union[Span, MultiSpan]]:
     if isinstance(span, Span):
-        start_token_idx = char_to_token(span.start)
-        end_token_idx_inclusive = char_to_token(span.end - 1)
+        if strip_span:
+            base_text = span.targets[0]
+            if not isinstance(base_text, str):
+                raise TypeError(
+                    f"The first target of a text targeting span must be a string, but found {type(base_text)} as first "
+                    f"target type. Can not convert the span {span}."
+                )
+            char_start, char_end = get_stripped_offsets(span.start, span.end, base_text)
+        else:
+            char_start, char_end = span.start, span.end
+        # we can not convert empty and invalid spans
+        if char_start >= char_end:
+            return None
+        start_token_idx = char_to_token(char_start)
+        end_token_idx_inclusive = char_to_token(char_end - 1)
         if start_token_idx is None or end_token_idx_inclusive is None:
             return None
         return span.copy(start=start_token_idx, end=end_token_idx_inclusive + 1)
     elif isinstance(span, MultiSpan):
+        if strip_span:
+            base_text = span.targets[0]
+            if not isinstance(base_text, str):
+                raise TypeError(
+                    f"The first target of a text targeting span must be a string, but found {type(base_text)} as first "
+                    f"target type. Can not convert the span {span}."
+                )
+            stripped_slices = [
+                get_stripped_offsets(start, end, base_text) for start, end in span.slices
+            ]
+        else:
+            stripped_slices = span.slices
+        # remove empty and invalid slices
+        stripped_slices = [(start, end) for start, end in stripped_slices if start < end]
+        if len(stripped_slices) == 0:
+            return None
         slices_inclusive_end = [
-            (char_to_token(start), char_to_token(end - 1)) for start, end in span.slices
+            (char_to_token(start), char_to_token(end - 1)) for start, end in stripped_slices
         ]
         if any(start is None or end is None for start, end in slices_inclusive_end):
             return None
@@ -120,6 +169,7 @@ def text_based_document_to_token_based(
     tokens: Optional[List[str]] = None,
     token_offset_mapping: Optional[List[Tuple[int, int]]] = None,
     char_to_token: Optional[Callable[[int], Optional[int]]] = None,
+    strip_spans: bool = False,
     strict_span_conversion: bool = True,
     verbose: bool = True,
     added_annotations: Optional[Dict[str, Dict[Annotation, Annotation]]] = None,
@@ -141,6 +191,8 @@ def text_based_document_to_token_based(
             to None.
         strict_span_conversion (bool, optional): If True, raise an error if not all annotations can
             be converted to token based documents. Defaults to True.
+        strip_spans (bool, optional): If True, strip the whitespace from the character spans before
+            converting them to token spans. Defaults to False.
         verbose (bool, optional): If True, log warnings if annotations can not be converted. Defaults
             to True.
         added_annotations (Optional[Dict[str, Dict[Annotation, Annotation]]], optional): Pass an empty
@@ -225,7 +277,7 @@ def text_based_document_to_token_based(
     for text_targeting_layer_name in text_targeting_layers:
         override_annotations[text_targeting_layer_name] = {}
         for char_span in doc[text_targeting_layer_name]:
-            token_span = char_span_to_token_span(char_span, char_to_token)
+            token_span = char_span_to_token_span(char_span, char_to_token, strip_spans)
             if token_span is None:
                 if strict_span_conversion:
                     raise ValueError(
@@ -404,6 +456,7 @@ def tokenize_document(
     tokenizer: PreTrainedTokenizer,
     result_document_type: Type[ToD],
     partition_layer: Optional[str] = None,
+    strip_spans: bool = False,
     strict_span_conversion: bool = True,
     added_annotations: Optional[List[Dict[str, Dict[Annotation, Annotation]]]] = None,
     verbose: bool = True,
@@ -420,6 +473,8 @@ def tokenize_document(
         result_document_type (Type[ToD]): The exact type of the token based documents.
         partition_layer (Optional[str], optional): The layer to use for partitioning the document. If None, the whole
             document is tokenized. Defaults to None.
+        strip_spans (bool, optional): If True, strip the whitespace from the character spans before converting them to
+            token spans. Defaults to False.
         strict_span_conversion (bool, optional): If True, raise an error if not all annotations can be converted to
             token based documents. Defaults to True.
         added_annotations (Optional[List[Dict[str, Dict[Annotation, Annotation]]]], optional): Pass an empty list to
@@ -471,6 +526,7 @@ def tokenize_document(
                 token_offset_mapping=token_offset_mapping,
                 char_to_token=char_to_token,
                 strict_span_conversion=False,
+                strip_spans=strip_spans,
                 verbose=False,
                 added_annotations=current_added_annotations,
             )
