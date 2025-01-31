@@ -445,7 +445,7 @@ def test_text_based_document_to_token_based_space_span(text_document, token_docu
     assert len(tokenized_doc.entities) == 0
 
 
-def test_text_based_document_to_token_based_trim_span(text_document, token_document):
+def test_text_based_document_to_token_based_strip_span(text_document, token_document):
     doc = TestDocument(text=text_document.text)
     # add a span that is not aligned with the tokenization
     doc.entities.append(LabeledSpan(start=5, end=16, label="unaligned"))
@@ -455,6 +455,7 @@ def test_text_based_document_to_token_based_trim_span(text_document, token_docum
         doc,
         tokens=list(token_document.tokens),
         result_document_type=TokenizedTestDocument,
+        strip_spans=True,
     )
     assert result_doc.entities.resolve() == [("unaligned", ("sentence", "."))]
 
@@ -525,7 +526,7 @@ def test_text_based_document_to_token_based_empty_multi_span_slice_strict(
     )
 
 
-def test_token_based_document_to_text_based_trim_multi_span(
+def test_token_based_document_to_text_based_strip_multi_span(
     token_document_with_multi_spans, text_document_with_multi_spans
 ):
     doc = TestDocumentWithMultiSpans(text=text_document_with_multi_spans.text)
@@ -537,6 +538,7 @@ def test_token_based_document_to_text_based_trim_multi_span(
         doc,
         tokens=list(token_document_with_multi_spans.tokens),
         result_document_type=TokenizedTestDocumentWithMultiSpans,
+        strip_spans=True,
     )
     assert result_doc.entities.resolve() == [("unaligned", (("sentence", "."),))]
 
