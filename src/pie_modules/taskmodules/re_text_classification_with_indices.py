@@ -572,9 +572,7 @@ class RETextClassificationWithIndicesTaskModule(
             if self.marker_factory.all_roles == {HEAD, TAIL}:
                 for arguments in list(arguments2relation.keys()):
                     role2arg = dict(arguments)
-                    role2label = {
-                        role: arg.label for role, arg in role2arg.items() if hasattr(arg, "label")
-                    }
+                    role2label = {role: getattr(arg, "label") for role, arg in role2arg.items()}
                     head_tail_labels = (role2label.get(HEAD), role2label.get(TAIL))
                     if head_tail_labels not in self.argument_type_whitelist:
                         rel = arguments2relation.pop(arguments)
@@ -602,7 +600,8 @@ class RETextClassificationWithIndicesTaskModule(
                         # Skip if argument_type_whitelist is defined and current candidates do not fit.
                         if (
                             self.argument_type_whitelist is not None
-                            and (head.label, tail.label) not in self.argument_type_whitelist
+                            and (getattr(head, "label"), getattr(tail, "label"))
+                            not in self.argument_type_whitelist
                         ):
                             continue
 
