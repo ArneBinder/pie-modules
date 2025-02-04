@@ -21,6 +21,7 @@ from pie_modules.taskmodules import RETextClassificationWithIndicesTaskModule
 from pie_modules.taskmodules.re_text_classification_with_indices import (
     HEAD,
     TAIL,
+    get_relation_argument_spans_and_roles,
     inner_span_distance,
     span_distance,
 )
@@ -1185,21 +1186,26 @@ def test_add_candidate_relations_with_argument_type_whitelist(documents):
         add_candidate_relations=True,
         argument_type_whitelist=[["PER", "ORG"], ["ORG", "PER"]],
     )
+    doc = documents[4]
+    taskmodule.prepare(documents)
 
-    assert documents[4].entities.resolve() == [("PER", "Entity G"), ("ORG", "H"), ("ORG", "I")]
-    assert documents[4].relations.resolve() == [
+    assert doc.entities.resolve() == [("PER", "Entity G"), ("ORG", "H"), ("ORG", "I")]
+    assert doc.relations.resolve() == [
         ("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))),
         ("per:founder", (("PER", "Entity G"), ("ORG", "I"))),
         ("org:founded_by", (("ORG", "I"), ("ORG", "H"))),
     ]
+    arguments2relation = {}
+    for rel in doc.relations:
+        arguments2relation[get_relation_argument_spans_and_roles(rel)] = rel
+    assert len(arguments2relation) == 3
 
-    taskmodule.prepare(documents)
-    encodings = taskmodule.encode(documents[4])
+    taskmodule._add_candidate_relations(
+        arguments2relation=arguments2relation, entities=doc.entities
+    )
+    assert len(arguments2relation) == 5
 
-    assert len(encodings) == 5
-
-    relations = [encoding.metadata["candidate_annotation"] for encoding in encodings]
-    relation_tuples = [rel.resolve() for rel in relations]
+    relation_tuples = [rel.resolve() for rel in arguments2relation.values()]
 
     # Original relations from document (aren't affected by whitelist)
     assert relation_tuples[0] == ("per:employee_of", (("PER", "Entity G"), ("ORG", "H")))
@@ -1214,7 +1220,7 @@ def test_add_candidate_relations_with_argument_type_whitelist(documents):
     assert ("no_relation", (("ORG", "H"), ("ORG", "I"))) not in relation_tuples
 
 
-def test_taskmodule_with_argument_type_whitelist_without_add_candidate_relations(documents):
+def test_taskmodule_with_argument_type_whitelist_without_add_candidate_relations():
     with pytest.raises(ValueError) as excinfo:
         taskmodule = RETextClassificationWithIndicesTaskModule(
             relation_annotation="relations",
