@@ -378,10 +378,6 @@ class RETextClassificationWithIndicesTaskModule(
         self.argument_type_whitelist: Optional[List[Tuple[str, str]]] = None
 
         if argument_type_whitelist is not None:
-            if not add_candidate_relations:
-                raise ValueError(
-                    "The parameter argument_type_whitelist should only be used with add_candidate_relations=True"
-                )
             # hydra does not support tuples, so we got lists and need to convert them
             self.argument_type_whitelist = [
                 (types[0], types[1]) for types in argument_type_whitelist
@@ -567,6 +563,29 @@ class RETextClassificationWithIndicesTaskModule(
                         f"{type(rel)}"
                     )
 
+    def _filter_relations_by_argument_type_whitelist(
+        self,
+        arguments2relation: Dict[Tuple[Tuple[str, Annotation], ...], Annotation],
+        doc_id: Optional[str] = None,
+    ) -> None:
+        if self.argument_type_whitelist is not None:
+            if self.marker_factory.all_roles == {HEAD, TAIL}:
+                for arguments in list(arguments2relation.keys()):
+                    role2arg = dict(arguments)
+                    role2label = {
+                        role: arg.label for role, arg in role2arg.items() if hasattr(arg, "label")
+                    }
+                    head_tail_labels = (role2label.get(HEAD), role2label.get(TAIL))
+                    if head_tail_labels not in self.argument_type_whitelist:
+                        rel = arguments2relation.pop(arguments)
+                        self.collect_relation("skipped_argument_type_whitelist", rel)
+            else:
+                raise NotImplementedError(
+                    f"doc.id={doc_id}: the taskmodule does not yet support filtering relations "
+                    f"by argument_type_whitelist with argument roles other than 'head' and "
+                    f"'tail': {sorted(self.marker_factory.all_roles)}"
+                )
+
     def _add_candidate_relations(
         self,
         arguments2relation: Dict[Tuple[Tuple[str, Annotation], ...], Annotation],
@@ -691,6 +710,9 @@ class RETextClassificationWithIndicesTaskModule(
                     self.collect_relation("skipped_partially_contained", rel)
 
             self._add_reversed_relations(arguments2relation=arguments2relation, doc_id=document.id)
+            self._filter_relations_by_argument_type_whitelist(
+                arguments2relation=arguments2relation, doc_id=document.id
+            )
             self._add_candidate_relations(
                 arguments2relation=arguments2relation, entities=entities, doc_id=document.id
             )
