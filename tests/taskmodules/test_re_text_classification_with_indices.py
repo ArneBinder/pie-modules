@@ -1191,19 +1191,32 @@ def test_encode_input_with_add_candidate_relations_with_argument_type_whitelist(
     assert len(encodings) == 5
 
     relations = [encoding.metadata["candidate_annotation"] for encoding in encodings]
-    relation_tuples = [(str(rel.head), rel.label, str(rel.tail)) for rel in relations]
+    relation_tuples = [rel.resolve() for rel in relations]
 
-    # Original relations from document
-    assert relation_tuples[0] == ("Entity G", "per:employee_of", "H")
-    assert relation_tuples[1] == ("Entity G", "per:founder", "I")
-    assert relation_tuples[2] == ("I", "org:founded_by", "H")
+    # Original relations from document (aren't affected by whitelist)
+    assert relation_tuples[0] == ("per:employee_of", (("PER", "Entity G"), ("ORG", "H")))
+    assert relation_tuples[1] == ("per:founder", (("PER", "Entity G"), ("ORG", "I")))
+    assert relation_tuples[2] == ("org:founded_by", (("ORG", "I"), ("ORG", "H")))
 
     # Relation candidate added by _add_candidate_relations()
-    assert relation_tuples[3] == ("H", "no_relation", "Entity G")
-    assert relation_tuples[4] == ("I", "no_relation", "Entity G")
+    assert relation_tuples[3] == ("no_relation", (("ORG", "H"), ("PER", "Entity G")))
+    assert relation_tuples[4] == ("no_relation", (("ORG", "I"), ("PER", "Entity G")))
 
     # Relations not created due to whitelist
-    assert ("H", "no_relation", "I") not in relation_tuples
+    assert ("no_relation", (("ORG", "H"), ("ORG", "I"))) not in relation_tuples
+
+
+def test_encode_input_with_argument_type_whitelist_without_add_candidate_relations(documents):
+    with pytest.raises(ValueError) as excinfo:
+        taskmodule = RETextClassificationWithIndicesTaskModule(
+            relation_annotation="relations",
+            tokenizer_name_or_path="bert-base-cased",
+            argument_type_whitelist=[["PER", "ORG"], ["ORG", "PER"]],
+        )
+    assert (
+        str(excinfo.value)
+        == "The parameter argument_type_whitelist should only be used with add_candidate_relations=True"
+    )
 
 
 def test_encode_input_with_add_reversed_relations(documents):
