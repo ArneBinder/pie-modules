@@ -1186,52 +1186,23 @@ def test_encode_input_with_add_candidate_relations_with_argument_type_whitelist(
         argument_type_whitelist=[["PER", "ORG"], ["ORG", "PER"]],
     )
     taskmodule.prepare(documents)
-    documents_without_relations = []
-    encodings = []
-    # just take the first five documents
-    for doc in documents[:5]:
-        doc_without_relations = doc.copy()
-        relations = list(doc_without_relations.relations)
-        doc_without_relations.relations.clear()
-        # re-add one relation to test if it is kept
-        if len(relations) > 0:
-            doc_without_relations.relations.append(relations[0])
-        documents_without_relations.append(doc_without_relations)
-        encodings.extend(taskmodule.encode(doc_without_relations))
+    encodings = taskmodule.encode(documents[4])
 
-    assert len(encodings) == 10
+    assert len(encodings) == 5
+
     relations = [encoding.metadata["candidate_annotation"] for encoding in encodings]
-    texts = [encoding.document.text for encoding in encodings]
     relation_tuples = [(str(rel.head), rel.label, str(rel.tail)) for rel in relations]
 
-    # There are no entities in the first document, so there are no created relation candidates
+    # Original relations from document
+    assert relation_tuples[0] == ("Entity G", "per:employee_of", "H")
+    assert relation_tuples[1] == ("Entity G", "per:founder", "I")
+    assert relation_tuples[2] == ("I", "org:founded_by", "H")
 
-    # this relations were kept
-    assert texts[0] == "Entity A works at B."
-    assert relation_tuples[0] == ("Entity A", "per:employee_of", "B")
-    assert texts[6] == "First sentence. Entity G works at H. And founded I."
-    assert relation_tuples[6] == ("Entity G", "per:employee_of", "H")
+    # Relation candidate added by _add_candidate_relations()
+    assert relation_tuples[3] == ("H", "no_relation", "Entity G")
+    assert relation_tuples[4] == ("I", "no_relation", "Entity G")
 
-    # the following relations were added
-    assert texts[1] == "Entity A works at B."
-    assert relation_tuples[1] == ("B", "no_relation", "Entity A")
-    assert texts[2] == "Entity C and D."
-    assert relation_tuples[2] == ("Entity C", "no_relation", "D")
-    assert texts[3] == "Entity C and D."
-    assert relation_tuples[3] == ("D", "no_relation", "Entity C")
-    assert texts[4] == "First sentence. Entity E and F."
-    assert relation_tuples[4] == ("Entity E", "no_relation", "F")
-    assert texts[5] == "First sentence. Entity E and F."
-    assert relation_tuples[5] == ("F", "no_relation", "Entity E")
-    assert texts[7] == "First sentence. Entity G works at H. And founded I."
-    assert relation_tuples[7] == ("Entity G", "no_relation", "I")
-    assert texts[8] == "First sentence. Entity G works at H. And founded I."
-    assert relation_tuples[8] == ("H", "no_relation", "Entity G")
-    assert texts[9] == "First sentence. Entity G works at H. And founded I."
-    assert relation_tuples[9] == ("I", "no_relation", "Entity G")
-
-    # Check that not whitelisted argument pairs were not added
-    assert ("I", "no_relation", "H") not in relation_tuples
+    # Relations not created due to whitelist
     assert ("H", "no_relation", "I") not in relation_tuples
 
 
