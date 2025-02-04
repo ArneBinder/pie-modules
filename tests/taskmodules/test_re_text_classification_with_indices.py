@@ -1178,13 +1178,21 @@ def test_encode_input_with_add_candidate_relations_with_wrong_relation_type(
     )
 
 
-def test_encode_input_with_add_candidate_relations_with_argument_type_whitelist(documents):
+def test_add_candidate_relations_with_argument_type_whitelist(documents):
     taskmodule = RETextClassificationWithIndicesTaskModule(
         relation_annotation="relations",
         tokenizer_name_or_path="bert-base-cased",
         add_candidate_relations=True,
         argument_type_whitelist=[["PER", "ORG"], ["ORG", "PER"]],
     )
+
+    assert documents[4].entities.resolve() == [("PER", "Entity G"), ("ORG", "H"), ("ORG", "I")]
+    assert documents[4].relations.resolve() == [
+        ("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))),
+        ("per:founder", (("PER", "Entity G"), ("ORG", "I"))),
+        ("org:founded_by", (("ORG", "I"), ("ORG", "H"))),
+    ]
+
     taskmodule.prepare(documents)
     encodings = taskmodule.encode(documents[4])
 
@@ -1206,7 +1214,7 @@ def test_encode_input_with_add_candidate_relations_with_argument_type_whitelist(
     assert ("no_relation", (("ORG", "H"), ("ORG", "I"))) not in relation_tuples
 
 
-def test_encode_input_with_argument_type_whitelist_without_add_candidate_relations(documents):
+def test_taskmodule_with_argument_type_whitelist_without_add_candidate_relations(documents):
     with pytest.raises(ValueError) as excinfo:
         taskmodule = RETextClassificationWithIndicesTaskModule(
             relation_annotation="relations",
