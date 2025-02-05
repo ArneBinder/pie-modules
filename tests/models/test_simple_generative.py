@@ -29,8 +29,10 @@ def taskmodule():
 @pytest.fixture(scope="module")
 def model(taskmodule) -> SimpleGenerativeModel:
     return SimpleGenerativeModel(
-        base_model_type="transformers.AutoModelForSeq2SeqLM",
-        base_model_config=dict(pretrained_model_name_or_path=MODEL_ID),
+        base_model={
+            "_target_": "transformers.AutoModelForSeq2SeqLM.from_pretrained",
+            "pretrained_model_name_or_path": MODEL_ID,
+        },
         # only use predictions for metrics in test stage to cover all cases (default is all stages)
         metric_call_predict=[TESTING],
         taskmodule_config=taskmodule.config,
@@ -107,14 +109,17 @@ def test_model_pickleable(model):
 def test_model_without_taskmodule(caplog):
     with caplog.at_level("WARNING"):
         model = SimpleGenerativeModel(
-            base_model_type="transformers.AutoModelForSeq2SeqLM",
-            base_model_config=dict(pretrained_model_name_or_path=MODEL_ID),
+            base_model={
+                "_target_": "transformers.AutoModelForSeq2SeqLM.from_pretrained",
+                "pretrained_model_name_or_path": MODEL_ID,
+            },
         )
     assert model is not None
     assert caplog.messages == [
-        "No taskmodule is available, so no metrics are set up. Please provide a taskmodule_config to enable metrics for stages ['train', 'val', 'test'].",
-        "The base_model_type and base_model_config arguments are deprecated. Please use base_model. You can use the following code to create the base_model argument: base_model = {'_target_': f'{base_model_type}.from_pretrained', **base_model_config}",
-        "No taskmodule is available, so no generation config will be created. Consider setting taskmodule_config to a valid taskmodule config to use specific setup for generation.",
+        "No taskmodule is available, so no metrics are set up. Please provide a taskmodule_config "
+        "to enable metrics for stages ['train', 'val', 'test'].",
+        "No taskmodule is available, so no generation config will be created. Consider setting "
+        "taskmodule_config to a valid taskmodule config to use specific setup for generation.",
     ]
 
 
@@ -123,12 +128,14 @@ def test_model_with_deprecated_base_model_setup(caplog, taskmodule):
         model = SimpleGenerativeModel(
             base_model_type="transformers.AutoModelForSeq2SeqLM",
             base_model_config=dict(pretrained_model_name_or_path=MODEL_ID),
-            taskmodule_config=taskmodule.config
+            taskmodule_config=taskmodule.config,
         )
     assert model is not None
     assert caplog.messages == [
-        "The base_model_type and base_model_config arguments are deprecated. Please use base_model. You can use the following code to create the base_model argument: base_model = {'_target_': f'{base_model_type}.from_pretrained', **base_model_config}",
-        ]
+        "The base_model_type and base_model_config arguments are deprecated. Please use base_model. "
+        "You can use the following code to create the base_model argument: "
+        "base_model = {'_target_': f'{base_model_type}.from_pretrained', **base_model_config}",
+    ]
 
 
 @pytest.fixture(scope="module")
