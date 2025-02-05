@@ -3,11 +3,16 @@ import logging
 from typing import Any, Dict, Optional, Tuple, Type, Union
 
 import torch
+from hydra.utils import instantiate
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch import FloatTensor, LongTensor
 from torch.optim import Optimizer
-from transformers import PreTrainedModel, get_linear_schedule_with_warmup
+from transformers import (
+    GenerationMixin,
+    PreTrainedModel,
+    get_linear_schedule_with_warmup,
+)
 from transformers.modeling_outputs import Seq2SeqLMOutput
 from typing_extensions import TypeAlias
 
@@ -59,8 +64,10 @@ class SimpleGenerativeModel(
     def __init__(
         self,
         # base model setup
-        base_model_type: str,
-        base_model_config: Dict[str, Any],
+        base_model: Optional[Dict[str, Any]] = None,
+        # old setup
+        base_model_type: Optional[str] = None,
+        base_model_config: Optional[Dict[str, Any]] = None,
         # generation
         override_generation_kwargs: Optional[Dict[str, Any]] = None,
         # scheduler / optimizer
@@ -71,17 +78,30 @@ class SimpleGenerativeModel(
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.save_hyperparameters()
+        if base_model is None:
+            if base_model_type is None:
+                raise ValueError(
+                    "Either base_model or base_model_type must be provided. If base_model is not provided, "
+                    "base_model_type must be a valid model type, e.g. 'transformers.AutoModelForSeq2SeqLM'."
+                )
+            if base_model_config is None:
+                raise ValueError(
+                    "base_model_config must be provided if base_model is not provided. It should be a dictionary "
+                    "with the keyword arguments that will be passed to the from_pretrained() method of the base model."
+                )
+            logger.warning(
+                "The base_model_type and base_model_config arguments are deprecated. Please use base_model. You can use the following code to create the base_model argument: base_model = {'_target_': f'{base_model_type}.from_pretrained', **base_model_config}"
+            )
+            base_model = {"_target_": f"{base_model_type}.from_pretrained", **base_model_config}
+
+        self.save_hyperparameters(ignore=["base_model_type", "base_model_config"])
 
         # optimizer / scheduler
         self.learning_rate = learning_rate
         self.optimizer_type = optimizer_type
         self.warmup_proportion = warmup_proportion
 
-        # Note: We do not set expected_super_type=PreTrainedModel for resolve_type() because
-        #   AutoModel* classed such as AutoModelForSeq2SeqLM do not inherit from that.
-        resolved_base_model_type: Type[PreTrainedModel] = resolve_type(base_model_type)
-        self.model = resolved_base_model_type.from_pretrained(**base_model_config)
+        self.model: GenerationMixin = instantiate(base_model)
         self.generation_config = self.configure_generation(**(override_generation_kwargs or {}))
 
     def configure_generation(self, **kwargs) -> Dict[str, Any]:
