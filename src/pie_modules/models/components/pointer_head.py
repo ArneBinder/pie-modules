@@ -261,6 +261,7 @@ class PointerHead(torch.nn.Module):
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         constraints: Optional[torch.LongTensor] = None,
     ):
+        min_float_val = torch.finfo(last_hidden_state.dtype).min
         # assemble the logits
         logits = last_hidden_state.new_full(
             (
@@ -268,7 +269,7 @@ class PointerHead(torch.nn.Module):
                 last_hidden_state.size(1),
                 self.pointer_offset + encoder_input_ids.size(-1),
             ),
-            fill_value=-1e24,
+            fill_value=min_float_val,
         )
 
         # eos and label scores depend only on the decoder output
@@ -295,7 +296,7 @@ class PointerHead(torch.nn.Module):
         # never point to the padding or the eos token in the encoder input
         # TODO: why not excluding the bos token? seems to give worse results, but not tested extensively
         mask_invalid = encoder_attention_mask.eq(0) | encoder_input_ids.eq(self.eos_token_id)
-        avg_word_scores = avg_word_scores.masked_fill(mask_invalid.unsqueeze(1), -1e32)
+        avg_word_scores = avg_word_scores.masked_fill(mask_invalid.unsqueeze(1), min_float_val)
 
         # Note: the remaining row in logits contains the score for the bos token which should be never generated!
         logits[:, :, [self.eos_id]] = eos_scores
@@ -337,7 +338,7 @@ class PointerHead(torch.nn.Module):
                     last_hidden_state.size(1),
                     self.pointer_offset + encoder_input_ids.size(-1),
                 ),
-                fill_value=-1e24,
+                fill_value=min_float_val,
             )
             constraints_logits[:, :, self.label_ids] = constraints_label_scores
             constraints_logits[:, :, self.pointer_offset :] = constraints_word_scores
@@ -346,7 +347,8 @@ class PointerHead(torch.nn.Module):
             constraints_logits_valid = constraints_logits[mask]
             constraints_valid = constraints[mask]
             loss_c = F.binary_cross_entropy(
-                torch.sigmoid(constraints_logits_valid), constraints_valid.float()
+                torch.sigmoid(constraints_logits_valid),
+                constraints_valid.to(dtype=constraints_logits_valid.dtype),
             )
 
             if loss is None:
