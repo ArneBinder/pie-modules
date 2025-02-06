@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 import torch
 from transformers import (
@@ -313,7 +314,7 @@ def test_forward(model, batch, decoder_input_ids, config):
         torch.tensor(
             [
                 [
-                    -1.0000000138484279e24,
+                    -3.4028234663852886e38,
                     -0.23238050937652588,
                     0.2958170175552368,
                     0.05529244244098663,
@@ -329,10 +330,10 @@ def test_forward(model, batch, decoder_input_ids, config):
                     0.05362509936094284,
                     0.04528001323342323,
                     -0.0684177577495575,
-                    -1.0000000331813535e32,
+                    -3.4028234663852886e38,
                 ],
                 [
-                    -1.0000000138484279e24,
+                    -3.4028234663852886e38,
                     -0.23274855315685272,
                     0.2960396707057953,
                     0.05556505173444748,
@@ -343,23 +344,25 @@ def test_forward(model, batch, decoder_input_ids, config):
                     0.06498698145151138,
                     0.07938676327466965,
                     -0.07943986356258392,
-                    -1.0000000331813535e32,
-                    -1.0000000331813535e32,
-                    -1.0000000331813535e32,
-                    -1.0000000331813535e32,
-                    -1.0000000331813535e32,
-                    -1.0000000331813535e32,
+                    -3.4028234663852886e38,
+                    -3.4028234663852886e38,
+                    -3.4028234663852886e38,
+                    -3.4028234663852886e38,
+                    -3.4028234663852886e38,
+                    -3.4028234663852886e38,
                 ],
             ]
         ),
     )
     # check the sum of all logits
     if config == {}:
+        # ensure that no individual value is -inf
+        assert outputs.logits.min() > -np.inf
         torch.testing.assert_close(
             outputs.logits.sum(0).sum(0),
             torch.tensor(
                 [
-                    -1.6000000221574846e25,
+                    -np.inf,
                     -0.9064984321594238,
                     1.189674735069275,
                     0.9796359539031982,
@@ -370,21 +373,23 @@ def test_forward(model, batch, decoder_input_ids, config):
                     -0.12306825071573257,
                     0.6218758225440979,
                     -0.4374474287033081,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -1.6000000530901656e33,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
                 ]
             ),
         )
     elif config == {"decoder_position_id_mode": "pattern"}:
+        # ensure that no individual value is -inf
+        assert outputs.logits.min() > -np.inf
         torch.testing.assert_close(
             outputs.logits.sum(0).sum(0),
             torch.tensor(
                 [
-                    -1.6000000221574846e25,
+                    -np.inf,
                     -0.5539568662643433,
                     0.7004716396331787,
                     1.5720455646514893,
@@ -395,12 +400,12 @@ def test_forward(model, batch, decoder_input_ids, config):
                     -0.04344810172915459,
                     0.3674442768096924,
                     -0.6838937997817993,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -1.6000000530901656e33,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
                 ]
             ),
         )
