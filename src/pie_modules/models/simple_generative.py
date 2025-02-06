@@ -81,6 +81,7 @@ class SimpleGenerativeModel(
         # Note: We do not set expected_super_type=PreTrainedModel for resolve_type() because
         #   AutoModel* classed such as AutoModelForSeq2SeqLM do not inherit from that.
         resolved_base_model_type: Type[PreTrainedModel] = resolve_type(base_model_type)
+        base_model_config["torch_dtype"] = torch.float16
         self.model = resolved_base_model_type.from_pretrained(**base_model_config)
         self.generation_config = self.configure_generation(**(override_generation_kwargs or {}))
 
