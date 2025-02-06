@@ -123,6 +123,17 @@ def test_model_without_taskmodule(caplog):
     ]
 
 
+def test_missing_base_model_and_type():
+    with pytest.raises(ValueError) as excinfo:
+        SimpleGenerativeModel()
+    assert (
+        str(excinfo.value)
+        == "Either base_model or base_model_type must be provided. If base_model is "
+        "not provided, base_model_type must be a valid model type, "
+        "e.g. 'transformers.AutoModelForSeq2SeqLM'."
+    )
+
+
 def test_model_with_deprecated_base_model_setup(caplog, taskmodule):
     with caplog.at_level("WARNING"):
         model = SimpleGenerativeModel(
