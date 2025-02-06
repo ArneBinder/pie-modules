@@ -96,7 +96,7 @@ class SimpleGenerativeModel(
         self.optimizer_type = optimizer_type
         self.warmup_proportion = warmup_proportion
 
-        self.model = self.setup_base_model(base_model)
+        self.model = self.setup_base_model(config=base_model)
         self.generation_config = self.configure_generation(**(override_generation_kwargs or {}))
 
     def setup_base_model(self, config: Dict[str, Any]) -> PreTrainedModel:
