@@ -83,15 +83,12 @@ class SimpleGenerativeModel(
                     "Either base_model or base_model_type must be provided. If base_model is not provided, "
                     "base_model_type must be a valid model type, e.g. 'transformers.AutoModelForSeq2SeqLM'."
                 )
-            if base_model_config is None:
-                raise ValueError(
-                    "base_model_config must be provided if base_model is not provided. It should be a dictionary "
-                    "with the keyword arguments that will be passed to the from_pretrained() method of the base model."
-                )
             logger.warning(
-                "The base_model_type and base_model_config arguments are deprecated. Please use base_model. You can use the following code to create the base_model argument: base_model = {'_type_': base_model_type, **base_model_config}"
+                "The base_model_type and base_model_config arguments are deprecated. Please use base_model. "
+                "You can use the following code to create the base_model argument: "
+                "base_model = {'_type_': base_model_type, **base_model_config}"
             )
-            base_model = {"_type_": base_model_type, **base_model_config}
+            base_model = {"_type_": base_model_type, **(base_model_config or {})}
 
         self.save_hyperparameters(ignore=["base_model_type", "base_model_config"])
         if scheduler_name is None and warmup_proportion > 0.0:
