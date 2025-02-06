@@ -30,7 +30,7 @@ def taskmodule():
 def model(taskmodule) -> SimpleGenerativeModel:
     return SimpleGenerativeModel(
         base_model={
-            "_target_": "transformers.AutoModelForSeq2SeqLM.from_pretrained",
+            "_type_": "transformers.AutoModelForSeq2SeqLM",
             "pretrained_model_name_or_path": MODEL_ID,
         },
         # only use predictions for metrics in test stage to cover all cases (default is all stages)
@@ -110,7 +110,7 @@ def test_model_without_taskmodule(caplog):
     with caplog.at_level("WARNING"):
         model = SimpleGenerativeModel(
             base_model={
-                "_target_": "transformers.AutoModelForSeq2SeqLM.from_pretrained",
+                "_type_": "transformers.AutoModelForSeq2SeqLM",
                 "pretrained_model_name_or_path": MODEL_ID,
             },
         )
@@ -134,7 +134,7 @@ def test_model_with_deprecated_base_model_setup(caplog, taskmodule):
     assert caplog.messages == [
         "The base_model_type and base_model_config arguments are deprecated. Please use base_model. "
         "You can use the following code to create the base_model argument: "
-        "base_model = {'_target_': f'{base_model_type}.from_pretrained', **base_model_config}",
+        "base_model = {'_type_': base_model_type, **base_model_config}",
     ]
 
 

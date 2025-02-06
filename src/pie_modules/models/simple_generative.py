@@ -3,17 +3,12 @@ import logging
 from typing import Any, Dict, Optional, Tuple, Type, Union
 
 import torch
-from hydra.utils import instantiate
 from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch import FloatTensor, LongTensor
 from torch.optim import Optimizer
 from transformers import PreTrainedModel, SchedulerType, get_scheduler
-from transformers import (
-    GenerationMixin,
-    PreTrainedModel,
-    get_linear_schedule_with_warmup,
-)
+from transformers import PreTrainedModel, get_linear_schedule_with_warmup
 from transformers.modeling_outputs import Seq2SeqLMOutput
 from typing_extensions import TypeAlias
 
@@ -94,9 +89,9 @@ class SimpleGenerativeModel(
                     "with the keyword arguments that will be passed to the from_pretrained() method of the base model."
                 )
             logger.warning(
-                "The base_model_type and base_model_config arguments are deprecated. Please use base_model. You can use the following code to create the base_model argument: base_model = {'_target_': f'{base_model_type}.from_pretrained', **base_model_config}"
+                "The base_model_type and base_model_config arguments are deprecated. Please use base_model. You can use the following code to create the base_model argument: base_model = {'_type_': base_model_type, **base_model_config}"
             )
-            base_model = {"_target_": f"{base_model_type}.from_pretrained", **base_model_config}
+            base_model = {"_type_": base_model_type, **base_model_config}
 
         self.save_hyperparameters(ignore=["base_model_type", "base_model_config"])
         if scheduler_name is None and warmup_proportion > 0.0:
@@ -115,8 +110,13 @@ class SimpleGenerativeModel(
         self.warmup_proportion = warmup_proportion
         self.scheduler_kwargs = scheduler_kwargs or {}
 
-        self.model: GenerationMixin = instantiate(base_model)
+        self.model = self.setup_base_model(base_model)
         self.generation_config = self.configure_generation(**(override_generation_kwargs or {}))
+
+    def setup_base_model(self, config: Dict[str, Any]) -> PreTrainedModel:
+        config = copy.copy(config)
+        resolved_base_model_type: Type[PreTrainedModel] = resolve_type(config.pop("_type_"))
+        return resolved_base_model_type.from_pretrained(**config)
 
     def configure_generation(self, **kwargs) -> Dict[str, Any]:
         if self.taskmodule is not None:
