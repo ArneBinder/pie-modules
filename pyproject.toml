@@ -30,7 +30,6 @@ torchmetrics = "^1"
 # >=4.35 because of BartModelWithDecoderPositionIds, <4.37 because of generation config
 # created from model config in BartAsPointerNetwork
 transformers = ">=4.35.0,<4.37.0"
-hydra-core = "^1.3.0"
 
 [tool.poetry.group.dev.dependencies]
 torch = {version = "^2.1.0+cpu", source = "pytorch"}
