@@ -261,8 +261,6 @@ class PointerHead(torch.nn.Module):
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         constraints: Optional[torch.LongTensor] = None,
     ):
-        # print(f"last_hidden_state dtype: {last_hidden_state.dtype}")
-        # print(f"encoder_last_hidden_state dtype: {encoder_last_hidden_state.dtype}")
         min_float_val = torch.finfo(last_hidden_state.dtype).min
         # assemble the logits
         logits = last_hidden_state.new_full(
