@@ -270,6 +270,7 @@ class PointerHead(torch.nn.Module):
                 self.pointer_offset + encoder_input_ids.size(-1),
             ),
             fill_value=min_float_val,
+            dtype=last_hidden_state.dtype,
         )
 
         # eos and label scores depend only on the decoder output
@@ -341,6 +342,7 @@ class PointerHead(torch.nn.Module):
                     self.pointer_offset + encoder_input_ids.size(-1),
                 ),
                 fill_value=min_float_val,
+                dtype=last_hidden_state.dtype,
             )
             constraints_logits[:, :, self.label_ids] = constraints_label_scores
             constraints_logits[:, :, self.pointer_offset :] = constraints_word_scores
