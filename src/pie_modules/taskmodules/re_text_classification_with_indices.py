@@ -337,6 +337,7 @@ class RETextClassificationWithIndicesTaskModule(
         log_first_n_examples: int = 0,
         add_argument_indices_to_input: bool = False,
         add_global_attention_mask_to_input: bool = False,
+        argument_type_whitelist: Optional[List[List[str]]] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -374,6 +375,13 @@ class RETextClassificationWithIndicesTaskModule(
         self.max_argument_distance_type = max_argument_distance_type
         self.max_window = max_window
         self.allow_discontinuous_text = allow_discontinuous_text
+        self.argument_type_whitelist: Optional[List[Tuple[str, str]]] = None
+
+        if argument_type_whitelist is not None:
+            # hydra does not support tuples, so we got lists and need to convert them
+            self.argument_type_whitelist = [
+                (types[0], types[1]) for types in argument_type_whitelist
+            ]
 
         # overwrite None with 0 for backward compatibility
         self.log_first_n_examples = log_first_n_examples or 0
@@ -555,6 +563,27 @@ class RETextClassificationWithIndicesTaskModule(
                         f"{type(rel)}"
                     )
 
+    def _filter_relations_by_argument_type_whitelist(
+        self,
+        arguments2relation: Dict[Tuple[Tuple[str, Annotation], ...], Annotation],
+        doc_id: Optional[str] = None,
+    ) -> None:
+        if self.argument_type_whitelist is not None:
+            if self.marker_factory.all_roles == {HEAD, TAIL}:
+                for arguments in list(arguments2relation.keys()):
+                    role2arg = dict(arguments)
+                    role2label = {role: getattr(arg, "label") for role, arg in role2arg.items()}
+                    head_tail_labels = (role2label.get(HEAD), role2label.get(TAIL))
+                    if head_tail_labels not in self.argument_type_whitelist:
+                        rel = arguments2relation.pop(arguments)
+                        self.collect_relation("skipped_argument_type_whitelist", rel)
+            else:
+                raise NotImplementedError(
+                    f"doc.id={doc_id}: the taskmodule does not yet support filtering relations "
+                    f"by argument_type_whitelist with argument roles other than 'head' and "
+                    f"'tail': {sorted(self.marker_factory.all_roles)}"
+                )
+
     def _add_candidate_relations(
         self,
         arguments2relation: Dict[Tuple[Tuple[str, Annotation], ...], Annotation],
@@ -566,15 +595,24 @@ class RETextClassificationWithIndicesTaskModule(
                 # iterate over all possible argument candidates
                 for head in entities:
                     for tail in entities:
-                        if head != tail:
-                            # Create a relation candidate with the none label. Otherwise, we use the existing relation.
-                            new_relation = BinaryRelation(
-                                head=head, tail=tail, label=self.none_label, score=1.0
-                            )
-                            new_relation_args = get_relation_argument_spans_and_roles(new_relation)
-                            # we use the new relation only if there is no existing relation with the same arguments
-                            if new_relation_args not in arguments2relation:
-                                arguments2relation[new_relation_args] = new_relation
+                        if head == tail:
+                            continue
+                        # Skip if argument_type_whitelist is defined and current candidates do not fit.
+                        if (
+                            self.argument_type_whitelist is not None
+                            and (getattr(head, "label"), getattr(tail, "label"))
+                            not in self.argument_type_whitelist
+                        ):
+                            continue
+
+                        # Create a relation candidate with the none label. Otherwise, we use the existing relation.
+                        new_relation = BinaryRelation(
+                            head=head, tail=tail, label=self.none_label, score=1.0
+                        )
+                        new_relation_args = get_relation_argument_spans_and_roles(new_relation)
+                        # we use the new relation only if there is no existing relation with the same arguments
+                        if new_relation_args not in arguments2relation:
+                            arguments2relation[new_relation_args] = new_relation
             else:
                 raise NotImplementedError(
                     f"doc.id={doc_id}: the taskmodule does not yet support adding relation candidates "
@@ -671,6 +709,9 @@ class RETextClassificationWithIndicesTaskModule(
                     self.collect_relation("skipped_partially_contained", rel)
 
             self._add_reversed_relations(arguments2relation=arguments2relation, doc_id=document.id)
+            self._filter_relations_by_argument_type_whitelist(
+                arguments2relation=arguments2relation, doc_id=document.id
+            )
             self._add_candidate_relations(
                 arguments2relation=arguments2relation, entities=entities, doc_id=document.id
             )
