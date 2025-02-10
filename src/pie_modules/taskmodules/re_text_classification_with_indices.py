@@ -379,7 +379,7 @@ class RETextClassificationWithIndicesTaskModule(
         self.max_argument_distance_type = max_argument_distance_type
         self.max_window = max_window
         self.allow_discontinuous_text = allow_discontinuous_text
-        self.relations_with_same_arguments = handle_relations_with_same_arguments
+        self.handle_relations_with_same_arguments = handle_relations_with_same_arguments
         self.relations_with_same_arguments = relations_with_same_arguments
         self.argument_type_whitelist: Optional[List[Tuple[str, str]]] = None
 
@@ -701,7 +701,7 @@ class RETextClassificationWithIndicesTaskModule(
                     if arguments in arguments2relation:
                         prev_label = arguments2relation[arguments].label
                         arguments_duplicates.add(arguments)
-                        if self.relations_with_same_arguments == "keep_first":
+                        if self.handle_relations_with_same_arguments == "keep_first":
                             logger.warning(
                                 f"doc.id={document.id}: there are multiple relations with the same arguments {arguments}: "
                                 f"previous label='{prev_label}' and current label='{rel.label}'. We only keep the first "
@@ -709,7 +709,7 @@ class RETextClassificationWithIndicesTaskModule(
                             )
                         # if `keep_none`, first occurred relations are removed after _add_candidate_relations() call,
                         # so that none of them are re-added as 'no-relation'
-                        elif self.relations_with_same_arguments == "keep_none":
+                        elif self.handle_relations_with_same_arguments == "keep_none":
                             logger.warning(
                                 f"doc.id={document.id}: there are multiple relations with the same arguments {arguments}: "
                                 f"previous label='{prev_label}' and current label='{rel.label}'. Both relations will be removed."
@@ -736,7 +736,7 @@ class RETextClassificationWithIndicesTaskModule(
                 arguments2relation=arguments2relation, entities=entities, doc_id=document.id
             )
             # remove remaining relation duplicates
-            if self.relations_with_same_arguments == "keep_none":
+            if self.handle_relations_with_same_arguments == "keep_none":
                 for arguments in arguments_duplicates:
                     rel = arguments2relation.pop(arguments)
                     self.collect_relation("skipped_same_arguments", rel)
