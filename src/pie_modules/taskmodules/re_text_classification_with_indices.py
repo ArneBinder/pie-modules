@@ -303,6 +303,8 @@ class RETextClassificationWithIndicesTaskModule(
             combining all entities in the document and assigning the none_label. If the document already contains
             a relation with the entity pair, we do not add it again. If False, assume that the document already
             contains relation annotations including negative examples (i.e. relations with the none_label).
+        handle_relations_with_same_arguments: str, defaults to "keep_none". If "keep_none", all relations that
+            share same arguments will be removed. If "keep_first", first occurred duplicate will be kept.
     """
 
     PREPARED_ATTRIBUTES = ["labels", "entity_labels"]
@@ -339,6 +341,7 @@ class RETextClassificationWithIndicesTaskModule(
         add_global_attention_mask_to_input: bool = False,
         argument_type_whitelist: Optional[List[List[str]]] = None,
         relations_with_same_arguments: Optional[str] = "keep_none",
+        handle_relations_with_same_arguments: str = "keep_none",
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -376,6 +379,7 @@ class RETextClassificationWithIndicesTaskModule(
         self.max_argument_distance_type = max_argument_distance_type
         self.max_window = max_window
         self.allow_discontinuous_text = allow_discontinuous_text
+        self.relations_with_same_arguments = handle_relations_with_same_arguments
         self.relations_with_same_arguments = relations_with_same_arguments
         self.argument_type_whitelist: Optional[List[Tuple[str, str]]] = None
 
@@ -712,7 +716,7 @@ class RETextClassificationWithIndicesTaskModule(
                             )
                         else:
                             raise ValueError(
-                                "'relations_with_same_arguments' must be 'keep_first' or 'keep_none'."
+                                "'handle_relations_with_same_arguments' must be 'keep_first' or 'keep_none'."
                             )
                         self.collect_relation("skipped_same_arguments", rel)
                     else:
