@@ -338,6 +338,7 @@ class RETextClassificationWithIndicesTaskModule(
         add_argument_indices_to_input: bool = False,
         add_global_attention_mask_to_input: bool = False,
         argument_type_whitelist: Optional[List[List[str]]] = None,
+        relations_with_same_arguments: Optional[str] = "keep_none",
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -375,6 +376,7 @@ class RETextClassificationWithIndicesTaskModule(
         self.max_argument_distance_type = max_argument_distance_type
         self.max_window = max_window
         self.allow_discontinuous_text = allow_discontinuous_text
+        self.relations_with_same_arguments = relations_with_same_arguments
         self.argument_type_whitelist: Optional[List[Tuple[str, str]]] = None
 
         if argument_type_whitelist is not None:
@@ -680,6 +682,7 @@ class RETextClassificationWithIndicesTaskModule(
             # create a mapping from relation arguments to the respective relation objects
             entities_set = set(entities)
             arguments2relation: Dict[Tuple[Tuple[str, Annotation], ...], Annotation] = {}
+            arguments_duplicates: Set[Tuple[Tuple[str, Annotation], ...]] = set()
             for rel in all_relations:
                 # skip relations with unknown labels
                 if rel.label not in self.label_to_id:
@@ -693,11 +696,24 @@ class RETextClassificationWithIndicesTaskModule(
                     # check if there are multiple relations with the same argument tuple
                     if arguments in arguments2relation:
                         prev_label = arguments2relation[arguments].label
-                        logger.warning(
-                            f"doc.id={document.id}: there are multiple relations with the same arguments {arguments}: "
-                            f"previous label='{prev_label}' and current label='{rel.label}'. We only keep the first "
-                            f"occurring relation which has the label='{prev_label}'."
-                        )
+                        arguments_duplicates.add(arguments)
+                        if self.relations_with_same_arguments == "keep_first":
+                            logger.warning(
+                                f"doc.id={document.id}: there are multiple relations with the same arguments {arguments}: "
+                                f"previous label='{prev_label}' and current label='{rel.label}'. We only keep the first "
+                                f"occurring relation which has the label='{prev_label}'."
+                            )
+                        # if `keep_none`, first occurred relations are removed after _add_candidate_relations() call,
+                        # so that none of them are re-added as 'no-relation'
+                        elif self.relations_with_same_arguments == "keep_none":
+                            logger.warning(
+                                f"doc.id={document.id}: there are multiple relations with the same arguments {arguments}: "
+                                f"previous label='{prev_label}' and current label='{rel.label}'. Both relations will be removed."
+                            )
+                        else:
+                            raise ValueError(
+                                "'relations_with_same_arguments' must be 'keep_first' or 'keep_none'."
+                            )
                         self.collect_relation("skipped_same_arguments", rel)
                     else:
                         arguments2relation[arguments] = rel
@@ -715,6 +731,12 @@ class RETextClassificationWithIndicesTaskModule(
             self._add_candidate_relations(
                 arguments2relation=arguments2relation, entities=entities, doc_id=document.id
             )
+            # remove remaining relation duplicates
+            if self.relations_with_same_arguments == "keep_none":
+                for arguments in arguments_duplicates:
+                    rel = arguments2relation.pop(arguments)
+                    self.collect_relation("skipped_same_arguments", rel)
+
             self._filter_relations_by_argument_distance(
                 arguments2relation=arguments2relation, doc_id=document.id
             )

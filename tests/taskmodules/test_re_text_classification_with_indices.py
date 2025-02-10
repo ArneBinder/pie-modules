@@ -1043,10 +1043,12 @@ def test_collate_with_add_argument_indices(batch_with_argument_indices):
     torch.testing.assert_close(inputs["pooler_end_indices"], torch.tensor([[6, 11], [9, 14]]))
 
 
-def test_encode_input_multiple_relations_for_same_arguments(caplog):
+@pytest.mark.parametrize("relations_with_same_arguments", ["keep_first", "keep_none"])
+def test_encode_input_multiple_relations_for_same_arguments(caplog, relations_with_same_arguments):
     taskmodule = RETextClassificationWithIndicesTaskModule(
         relation_annotation="relations",
         tokenizer_name_or_path="bert-base-cased",
+        relations_with_same_arguments=relations_with_same_arguments,
     )
     document = TestDocument(text="A founded B.", id="multiple_relations_for_same_arguments")
     document.entities.append(LabeledSpan(start=0, end=1, label="PER"))
@@ -1062,22 +1064,32 @@ def test_encode_input_multiple_relations_for_same_arguments(caplog):
     )
     taskmodule.prepare([document])
     encodings = taskmodule.encode_input(document)
-
     assert len(caplog.messages) == 1
-    assert (
-        caplog.messages[0]
-        == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the same arguments "
-        "(('head', LabeledSpan(start=0, end=1, label='PER', score=1.0)), "
-        "('tail', LabeledSpan(start=10, end=11, label='PER', score=1.0))): previous label='per:founded_by' "
-        "and current label='per:founder'. We only keep the first occurring relation which has the "
-        "label='per:founded_by'."
-    )
 
-    assert len(encodings) == 1
-    relation = encodings[0].metadata["candidate_annotation"]
-    assert str(relation.head) == "A"
-    assert str(relation.tail) == "B"
-    assert relation.label == "per:founded_by"
+    if relations_with_same_arguments == "keep_first":
+        assert (
+            caplog.messages[0]
+            == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the same arguments "
+            "(('head', LabeledSpan(start=0, end=1, label='PER', score=1.0)), "
+            "('tail', LabeledSpan(start=10, end=11, label='PER', score=1.0))): previous label='per:founded_by' "
+            "and current label='per:founder'. We only keep the first occurring relation which has the "
+            "label='per:founded_by'."
+        )
+
+        assert len(encodings) == 1
+        relation = encodings[0].metadata["candidate_annotation"]
+        assert str(relation.head) == "A"
+        assert str(relation.tail) == "B"
+        assert relation.label == "per:founded_by"
+    elif relations_with_same_arguments == "keep_none":
+        assert (
+            caplog.messages[0]
+            == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the same arguments "
+            "(('head', LabeledSpan(start=0, end=1, label='PER', score=1.0)), "
+            "('tail', LabeledSpan(start=10, end=11, label='PER', score=1.0))): previous label='per:founded_by' "
+            "and current label='per:founder'. Both relations will be removed."
+        )
+        assert len(encodings) == 0
 
 
 def test_encode_input_argument_role_unknown(documents):
