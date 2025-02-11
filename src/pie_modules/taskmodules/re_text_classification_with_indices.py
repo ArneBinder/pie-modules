@@ -700,7 +700,9 @@ class RETextClassificationWithIndicesTaskModule(
                     # check if there are multiple relations with the same argument tuple
                     if arguments in arguments2relation:
                         prev_label = arguments2relation[arguments].label
-                        arguments_resolved = tuple(map(lambda x: x[1].resolve(), arguments))
+                        arguments_resolved = tuple(
+                            map(lambda x: (x[0], x[1].resolve()), arguments)
+                        )
                         if prev_label == rel.label:
                             logger.warning(
                                 f"doc.id={document.id}: Relation annotation `{rel.resolve()}` is duplicated. "
