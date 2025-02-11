@@ -1074,32 +1074,26 @@ def test_encode_input_multiple_relations_for_same_arguments(
 
     with caplog.at_level(logging.INFO):
         taskmodule.show_statistics()
-    assert len(caplog.messages) == 3
     candidate_relation = [enc.metadata["candidate_annotation"] for enc in encodings]
     candidate_relation_tuples = [
         (rel.head.resolve(), rel.label, rel.tail.resolve()) for rel in candidate_relation
     ]
 
+    assert len(caplog.messages) == 2
     if handle_relations_with_same_arguments == "keep_first":
         assert (
             caplog.messages[0]
             == "doc.id=test_doc: there are multiple relations with the same arguments "
-            "(('head', ('PER', 'A')), ('tail', ('PER', 'B'))): previous "
-            "label='per:founded_by' and current label='per:founder'. We only keep the "
-            "first occurring relation which has the label='per:founded_by'."
-        )
-        assert (
-            caplog.messages[1]
-            == "doc.id=test_doc: Relation annotation `('per:founded_by', (('PER', 'A'), ('PER', 'B')))` "
-            "is duplicated. We keep only one of them. Duplicate won't appear in statistics either as "
-            "'available' or as skipped."
+            "(('head', ('PER', 'A')), ('tail', ('PER', 'B'))), but different labels: "
+            "['per:founded_by', 'per:founder', 'per:founded_by']. We only keep the first "
+            "occurring relation which has the label='per:founded_by'."
         )
         if not add_candidate_relations:
             # with 'keep_first', only first relation occurred is kept ('per:founded_by').
             # full duplicate of 'per:founded_by' is removed and appears neither as available,
             # nor as skipped in statistics.
             assert (
-                caplog.messages[2] == "statistics:\n"
+                caplog.messages[1] == "statistics:\n"
                 "|                        |   per:founded_by |   per:founder |   all_relations |\n"
                 "|:-----------------------|-----------------:|--------------:|----------------:|\n"
                 "| available              |                1 |             1 |               2 |\n"
@@ -1111,7 +1105,7 @@ def test_encode_input_multiple_relations_for_same_arguments(
         else:
             # as above, but with candidate (negative) relations added
             assert (
-                caplog.messages[2] == "statistics:\n"
+                caplog.messages[1] == "statistics:\n"
                 "|                        |   no_relation |   per:founded_by |   per:founder |   all_relations |\n"
                 "|:-----------------------|--------------:|-----------------:|--------------:|----------------:|\n"
                 "| available              |             0 |                1 |             1 |               2 |\n"
@@ -1127,21 +1121,15 @@ def test_encode_input_multiple_relations_for_same_arguments(
         assert (
             caplog.messages[0]
             == "doc.id=test_doc: there are multiple relations with the same arguments "
-            "(('head', ('PER', 'A')), ('tail', ('PER', 'B'))): previous label='per:founded_by' "
-            "and current label='per:founder'. Both relations will be removed."
-        )
-        assert (
-            caplog.messages[1]
-            == "doc.id=test_doc: Relation annotation `('per:founded_by', (('PER', 'A'), ('PER', 'B')))` "
-            "is duplicated. We keep only one of them. Duplicate won't appear in statistics either "
-            "as 'available' or as skipped."
+            "(('head', ('PER', 'A')), ('tail', ('PER', 'B'))), but different labels: "
+            "['per:founded_by', 'per:founder', 'per:founded_by']. All relations will be removed."
         )
         if not add_candidate_relations:
             # with 'keep_none' both relations sharing same arguments are removed
             # full duplicate of 'per:founded_by' is removed and appears neither as available,
             # nor as skipped in statistics.
             assert (
-                caplog.messages[2] == "statistics:\n"
+                caplog.messages[1] == "statistics:\n"
                 "|                        |   per:founded_by |   per:founder |   all_relations |\n"
                 "|:-----------------------|-----------------:|--------------:|----------------:|\n"
                 "| available              |                1 |             1 |               2 |\n"
@@ -1152,7 +1140,7 @@ def test_encode_input_multiple_relations_for_same_arguments(
             # all conflicting relations go into the same direction, so we can create a candidate (negative)
             # relation for the other direction.
             assert (
-                caplog.messages[2] == "statistics:\n"
+                caplog.messages[1] == "statistics:\n"
                 "|                        |   no_relation |   per:founded_by |   per:founder |   all_relations |\n"
                 "|:-----------------------|--------------:|-----------------:|--------------:|----------------:|\n"
                 "| available              |             0 |                1 |             1 |               2 |\n"

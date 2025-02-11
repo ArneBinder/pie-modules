@@ -8,6 +8,7 @@ workflow:
 """
 
 import logging
+from collections import defaultdict
 from functools import partial
 from typing import (
     Any,
@@ -692,14 +693,14 @@ class RETextClassificationWithIndicesTaskModule(
                 if is_contained_in((entity.start, entity.end), (partition.start, partition.end))
             ]
 
-            # create a mapping from relation arguments to the respective relation objects
+            # Create a mapping from relation arguments to the respective relation objects.
+            # Note that the data can contain multiple relations with the same arguments.
             entities_set = set(entities)
-            arguments2relation: Dict[Tuple[Tuple[str, Annotation], ...], Annotation] = {}
-            # we will never create an encoding for the relation candidates in arguments_blacklist
-            arguments_blacklist: Set[Tuple[Tuple[str, Annotation], ...]] = set()
-            arguments_duplicates: Set[Tuple[Tuple[str, Annotation], ...]] = set()
+            arguments2relations: Dict[Tuple[Tuple[str, Annotation], ...], List[Annotation]] = (
+                defaultdict(list)
+            )
             for rel in all_relations:
-                # skip relations with unknown labels
+                # Skip relations with unknown labels. Use label_to_id because that contains the none_label
                 if rel.label not in self.label_to_id:
                     self.collect_relation("skipped_unknown_label", rel)
                     continue
@@ -721,12 +722,49 @@ class RETextClassificationWithIndicesTaskModule(
                     )
                     self.collect_relation("skipped_partially_contained", rel)
                     continue
+                arguments2relations[arguments].append(rel)
 
-                # check if there are multiple relations with the same argument tuple
-                if arguments in arguments2relation:
-                    prev_label = arguments2relation[arguments].label
+            # resolve duplicates for same arguments
+            arguments2relation: Dict[Tuple[Tuple[str, Annotation], ...], Annotation] = {}
+            # we will never create an encoding for the relation candidates in arguments_blacklist
+            arguments_blacklist: Set[Tuple[Tuple[str, Annotation], ...]] = set()
+            for arguments, relations in arguments2relations.items():
+                relations_set = set(relations)
+                # more than one unique relation with the same arguments
+                if len(relations_set) > 1:
                     arguments_resolved = tuple(map(lambda x: (x[0], x[1].resolve()), arguments))
-                    if prev_label == rel.label:
+                    labels = [rel.label for rel in relations]
+                    if self.handle_relations_with_same_arguments == "keep_first":
+                        # keep only the first relation
+                        arguments2relation[arguments] = relations[0]
+                        for discard_rel in set(relations) - {
+                            relations[0]
+                        }:  # remove all other relations
+                            self.collect_relation("skipped_same_arguments", discard_rel)
+                        logger.warning(
+                            f"doc.id={document.id}: there are multiple relations with the same arguments "
+                            f"{arguments_resolved}, but different labels: {labels}. We only keep the first "
+                            f"occurring relation which has the label='{relations[0].label}'."
+                        )
+                    elif self.handle_relations_with_same_arguments == "keep_none":
+                        # add these arguments to the blacklist to not add them as 'no-relation's back again
+                        arguments_blacklist.add(arguments)
+                        # remove all relations with the same arguments
+                        for discard_rel in relations_set:
+                            self.collect_relation("skipped_same_arguments", discard_rel)
+                        logger.warning(
+                            f"doc.id={document.id}: there are multiple relations with the same arguments "
+                            f"{arguments_resolved}, but different labels: {labels}. All relations will be removed."
+                        )
+                    else:
+                        raise ValueError(
+                            f"'handle_relations_with_same_arguments' must be 'keep_first' or 'keep_none', "
+                            f"but got `{self.handle_relations_with_same_arguments}`."
+                        )
+                else:
+                    arguments2relation[arguments] = relations[0]
+                    # more than one duplicate relation (with the same arguments)
+                    if len(relations) > 1:
                         # if 'collect_statistics=true' such duplicates won't be collected and are not counted in
                         # statistics if 'collect_statistics=true' either as 'available' or as 'skipped_same_arguments'
                         logger.warning(
@@ -734,37 +772,6 @@ class RETextClassificationWithIndicesTaskModule(
                             f"We keep only one of them. Duplicate won't appear in statistics either as 'available' "
                             f"or as skipped."
                         )
-                        continue
-                    arguments_duplicates.add(arguments)
-                    if self.handle_relations_with_same_arguments == "keep_first":
-                        logger.warning(
-                            f"doc.id={document.id}: there are multiple relations with the same arguments {arguments_resolved}: "
-                            f"previous label='{prev_label}' and current label='{rel.label}'. We only keep the first "
-                            f"occurring relation which has the label='{prev_label}'."
-                        )
-                    # if `handle_relations_with_same_arguments="keep_none`, first occurred relations are removed
-                    # after _add_candidate_relations() call, so that none of them are re-added as 'no-relation'
-                    elif self.handle_relations_with_same_arguments == "keep_none":
-                        logger.warning(
-                            f"doc.id={document.id}: there are multiple relations with the same arguments {arguments_resolved}: "
-                            f"previous label='{prev_label}' and current label='{rel.label}'. Both relations will be removed."
-                        )
-                    else:
-                        raise ValueError(
-                            f"'handle_relations_with_same_arguments' must be 'keep_first' or 'keep_none', "
-                            f"but got `{self.handle_relations_with_same_arguments}`."
-                        )
-                    self.collect_relation("skipped_same_arguments", rel)
-                else:
-                    arguments2relation[arguments] = rel
-
-            # Remove remaining relation duplicates and add them to the blacklist
-            # to not add them as 'no-relation's back again.
-            if self.handle_relations_with_same_arguments == "keep_none":
-                for arguments in arguments_duplicates:
-                    arguments_blacklist.add(arguments)
-                    rel = arguments2relation.pop(arguments)
-                    self.collect_relation("skipped_same_arguments", rel)
 
             self._add_reversed_relations(arguments2relation=arguments2relation, doc_id=document.id)
             self._filter_relations_by_argument_type_whitelist(
