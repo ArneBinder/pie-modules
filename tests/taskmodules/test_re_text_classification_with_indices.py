@@ -1095,7 +1095,7 @@ def test_encode_input_multiple_relations_for_same_arguments(
                 caplog.messages[1]
                 == "doc.id=multiple_relations_for_same_arguments: Relation annotation "
                 "`('per:founded_by', (('PER', 'A'), ('PER', 'B')))` is duplicated. We keep "
-                "only one of them."
+                "only one of them. Duplicate won't appear in statistics either as 'available' or as skipped."
             )
             # with 'keep_first', only first relation occurred is kept ('per:founded_by').
             # full duplicate of 'per:founded_by' is removed and appears neither as available, nor as skipped in statistics.
@@ -1124,8 +1124,8 @@ def test_encode_input_multiple_relations_for_same_arguments(
             assert (
                 caplog.messages[1]
                 == "doc.id=multiple_relations_for_same_arguments: Relation annotation "
-                "`('per:founded_by', (('PER', 'A'), ('PER', 'B')))` is duplicated. "
-                "We keep only one of them."
+                "`('per:founded_by', (('PER', 'A'), ('PER', 'B')))` is duplicated. We keep "
+                "only one of them. Duplicate won't appear in statistics either as 'available' or as skipped."
             )
             # with 'keep_none' both relations sharing same arguments are removed
             # full duplicate of 'per:founded_by' is removed and appears neither as available, nor as skipped in statistics.
@@ -1168,7 +1168,7 @@ def test_encode_input_duplicated_relations(caplog, handle_relations_with_same_ar
     assert (
         caplog.messages[0] == "doc.id=multiple_relations_for_same_arguments: Relation annotation "
         "`('per:founded_by', (('PER', 'A'), ('PER', 'B')))` is duplicated. We keep "
-        "only one of them."
+        "only one of them. Duplicate won't appear in statistics either as 'available' or as skipped."
     )
     # equally for 'keep_first' and 'keep_last', full duplicates are not affected and do not appear in statistics, but still
     # generate a warning.
