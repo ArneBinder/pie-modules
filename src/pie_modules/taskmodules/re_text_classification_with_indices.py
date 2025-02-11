@@ -704,6 +704,8 @@ class RETextClassificationWithIndicesTaskModule(
                             map(lambda x: (x[0], x[1].resolve()), arguments)
                         )
                         if prev_label == rel.label:
+                            # if 'collect_statistics=true' such duplicates won't be collected and are not counted in
+                            # statistics if 'collect_statistics=true' either as 'available' or as 'skipped_same_arguments'
                             logger.warning(
                                 f"doc.id={document.id}: Relation annotation `{rel.resolve()}` is duplicated. "
                                 f"We keep only one of them."
@@ -716,8 +718,8 @@ class RETextClassificationWithIndicesTaskModule(
                                 f"previous label='{prev_label}' and current label='{rel.label}'. We only keep the first "
                                 f"occurring relation which has the label='{prev_label}'."
                             )
-                        # if `keep_none`, first occurred relations are removed after _add_candidate_relations() call,
-                        # so that none of them are re-added as 'no-relation'
+                        # if `handle_relations_with_same_arguments="keep_none`, first occurred relations are removed
+                        # after _add_candidate_relations() call, so that none of them are re-added as 'no-relation'
                         elif self.handle_relations_with_same_arguments == "keep_none":
                             logger.warning(
                                 f"doc.id={document.id}: there are multiple relations with the same arguments {arguments_resolved}: "
@@ -725,7 +727,8 @@ class RETextClassificationWithIndicesTaskModule(
                             )
                         else:
                             raise ValueError(
-                                f"'handle_relations_with_same_arguments' must be 'keep_first' or 'keep_none', but got `{self.handle_relations_with_same_arguments}`."
+                                f"'handle_relations_with_same_arguments' must be 'keep_first' or 'keep_none', "
+                                f"but got `{self.handle_relations_with_same_arguments}`."
                             )
                         self.collect_relation("skipped_same_arguments", rel)
                     else:
@@ -744,7 +747,8 @@ class RETextClassificationWithIndicesTaskModule(
             self._add_candidate_relations(
                 arguments2relation=arguments2relation, entities=entities, doc_id=document.id
             )
-            # remove remaining relation duplicates
+            # remove remaining relation duplicates. It should be done here, after _add_candidate_relations() so that
+            # removed relations are not re-added with `no-relation` label.
             if self.handle_relations_with_same_arguments == "keep_none":
                 for arguments in arguments_duplicates:
                     rel = arguments2relation.pop(arguments)

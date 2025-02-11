@@ -1044,7 +1044,7 @@ def test_collate_with_add_argument_indices(batch_with_argument_indices):
 
 
 @pytest.mark.parametrize(
-    "handle_relations_with_same_arguments", ["keep_first", "keep_none", "keep_second"]
+    "handle_relations_with_same_arguments", ["keep_first", "keep_none", "unknown_value"]
 )
 def test_encode_input_multiple_relations_for_same_arguments(
     caplog, handle_relations_with_same_arguments
@@ -1070,11 +1070,11 @@ def test_encode_input_multiple_relations_for_same_arguments(
     )
     taskmodule.prepare([document])
 
-    if handle_relations_with_same_arguments not in ["keep_first", "keep_none"]:
+    if handle_relations_with_same_arguments == "unknown_value":
         with pytest.raises(ValueError) as excinfo:
             encodings = taskmodule.encode_input(document)
         assert str(excinfo.value) == (
-            "'handle_relations_with_same_arguments' must be 'keep_first' or 'keep_none', but got `keep_second`."
+            "'handle_relations_with_same_arguments' must be 'keep_first' or 'keep_none', but got `unknown_value`."
         )
     else:
         encodings = taskmodule.encode_input(document)
@@ -1097,6 +1097,8 @@ def test_encode_input_multiple_relations_for_same_arguments(
                 "`('per:founded_by', (('PER', 'A'), ('PER', 'B')))` is duplicated. We keep "
                 "only one of them."
             )
+            # with 'keep_first', only first relation occurred is kept ('per:founded_by').
+            # full duplicate of 'per:founded_by' is removed and appears neither as available, nor as skipped in statistics.
             assert (
                 caplog.messages[2] == "statistics:\n"
                 "|                        |   per:founded_by |   per:founder |   all_relations |\n"
@@ -1125,6 +1127,8 @@ def test_encode_input_multiple_relations_for_same_arguments(
                 "`('per:founded_by', (('PER', 'A'), ('PER', 'B')))` is duplicated. "
                 "We keep only one of them."
             )
+            # with 'keep_none' both relations sharing same arguments are removed
+            # full duplicate of 'per:founded_by' is removed and appears neither as available, nor as skipped in statistics.
             assert (
                 caplog.messages[2] == "statistics:\n"
                 "|                        |   per:founded_by |   per:founder |   all_relations |\n"
@@ -1133,6 +1137,54 @@ def test_encode_input_multiple_relations_for_same_arguments(
                 "| skipped_same_arguments |                1 |             1 |               2 |"
             )
             assert len(encodings) == 0
+
+
+@pytest.mark.parametrize("handle_relations_with_same_arguments", ["keep_first", "keep_none"])
+def test_encode_input_duplicated_relations(caplog, handle_relations_with_same_arguments):
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path="bert-base-cased",
+        handle_relations_with_same_arguments=handle_relations_with_same_arguments,
+        collect_statistics=True,
+    )
+    document = TestDocument(text="A founded B.", id="multiple_relations_for_same_arguments")
+    document.entities.append(LabeledSpan(start=0, end=1, label="PER"))
+    document.entities.append(LabeledSpan(start=10, end=11, label="PER"))
+    entities = document.entities
+    assert str(entities[0]) == "A"
+    assert str(entities[1]) == "B"
+    document.relations.extend(
+        [
+            BinaryRelation(head=entities[0], tail=entities[1], label="per:founded_by"),
+            BinaryRelation(head=entities[0], tail=entities[1], label="per:founded_by"),
+        ]
+    )
+    taskmodule.prepare([document])
+    encodings = taskmodule.encode_input(document)
+
+    with caplog.at_level(logging.INFO):
+        taskmodule.show_statistics()
+    assert len(caplog.messages) == 2
+    assert (
+        caplog.messages[0] == "doc.id=multiple_relations_for_same_arguments: Relation annotation "
+        "`('per:founded_by', (('PER', 'A'), ('PER', 'B')))` is duplicated. We keep "
+        "only one of them."
+    )
+    # equally for 'keep_first' and 'keep_last', full duplicates are not affected and do not appear in statistics, but still
+    # generate a warning.
+    assert (
+        caplog.messages[1] == "statistics:\n"
+        "|           |   per:founded_by |\n"
+        "|:----------|-----------------:|\n"
+        "| available |                1 |\n"
+        "| used      |                1 |\n"
+        "| used %    |              100 |"
+    )
+    assert len(encodings) == 1
+    relation = encodings[0].metadata["candidate_annotation"]
+    assert str(relation.head) == "A"
+    assert str(relation.tail) == "B"
+    assert relation.label == "per:founded_by"
 
 
 def test_encode_input_argument_role_unknown(documents):
