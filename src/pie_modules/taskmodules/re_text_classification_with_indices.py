@@ -708,7 +708,8 @@ class RETextClassificationWithIndicesTaskModule(
                             # statistics if 'collect_statistics=true' either as 'available' or as 'skipped_same_arguments'
                             logger.warning(
                                 f"doc.id={document.id}: Relation annotation `{rel.resolve()}` is duplicated. "
-                                f"We keep only one of them."
+                                f"We keep only one of them. Duplicate won't appear in statistics either as 'available' "
+                                f"or as skipped."
                             )
                             continue
                         arguments_duplicates.add(arguments)
