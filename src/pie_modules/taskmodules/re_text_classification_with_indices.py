@@ -706,51 +706,57 @@ class RETextClassificationWithIndicesTaskModule(
 
                 arguments = get_relation_argument_spans_and_roles(rel)
                 arg_roles, arg_spans = zip(*arguments)
-                # filter out all relations that have arguments not in the current partition
-                if all(arg_span in entities_set for arg_span in arg_spans):
-                    # check if there are multiple relations with the same argument tuple
-                    if arguments in arguments2relation:
-                        prev_label = arguments2relation[arguments].label
-                        arguments_resolved = tuple(
-                            map(lambda x: (x[0], x[1].resolve()), arguments)
-                        )
-                        if prev_label == rel.label:
-                            # if 'collect_statistics=true' such duplicates won't be collected and are not counted in
-                            # statistics if 'collect_statistics=true' either as 'available' or as 'skipped_same_arguments'
-                            logger.warning(
-                                f"doc.id={document.id}: Relation annotation `{rel.resolve()}` is duplicated. "
-                                f"We keep only one of them. Duplicate won't appear in statistics either as 'available' "
-                                f"or as skipped."
-                            )
-                            continue
-                        arguments_duplicates.add(arguments)
-                        if self.handle_relations_with_same_arguments == "keep_first":
-                            logger.warning(
-                                f"doc.id={document.id}: there are multiple relations with the same arguments {arguments_resolved}: "
-                                f"previous label='{prev_label}' and current label='{rel.label}'. We only keep the first "
-                                f"occurring relation which has the label='{prev_label}'."
-                            )
-                        # if `handle_relations_with_same_arguments="keep_none`, first occurred relations are removed
-                        # after _add_candidate_relations() call, so that none of them are re-added as 'no-relation'
-                        elif self.handle_relations_with_same_arguments == "keep_none":
-                            logger.warning(
-                                f"doc.id={document.id}: there are multiple relations with the same arguments {arguments_resolved}: "
-                                f"previous label='{prev_label}' and current label='{rel.label}'. Both relations will be removed."
-                            )
-                        else:
-                            raise ValueError(
-                                f"'handle_relations_with_same_arguments' must be 'keep_first' or 'keep_none', "
-                                f"but got `{self.handle_relations_with_same_arguments}`."
-                            )
-                        self.collect_relation("skipped_same_arguments", rel)
-                    else:
-                        arguments2relation[arguments] = rel
-                elif any(arg_span in entities_set for arg_span in arg_spans):
+
+                # filter out all relations that are completely outside the current partition
+                if all(arg_span not in entities_set for arg_span in arg_spans):
+                    continue
+
+                # filter relations that are only partially contained in the current partition,
+                # i.e. some arguments are in the partition and some are not
+                if any(arg_span not in entities_set for arg_span in arg_spans):
                     logger.warning(
                         f"doc.id={document.id}: there is a relation with label '{rel.label}' and arguments "
-                        f"{arguments} that is only partially contained in the current partition. We skip this relation."
+                        f"{arguments} that is only partially contained in the current partition. "
+                        f"We skip this relation."
                     )
                     self.collect_relation("skipped_partially_contained", rel)
+                    continue
+
+                # check if there are multiple relations with the same argument tuple
+                if arguments in arguments2relation:
+                    prev_label = arguments2relation[arguments].label
+                    arguments_resolved = tuple(map(lambda x: (x[0], x[1].resolve()), arguments))
+                    if prev_label == rel.label:
+                        # if 'collect_statistics=true' such duplicates won't be collected and are not counted in
+                        # statistics if 'collect_statistics=true' either as 'available' or as 'skipped_same_arguments'
+                        logger.warning(
+                            f"doc.id={document.id}: Relation annotation `{rel.resolve()}` is duplicated. "
+                            f"We keep only one of them. Duplicate won't appear in statistics either as 'available' "
+                            f"or as skipped."
+                        )
+                        continue
+                    arguments_duplicates.add(arguments)
+                    if self.handle_relations_with_same_arguments == "keep_first":
+                        logger.warning(
+                            f"doc.id={document.id}: there are multiple relations with the same arguments {arguments_resolved}: "
+                            f"previous label='{prev_label}' and current label='{rel.label}'. We only keep the first "
+                            f"occurring relation which has the label='{prev_label}'."
+                        )
+                    # if `handle_relations_with_same_arguments="keep_none`, first occurred relations are removed
+                    # after _add_candidate_relations() call, so that none of them are re-added as 'no-relation'
+                    elif self.handle_relations_with_same_arguments == "keep_none":
+                        logger.warning(
+                            f"doc.id={document.id}: there are multiple relations with the same arguments {arguments_resolved}: "
+                            f"previous label='{prev_label}' and current label='{rel.label}'. Both relations will be removed."
+                        )
+                    else:
+                        raise ValueError(
+                            f"'handle_relations_with_same_arguments' must be 'keep_first' or 'keep_none', "
+                            f"but got `{self.handle_relations_with_same_arguments}`."
+                        )
+                    self.collect_relation("skipped_same_arguments", rel)
+                else:
+                    arguments2relation[arguments] = rel
 
             # Remove remaining relation duplicates and add them to the blacklist
             # to not add them as 'no-relation's back again.
