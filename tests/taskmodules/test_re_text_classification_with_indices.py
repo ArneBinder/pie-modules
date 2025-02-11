@@ -1043,7 +1043,9 @@ def test_collate_with_add_argument_indices(batch_with_argument_indices):
     torch.testing.assert_close(inputs["pooler_end_indices"], torch.tensor([[6, 11], [9, 14]]))
 
 
-@pytest.mark.parametrize("handle_relations_with_same_arguments", ["keep_first", "keep_none"])
+@pytest.mark.parametrize(
+    "handle_relations_with_same_arguments", ["keep_first", "keep_none", "keep_second"]
+)
 def test_encode_input_multiple_relations_for_same_arguments(
     caplog, handle_relations_with_same_arguments
 ):
@@ -1067,65 +1069,74 @@ def test_encode_input_multiple_relations_for_same_arguments(
         ]
     )
     taskmodule.prepare([document])
-    encodings = taskmodule.encode_input(document)
-    with caplog.at_level(logging.INFO):
-        taskmodule.show_statistics()
-    assert len(caplog.messages) == 3
 
-    if handle_relations_with_same_arguments == "keep_first":
-        assert (
-            caplog.messages[0]
-            == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the same arguments "
-            "(('head', LabeledSpan(start=0, end=1, label='PER', score=1.0)), "
-            "('tail', LabeledSpan(start=10, end=11, label='PER', score=1.0))): previous label='per:founded_by' "
-            "and current label='per:founder'. We only keep the first occurring relation which has the "
-            "label='per:founded_by'."
+    if handle_relations_with_same_arguments not in ["keep_first", "keep_none"]:
+        with pytest.raises(ValueError) as excinfo:
+            encodings = taskmodule.encode_input(document)
+        assert str(excinfo.value) == (
+            "'handle_relations_with_same_arguments' must be 'keep_first' or 'keep_none', but got `keep_second`."
         )
-        assert (
-            caplog.messages[1]
-            == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the same arguments "
-            "(('head', LabeledSpan(start=0, end=1, label='PER', score=1.0)), "
-            "('tail', LabeledSpan(start=10, end=11, label='PER', score=1.0))): previous label='per:founded_by' "
-            "and current label='per:founded_by'. We only keep the first occurring relation which has the "
-            "label='per:founded_by'."
-        )
-        assert (
-            caplog.messages[2] == "statistics:\n"
-            "|                        |   per:founded_by |   per:founder |   all_relations |\n"
-            "|:-----------------------|-----------------:|--------------:|----------------:|\n"
-            "| available              |                1 |             1 |               2 |\n"
-            "| skipped_same_arguments |                1 |             1 |               2 |\n"
-            "| used                   |                1 |             0 |               1 |\n"
-            "| used %                 |              100 |             0 |              50 |"
-        )
-        assert len(encodings) == 1
-        relation = encodings[0].metadata["candidate_annotation"]
-        assert str(relation.head) == "A"
-        assert str(relation.tail) == "B"
-        assert relation.label == "per:founded_by"
-    elif handle_relations_with_same_arguments == "keep_none":
-        assert (
-            caplog.messages[0]
-            == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the same arguments "
-            "(('head', LabeledSpan(start=0, end=1, label='PER', score=1.0)), "
-            "('tail', LabeledSpan(start=10, end=11, label='PER', score=1.0))): previous label='per:founded_by' "
-            "and current label='per:founder'. Both relations will be removed."
-        )
-        assert (
-            caplog.messages[1]
-            == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the same arguments "
-            "(('head', LabeledSpan(start=0, end=1, label='PER', score=1.0)), "
-            "('tail', LabeledSpan(start=10, end=11, label='PER', score=1.0))): previous label='per:founded_by' "
-            "and current label='per:founded_by'. Both relations will be removed."
-        )
-        assert (
-            caplog.messages[2] == "statistics:\n"
-            "|                        |   per:founded_by |   per:founder |   all_relations |\n"
-            "|:-----------------------|-----------------:|--------------:|----------------:|\n"
-            "| available              |                1 |             1 |               2 |\n"
-            "| skipped_same_arguments |                1 |             1 |               2 |"
-        )
-        assert len(encodings) == 0
+    else:
+        encodings = taskmodule.encode_input(document)
+
+        with caplog.at_level(logging.INFO):
+            taskmodule.show_statistics()
+        assert len(caplog.messages) == 3
+
+        if handle_relations_with_same_arguments == "keep_first":
+            assert (
+                caplog.messages[0]
+                == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the same arguments "
+                "(('head', LabeledSpan(start=0, end=1, label='PER', score=1.0)), "
+                "('tail', LabeledSpan(start=10, end=11, label='PER', score=1.0))): previous label='per:founded_by' "
+                "and current label='per:founder'. We only keep the first occurring relation which has the "
+                "label='per:founded_by'."
+            )
+            assert (
+                caplog.messages[1]
+                == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the same arguments "
+                "(('head', LabeledSpan(start=0, end=1, label='PER', score=1.0)), "
+                "('tail', LabeledSpan(start=10, end=11, label='PER', score=1.0))): previous label='per:founded_by' "
+                "and current label='per:founded_by'. We only keep the first occurring relation which has the "
+                "label='per:founded_by'."
+            )
+            assert (
+                caplog.messages[2] == "statistics:\n"
+                "|                        |   per:founded_by |   per:founder |   all_relations |\n"
+                "|:-----------------------|-----------------:|--------------:|----------------:|\n"
+                "| available              |                1 |             1 |               2 |\n"
+                "| skipped_same_arguments |                1 |             1 |               2 |\n"
+                "| used                   |                1 |             0 |               1 |\n"
+                "| used %                 |              100 |             0 |              50 |"
+            )
+            assert len(encodings) == 1
+            relation = encodings[0].metadata["candidate_annotation"]
+            assert str(relation.head) == "A"
+            assert str(relation.tail) == "B"
+            assert relation.label == "per:founded_by"
+        elif handle_relations_with_same_arguments == "keep_none":
+            assert (
+                caplog.messages[0]
+                == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the same arguments "
+                "(('head', LabeledSpan(start=0, end=1, label='PER', score=1.0)), "
+                "('tail', LabeledSpan(start=10, end=11, label='PER', score=1.0))): previous label='per:founded_by' "
+                "and current label='per:founder'. Both relations will be removed."
+            )
+            assert (
+                caplog.messages[1]
+                == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the same arguments "
+                "(('head', LabeledSpan(start=0, end=1, label='PER', score=1.0)), "
+                "('tail', LabeledSpan(start=10, end=11, label='PER', score=1.0))): previous label='per:founded_by' "
+                "and current label='per:founded_by'. Both relations will be removed."
+            )
+            assert (
+                caplog.messages[2] == "statistics:\n"
+                "|                        |   per:founded_by |   per:founder |   all_relations |\n"
+                "|:-----------------------|-----------------:|--------------:|----------------:|\n"
+                "| available              |                1 |             1 |               2 |\n"
+                "| skipped_same_arguments |                1 |             1 |               2 |"
+            )
+            assert len(encodings) == 0
 
 
 def test_encode_input_argument_role_unknown(documents):

@@ -716,7 +716,7 @@ class RETextClassificationWithIndicesTaskModule(
                             )
                         else:
                             raise ValueError(
-                                "'handle_relations_with_same_arguments' must be 'keep_first' or 'keep_none'."
+                                f"'handle_relations_with_same_arguments' must be 'keep_first' or 'keep_none', but got `{self.handle_relations_with_same_arguments}`."
                             )
                         self.collect_relation("skipped_same_arguments", rel)
                     else:
