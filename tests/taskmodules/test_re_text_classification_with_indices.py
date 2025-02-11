@@ -1086,26 +1086,18 @@ def test_encode_input_multiple_relations_for_same_arguments(
         if handle_relations_with_same_arguments == "keep_first":
             assert (
                 caplog.messages[0]
-                == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the same arguments "
-                "(('head', LabeledSpan(start=0, end=1, label='PER', score=1.0)), "
-                "('tail', LabeledSpan(start=10, end=11, label='PER', score=1.0))): previous label='per:founded_by' "
-                "and current label='per:founder'. We only keep the first occurring relation which has the "
-                "label='per:founded_by'."
+                == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the same arguments (('PER', 'A'), ('PER', 'B')): previous label='per:founded_by' and current label='per:founder'. We only keep the first occurring relation which has the label='per:founded_by'."
             )
             assert (
                 caplog.messages[1]
-                == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the same arguments "
-                "(('head', LabeledSpan(start=0, end=1, label='PER', score=1.0)), "
-                "('tail', LabeledSpan(start=10, end=11, label='PER', score=1.0))): previous label='per:founded_by' "
-                "and current label='per:founded_by'. We only keep the first occurring relation which has the "
-                "label='per:founded_by'."
+                == "doc.id=multiple_relations_for_same_arguments: Relation annotation `('per:founded_by', (('PER', 'A'), ('PER', 'B')))` is duplicated. We keep only one of them."
             )
             assert (
                 caplog.messages[2] == "statistics:\n"
                 "|                        |   per:founded_by |   per:founder |   all_relations |\n"
                 "|:-----------------------|-----------------:|--------------:|----------------:|\n"
                 "| available              |                1 |             1 |               2 |\n"
-                "| skipped_same_arguments |                1 |             1 |               2 |\n"
+                "| skipped_same_arguments |                0 |             1 |               1 |\n"
                 "| used                   |                1 |             0 |               1 |\n"
                 "| used %                 |              100 |             0 |              50 |"
             )
@@ -1118,16 +1110,13 @@ def test_encode_input_multiple_relations_for_same_arguments(
             assert (
                 caplog.messages[0]
                 == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the same arguments "
-                "(('head', LabeledSpan(start=0, end=1, label='PER', score=1.0)), "
-                "('tail', LabeledSpan(start=10, end=11, label='PER', score=1.0))): previous label='per:founded_by' "
-                "and current label='per:founder'. Both relations will be removed."
+                "(('PER', 'A'), ('PER', 'B')): previous label='per:founded_by' and current label='per:founder'. "
+                "Both relations will be removed."
             )
             assert (
                 caplog.messages[1]
-                == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the same arguments "
-                "(('head', LabeledSpan(start=0, end=1, label='PER', score=1.0)), "
-                "('tail', LabeledSpan(start=10, end=11, label='PER', score=1.0))): previous label='per:founded_by' "
-                "and current label='per:founded_by'. Both relations will be removed."
+                == "doc.id=multiple_relations_for_same_arguments: Relation annotation `('per:founded_by', "
+                "(('PER', 'A'), ('PER', 'B')))` is duplicated. We keep only one of them."
             )
             assert (
                 caplog.messages[2] == "statistics:\n"

@@ -700,10 +700,17 @@ class RETextClassificationWithIndicesTaskModule(
                     # check if there are multiple relations with the same argument tuple
                     if arguments in arguments2relation:
                         prev_label = arguments2relation[arguments].label
+                        arguments_resolved = tuple(map(lambda x: x[1].resolve(), arguments))
+                        if prev_label == rel.label:
+                            logger.warning(
+                                f"doc.id={document.id}: Relation annotation `{rel.resolve()}` is duplicated. "
+                                f"We keep only one of them."
+                            )
+                            continue
                         arguments_duplicates.add(arguments)
                         if self.handle_relations_with_same_arguments == "keep_first":
                             logger.warning(
-                                f"doc.id={document.id}: there are multiple relations with the same arguments {arguments}: "
+                                f"doc.id={document.id}: there are multiple relations with the same arguments {arguments_resolved}: "
                                 f"previous label='{prev_label}' and current label='{rel.label}'. We only keep the first "
                                 f"occurring relation which has the label='{prev_label}'."
                             )
@@ -711,7 +718,7 @@ class RETextClassificationWithIndicesTaskModule(
                         # so that none of them are re-added as 'no-relation'
                         elif self.handle_relations_with_same_arguments == "keep_none":
                             logger.warning(
-                                f"doc.id={document.id}: there are multiple relations with the same arguments {arguments}: "
+                                f"doc.id={document.id}: there are multiple relations with the same arguments {arguments_resolved}: "
                                 f"previous label='{prev_label}' and current label='{rel.label}'. Both relations will be removed."
                             )
                         else:
