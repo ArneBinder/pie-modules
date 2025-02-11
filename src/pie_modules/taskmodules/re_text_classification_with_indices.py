@@ -741,21 +741,23 @@ class RETextClassificationWithIndicesTaskModule(
                             relations[0]
                         }:  # remove all other relations
                             self.collect_relation("skipped_same_arguments", discard_rel)
-                        logger.warning(
-                            f"doc.id={document.id}: there are multiple relations with the same arguments "
-                            f"{arguments_resolved}, but different labels: {labels}. We only keep the first "
-                            f"occurring relation which has the label='{relations[0].label}'."
-                        )
+                        if not self.collect_statistics:
+                            logger.warning(
+                                f"doc.id={document.id}: there are multiple relations with the same arguments "
+                                f"{arguments_resolved}, but different labels: {labels}. We only keep the first "
+                                f"occurring relation which has the label='{relations[0].label}'."
+                            )
                     elif self.handle_relations_with_same_arguments == "keep_none":
                         # add these arguments to the blacklist to not add them as 'no-relation's back again
                         arguments_blacklist.add(arguments)
                         # remove all relations with the same arguments
                         for discard_rel in relations_set:
                             self.collect_relation("skipped_same_arguments", discard_rel)
-                        logger.warning(
-                            f"doc.id={document.id}: there are multiple relations with the same arguments "
-                            f"{arguments_resolved}, but different labels: {labels}. All relations will be removed."
-                        )
+                        if not self.collect_statistics:
+                            logger.warning(
+                                f"doc.id={document.id}: there are multiple relations with the same arguments "
+                                f"{arguments_resolved}, but different labels: {labels}. All relations will be removed."
+                            )
                     else:
                         raise ValueError(
                             f"'handle_relations_with_same_arguments' must be 'keep_first' or 'keep_none', "
