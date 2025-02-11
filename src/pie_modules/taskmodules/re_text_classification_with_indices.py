@@ -594,6 +594,7 @@ class RETextClassificationWithIndicesTaskModule(
         self,
         arguments2relation: Dict[Tuple[Tuple[str, Annotation], ...], Annotation],
         entities: Iterable[Span],
+        arguments_blacklist: Optional[Set[Tuple[Tuple[str, Annotation], ...]]] = None,
         doc_id: Optional[str] = None,
     ) -> None:
         if self.add_candidate_relations:
@@ -616,6 +617,14 @@ class RETextClassificationWithIndicesTaskModule(
                             head=head, tail=tail, label=self.none_label, score=1.0
                         )
                         new_relation_args = get_relation_argument_spans_and_roles(new_relation)
+
+                        # check blacklist
+                        if (
+                            arguments_blacklist is not None
+                            and new_relation_args in arguments_blacklist
+                        ):
+                            continue
+
                         # we use the new relation only if there is no existing relation with the same arguments
                         if new_relation_args not in arguments2relation:
                             arguments2relation[new_relation_args] = new_relation
@@ -686,6 +695,8 @@ class RETextClassificationWithIndicesTaskModule(
             # create a mapping from relation arguments to the respective relation objects
             entities_set = set(entities)
             arguments2relation: Dict[Tuple[Tuple[str, Annotation], ...], Annotation] = {}
+            # we will never create an encoding for the relation candidates in arguments_blacklist
+            arguments_blacklist: Set[Tuple[Tuple[str, Annotation], ...]] = set()
             arguments_duplicates: Set[Tuple[Tuple[str, Annotation], ...]] = set()
             for rel in all_relations:
                 # skip relations with unknown labels
@@ -741,23 +752,24 @@ class RETextClassificationWithIndicesTaskModule(
                     )
                     self.collect_relation("skipped_partially_contained", rel)
 
+            # Remove remaining relation duplicates and add them to the blacklist
+            # to not add them as 'no-relation's back again.
+            if self.handle_relations_with_same_arguments == "keep_none":
+                for arguments in arguments_duplicates:
+                    arguments_blacklist.add(arguments)
+                    rel = arguments2relation.pop(arguments)
+                    self.collect_relation("skipped_same_arguments", rel)
+
             self._add_reversed_relations(arguments2relation=arguments2relation, doc_id=document.id)
             self._filter_relations_by_argument_type_whitelist(
                 arguments2relation=arguments2relation, doc_id=document.id
             )
             self._add_candidate_relations(
-                arguments2relation=arguments2relation, entities=entities, doc_id=document.id
+                arguments2relation=arguments2relation,
+                arguments_blacklist=arguments_blacklist,
+                entities=entities,
+                doc_id=document.id,
             )
-
-            # Remove remaining relation duplicates.
-            # It should be done here, after _add_candidate_relations(),
-            # because with 'keep_none', first occurred relation has to be
-            # removed from 'arguments2relation', but if it is not here during _add_candidate_relations()
-            # relation with 'no_relation' label will be added instead.
-            if self.handle_relations_with_same_arguments == "keep_none":
-                for arguments in arguments_duplicates:
-                    rel = arguments2relation.pop(arguments)
-                    self.collect_relation("skipped_same_arguments", rel)
 
             self._filter_relations_by_argument_distance(
                 arguments2relation=arguments2relation, doc_id=document.id
