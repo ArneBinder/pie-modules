@@ -748,8 +748,12 @@ class RETextClassificationWithIndicesTaskModule(
             self._add_candidate_relations(
                 arguments2relation=arguments2relation, entities=entities, doc_id=document.id
             )
-            # remove remaining relation duplicates. It should be done here, after _add_candidate_relations() so that
-            # removed relations are not re-added with `no-relation` label.
+
+            # Remove remaining relation duplicates.
+            # It should be done here, after _add_candidate_relations(),
+            # because with 'keep_none', first occurred relation has to be
+            # removed from 'arguments2relation', but if it is not here during _add_candidate_relations()
+            # relation with 'no_relation' label will be added instead.
             if self.handle_relations_with_same_arguments == "keep_none":
                 for arguments in arguments_duplicates:
                     rel = arguments2relation.pop(arguments)
