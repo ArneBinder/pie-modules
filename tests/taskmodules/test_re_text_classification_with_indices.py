@@ -1043,19 +1043,19 @@ def test_collate_with_add_argument_indices(batch_with_argument_indices):
     torch.testing.assert_close(inputs["pooler_end_indices"], torch.tensor([[6, 11], [9, 14]]))
 
 
-@pytest.mark.parametrize(
-    "handle_relations_with_same_arguments", ["keep_first", "keep_none", "unknown_value"]
-)
+@pytest.mark.parametrize("handle_relations_with_same_arguments", ["keep_first", "keep_none"])
+@pytest.mark.parametrize("add_candidate_relations", [False, True])
 def test_encode_input_multiple_relations_for_same_arguments(
-    caplog, handle_relations_with_same_arguments
+    caplog, handle_relations_with_same_arguments, add_candidate_relations
 ):
     taskmodule = RETextClassificationWithIndicesTaskModule(
         relation_annotation="relations",
         tokenizer_name_or_path="bert-base-cased",
         handle_relations_with_same_arguments=handle_relations_with_same_arguments,
         collect_statistics=True,
+        add_candidate_relations=add_candidate_relations,
     )
-    document = TestDocument(text="A founded B.", id="multiple_relations_for_same_arguments")
+    document = TestDocument(text="A founded B.", id="test_doc")
     document.entities.append(LabeledSpan(start=0, end=1, label="PER"))
     document.entities.append(LabeledSpan(start=10, end=11, label="PER"))
     entities = document.entities
@@ -1070,35 +1070,34 @@ def test_encode_input_multiple_relations_for_same_arguments(
     )
     taskmodule.prepare([document])
 
-    if handle_relations_with_same_arguments == "unknown_value":
-        with pytest.raises(ValueError) as excinfo:
-            encodings = taskmodule.encode_input(document)
-        assert str(excinfo.value) == (
-            "'handle_relations_with_same_arguments' must be 'keep_first' or 'keep_none', but got `unknown_value`."
+    encodings = taskmodule.encode_input(document)
+
+    with caplog.at_level(logging.INFO):
+        taskmodule.show_statistics()
+    assert len(caplog.messages) == 3
+    candidate_relation = [enc.metadata["candidate_annotation"] for enc in encodings]
+    candidate_relation_tuples = [
+        (rel.head.resolve(), rel.label, rel.tail.resolve()) for rel in candidate_relation
+    ]
+
+    if handle_relations_with_same_arguments == "keep_first":
+        assert (
+            caplog.messages[0]
+            == "doc.id=test_doc: there are multiple relations with the same arguments "
+            "(('head', ('PER', 'A')), ('tail', ('PER', 'B'))): previous "
+            "label='per:founded_by' and current label='per:founder'. We only keep the "
+            "first occurring relation which has the label='per:founded_by'."
         )
-    else:
-        encodings = taskmodule.encode_input(document)
-
-        with caplog.at_level(logging.INFO):
-            taskmodule.show_statistics()
-        assert len(caplog.messages) == 3
-
-        if handle_relations_with_same_arguments == "keep_first":
-            assert (
-                caplog.messages[0]
-                == "doc.id=multiple_relations_for_same_arguments: there are multiple relations with the "
-                "same arguments (('head', ('PER', 'A')), ('tail', ('PER', 'B'))): previous "
-                "label='per:founded_by' and current label='per:founder'. We only keep the first "
-                "occurring relation which has the label='per:founded_by'."
-            )
-            assert (
-                caplog.messages[1]
-                == "doc.id=multiple_relations_for_same_arguments: Relation annotation "
-                "`('per:founded_by', (('PER', 'A'), ('PER', 'B')))` is duplicated. We keep "
-                "only one of them. Duplicate won't appear in statistics either as 'available' or as skipped."
-            )
+        assert (
+            caplog.messages[1]
+            == "doc.id=test_doc: Relation annotation `('per:founded_by', (('PER', 'A'), ('PER', 'B')))` "
+            "is duplicated. We keep only one of them. Duplicate won't appear in statistics either as "
+            "'available' or as skipped."
+        )
+        if not add_candidate_relations:
             # with 'keep_first', only first relation occurred is kept ('per:founded_by').
-            # full duplicate of 'per:founded_by' is removed and appears neither as available, nor as skipped in statistics.
+            # full duplicate of 'per:founded_by' is removed and appears neither as available,
+            # nor as skipped in statistics.
             assert (
                 caplog.messages[2] == "statistics:\n"
                 "|                        |   per:founded_by |   per:founder |   all_relations |\n"
@@ -1108,27 +1107,39 @@ def test_encode_input_multiple_relations_for_same_arguments(
                 "| used                   |                1 |             0 |               1 |\n"
                 "| used %                 |              100 |             0 |              50 |"
             )
-            assert len(encodings) == 1
-            relation = encodings[0].metadata["candidate_annotation"]
-            assert str(relation.head) == "A"
-            assert str(relation.tail) == "B"
-            assert relation.label == "per:founded_by"
-        elif handle_relations_with_same_arguments == "keep_none":
+            assert candidate_relation_tuples == [(("PER", "A"), "per:founded_by", ("PER", "B"))]
+        else:
+            # as above, but with candidate (negative) relations added
             assert (
-                caplog.messages[0]
-                == "doc.id=multiple_relations_for_same_arguments: there are multiple relations "
-                "with the same arguments (('head', ('PER', 'A')), ('tail', ('PER', 'B'))): "
-                "previous label='per:founded_by' and current label='per:founder'. Both relations "
-                "will be removed."
+                caplog.messages[2] == "statistics:\n"
+                "|                        |   no_relation |   per:founded_by |   per:founder |   all_relations |\n"
+                "|:-----------------------|--------------:|-----------------:|--------------:|----------------:|\n"
+                "| available              |             0 |                1 |             1 |               2 |\n"
+                "| skipped_same_arguments |             0 |                0 |             1 |               1 |\n"
+                "| used                   |             1 |                1 |             0 |               1 |\n"
+                "| used %                 |           inf |              100 |             0 |              50 |"
             )
-            assert (
-                caplog.messages[1]
-                == "doc.id=multiple_relations_for_same_arguments: Relation annotation "
-                "`('per:founded_by', (('PER', 'A'), ('PER', 'B')))` is duplicated. We keep "
-                "only one of them. Duplicate won't appear in statistics either as 'available' or as skipped."
-            )
+            assert candidate_relation_tuples == [
+                (("PER", "A"), "per:founded_by", ("PER", "B")),
+                (("PER", "B"), "no_relation", ("PER", "A")),
+            ]
+    elif handle_relations_with_same_arguments == "keep_none":
+        assert (
+            caplog.messages[0]
+            == "doc.id=test_doc: there are multiple relations with the same arguments "
+            "(('head', ('PER', 'A')), ('tail', ('PER', 'B'))): previous label='per:founded_by' "
+            "and current label='per:founder'. Both relations will be removed."
+        )
+        assert (
+            caplog.messages[1]
+            == "doc.id=test_doc: Relation annotation `('per:founded_by', (('PER', 'A'), ('PER', 'B')))` "
+            "is duplicated. We keep only one of them. Duplicate won't appear in statistics either "
+            "as 'available' or as skipped."
+        )
+        if not add_candidate_relations:
             # with 'keep_none' both relations sharing same arguments are removed
-            # full duplicate of 'per:founded_by' is removed and appears neither as available, nor as skipped in statistics.
+            # full duplicate of 'per:founded_by' is removed and appears neither as available,
+            # nor as skipped in statistics.
             assert (
                 caplog.messages[2] == "statistics:\n"
                 "|                        |   per:founded_by |   per:founder |   all_relations |\n"
@@ -1136,18 +1147,65 @@ def test_encode_input_multiple_relations_for_same_arguments(
                 "| available              |                1 |             1 |               2 |\n"
                 "| skipped_same_arguments |                1 |             1 |               2 |"
             )
-            assert len(encodings) == 0
+            assert candidate_relation_tuples == []
+        else:
+            # all conflicting relations go into the same direction, so we can create a candidate (negative)
+            # relation for the other direction.
+            assert (
+                caplog.messages[2] == "statistics:\n"
+                "|                        |   no_relation |   per:founded_by |   per:founder |   all_relations |\n"
+                "|:-----------------------|--------------:|-----------------:|--------------:|----------------:|\n"
+                "| available              |             0 |                1 |             1 |               2 |\n"
+                "| skipped_same_arguments |             0 |                1 |             1 |               2 |\n"
+                "| used                   |             1 |                0 |             0 |               0 |\n"
+                "| used %                 |           inf |                0 |             0 |               0 |"
+            )
+            assert candidate_relation_tuples == [(("PER", "B"), "no_relation", ("PER", "A"))]
+
+
+def test_encode_input_handle_relations_with_same_arguments_unknown_value(caplog):
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path="bert-base-cased",
+        handle_relations_with_same_arguments="unknown_value",
+    )
+    document = TestDocument(text="A founded B.", id="test_doc")
+    document.entities.append(LabeledSpan(start=0, end=1, label="PER"))
+    document.entities.append(LabeledSpan(start=10, end=11, label="PER"))
+    document.relations.append(
+        BinaryRelation(
+            head=document.entities[0], tail=document.entities[1], label="per:founded_by"
+        )
+    )
+    document.relations.append(
+        BinaryRelation(head=document.entities[0], tail=document.entities[1], label="per:founder")
+    )
+    assert document.relations.resolve() == [
+        ("per:founded_by", (("PER", "A"), ("PER", "B"))),
+        ("per:founder", (("PER", "A"), ("PER", "B"))),
+    ]
+    taskmodule.prepare([document])
+
+    with pytest.raises(ValueError) as excinfo:
+        taskmodule.encode_input(document)
+    assert str(excinfo.value) == (
+        "'handle_relations_with_same_arguments' must be 'keep_first' or 'keep_none', but got `unknown_value`."
+    )
 
 
 @pytest.mark.parametrize("handle_relations_with_same_arguments", ["keep_first", "keep_none"])
-def test_encode_input_duplicated_relations(caplog, handle_relations_with_same_arguments):
+@pytest.mark.parametrize("add_candidate_relations", [False, True])
+def test_encode_input_duplicated_relations(
+    caplog, handle_relations_with_same_arguments, add_candidate_relations
+):
     taskmodule = RETextClassificationWithIndicesTaskModule(
         relation_annotation="relations",
         tokenizer_name_or_path="bert-base-cased",
         handle_relations_with_same_arguments=handle_relations_with_same_arguments,
+        add_candidate_relations=add_candidate_relations,
         collect_statistics=True,
     )
-    document = TestDocument(text="A founded B.", id="multiple_relations_for_same_arguments")
+    document = TestDocument(text="A founded B.", id="test_doc")
     document.entities.append(LabeledSpan(start=0, end=1, label="PER"))
     document.entities.append(LabeledSpan(start=10, end=11, label="PER"))
     entities = document.entities
@@ -1166,25 +1224,39 @@ def test_encode_input_duplicated_relations(caplog, handle_relations_with_same_ar
         taskmodule.show_statistics()
     assert len(caplog.messages) == 2
     assert (
-        caplog.messages[0] == "doc.id=multiple_relations_for_same_arguments: Relation annotation "
+        caplog.messages[0] == "doc.id=test_doc: Relation annotation "
         "`('per:founded_by', (('PER', 'A'), ('PER', 'B')))` is duplicated. We keep "
         "only one of them. Duplicate won't appear in statistics either as 'available' or as skipped."
     )
+    candidate_relation = [enc.metadata["candidate_annotation"] for enc in encodings]
+    candidate_relation_tuples = [
+        (rel.head.resolve(), rel.label, rel.tail.resolve()) for rel in candidate_relation
+    ]
     # equally for 'keep_first' and 'keep_last', full duplicates are not affected and do not appear in statistics, but still
     # generate a warning.
-    assert (
-        caplog.messages[1] == "statistics:\n"
-        "|           |   per:founded_by |\n"
-        "|:----------|-----------------:|\n"
-        "| available |                1 |\n"
-        "| used      |                1 |\n"
-        "| used %    |              100 |"
-    )
-    assert len(encodings) == 1
-    relation = encodings[0].metadata["candidate_annotation"]
-    assert str(relation.head) == "A"
-    assert str(relation.tail) == "B"
-    assert relation.label == "per:founded_by"
+    if add_candidate_relations:
+        assert candidate_relation_tuples == [
+            (("PER", "A"), "per:founded_by", ("PER", "B")),
+            (("PER", "B"), "no_relation", ("PER", "A")),
+        ]
+        assert (
+            caplog.messages[1] == "statistics:\n"
+            "|           |   no_relation |   per:founded_by |   all_relations |\n"
+            "|:----------|--------------:|-----------------:|----------------:|\n"
+            "| available |             0 |                1 |               1 |\n"
+            "| used      |             1 |                1 |               1 |\n"
+            "| used %    |           inf |              100 |             100 |"
+        )
+    else:
+        assert candidate_relation_tuples == [(("PER", "A"), "per:founded_by", ("PER", "B"))]
+        assert (
+            caplog.messages[1] == "statistics:\n"
+            "|           |   per:founded_by |\n"
+            "|:----------|-----------------:|\n"
+            "| available |                1 |\n"
+            "| used      |                1 |\n"
+            "| used %    |              100 |"
+        )
 
 
 def test_encode_input_argument_role_unknown(documents):
