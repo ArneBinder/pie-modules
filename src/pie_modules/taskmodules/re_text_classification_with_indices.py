@@ -341,7 +341,6 @@ class RETextClassificationWithIndicesTaskModule(
         add_argument_indices_to_input: bool = False,
         add_global_attention_mask_to_input: bool = False,
         argument_type_whitelist: Optional[List[List[str]]] = None,
-        relations_with_same_arguments: Optional[str] = "keep_none",
         handle_relations_with_same_arguments: str = "keep_none",
         **kwargs,
     ) -> None:
@@ -381,7 +380,6 @@ class RETextClassificationWithIndicesTaskModule(
         self.max_window = max_window
         self.allow_discontinuous_text = allow_discontinuous_text
         self.handle_relations_with_same_arguments = handle_relations_with_same_arguments
-        self.relations_with_same_arguments = relations_with_same_arguments
         self.argument_type_whitelist: Optional[List[Tuple[str, str]]] = None
 
         if argument_type_whitelist is not None:
