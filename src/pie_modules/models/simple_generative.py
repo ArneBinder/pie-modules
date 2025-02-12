@@ -59,8 +59,10 @@ class SimpleGenerativeModel(
     def __init__(
         self,
         # base model setup
-        base_model_type: str,
-        base_model_config: Dict[str, Any],
+        base_model: Optional[Dict[str, Any]] = None,
+        # old setup
+        base_model_type: Optional[str] = None,
+        base_model_config: Optional[Dict[str, Any]] = None,
         # generation
         override_generation_kwargs: Optional[Dict[str, Any]] = None,
         # scheduler / optimizer
@@ -71,18 +73,33 @@ class SimpleGenerativeModel(
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.save_hyperparameters()
+        if base_model is None:
+            if base_model_type is None:
+                raise ValueError(
+                    "Either base_model or base_model_type must be provided. If base_model is not provided, "
+                    "base_model_type must be a valid model type, e.g. 'transformers.AutoModelForSeq2SeqLM'."
+                )
+            logger.warning(
+                "The base_model_type and base_model_config arguments are deprecated. Please use base_model. "
+                "You can use the following code to create the base_model argument: "
+                "base_model = {'_type_': base_model_type, **base_model_config}"
+            )
+            base_model = {"_type_": base_model_type, **(base_model_config or {})}
+
+        self.save_hyperparameters(ignore=["base_model_type", "base_model_config"])
 
         # optimizer / scheduler
         self.learning_rate = learning_rate
         self.optimizer_type = optimizer_type
         self.warmup_proportion = warmup_proportion
 
-        # Note: We do not set expected_super_type=PreTrainedModel for resolve_type() because
-        #   AutoModel* classed such as AutoModelForSeq2SeqLM do not inherit from that.
-        resolved_base_model_type: Type[PreTrainedModel] = resolve_type(base_model_type)
-        self.model = resolved_base_model_type.from_pretrained(**base_model_config)
+        self.model = self.setup_base_model(config=base_model)
         self.generation_config = self.configure_generation(**(override_generation_kwargs or {}))
+
+    def setup_base_model(self, config: Dict[str, Any]) -> PreTrainedModel:
+        config = copy.copy(config)
+        resolved_base_model_type: Type[PreTrainedModel] = resolve_type(config.pop("_type_"))
+        return resolved_base_model_type.from_pretrained(**config)
 
     def configure_generation(self, **kwargs) -> Dict[str, Any]:
         if self.taskmodule is not None:
