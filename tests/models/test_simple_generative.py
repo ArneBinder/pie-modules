@@ -389,8 +389,10 @@ def _assert_optimizer(
 
 
 def test_configure_optimizers_with_warmup(model, optimizer):
-    backup_value = model.warmup_proportion
+    warmup_proportion_backup_value = model.warmup_proportion
+    scheduler_name_backup_value = model.scheduler_name
     model.warmup_proportion = 0.1
+    model.scheduler_name = "linear"
     model.trainer = Trainer(max_epochs=10)
     optimizer_and_schedular = model.configure_optimizers()
     assert optimizer_and_schedular is not None
@@ -408,4 +410,5 @@ def test_configure_optimizers_with_warmup(model, optimizer):
     assert scheduler.optimizer is optimizers[0]
     assert scheduler.base_lrs == [13e-3]
 
-    model.warmup_proportion = backup_value
+    model.warmup_proportion = warmup_proportion_backup_value
+    model.scheduler_name = scheduler_name_backup_value
