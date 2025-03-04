@@ -2,7 +2,8 @@ import logging
 from copy import copy
 from typing import Any, Dict, List, Optional, Tuple
 
-from torch import Tensor, nn
+import torch
+from torch import FloatTensor, LongTensor, Tensor, nn
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,41 @@ class RNNWrapper(nn.Module):
             return self.rnn.hidden_size
 
 
+class ConcatenatedSequencesWrapper(nn.Module):
+    """Wrapper for a module that processes concatenated sequences.
+
+    The input tensor is expected to have the shape (batch_size, sequence_length, input_size) and
+    multiple sequences are concatenated along the batch dimension. The module is expected to
+    process the concatenated sequences and return the processed sequences with the same shape. The
+    processed sequences are then separated back to the original sequences and returned as the
+    output tensor.
+    """
+
+    def __init__(self, module: nn.Module, module_output_size: int):
+        super().__init__()
+        self.module = module
+        self.module_output_size = module_output_size
+
+    def forward(self, values: FloatTensor, sequence_ids: LongTensor, *args, **kwargs) -> Tensor:
+        results = torch.zeros(
+            values.size(0), values.size(1), self.module_output_size, device=values.device
+        )
+        for seq_idx in torch.unique(sequence_ids):
+            # get values for the current sequence (from multiple batch entries)
+            mask = sequence_ids == seq_idx
+            selected_values = values[mask]
+            # flatten the batch dimension
+            concatenated_sequence = selected_values.view(-1, selected_values.size(-1))
+            processed_sequence = self.module(concatenated_sequence.unsqueeze(0), *args, **kwargs)
+            # restore the batch dimension
+            reconstructed_sequence = processed_sequence.view(
+                selected_values.size(), processed_sequence.size(-1)
+            )
+            # store the processed sequence back to the results tensor at the correct batch indices
+            results[mask] = reconstructed_sequence
+        return results
+
+
 def build_seq2seq_encoder(
     config: Dict[str, Any], input_size: int
 ) -> Tuple[Optional[nn.Module], int]:
@@ -54,6 +90,9 @@ def build_seq2seq_encoder(
             input_size = output_size
 
         seq2seq_encoder = nn.Sequential(*modules)
+    elif seq2seq_encoder_type == "concatenate_sequences":
+        submodule, output_size = build_seq2seq_encoder(config["module"], input_size)
+        seq2seq_encoder = ConcatenatedSequencesWrapper(submodule, output_size)
     elif seq2seq_encoder_type in RNN_TYPE2CLASS:
         rnn_class = RNN_TYPE2CLASS[seq2seq_encoder_type]
         seq2seq_encoder = RNNWrapper(rnn_class(input_size=input_size, batch_first=True, **config))
