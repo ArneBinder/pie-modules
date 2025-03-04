@@ -181,13 +181,20 @@ class TokenClassificationModelWithSeq2SeqEncoderAndCrf(
         self, inputs: InputType, targets: Optional[TargetType] = None
     ) -> TokenClassifierOutput:
         inputs_without_special_tokens_mask = {
-            k: v for k, v in inputs.items() if k != "special_tokens_mask"
+            k: v
+            for k, v in inputs.items()
+            if k != "special_tokens_mask" and not k.startswith("seq2seq_encoder_")
         }
         outputs = self.model(**inputs_without_special_tokens_mask)
         sequence_output = outputs[0]
 
         if self.seq2seq_encoder is not None:
-            sequence_output = self.seq2seq_encoder(sequence_output)
+            seq2seq_encoder_kwargs = {
+                k[len("seq2seq_encoder_") :]: v
+                for k, v in inputs.items()
+                if k.startswith("seq2seq_encoder_")
+            }
+            sequence_output = self.seq2seq_encoder(sequence_output, **seq2seq_encoder_kwargs)
 
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
