@@ -34,6 +34,7 @@ def taskmodule_config():
         "tokenize_kwargs": None,
         "pad_kwargs": None,
         "log_precision_recall_metrics": True,
+        "inputs_key_document_indices": None,
     }
 
 
