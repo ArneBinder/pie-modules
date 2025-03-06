@@ -160,6 +160,7 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
         tokenize_kwargs: Optional[Dict[str, Any]] = None,
         pad_kwargs: Optional[Dict[str, Any]] = None,
         log_precision_recall_metrics: bool = True,
+        inputs_key_document_indices: Optional[str] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -173,6 +174,7 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
         self.tokenize_kwargs = tokenize_kwargs or {}
         self.pad_kwargs = pad_kwargs or {}
         self.log_precision_recall_metrics = log_precision_recall_metrics
+        self.inputs_key_document_indices = inputs_key_document_indices
 
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
 
@@ -230,6 +232,15 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
 
         self.id_to_label = {v: k for k, v in self.label_to_id.items()}
 
+    def encode_inputs(
+        self,
+        documents: Sequence[DocumentType],
+        show_progress: bool = False,
+    ) -> Tuple[Sequence[TaskEncodingType], Sequence[DocumentType]]:
+        self._doc_idx = 0
+        result = super().encode_inputs(documents, show_progress=show_progress)
+        return result
+
     def encode_input(
         self,
         document: TextDocument,
@@ -263,10 +274,11 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
                 TaskEncoding(
                     document=document,
                     inputs=tokenized_doc.metadata["tokenizer_encoding"],
-                    metadata={"tokenized_document": tokenized_doc},
+                    metadata={"tokenized_document": tokenized_doc, "document_idx": self._doc_idx},
                 )
             )
 
+        self._doc_idx += 1
         return task_encodings
 
     def encode_target(
@@ -317,6 +329,11 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
         inputs = self.tokenizer.pad(
             list_of_dicts2dict_of_lists(input_encodings), return_tensors="pt", **self.pad_kwargs
         )
+        if self.inputs_key_document_indices is not None:
+            document_indices = torch.tensor(
+                [task_encoding.metadata["document_idx"] for task_encoding in task_encodings]
+            )
+            inputs[self.inputs_key_document_indices] = document_indices
 
         if not task_encodings[0].has_targets:
             return inputs, None
