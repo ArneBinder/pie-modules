@@ -47,20 +47,26 @@ class ConcatenatedSequencesWrapper(nn.Module):
         self.module = module
         self.module_output_size = module_output_size
 
-    def forward(self, values: FloatTensor, sequence_ids: LongTensor, *args, **kwargs) -> Tensor:
+    def forward(
+        self, values: FloatTensor, sequence_ids: LongTensor, *args, **kwargs
+    ) -> FloatTensor:
         results = torch.zeros(
             values.size(0), values.size(1), self.module_output_size, device=values.device
         )
         for seq_idx in torch.unique(sequence_ids):
             # get values for the current sequence (from multiple batch entries)
             mask = sequence_ids == seq_idx
+            # shape: (num_selected, sequence_length, input_size)
             selected_values = values[mask]
             # flatten the batch dimension
             concatenated_sequence = selected_values.view(-1, selected_values.size(-1))
-            processed_sequence = self.module(concatenated_sequence.unsqueeze(0), *args, **kwargs)
-            # restore the batch dimension
+            # (num_selected * sequence_length, input_size) -> (num_selected * sequence_length, output_size)
+            processed_sequence = self.module(
+                concatenated_sequence.unsqueeze(0), *args, **kwargs
+            ).squeeze(0)
+            # restore the batch dimension: (num_selected, sequence_length, output_size)
             reconstructed_sequence = processed_sequence.view(
-                selected_values.size(), processed_sequence.size(-1)
+                selected_values.size(0), selected_values.size(1), processed_sequence.size(-1)
             )
             # store the processed sequence back to the results tensor at the correct batch indices
             results[mask] = reconstructed_sequence
