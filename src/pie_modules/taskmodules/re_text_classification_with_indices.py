@@ -1057,19 +1057,18 @@ class RETextClassificationWithIndicesTaskModule(
                     arg,
                     marker_type,
                 ) in marker_ids_with_positions_sorted:
-                    input_ids_with_markers = (
-                        input_ids_with_markers[: token_position + offset]
-                        + ([marker_id] if self.insert_markers else [])
-                        + input_ids_with_markers[token_position + offset :]
-                    )
-                    if entity_tags is not None:
-                        entity_tags = (
-                            entity_tags[: token_position + offset]
-                            + ([0] if self.insert_markers else [])
-                            + entity_tags[token_position + offset :]
-                        )
-
                     if self.insert_markers:
+                        input_ids_with_markers = (
+                            input_ids_with_markers[: token_position + offset]
+                            + [marker_id]
+                            + input_ids_with_markers[token_position + offset :]
+                        )
+                        if entity_tags is not None:
+                            entity_tags = (
+                                entity_tags[: token_position + offset]
+                                + [0]
+                                + entity_tags[token_position + offset :]
+                            )
                         offset += 1
                     if self.add_argument_indices_to_input or self.add_argument_tags_to_input:
                         idx = self.argument_role2idx[arg.role]
