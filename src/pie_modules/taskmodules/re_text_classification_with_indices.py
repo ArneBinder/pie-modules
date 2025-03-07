@@ -1038,7 +1038,9 @@ class RETextClassificationWithIndicesTaskModule(
                                 )
                             # -1 to undo the additional offset for the end marker which does not
                             # affect the mention offset
-                            arg_end_indices[idx] = token_position + offset - 1
+                            arg_end_indices[idx] = (
+                                token_position + offset - (1 if self.insert_markers else 0)
+                            )
 
                 if self.append_markers:
                     if self.tokenizer.sep_token is None:
