@@ -2198,3 +2198,174 @@ def test_configure_model_metric(documents, taskmodule):
 
     # ensure that the metric can be pickled
     pickle.dumps(metric)
+
+
+def test_encode_without_insert_marter_but_argument_tags(documents):
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        insert_markers=False,
+        add_argument_tags_to_input=True,
+    )
+    assert not taskmodule.is_from_pretrained
+    taskmodule.prepare(documents)
+
+    assert len(documents) == 7
+    encodings = taskmodule.encode(documents)
+    batch = taskmodule.collate(encodings)
+    inputs, targets = batch
+    tokens = [
+        taskmodule.tokenizer.convert_ids_to_tokens(input_ids) for input_ids in inputs["input_ids"]
+    ]
+
+    def get_tag(argument_tag_id: int, idx2label: Dict[int, str]) -> str:
+        if argument_tag_id == 0:
+            return "O"
+        argument_tag_id -= 1
+        label = idx2label[argument_tag_id // 2]
+        if argument_tag_id % 2 == 0:
+            return f"B-{label}"
+        else:
+            return f"I-{label}"
+
+    idx2role = {v: k for k, v in taskmodule.argument_role2idx.items()}
+    argument_tag_ids = [
+        [get_tag(tag_id, idx2role) for tag_id in (argument_tags - 1).tolist() if tag_id >= 0]
+        for argument_tags in inputs["argument_tags"]
+    ]
+    tokens_with_tags = [
+        [(tok, tag) for tok, tag in zip(tkns, tags)]
+        for tkns, tags in zip(tokens, argument_tag_ids)
+    ]
+    assert tokens_with_tags == [
+        [
+            ("[CLS]", "O"),
+            ("En", "B-head"),
+            ("##ti", "I-head"),
+            ("##ty", "I-head"),
+            ("A", "O"),
+            ("works", "O"),
+            ("at", "O"),
+            ("B", "B-tail"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("First", "O"),
+            ("sentence", "O"),
+            (".", "O"),
+            ("En", "B-head"),
+            ("##ti", "I-head"),
+            ("##ty", "I-head"),
+            ("G", "O"),
+            ("works", "O"),
+            ("at", "O"),
+            ("H", "B-tail"),
+            (".", "O"),
+            ("And", "O"),
+            ("founded", "O"),
+            ("I", "O"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("First", "O"),
+            ("sentence", "O"),
+            (".", "O"),
+            ("En", "B-head"),
+            ("##ti", "I-head"),
+            ("##ty", "I-head"),
+            ("G", "O"),
+            ("works", "O"),
+            ("at", "O"),
+            ("H", "O"),
+            (".", "O"),
+            ("And", "O"),
+            ("founded", "O"),
+            ("I", "B-tail"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("First", "O"),
+            ("sentence", "O"),
+            (".", "O"),
+            ("En", "O"),
+            ("##ti", "O"),
+            ("##ty", "O"),
+            ("G", "O"),
+            ("works", "O"),
+            ("at", "O"),
+            ("H", "B-tail"),
+            (".", "O"),
+            ("And", "O"),
+            ("founded", "O"),
+            ("I", "B-head"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("First", "O"),
+            ("sentence", "O"),
+            (".", "O"),
+            ("En", "B-head"),
+            ("##ti", "I-head"),
+            ("##ty", "I-head"),
+            ("M", "O"),
+            ("works", "O"),
+            ("at", "O"),
+            ("N", "B-tail"),
+            (".", "O"),
+            ("And", "O"),
+            ("it", "O"),
+            ("founded", "O"),
+            ("O", "O"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("First", "O"),
+            ("sentence", "O"),
+            (".", "O"),
+            ("En", "O"),
+            ("##ti", "O"),
+            ("##ty", "O"),
+            ("M", "O"),
+            ("works", "O"),
+            ("at", "O"),
+            ("N", "O"),
+            (".", "O"),
+            ("And", "O"),
+            ("it", "B-head"),
+            ("founded", "O"),
+            ("O", "B-tail"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("First", "O"),
+            ("sentence", "O"),
+            (".", "O"),
+            ("En", "O"),
+            ("##ti", "O"),
+            ("##ty", "O"),
+            ("M", "O"),
+            ("works", "O"),
+            ("at", "O"),
+            ("N", "O"),
+            (".", "O"),
+            ("And", "O"),
+            ("it", "B-tail"),
+            ("founded", "O"),
+            ("O", "B-head"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+    ]
