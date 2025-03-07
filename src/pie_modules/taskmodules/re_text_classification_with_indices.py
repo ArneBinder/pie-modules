@@ -371,6 +371,7 @@ class RETextClassificationWithIndicesTaskModule(
         log_first_n_examples: int = 0,
         add_argument_indices_to_input: bool = False,
         add_argument_tags_to_input: bool = False,
+        add_entity_tags_to_input: bool = False,
         add_global_attention_mask_to_input: bool = False,
         argument_type_whitelist: Optional[List[List[str]]] = None,
         handle_relations_with_same_arguments: str = "keep_none",
@@ -425,6 +426,7 @@ class RETextClassificationWithIndicesTaskModule(
         self.log_first_n_examples = log_first_n_examples or 0
         self.add_argument_indices_to_input = add_argument_indices_to_input
         self.add_argument_tags_to_input = add_argument_tags_to_input
+        self.add_entity_tags_to_input = add_entity_tags_to_input
         self.add_global_attention_mask_to_input = add_global_attention_mask_to_input
         if argument_role_to_marker is None:
             self.argument_role_to_marker = {HEAD: "H", TAIL: "T"}
@@ -882,6 +884,41 @@ class RETextClassificationWithIndicesTaskModule(
 
                 input_ids = encoding["input_ids"]
 
+                entity_tags = None
+                if self.add_entity_tags_to_input:
+                    entity_spans_partition = [
+                        shift_span(span, offset=-partition.start) for span in entities
+                    ]
+                    entity_token_spans = []
+                    for span in entity_spans_partition:
+                        try:
+                            entity_token_spans.append(
+                                get_aligned_token_span(
+                                    encoding=encoding,
+                                    char_span=span,
+                                )
+                            )
+                        except SpanNotAlignedWithTokenException as e:
+                            span_original = shift_span(e.span, offset=partition.start)
+                            span_text = document.text[span_original.start : span_original.end]
+                            logger.warning(
+                                f"doc.id={document.id}: Skipping invalid example, cannot get entity token slice for "
+                                f'{span_original}: "{span_text}"'
+                            )
+                            self.collect_relation("skipped_entity_not_aligned", rel)
+                            continue
+
+                    entity_tags = bio_encode_spans(
+                        spans=[
+                            (span.start, span.end, getattr(span, "label", "ENTITY"))
+                            for span in entity_token_spans
+                        ],
+                        total_length=len(input_ids),
+                        label2idx={
+                            label: idx for idx, label in enumerate(self.entity_labels or [])
+                        },
+                    )
+
                 # windowing: we restrict the input to a window of a maximal size (max_window) with the arguments
                 # of the candidate relation in the center (as much as possible)
                 if self.max_window is not None:
@@ -898,6 +935,11 @@ class RETextClassificationWithIndicesTaskModule(
                         max_tokens -= len(args) * 2
 
                     if self.allow_discontinuous_text:
+                        if entity_tags is not None:
+                            raise NotImplementedError(
+                                "allow_discontinuous_text=True is not yet supported with add_entity_tags_to_input=True"
+                            )
+
                         max_tokens_per_argument = max_tokens // len(args)
                         max_tokens_per_argument -= len(self.glue_token_ids)
                         if any(
@@ -975,6 +1017,9 @@ class RETextClassificationWithIndicesTaskModule(
                         window_start, window_end = window_slice
                         input_ids = input_ids[window_start:window_end]
 
+                        if entity_tags is not None:
+                            entity_tags = entity_tags[window_start:window_end]
+
                         for arg in args:
                             arg.shift_token_span(-window_start)
 
@@ -1017,6 +1062,13 @@ class RETextClassificationWithIndicesTaskModule(
                         + ([marker_id] if self.insert_markers else [])
                         + input_ids_with_markers[token_position + offset :]
                     )
+                    if entity_tags is not None:
+                        entity_tags = (
+                            entity_tags[: token_position + offset]
+                            + ([0] if self.insert_markers else [])
+                            + entity_tags[token_position + offset :]
+                        )
+
                     if self.insert_markers:
                         offset += 1
                     if self.add_argument_indices_to_input or self.add_argument_tags_to_input:
@@ -1059,6 +1111,9 @@ class RETextClassificationWithIndicesTaskModule(
                                 self.argument_markers_to_id[arg.as_append_marker]
                             )
                             input_ids_with_markers.append(sep_token_id)
+                        if entity_tags is not None:
+                            entity_tags.append(0)
+                            entity_tags.append(0)
 
                 # when windowing is used, we have to add the special tokens manually
                 if without_special_tokens:
@@ -1080,6 +1135,19 @@ class RETextClassificationWithIndicesTaskModule(
                         ]
                         arg_end_indices = [
                             idx + index_offset if idx != -1 else -1 for idx in arg_end_indices
+                        ]
+                    if entity_tags is not None:
+                        special_tokens_mask = self.tokenizer.get_special_tokens_mask(
+                            token_ids_0=input_ids_with_markers, already_has_special_tokens=True
+                        )
+                        entity_tags_with_special = self.tokenizer.build_inputs_with_special_tokens(
+                            token_ids_0=entity_tags
+                        )
+                        entity_tags = [
+                            tag if not is_special else 0
+                            for tag, is_special in zip(
+                                entity_tags_with_special, special_tokens_mask
+                            )
                         ]
 
                 inputs = {"input_ids": input_ids_with_markers}
@@ -1103,6 +1171,9 @@ class RETextClassificationWithIndicesTaskModule(
                         label2idx=self.argument_role2idx,
                     )
                     inputs["argument_tags"] = argument_tag_ids
+
+                if entity_tags is not None:
+                    inputs["entity_tags"] = entity_tags
 
                 task_encodings.append(
                     TaskEncoding(
@@ -1266,6 +1337,23 @@ class RETextClassificationWithIndicesTaskModule(
             inputs["argument_tags"] = argument_tags_padded["input_ids"] + 1
             # overwrite padding with 0
             inputs["argument_tags"][argument_tags_padded["attention_mask"] == 0] = 0
+
+        if self.add_entity_tags_to_input:
+            entity_tags = [
+                {"input_ids": task_encoding.inputs["entity_tags"]}
+                for task_encoding in task_encodings
+            ]
+            entity_tags_padded = self.tokenizer.pad(
+                entity_tags,
+                padding=self.padding,
+                max_length=self.max_length,
+                pad_to_multiple_of=self.pad_to_multiple_of,
+                return_tensors="pt",
+            )
+            # increase all values by 1 because 0 is used for padding
+            inputs["entity_tags"] = entity_tags_padded["input_ids"] + 1
+            # overwrite padding with 0
+            inputs["entity_tags"][entity_tags_padded["attention_mask"] == 0] = 0
 
         if self.add_argument_indices_to_input:
             inputs["pooler_start_indices"] = torch.tensor(

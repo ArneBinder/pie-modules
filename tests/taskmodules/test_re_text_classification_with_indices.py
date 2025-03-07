@@ -2283,12 +2283,12 @@ def test_configure_model_metric(documents, taskmodule):
     pickle.dumps(metric)
 
 
-def get_bio_tag(argument_tag_id: int, idx2label: Dict[int, str]) -> str:
-    if argument_tag_id == 0:
+def get_bio_tag(tag_id: int, idx2label: Dict[int, str]) -> str:
+    if tag_id == 0:
         return "O"
-    argument_tag_id -= 1
-    label = idx2label[argument_tag_id // 2]
-    if argument_tag_id % 2 == 0:
+    tag_id -= 1
+    label = idx2label[tag_id // 2]
+    if tag_id % 2 == 0:
         return f"B-{label}"
     else:
         return f"I-{label}"
@@ -2541,3 +2541,261 @@ def test_encode_without_insert_marker_but_argument_tags_and_windowing(
             ("[SEP]", "O"),
         ],
     ]
+
+
+@pytest.mark.parametrize("insert_markers", [True, False])
+def test_encode_with_add_entity_tags_to_input(documents, insert_markers):
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        add_entity_tags_to_input=True,
+        insert_markers=insert_markers,
+    )
+    assert not taskmodule.is_from_pretrained
+    taskmodule.prepare(documents)
+
+    encodings = taskmodule.encode(documents)
+    assert len(encodings) == 7
+    batch = taskmodule.collate(encodings)
+    inputs, targets = batch
+    tokens = [
+        taskmodule.tokenizer.convert_ids_to_tokens(input_ids) for input_ids in inputs["input_ids"]
+    ]
+
+    idx2label = {k: v for k, v in enumerate(taskmodule.entity_labels)}
+    entity_tag_ids = [
+        [get_bio_tag(tag_id, idx2label) for tag_id in (argument_tags - 1).tolist() if tag_id >= 0]
+        for argument_tags in inputs["entity_tags"]
+    ]
+    tokens_with_tags = [
+        [(tok, tag) for tok, tag in zip(tkns, tags)] for tkns, tags in zip(tokens, entity_tag_ids)
+    ]
+    if insert_markers:
+        assert tokens_with_tags[:3] == [
+            [
+                ("[CLS]", "O"),
+                ("[H]", "O"),
+                ("En", "B-PER"),
+                ("##ti", "I-PER"),
+                ("##ty", "I-PER"),
+                ("A", "I-PER"),
+                ("[/H]", "O"),
+                ("works", "O"),
+                ("at", "O"),
+                ("[T]", "O"),
+                ("B", "B-ORG"),
+                ("[/T]", "O"),
+                (".", "O"),
+                ("[SEP]", "O"),
+            ],
+            [
+                ("[CLS]", "O"),
+                ("First", "O"),
+                ("sentence", "O"),
+                (".", "O"),
+                ("[H]", "O"),
+                ("En", "B-PER"),
+                ("##ti", "I-PER"),
+                ("##ty", "I-PER"),
+                ("G", "I-PER"),
+                ("[/H]", "O"),
+                ("works", "O"),
+                ("at", "O"),
+                ("[T]", "O"),
+                ("H", "B-ORG"),
+                ("[/T]", "O"),
+                (".", "O"),
+                ("And", "O"),
+                ("founded", "O"),
+                ("I", "B-ORG"),
+                (".", "O"),
+                ("[SEP]", "O"),
+            ],
+            [
+                ("[CLS]", "O"),
+                ("First", "O"),
+                ("sentence", "O"),
+                (".", "O"),
+                ("[H]", "O"),
+                ("En", "B-PER"),
+                ("##ti", "I-PER"),
+                ("##ty", "I-PER"),
+                ("G", "I-PER"),
+                ("[/H]", "O"),
+                ("works", "O"),
+                ("at", "O"),
+                ("H", "B-ORG"),
+                (".", "O"),
+                ("And", "O"),
+                ("founded", "O"),
+                ("[T]", "O"),
+                ("I", "B-ORG"),
+                ("[/T]", "O"),
+                (".", "O"),
+                ("[SEP]", "O"),
+            ],
+        ]
+    else:
+        assert tokens_with_tags[:3] == [
+            [
+                ("[CLS]", "O"),
+                ("En", "B-PER"),
+                ("##ti", "I-PER"),
+                ("##ty", "I-PER"),
+                ("A", "I-PER"),
+                ("works", "O"),
+                ("at", "O"),
+                ("B", "B-ORG"),
+                (".", "O"),
+                ("[SEP]", "O"),
+            ],
+            [
+                ("[CLS]", "O"),
+                ("First", "O"),
+                ("sentence", "O"),
+                (".", "O"),
+                ("En", "B-PER"),
+                ("##ti", "I-PER"),
+                ("##ty", "I-PER"),
+                ("G", "I-PER"),
+                ("works", "O"),
+                ("at", "O"),
+                ("H", "B-ORG"),
+                (".", "O"),
+                ("And", "O"),
+                ("founded", "O"),
+                ("I", "B-ORG"),
+                (".", "O"),
+                ("[SEP]", "O"),
+            ],
+            [
+                ("[CLS]", "O"),
+                ("First", "O"),
+                ("sentence", "O"),
+                (".", "O"),
+                ("En", "B-PER"),
+                ("##ti", "I-PER"),
+                ("##ty", "I-PER"),
+                ("G", "I-PER"),
+                ("works", "O"),
+                ("at", "O"),
+                ("H", "B-ORG"),
+                (".", "O"),
+                ("And", "O"),
+                ("founded", "O"),
+                ("I", "B-ORG"),
+                (".", "O"),
+                ("[SEP]", "O"),
+            ],
+        ]
+
+
+@pytest.mark.parametrize("insert_markers", [True, False])
+def test_encode_with_add_entity_tags_to_input_windowing(documents, insert_markers):
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        add_entity_tags_to_input=True,
+        insert_markers=insert_markers,
+        max_window=12 if insert_markers else 8,
+    )
+    assert not taskmodule.is_from_pretrained
+    taskmodule.prepare(documents)
+
+    encodings = taskmodule.encode(documents, encode_target=True)
+    assert len(encodings) == 3
+    batch = taskmodule.collate(encodings)
+    inputs, targets = batch
+    tokens = [
+        taskmodule.tokenizer.convert_ids_to_tokens(input_ids) for input_ids in inputs["input_ids"]
+    ]
+
+    idx2label = {k: v for k, v in enumerate(taskmodule.entity_labels)}
+    entity_tag_ids = [
+        [get_bio_tag(tag_id, idx2label) for tag_id in (argument_tags - 1).tolist() if tag_id >= 0]
+        for argument_tags in inputs["entity_tags"]
+    ]
+    tokens_with_tags = [
+        [(tok, tag) for tok, tag in zip(tkns, tags)] for tkns, tags in zip(tokens, entity_tag_ids)
+    ]
+
+    if insert_markers:
+        assert tokens_with_tags == [
+            [
+                ("[CLS]", "O"),
+                ("at", "O"),
+                ("[T]", "O"),
+                ("H", "B-ORG"),
+                ("[/T]", "O"),
+                (".", "O"),
+                ("And", "O"),
+                ("founded", "O"),
+                ("[H]", "O"),
+                ("I", "B-ORG"),
+                ("[/H]", "O"),
+                ("[SEP]", "O"),
+            ],
+            [
+                ("[CLS]", "O"),
+                (".", "O"),
+                ("And", "O"),
+                ("[H]", "O"),
+                ("it", "B-PER"),
+                ("[/H]", "O"),
+                ("founded", "O"),
+                ("[T]", "O"),
+                ("O", "B-ORG"),
+                ("[/T]", "O"),
+                (".", "O"),
+                ("[SEP]", "O"),
+            ],
+            [
+                ("[CLS]", "O"),
+                (".", "O"),
+                ("And", "O"),
+                ("[T]", "O"),
+                ("it", "B-PER"),
+                ("[/T]", "O"),
+                ("founded", "O"),
+                ("[H]", "O"),
+                ("O", "B-ORG"),
+                ("[/H]", "O"),
+                (".", "O"),
+                ("[SEP]", "O"),
+            ],
+        ]
+    else:
+        assert tokens_with_tags == [
+            [
+                ("[CLS]", "O"),
+                ("at", "O"),
+                ("H", "B-ORG"),
+                (".", "O"),
+                ("And", "O"),
+                ("founded", "O"),
+                ("I", "B-ORG"),
+                ("[SEP]", "O"),
+            ],
+            [
+                ("[CLS]", "O"),
+                (".", "O"),
+                ("And", "O"),
+                ("it", "B-PER"),
+                ("founded", "O"),
+                ("O", "B-ORG"),
+                (".", "O"),
+                ("[SEP]", "O"),
+            ],
+            [
+                ("[CLS]", "O"),
+                (".", "O"),
+                ("And", "O"),
+                ("it", "B-PER"),
+                ("founded", "O"),
+                ("O", "B-ORG"),
+                (".", "O"),
+                ("[SEP]", "O"),
+            ],
+        ]
