@@ -296,6 +296,20 @@ def shift_span(span: S, offset: int) -> S:
     return span.copy(start=span.start + offset, end=span.end + offset)
 
 
+def bio_encode_spans(
+    spans: List[Tuple[int, int, str]], total_length: int, label2idx: Dict[str, int]
+) -> List[int]:
+    # result = ["O"] * total_length
+    result = [0] * total_length
+    for start, end, label in spans:
+        # result[start] = f"B-{label}"
+        result[start] = label2idx[label] * 2 + 1
+        for i in range(start + 1, end):
+            # result[i] = f"I-{label}"
+            result[i] = label2idx[label] * 2 + 2
+    return result
+
+
 @TaskModule.register()
 class RETextClassificationWithIndicesTaskModule(
     RelationStatisticsMixin,
@@ -345,6 +359,7 @@ class RETextClassificationWithIndicesTaskModule(
         argument_role_to_marker: Optional[Dict[str, str]] = None,
         single_argument_pair: bool = True,
         append_markers: bool = False,
+        insert_markers: bool = True,
         entity_labels: Optional[List[str]] = None,
         reversed_relation_label_suffix: str = "_reversed",
         symmetric_relations: Optional[List[str]] = None,
@@ -355,6 +370,7 @@ class RETextClassificationWithIndicesTaskModule(
         allow_discontinuous_text: bool = False,
         log_first_n_examples: int = 0,
         add_argument_indices_to_input: bool = False,
+        add_argument_tags_to_input: bool = False,
         add_global_attention_mask_to_input: bool = False,
         argument_type_whitelist: Optional[List[List[str]]] = None,
         handle_relations_with_same_arguments: str = "keep_none",
@@ -385,6 +401,7 @@ class RETextClassificationWithIndicesTaskModule(
         self.add_type_to_marker = add_type_to_marker
         self.single_argument_pair = single_argument_pair
         self.append_markers = append_markers
+        self.insert_markers = insert_markers
         self.entity_labels = entity_labels
         self.partition_annotation = partition_annotation
         self.none_label = none_label
@@ -407,6 +424,7 @@ class RETextClassificationWithIndicesTaskModule(
         # overwrite None with 0 for backward compatibility
         self.log_first_n_examples = log_first_n_examples or 0
         self.add_argument_indices_to_input = add_argument_indices_to_input
+        self.add_argument_tags_to_input = add_argument_tags_to_input
         self.add_global_attention_mask_to_input = add_global_attention_mask_to_input
         if argument_role_to_marker is None:
             self.argument_role_to_marker = {HEAD: "H", TAIL: "T"}
@@ -870,11 +888,9 @@ class RETextClassificationWithIndicesTaskModule(
                     # The actual number of tokens needs to be lower than max_window because we add two
                     # marker tokens (before / after) each argument and the default special tokens
                     # (e.g. CLS and SEP).
-                    max_tokens = (
-                        self.max_window
-                        - len(args) * 2
-                        - self.tokenizer.num_special_tokens_to_add()
-                    )
+                    max_tokens = self.max_window - self.tokenizer.num_special_tokens_to_add()
+                    if self.insert_markers:
+                        max_tokens -= len(args) * 2
                     # if we add the markers also to the end, this decreases the available window again by
                     # two tokens (marker + sep) per argument
                     if self.append_markers:
@@ -987,16 +1003,23 @@ class RETextClassificationWithIndicesTaskModule(
                 offset = 0
                 arg_start_indices = [-1] * len(self.argument_role2idx)
                 arg_end_indices = [-1] * len(self.argument_role2idx)
-                for marker_id, token_position, arg, marker_type in sorted(
+                marker_ids_with_positions_sorted = sorted(
                     marker_ids_with_positions, key=lambda id_pos: id_pos[1]
-                ):
+                )
+                for (
+                    marker_id,
+                    token_position,
+                    arg,
+                    marker_type,
+                ) in marker_ids_with_positions_sorted:
                     input_ids_with_markers = (
                         input_ids_with_markers[: token_position + offset]
-                        + [marker_id]
+                        + ([marker_id] if self.insert_markers else [])
                         + input_ids_with_markers[token_position + offset :]
                     )
-                    offset += 1
-                    if self.add_argument_indices_to_input:
+                    if self.insert_markers:
+                        offset += 1
+                    if self.add_argument_indices_to_input or self.add_argument_tags_to_input:
                         idx = self.argument_role2idx[arg.role]
                         if marker_type == START:
                             if arg_start_indices[idx] != -1:
@@ -1015,7 +1038,9 @@ class RETextClassificationWithIndicesTaskModule(
                                 )
                             # -1 to undo the additional offset for the end marker which does not
                             # affect the mention offset
-                            arg_end_indices[idx] = token_position + offset - 1
+                            arg_end_indices[idx] = (
+                                token_position + offset - (1 if self.insert_markers else 0)
+                            )
 
                 if self.append_markers:
                     if self.tokenizer.sep_token is None:
@@ -1041,7 +1066,7 @@ class RETextClassificationWithIndicesTaskModule(
                     input_ids_with_markers = self.tokenizer.build_inputs_with_special_tokens(
                         token_ids_0=input_ids_with_markers
                     )
-                    if self.add_argument_indices_to_input:
+                    if self.add_argument_indices_to_input or self.add_argument_tags_to_input:
                         # get the number of prefix tokens
                         index_offset = find_sublist(
                             sub=original_input_ids_with_markers, bigger=input_ids_with_markers
@@ -1061,6 +1086,24 @@ class RETextClassificationWithIndicesTaskModule(
                 if self.add_argument_indices_to_input:
                     inputs["pooler_start_indices"] = arg_start_indices
                     inputs["pooler_end_indices"] = arg_end_indices
+                if self.add_argument_tags_to_input:
+                    # create bio-encoded tags for the arguments
+                    # using arg_start_indices, arg_end_indices, and marker_ids_with_positions_sorted
+                    argument_spans = [
+                        (
+                            arg_start_indices[self.argument_role2idx[arg.role]],
+                            arg_end_indices[self.argument_role2idx[arg.role]],
+                            arg.role,
+                        )
+                        for marker_id, token_position, arg, marker_type in marker_ids_with_positions_sorted
+                    ]
+                    argument_tag_ids = bio_encode_spans(
+                        spans=argument_spans,
+                        total_length=len(input_ids_with_markers),
+                        label2idx=self.argument_role2idx,
+                    )
+                    inputs["argument_tags"] = argument_tag_ids
+
                 task_encodings.append(
                     TaskEncoding(
                         document=document,
@@ -1207,6 +1250,22 @@ class RETextClassificationWithIndicesTaskModule(
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
+        if self.add_argument_tags_to_input:
+            argument_tags = [
+                {"input_ids": task_encoding.inputs["argument_tags"]}
+                for task_encoding in task_encodings
+            ]
+            argument_tags_padded = self.tokenizer.pad(
+                argument_tags,
+                padding=self.padding,
+                max_length=self.max_length,
+                pad_to_multiple_of=self.pad_to_multiple_of,
+                return_tensors="pt",
+            )
+            # increase all values by 1 because 0 is used for padding
+            inputs["argument_tags"] = argument_tags_padded["input_ids"] + 1
+            # overwrite padding with 0
+            inputs["argument_tags"][argument_tags_padded["attention_mask"] == 0] = 0
 
         if self.add_argument_indices_to_input:
             inputs["pooler_start_indices"] = torch.tensor(

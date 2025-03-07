@@ -969,6 +969,49 @@ def test_encode_with_add_argument_indices(documents):
     ]
 
 
+def test_encode_with_add_argument_indices_and_without_insert_markers(documents):
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        add_argument_indices_to_input=True,
+        insert_markers=False,
+    )
+
+    assert not taskmodule.is_from_pretrained
+    taskmodule.prepare(documents)
+
+    encodings = taskmodule.encode(documents, encode_target=True)
+    assert len(encodings) == 7
+    batch = taskmodule.collate(encodings)
+    inputs, targets = batch
+    tokens = [
+        taskmodule.tokenizer.convert_ids_to_tokens(input_ids) for input_ids in inputs["input_ids"]
+    ]
+
+    arg_spans = [
+        get_arg_token_span(
+            current_tokens,
+            current_start_indices,
+            current_end_indices,
+            taskmodule.argument_role2idx,
+        )
+        for current_tokens, current_start_indices, current_end_indices in zip(
+            tokens, inputs["pooler_start_indices"].tolist(), inputs["pooler_end_indices"].tolist()
+        )
+    ]
+
+    assert arg_spans == [
+        {"head": ["En", "##ti", "##ty", "A"], "tail": ["B"]},
+        {"head": ["En", "##ti", "##ty", "G"], "tail": ["H"]},
+        {"head": ["En", "##ti", "##ty", "G"], "tail": ["I"]},
+        {"head": ["I"], "tail": ["H"]},
+        {"head": ["En", "##ti", "##ty", "M"], "tail": ["N"]},
+        {"head": ["it"], "tail": ["O"]},
+        {"head": ["O"], "tail": ["it"]},
+    ]
+
+
 def test_find_sublist():
     # default case
     assert find_sublist(sub=[2, 3], bigger=[1, 2, 3, 4]) == 1
@@ -987,6 +1030,46 @@ def test_encode_with_add_argument_indices_and_windowing(documents):
         tokenizer_name_or_path=tokenizer_name_or_path,
         add_argument_indices_to_input=True,
         max_window=12,
+    )
+
+    assert not taskmodule.is_from_pretrained
+    taskmodule.prepare(documents)
+
+    encodings = taskmodule.encode(documents, encode_target=True)
+    assert len(encodings) == 3
+    batch = taskmodule.collate(encodings)
+    inputs, targets = batch
+    tokens = [
+        taskmodule.tokenizer.convert_ids_to_tokens(input_ids) for input_ids in inputs["input_ids"]
+    ]
+
+    arg_spans = [
+        get_arg_token_span(
+            current_tokens,
+            current_start_indices,
+            current_end_indices,
+            taskmodule.argument_role2idx,
+        )
+        for current_tokens, current_start_indices, current_end_indices in zip(
+            tokens, inputs["pooler_start_indices"].tolist(), inputs["pooler_end_indices"].tolist()
+        )
+    ]
+
+    assert arg_spans == [
+        {"head": ["I"], "tail": ["H"]},
+        {"head": ["it"], "tail": ["O"]},
+        {"head": ["O"], "tail": ["it"]},
+    ]
+
+
+def test_encode_with_add_argument_indices_windowing_and_without_insert_markers(documents):
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        add_argument_indices_to_input=True,
+        max_window=8,
+        insert_markers=False,
     )
 
     assert not taskmodule.is_from_pretrained
@@ -2198,3 +2281,263 @@ def test_configure_model_metric(documents, taskmodule):
 
     # ensure that the metric can be pickled
     pickle.dumps(metric)
+
+
+def get_bio_tag(argument_tag_id: int, idx2label: Dict[int, str]) -> str:
+    if argument_tag_id == 0:
+        return "O"
+    argument_tag_id -= 1
+    label = idx2label[argument_tag_id // 2]
+    if argument_tag_id % 2 == 0:
+        return f"B-{label}"
+    else:
+        return f"I-{label}"
+
+
+def test_encode_without_insert_marker_but_argument_tags(documents):
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        insert_markers=False,
+        add_argument_tags_to_input=True,
+    )
+    assert not taskmodule.is_from_pretrained
+    taskmodule.prepare(documents)
+
+    assert len(documents) == 7
+    encodings = taskmodule.encode(documents)
+    batch = taskmodule.collate(encodings)
+    inputs, targets = batch
+    tokens = [
+        taskmodule.tokenizer.convert_ids_to_tokens(input_ids) for input_ids in inputs["input_ids"]
+    ]
+
+    idx2role = {v: k for k, v in taskmodule.argument_role2idx.items()}
+    argument_tag_ids = [
+        [get_bio_tag(tag_id, idx2role) for tag_id in (argument_tags - 1).tolist() if tag_id >= 0]
+        for argument_tags in inputs["argument_tags"]
+    ]
+    tokens_with_tags = [
+        [(tok, tag) for tok, tag in zip(tkns, tags)]
+        for tkns, tags in zip(tokens, argument_tag_ids)
+    ]
+    assert tokens_with_tags == [
+        [
+            ("[CLS]", "O"),
+            ("En", "B-head"),
+            ("##ti", "I-head"),
+            ("##ty", "I-head"),
+            ("A", "I-head"),
+            ("works", "O"),
+            ("at", "O"),
+            ("B", "B-tail"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("First", "O"),
+            ("sentence", "O"),
+            (".", "O"),
+            ("En", "B-head"),
+            ("##ti", "I-head"),
+            ("##ty", "I-head"),
+            ("G", "I-head"),
+            ("works", "O"),
+            ("at", "O"),
+            ("H", "B-tail"),
+            (".", "O"),
+            ("And", "O"),
+            ("founded", "O"),
+            ("I", "O"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("First", "O"),
+            ("sentence", "O"),
+            (".", "O"),
+            ("En", "B-head"),
+            ("##ti", "I-head"),
+            ("##ty", "I-head"),
+            ("G", "I-head"),
+            ("works", "O"),
+            ("at", "O"),
+            ("H", "O"),
+            (".", "O"),
+            ("And", "O"),
+            ("founded", "O"),
+            ("I", "B-tail"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("First", "O"),
+            ("sentence", "O"),
+            (".", "O"),
+            ("En", "O"),
+            ("##ti", "O"),
+            ("##ty", "O"),
+            ("G", "O"),
+            ("works", "O"),
+            ("at", "O"),
+            ("H", "B-tail"),
+            (".", "O"),
+            ("And", "O"),
+            ("founded", "O"),
+            ("I", "B-head"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("First", "O"),
+            ("sentence", "O"),
+            (".", "O"),
+            ("En", "B-head"),
+            ("##ti", "I-head"),
+            ("##ty", "I-head"),
+            ("M", "I-head"),
+            ("works", "O"),
+            ("at", "O"),
+            ("N", "B-tail"),
+            (".", "O"),
+            ("And", "O"),
+            ("it", "O"),
+            ("founded", "O"),
+            ("O", "O"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("First", "O"),
+            ("sentence", "O"),
+            (".", "O"),
+            ("En", "O"),
+            ("##ti", "O"),
+            ("##ty", "O"),
+            ("M", "O"),
+            ("works", "O"),
+            ("at", "O"),
+            ("N", "O"),
+            (".", "O"),
+            ("And", "O"),
+            ("it", "B-head"),
+            ("founded", "O"),
+            ("O", "B-tail"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("First", "O"),
+            ("sentence", "O"),
+            (".", "O"),
+            ("En", "O"),
+            ("##ti", "O"),
+            ("##ty", "O"),
+            ("M", "O"),
+            ("works", "O"),
+            ("at", "O"),
+            ("N", "O"),
+            (".", "O"),
+            ("And", "O"),
+            ("it", "B-tail"),
+            ("founded", "O"),
+            ("O", "B-head"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+    ]
+
+
+@pytest.mark.parametrize("add_argument_indices_to_input", [True, False])
+def test_encode_without_insert_marker_but_argument_tags_and_windowing(
+    documents, add_argument_indices_to_input
+):
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        add_argument_indices_to_input=add_argument_indices_to_input,
+        add_argument_tags_to_input=True,
+        max_window=8,
+        insert_markers=False,
+    )
+    assert not taskmodule.is_from_pretrained
+    taskmodule.prepare(documents)
+
+    encodings = taskmodule.encode(documents, encode_target=True)
+    assert len(encodings) == 3
+    batch = taskmodule.collate(encodings)
+    inputs, targets = batch
+    tokens = [
+        taskmodule.tokenizer.convert_ids_to_tokens(input_ids) for input_ids in inputs["input_ids"]
+    ]
+
+    if add_argument_indices_to_input:
+        arg_spans = [
+            get_arg_token_span(
+                current_tokens,
+                current_start_indices,
+                current_end_indices,
+                taskmodule.argument_role2idx,
+            )
+            for current_tokens, current_start_indices, current_end_indices in zip(
+                tokens,
+                inputs["pooler_start_indices"].tolist(),
+                inputs["pooler_end_indices"].tolist(),
+            )
+        ]
+
+        assert arg_spans == [
+            {"head": ["I"], "tail": ["H"]},
+            {"head": ["it"], "tail": ["O"]},
+            {"head": ["O"], "tail": ["it"]},
+        ]
+
+    idx2role = {v: k for k, v in taskmodule.argument_role2idx.items()}
+    argument_tag_ids = [
+        [get_bio_tag(tag_id, idx2role) for tag_id in (argument_tags - 1).tolist() if tag_id >= 0]
+        for argument_tags in inputs["argument_tags"]
+    ]
+    tokens_with_tags = [
+        [(tok, tag) for tok, tag in zip(tkns, tags)]
+        for tkns, tags in zip(tokens, argument_tag_ids)
+    ]
+    assert tokens_with_tags == [
+        [
+            ("[CLS]", "O"),
+            ("at", "O"),
+            ("H", "B-tail"),
+            (".", "O"),
+            ("And", "O"),
+            ("founded", "O"),
+            ("I", "B-head"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            (".", "O"),
+            ("And", "O"),
+            ("it", "B-head"),
+            ("founded", "O"),
+            ("O", "B-tail"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            (".", "O"),
+            ("And", "O"),
+            ("it", "B-tail"),
+            ("founded", "O"),
+            ("O", "B-head"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+    ]
