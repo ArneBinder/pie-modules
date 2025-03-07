@@ -137,6 +137,22 @@ def span_distance(
         raise ValueError(f"unknown distance_type={distance_type}. use one of: inner")
 
 
+def find_sublist(sub: List, bigger: List) -> int:
+    if not bigger:
+        return -1
+    if not sub:
+        return -1
+    first, rest = sub[0], sub[1:]
+    pos = 0
+    try:
+        while True:
+            pos = bigger.index(first, pos) + 1
+            if not rest or bigger[pos : pos + len(rest)] == rest:
+                return pos - 1
+    except ValueError:
+        return -1
+
+
 class MarkerFactory:
     def __init__(self, role_to_marker: Dict[str, str]):
         self.role_to_marker = role_to_marker
@@ -1021,9 +1037,25 @@ class RETextClassificationWithIndicesTaskModule(
 
                 # when windowing is used, we have to add the special tokens manually
                 if without_special_tokens:
+                    original_input_ids_with_markers = input_ids_with_markers
                     input_ids_with_markers = self.tokenizer.build_inputs_with_special_tokens(
                         token_ids_0=input_ids_with_markers
                     )
+                    if self.add_argument_indices_to_input:
+                        # get the number of prefix tokens
+                        index_offset = find_sublist(
+                            sub=original_input_ids_with_markers, bigger=input_ids_with_markers
+                        )
+                        if index_offset == -1:
+                            raise ValueError(
+                                f"Could not find the original tokens in the prefixed tokens for document {document.id}"
+                            )
+                        arg_start_indices = [
+                            idx + index_offset if idx != -1 else -1 for idx in arg_start_indices
+                        ]
+                        arg_end_indices = [
+                            idx + index_offset if idx != -1 else -1 for idx in arg_end_indices
+                        ]
 
                 inputs = {"input_ids": input_ids_with_markers}
                 if self.add_argument_indices_to_input:
