@@ -2455,25 +2455,50 @@ def test_encode_without_insert_marker_but_argument_tags(documents):
     ]
 
 
-def test_encode_without_insert_marker_but_argument_tags_and_windowing(documents):
+@pytest.mark.parametrize("add_argument_indices_to_input", [True, False])
+def test_encode_without_insert_marker_but_argument_tags_and_windowing(
+    documents, add_argument_indices_to_input
+):
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
         relation_annotation="relations",
         tokenizer_name_or_path=tokenizer_name_or_path,
-        insert_markers=False,
+        add_argument_indices_to_input=add_argument_indices_to_input,
         add_argument_tags_to_input=True,
-        max_window=12,
+        max_window=8,
+        insert_markers=False,
     )
     assert not taskmodule.is_from_pretrained
     taskmodule.prepare(documents)
 
-    assert len(documents) == 7
-    encodings = taskmodule.encode(documents)
+    encodings = taskmodule.encode(documents, encode_target=True)
+    assert len(encodings) == 3
     batch = taskmodule.collate(encodings)
     inputs, targets = batch
     tokens = [
         taskmodule.tokenizer.convert_ids_to_tokens(input_ids) for input_ids in inputs["input_ids"]
     ]
+
+    if add_argument_indices_to_input:
+        arg_spans = [
+            get_arg_token_span(
+                current_tokens,
+                current_start_indices,
+                current_end_indices,
+                taskmodule.argument_role2idx,
+            )
+            for current_tokens, current_start_indices, current_end_indices in zip(
+                tokens,
+                inputs["pooler_start_indices"].tolist(),
+                inputs["pooler_end_indices"].tolist(),
+            )
+        ]
+
+        assert arg_spans == [
+            {"head": ["I"], "tail": ["H"]},
+            {"head": ["it"], "tail": ["O"]},
+            {"head": ["O"], "tail": ["it"]},
+        ]
 
     idx2role = {v: k for k, v in taskmodule.argument_role2idx.items()}
     argument_tag_ids = [
@@ -2484,87 +2509,34 @@ def test_encode_without_insert_marker_but_argument_tags_and_windowing(documents)
         [(tok, tag) for tok, tag in zip(tkns, tags)]
         for tkns, tags in zip(tokens, argument_tag_ids)
     ]
-    # TODO: this is wrong, fix it!
     assert tokens_with_tags == [
         [
-            ("[CLS]", "B-head"),
-            ("En", "I-head"),
-            ("##ti", "I-head"),
-            ("##ty", "O"),
-            ("A", "O"),
-            ("works", "O"),
-            ("at", "B-tail"),
-            ("B", "O"),
-            (".", "O"),
-            ("[SEP]", "O"),
-        ],
-        [
             ("[CLS]", "O"),
-            ("sentence", "O"),
-            (".", "B-head"),
-            ("En", "I-head"),
-            ("##ti", "I-head"),
-            ("##ty", "O"),
-            ("G", "O"),
-            ("works", "O"),
-            ("at", "B-tail"),
-            ("H", "O"),
-            (".", "O"),
-            ("[SEP]", "O"),
-        ],
-        [
-            ("[CLS]", "O"),
-            ("##ty", "O"),
-            ("G", "O"),
-            ("works", "O"),
-            ("at", "B-tail"),
-            ("H", "O"),
+            ("at", "O"),
+            ("H", "B-tail"),
             (".", "O"),
             ("And", "O"),
-            ("founded", "B-head"),
-            ("I", "O"),
+            ("founded", "O"),
+            ("I", "B-head"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            (".", "O"),
+            ("And", "O"),
+            ("it", "B-head"),
+            ("founded", "O"),
+            ("O", "B-tail"),
             (".", "O"),
             ("[SEP]", "O"),
         ],
         [
             ("[CLS]", "O"),
-            ("sentence", "O"),
-            (".", "B-head"),
-            ("En", "I-head"),
-            ("##ti", "I-head"),
-            ("##ty", "O"),
-            ("M", "O"),
-            ("works", "O"),
-            ("at", "B-tail"),
-            ("N", "O"),
             (".", "O"),
-            ("[SEP]", "O"),
-        ],
-        [
-            ("[CLS]", "O"),
-            ("M", "O"),
-            ("works", "O"),
-            ("at", "O"),
-            ("N", "O"),
-            (".", "O"),
-            ("And", "B-head"),
-            ("it", "O"),
-            ("founded", "B-tail"),
-            ("O", "O"),
-            (".", "O"),
-            ("[SEP]", "O"),
-        ],
-        [
-            ("[CLS]", "O"),
-            ("M", "O"),
-            ("works", "O"),
-            ("at", "O"),
-            ("N", "O"),
-            (".", "O"),
-            ("And", "B-tail"),
-            ("it", "O"),
-            ("founded", "B-head"),
-            ("O", "O"),
+            ("And", "O"),
+            ("it", "B-tail"),
+            ("founded", "O"),
+            ("O", "B-head"),
             (".", "O"),
             ("[SEP]", "O"),
         ],

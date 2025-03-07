@@ -1066,7 +1066,7 @@ class RETextClassificationWithIndicesTaskModule(
                     input_ids_with_markers = self.tokenizer.build_inputs_with_special_tokens(
                         token_ids_0=input_ids_with_markers
                     )
-                    if self.add_argument_indices_to_input:
+                    if self.add_argument_indices_to_input or self.add_argument_tags_to_input:
                         # get the number of prefix tokens
                         index_offset = find_sublist(
                             sub=original_input_ids_with_markers, bigger=input_ids_with_markers
