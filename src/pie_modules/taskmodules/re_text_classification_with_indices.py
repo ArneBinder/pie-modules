@@ -141,7 +141,7 @@ def find_sublist(sub: List, bigger: List) -> int:
     if not bigger:
         return -1
     if not sub:
-        return -1
+        return 0
     first, rest = sub[0], sub[1:]
     pos = 0
     try:

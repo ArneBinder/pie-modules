@@ -21,6 +21,7 @@ from pie_modules.taskmodules import RETextClassificationWithIndicesTaskModule
 from pie_modules.taskmodules.re_text_classification_with_indices import (
     HEAD,
     TAIL,
+    find_sublist,
     get_relation_argument_spans_and_roles,
     inner_span_distance,
     span_distance,
@@ -966,6 +967,17 @@ def test_encode_with_add_argument_indices(documents):
         {"head": ["it"], "tail": ["O"]},
         {"head": ["O"], "tail": ["it"]},
     ]
+
+
+def test_find_sublist():
+    # default case
+    assert find_sublist(sub=[2, 3], bigger=[1, 2, 3, 4]) == 1
+    # no sublist
+    assert find_sublist(sub=[2, 3], bigger=[1, 3, 2, 4]) == -1
+    # empty sublist: occurs on every position, but first is returned
+    assert find_sublist(sub=[], bigger=[1, 3, 2, 4]) == 0
+    # empty bigger
+    assert find_sublist(sub=[2, 3], bigger=[]) == -1
 
 
 def test_encode_with_add_argument_indices_and_windowing(documents):
