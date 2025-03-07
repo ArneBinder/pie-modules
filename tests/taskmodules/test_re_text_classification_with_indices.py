@@ -968,6 +968,45 @@ def test_encode_with_add_argument_indices(documents):
     ]
 
 
+def test_encode_with_add_argument_indices_and_windowing(documents):
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        add_argument_indices_to_input=True,
+        max_window=12,
+    )
+
+    assert not taskmodule.is_from_pretrained
+    taskmodule.prepare(documents)
+
+    encodings = taskmodule.encode(documents, encode_target=True)
+    assert len(encodings) == 3
+    batch = taskmodule.collate(encodings)
+    inputs, targets = batch
+    tokens = [
+        taskmodule.tokenizer.convert_ids_to_tokens(input_ids) for input_ids in inputs["input_ids"]
+    ]
+
+    arg_spans = [
+        get_arg_token_span(
+            current_tokens,
+            current_start_indices,
+            current_end_indices,
+            taskmodule.argument_role2idx,
+        )
+        for current_tokens, current_start_indices, current_end_indices in zip(
+            tokens, inputs["pooler_start_indices"].tolist(), inputs["pooler_end_indices"].tolist()
+        )
+    ]
+
+    assert arg_spans == [
+        {"head": ["I"], "tail": ["H"]},
+        {"head": ["it"], "tail": ["O"]},
+        {"head": ["O"], "tail": ["it"]},
+    ]
+
+
 @pytest.mark.parametrize("handle_relations_with_same_arguments", ["keep_first", "keep_none"])
 @pytest.mark.parametrize("add_candidate_relations", [False, True])
 @pytest.mark.parametrize("collect_statistics", [False, True])
