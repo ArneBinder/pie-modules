@@ -3,7 +3,7 @@ import logging
 import pickle
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, Union
+from typing import Any, Dict, List, Union
 
 import pytest
 import torch
@@ -21,6 +21,7 @@ from pie_modules.taskmodules import RETextClassificationWithIndicesTaskModule
 from pie_modules.taskmodules.re_text_classification_with_indices import (
     HEAD,
     TAIL,
+    find_sublist,
     get_relation_argument_spans_and_roles,
     inner_span_distance,
     span_distance,
@@ -914,8 +915,19 @@ def test_encode_with_allow_discontinuous_text_and_binary_relations():
     assert decoded2 == "[CLS] [H] A [/H] founded [T] B [/T]. [SEP]"
 
 
-@pytest.fixture(scope="module")
-def taskmodule_with_add_argument_indices(documents):
+def get_arg_token_span(
+    tokens: List[str],
+    start_indices: List[int],
+    end_indices: List[int],
+    argument_role2idx: Dict[str, int],
+) -> Dict[str, List[str]]:
+    return {
+        role: tokens[start_indices[argument_role2idx[role]] : end_indices[argument_role2idx[role]]]
+        for role, idx in argument_role2idx.items()
+    }
+
+
+def test_encode_with_add_argument_indices(documents):
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
         relation_annotation="relations",
@@ -925,122 +937,86 @@ def taskmodule_with_add_argument_indices(documents):
 
     assert not taskmodule.is_from_pretrained
     taskmodule.prepare(documents)
-    return taskmodule
+
+    encodings = taskmodule.encode(documents, encode_target=True)
+    assert len(encodings) == 7
+    batch = taskmodule.collate(encodings)
+    inputs, targets = batch
+    tokens = [
+        taskmodule.tokenizer.convert_ids_to_tokens(input_ids) for input_ids in inputs["input_ids"]
+    ]
+
+    arg_spans = [
+        get_arg_token_span(
+            current_tokens,
+            current_start_indices,
+            current_end_indices,
+            taskmodule.argument_role2idx,
+        )
+        for current_tokens, current_start_indices, current_end_indices in zip(
+            tokens, inputs["pooler_start_indices"].tolist(), inputs["pooler_end_indices"].tolist()
+        )
+    ]
+
+    assert arg_spans == [
+        {"head": ["En", "##ti", "##ty", "A"], "tail": ["B"]},
+        {"head": ["En", "##ti", "##ty", "G"], "tail": ["H"]},
+        {"head": ["En", "##ti", "##ty", "G"], "tail": ["I"]},
+        {"head": ["I"], "tail": ["H"]},
+        {"head": ["En", "##ti", "##ty", "M"], "tail": ["N"]},
+        {"head": ["it"], "tail": ["O"]},
+        {"head": ["O"], "tail": ["it"]},
+    ]
 
 
-@pytest.fixture(scope="module")
-def encodings_with_argument_indices(taskmodule_with_add_argument_indices, documents):
-    task_encodings = taskmodule_with_add_argument_indices.encode(documents, encode_target=True)
-    assert len(task_encodings) == 7
-    return task_encodings
+def test_find_sublist():
+    # default case
+    assert find_sublist(sub=[2, 3], bigger=[1, 2, 3, 4]) == 1
+    # no sublist
+    assert find_sublist(sub=[2, 3], bigger=[1, 3, 2, 4]) == -1
+    # empty sublist: occurs on every position, but first is returned
+    assert find_sublist(sub=[], bigger=[1, 3, 2, 4]) == 0
+    # empty bigger
+    assert find_sublist(sub=[2, 3], bigger=[]) == -1
 
 
-def test_encode_with_add_argument_indices(encodings_with_argument_indices):
-    encodings = encodings_with_argument_indices
-    assert all(["pooler_start_indices" in encoding.inputs for encoding in encodings])
-    assert all(["pooler_end_indices" in encoding.inputs for encoding in encodings])
-
-    # just check the first and fourth encoding
-    encoding = encodings[0]
-    assert "pooler_start_indices" in encoding.inputs
-    assert "pooler_end_indices" in encoding.inputs
-    assert len(encoding.inputs["pooler_start_indices"]) == 2
-    assert len(encoding.inputs["pooler_end_indices"]) == 2
-    assert encoding.inputs["pooler_start_indices"] == [2, 10]
-    assert encoding.inputs["pooler_end_indices"] == [6, 11]
-    encoding = encodings[3]
-    assert "pooler_start_indices" in encoding.inputs
-    assert "pooler_end_indices" in encoding.inputs
-    assert len(encoding.inputs["pooler_start_indices"]) == 2
-    assert len(encoding.inputs["pooler_end_indices"]) == 2
-    assert encoding.inputs["pooler_start_indices"] == [17, 11]
-    assert encoding.inputs["pooler_end_indices"] == [18, 12]
-
-
-@pytest.fixture(scope="module")
-def batch_with_argument_indices(
-    taskmodule_with_add_argument_indices, encodings_with_argument_indices
-):
-    # just take the first two encodings
-    return taskmodule_with_add_argument_indices.collate(encodings_with_argument_indices[:2])
-
-
-def test_collate_with_add_argument_indices(batch_with_argument_indices):
-    inputs, targets = batch_with_argument_indices
-
-    assert set(inputs) == {
-        "input_ids",
-        "attention_mask",
-        "pooler_start_indices",
-        "pooler_end_indices",
-    }
-
-    assert inputs["input_ids"].shape == inputs["attention_mask"].shape
-    torch.testing.assert_close(
-        inputs["input_ids"],
-        torch.tensor(
-            [
-                [
-                    101,
-                    28998,
-                    13832,
-                    3121,
-                    2340,
-                    138,
-                    28996,
-                    1759,
-                    1120,
-                    28999,
-                    139,
-                    28997,
-                    119,
-                    102,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                ],
-                [
-                    101,
-                    1752,
-                    5650,
-                    119,
-                    28998,
-                    13832,
-                    3121,
-                    2340,
-                    144,
-                    28996,
-                    1759,
-                    1120,
-                    28999,
-                    145,
-                    28997,
-                    119,
-                    1262,
-                    1771,
-                    146,
-                    119,
-                    102,
-                ],
-            ]
-        ),
-    )
-    torch.testing.assert_close(
-        inputs["attention_mask"],
-        torch.tensor(
-            [
-                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            ]
-        ),
+def test_encode_with_add_argument_indices_and_windowing(documents):
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        add_argument_indices_to_input=True,
+        max_window=12,
     )
 
-    torch.testing.assert_close(inputs["pooler_start_indices"], torch.tensor([[2, 10], [5, 13]]))
-    torch.testing.assert_close(inputs["pooler_end_indices"], torch.tensor([[6, 11], [9, 14]]))
+    assert not taskmodule.is_from_pretrained
+    taskmodule.prepare(documents)
+
+    encodings = taskmodule.encode(documents, encode_target=True)
+    assert len(encodings) == 3
+    batch = taskmodule.collate(encodings)
+    inputs, targets = batch
+    tokens = [
+        taskmodule.tokenizer.convert_ids_to_tokens(input_ids) for input_ids in inputs["input_ids"]
+    ]
+
+    arg_spans = [
+        get_arg_token_span(
+            current_tokens,
+            current_start_indices,
+            current_end_indices,
+            taskmodule.argument_role2idx,
+        )
+        for current_tokens, current_start_indices, current_end_indices in zip(
+            tokens, inputs["pooler_start_indices"].tolist(), inputs["pooler_end_indices"].tolist()
+        )
+    ]
+
+    assert arg_spans == [
+        {"head": ["I"], "tail": ["H"]},
+        {"head": ["it"], "tail": ["O"]},
+        {"head": ["O"], "tail": ["it"]},
+    ]
 
 
 @pytest.mark.parametrize("handle_relations_with_same_arguments", ["keep_first", "keep_none"])
