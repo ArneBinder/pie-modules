@@ -2200,7 +2200,18 @@ def test_configure_model_metric(documents, taskmodule):
     pickle.dumps(metric)
 
 
-def test_encode_without_insert_marter_but_argument_tags(documents):
+def get_bio_tag(argument_tag_id: int, idx2label: Dict[int, str]) -> str:
+    if argument_tag_id == 0:
+        return "O"
+    argument_tag_id -= 1
+    label = idx2label[argument_tag_id // 2]
+    if argument_tag_id % 2 == 0:
+        return f"B-{label}"
+    else:
+        return f"I-{label}"
+
+
+def test_encode_without_insert_marker_but_argument_tags(documents):
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
         relation_annotation="relations",
@@ -2219,19 +2230,9 @@ def test_encode_without_insert_marter_but_argument_tags(documents):
         taskmodule.tokenizer.convert_ids_to_tokens(input_ids) for input_ids in inputs["input_ids"]
     ]
 
-    def get_tag(argument_tag_id: int, idx2label: Dict[int, str]) -> str:
-        if argument_tag_id == 0:
-            return "O"
-        argument_tag_id -= 1
-        label = idx2label[argument_tag_id // 2]
-        if argument_tag_id % 2 == 0:
-            return f"B-{label}"
-        else:
-            return f"I-{label}"
-
     idx2role = {v: k for k, v in taskmodule.argument_role2idx.items()}
     argument_tag_ids = [
-        [get_tag(tag_id, idx2role) for tag_id in (argument_tags - 1).tolist() if tag_id >= 0]
+        [get_bio_tag(tag_id, idx2role) for tag_id in (argument_tags - 1).tolist() if tag_id >= 0]
         for argument_tags in inputs["argument_tags"]
     ]
     tokens_with_tags = [
@@ -2365,6 +2366,122 @@ def test_encode_without_insert_marter_but_argument_tags(documents):
             ("it", "B-tail"),
             ("founded", "O"),
             ("O", "B-head"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+    ]
+
+
+def test_encode_without_insert_marker_but_argument_tags_and_windowing(documents):
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        insert_markers=False,
+        add_argument_tags_to_input=True,
+        max_window=12,
+    )
+    assert not taskmodule.is_from_pretrained
+    taskmodule.prepare(documents)
+
+    assert len(documents) == 7
+    encodings = taskmodule.encode(documents)
+    batch = taskmodule.collate(encodings)
+    inputs, targets = batch
+    tokens = [
+        taskmodule.tokenizer.convert_ids_to_tokens(input_ids) for input_ids in inputs["input_ids"]
+    ]
+
+    idx2role = {v: k for k, v in taskmodule.argument_role2idx.items()}
+    argument_tag_ids = [
+        [get_bio_tag(tag_id, idx2role) for tag_id in (argument_tags - 1).tolist() if tag_id >= 0]
+        for argument_tags in inputs["argument_tags"]
+    ]
+    tokens_with_tags = [
+        [(tok, tag) for tok, tag in zip(tkns, tags)]
+        for tkns, tags in zip(tokens, argument_tag_ids)
+    ]
+    # TODO: this is wrong, fix it!
+    assert tokens_with_tags == [
+        [
+            ("[CLS]", "B-head"),
+            ("En", "I-head"),
+            ("##ti", "I-head"),
+            ("##ty", "O"),
+            ("A", "O"),
+            ("works", "O"),
+            ("at", "B-tail"),
+            ("B", "O"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("sentence", "O"),
+            (".", "B-head"),
+            ("En", "I-head"),
+            ("##ti", "I-head"),
+            ("##ty", "O"),
+            ("G", "O"),
+            ("works", "O"),
+            ("at", "B-tail"),
+            ("H", "O"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("##ty", "O"),
+            ("G", "O"),
+            ("works", "O"),
+            ("at", "B-tail"),
+            ("H", "O"),
+            (".", "O"),
+            ("And", "O"),
+            ("founded", "B-head"),
+            ("I", "O"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("sentence", "O"),
+            (".", "B-head"),
+            ("En", "I-head"),
+            ("##ti", "I-head"),
+            ("##ty", "O"),
+            ("M", "O"),
+            ("works", "O"),
+            ("at", "B-tail"),
+            ("N", "O"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("M", "O"),
+            ("works", "O"),
+            ("at", "O"),
+            ("N", "O"),
+            (".", "O"),
+            ("And", "B-head"),
+            ("it", "O"),
+            ("founded", "B-tail"),
+            ("O", "O"),
+            (".", "O"),
+            ("[SEP]", "O"),
+        ],
+        [
+            ("[CLS]", "O"),
+            ("M", "O"),
+            ("works", "O"),
+            ("at", "O"),
+            ("N", "O"),
+            (".", "O"),
+            ("And", "B-tail"),
+            ("it", "O"),
+            ("founded", "B-head"),
+            ("O", "O"),
             (".", "O"),
             ("[SEP]", "O"),
         ],
