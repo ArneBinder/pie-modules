@@ -32,6 +32,7 @@ def taskmodule_config():
         "label_pad_id": -100,
         "labels": ["ORG", "PER"],
         "include_ill_formed_predictions": True,
+        "combine_token_scores_method": "mean",
         "tokenize_kwargs": None,
         "pad_kwargs": None,
         "log_precision_recall_metrics": True,
