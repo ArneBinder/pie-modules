@@ -142,6 +142,8 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
         tokenize_kwargs: Keyword arguments to pass to the tokenizer during tokenization. Default: None.
         pad_kwargs: Keyword arguments to pass to the tokenizer during padding. Note, that this is used to pad the
             token ids *and* the tag ids, if available (i.e. during training or evaluation). Default: None.
+        combine_token_scores_method: Method to combine the token scores to a span score. Options are "mean", "max",
+            "min", and "product". Default: "mean".
         log_precision_recall_metrics: Whether to log precision and recall metrics (in addition to F1) for the
             spans. Default: True.
     """
@@ -159,6 +161,7 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
         include_ill_formed_predictions: bool = True,
         tokenize_kwargs: Optional[Dict[str, Any]] = None,
         pad_kwargs: Optional[Dict[str, Any]] = None,
+        combine_token_scores_method: str = "mean",
         log_precision_recall_metrics: bool = True,
         **kwargs,
     ) -> None:
@@ -173,6 +176,7 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
         self.tokenize_kwargs = tokenize_kwargs or {}
         self.pad_kwargs = pad_kwargs or {}
         self.log_precision_recall_metrics = log_precision_recall_metrics
+        self.combine_token_scores_method = combine_token_scores_method
 
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
 
@@ -364,8 +368,22 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
                 span_label_probs = torch.stack(
                     [span_probabilities[i, l] for i, l in enumerate(span_label_ids)]
                 )
-                # use mean probability of the span as score
-                annotation_kwargs["score"] = span_label_probs.mean().item()
+                if self.combine_token_scores_method == "mean":
+                    # use mean probability of the span as score
+                    annotation_kwargs["score"] = span_label_probs.mean().item()
+                elif self.combine_token_scores_method == "max":
+                    # use max probability of the span as score
+                    annotation_kwargs["score"] = span_label_probs.max().item()
+                elif self.combine_token_scores_method == "min":
+                    # use min probability of the span as score
+                    annotation_kwargs["score"] = span_label_probs.min().item()
+                elif self.combine_token_scores_method == "product":
+                    # use product of probabilities of the span as score
+                    annotation_kwargs["score"] = span_label_probs.prod().item()
+                else:
+                    raise ValueError(
+                        f"combine_token_scores_method={self.combine_token_scores_method} is not supported."
+                    )
             labeled_span = LabeledSpan(label=label, start=start, end=end, **annotation_kwargs)
             labeled_spans.append(labeled_span)
         return {"labeled_spans": labeled_spans}
