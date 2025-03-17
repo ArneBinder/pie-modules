@@ -18,6 +18,7 @@ def _merge_spans_via_relation(
     relations: Sequence[BinaryRelation],
     link_relation_label: str,
     create_multi_spans: bool = True,
+    combine_scores_method: str = "mean",
 ) -> Tuple[Union[Set[LabeledSpan], Set[LabeledMultiSpan]], Set[BinaryRelation]]:
     try:
         import networkx as nx
@@ -31,6 +32,7 @@ def _merge_spans_via_relation(
     g = nx.Graph()
     link_relations = []
     other_relations = []
+    span2edge_relation = {}
     for rel in relations:
         if rel.label == link_relation_label:
             link_relations.append(rel)
@@ -40,6 +42,8 @@ def _merge_spans_via_relation(
                 or rel.head.label == rel.tail.label
             ):
                 g.add_edge(rel.head, rel.tail)
+                span2edge_relation[rel.head] = rel
+                span2edge_relation[rel.tail] = rel
             else:
                 logger.debug(
                     f"spans to merge do not have the same label, do not merge them: {rel.head}, {rel.tail}"
@@ -53,16 +57,38 @@ def _merge_spans_via_relation(
         # all spans in a connected component have the same label
         label = list(span.label for span in connected_components)[0]
         connected_components_sorted = sorted(connected_components, key=lambda span: span.start)
+        # get all relations that connect the spans in the connected component
+        connected_component_relations_set = {
+            span2edge_relation[span] for span in connected_components_sorted
+        }
+        # keep only n-1 relations (take the n-1 highest scoring relations) to not use more scores than necessary
+        connected_component_relations = sorted(
+            connected_component_relations_set, key=lambda rel: rel.score, reverse=True
+        )[: len(connected_components) - 1]
+        relation_scores = [rel.score for rel in connected_component_relations]
+        span_scores = [span.score for span in connected_components_sorted]
+        all_scores = relation_scores + span_scores
+        if combine_scores_method == "mean":
+            score = sum(all_scores) / len(all_scores)
+        elif combine_scores_method == "product":
+            score = 1.0
+            for s in all_scores:
+                score *= s
+        else:
+            raise ValueError(f'combine_scores_method="{combine_scores_method}" not supported')
+
         if create_multi_spans:
             new_span = LabeledMultiSpan(
                 slices=tuple((span.start, span.end) for span in connected_components_sorted),
                 label=label,
+                score=score,
             )
         else:
             new_span = LabeledSpan(
                 start=min(span.start for span in connected_components_sorted),
                 end=max(span.end for span in connected_components_sorted),
                 label=label,
+                score=score,
             )
         for span in connected_components_sorted:
             span_mapping[span] = new_span
@@ -114,6 +140,8 @@ class SpansViaRelationMerger:
             Required when `result_document_type` is provided.
         use_predicted_spans: Whether to use the predicted spans or the gold spans when
             processing predictions.
+        combine_scores_method: The method to combine the scores of the relations and the
+            spans. The options are "mean" and "product". The default is "mean".
     """
 
     def __init__(
@@ -124,6 +152,7 @@ class SpansViaRelationMerger:
         result_field_mapping: Optional[dict[str, str]] = None,
         create_multi_spans: bool = True,
         use_predicted_spans: bool = True,
+        combine_scores_method: str = "mean",
     ):
         self.relation_layer = relation_layer
         self.link_relation_label = link_relation_label
@@ -146,6 +175,7 @@ class SpansViaRelationMerger:
             self.result_document_type = None
         self.result_field_mapping = result_field_mapping or {}
         self.use_predicted_spans = use_predicted_spans
+        self.combine_scores_method = combine_scores_method
 
     def __call__(self, document: D) -> D:
         relations: AnnotationLayer[BinaryRelation] = document[self.relation_layer]
@@ -157,6 +187,7 @@ class SpansViaRelationMerger:
             relations=relations,
             link_relation_label=self.link_relation_label,
             create_multi_spans=self.create_multi_spans,
+            combine_scores_method=self.combine_scores_method,
         )
 
         # process predicted annotations
@@ -165,6 +196,7 @@ class SpansViaRelationMerger:
             relations=relations.predictions,
             link_relation_label=self.link_relation_label,
             create_multi_spans=self.create_multi_spans,
+            combine_scores_method=self.combine_scores_method,
         )
 
         result = document.copy(with_annotations=False)
