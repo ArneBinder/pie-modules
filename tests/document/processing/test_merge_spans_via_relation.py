@@ -91,18 +91,18 @@ def test_merge_spans_via_relation_with_scores(
     #   so they should not be merged. But the relation should be removed
     # spans 0, 3 are connected via "relation_x" relation, its head should be remapped to the new span
     spans = [
-        LabeledSpan(start=0, end=1, label="label_a"),  # , score=0.9),
-        LabeledSpan(start=2, end=3, label="other"),  # , score=0.89),
-        LabeledSpan(start=4, end=5, label="label_a"),  # , score=0.88),
-        LabeledSpan(start=6, end=7, label="label_b"),  # , score=0.87),
-        LabeledSpan(start=8, end=9, label="label_a"),  # , score=0.86),
-        LabeledSpan(start=10, end=11, label="label_c"),  # , score=0.85),
+        LabeledSpan(start=0, end=1, label="label_a", score=0.9),
+        LabeledSpan(start=2, end=3, label="other", score=0.89),
+        LabeledSpan(start=4, end=5, label="label_a", score=0.88),
+        LabeledSpan(start=6, end=7, label="label_b", score=0.87),
+        LabeledSpan(start=8, end=9, label="label_a", score=0.86),
+        LabeledSpan(start=10, end=11, label="label_c", score=0.85),
     ]
     relations = [
-        BinaryRelation(head=spans[0], tail=spans[2], label="link"),  # , score=0.8),
-        BinaryRelation(head=spans[0], tail=spans[3], label="relation_x"),  # , score=0.79),
-        BinaryRelation(head=spans[2], tail=spans[4], label="link"),  # , score=0.78),
-        BinaryRelation(head=spans[3], tail=spans[5], label="link"),  # , score=0.77),
+        BinaryRelation(head=spans[0], tail=spans[2], label="link", score=0.8),
+        BinaryRelation(head=spans[0], tail=spans[3], label="relation_x", score=0.79),
+        BinaryRelation(head=spans[2], tail=spans[4], label="link", score=0.78),
+        BinaryRelation(head=spans[3], tail=spans[5], label="link", score=0.77),
     ]
 
     if combine_scores_method == "UNKNOWN":
@@ -123,6 +123,8 @@ def test_merge_spans_via_relation_with_scores(
             create_multi_spans=create_multi_spans,
             combine_scores_method=combine_scores_method,
         )
+        span2score = {span: span.score for span in merged_spans}
+        rel2score = {rel: rel.score for rel in merged_relations}
         if create_multi_spans:
             head = LabeledMultiSpan(
                 slices=(
@@ -131,27 +133,46 @@ def test_merge_spans_via_relation_with_scores(
                     (8, 9),
                 ),
                 label="label_a",
-                score=1.0,
             )
-            tail = LabeledMultiSpan(slices=((6, 7),), label="label_b", score=1.0)
+            tail = LabeledMultiSpan(slices=((6, 7),), label="label_b")
+            other = LabeledMultiSpan(slices=((2, 3),), label="other")
+            label_c = LabeledMultiSpan(slices=((10, 11),), label="label_c")
             assert merged_spans == {
                 head,
-                LabeledMultiSpan(slices=((2, 3),), label="other", score=1.0),
+                other,
                 tail,
-                LabeledMultiSpan(slices=((10, 11),), label="label_c", score=1.0),
+                label_c,
             }
         else:
-            head = LabeledSpan(start=0, end=9, label="label_a", score=1.0)
-            tail = LabeledSpan(start=6, end=7, label="label_b", score=1.0)
+            head = LabeledSpan(start=0, end=9, label="label_a")
+            tail = LabeledSpan(start=6, end=7, label="label_b")
+            other = LabeledSpan(start=2, end=3, label="other")
+            label_c = LabeledSpan(start=10, end=11, label="label_c")
             assert merged_spans == {
                 head,
                 tail,
-                LabeledSpan(start=2, end=3, label="other", score=1.0),
-                LabeledSpan(start=10, end=11, label="label_c", score=1.0),
+                other,
+                label_c,
             }
-        assert merged_relations == {
-            BinaryRelation(head=head, tail=tail, label="relation_x", score=1.0)
-        }
+        assert span2score[other] == 0.89
+        assert span2score[label_c] == 0.85
+        assert span2score[tail] == 0.87
+        rel = BinaryRelation(head=head, tail=tail, label="relation_x")
+        assert merged_relations == {rel}
+        assert rel2score[rel] == 0.79
+        decimals = 6
+        # scores from spans: 0.9, 0.88, 0.86
+        # scores from relations: 0.8, 0.78
+        if combine_scores_method == "mean":
+            assert round(span2score[head], decimals) == round(
+                (0.9 + 0.88 + 0.86 + 0.8 + 0.78) / 5, decimals
+            )
+        elif combine_scores_method == "product":
+            assert round(span2score[head], decimals) == round(
+                0.9 * 0.88 * 0.86 * 0.8 * 0.78, decimals
+            )
+        else:
+            raise ValueError(f'combine_scores_method="{combine_scores_method}" not supported')
 
 
 def sort_spans(spans):
