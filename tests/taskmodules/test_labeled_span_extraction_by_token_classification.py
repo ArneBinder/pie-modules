@@ -515,6 +515,67 @@ def unbatched_outputs(taskmodule, model_output):
     return taskmodule.unbatch_output(model_output)
 
 
+@pytest.mark.parametrize("combine_token_scores_method", ["mean", "max", "product", "UNKNOWN"])
+def test_combine_token_scores_method(documents, combine_token_scores_method):
+    taskmodule = LabeledSpanExtractionByTokenClassificationTaskModule(
+        tokenizer_name_or_path="bert-base-uncased",
+        span_annotation="entities",
+        combine_token_scores_method=combine_token_scores_method,
+    )
+    taskmodule.prepare(documents)
+
+    task_encodings = taskmodule.encode(documents, encode_target=True)
+    batch = taskmodule.collate(task_encodings)
+
+    # create "perfect" output from targets
+    labels = batch[1]["labels"]
+    num_classes = len(taskmodule.label_to_id)
+    # create one-hot encoding from labels
+    labels_valid = labels.clone()
+    labels_valid[labels_valid == taskmodule.label_pad_id] = taskmodule.label_to_id["O"]
+    # create one-hot encoding from labels, but with 0.9 for the correct labels
+    probabilities = (
+        torch.nn.functional.one_hot(labels_valid, num_classes=num_classes).to(torch.float32) * 0.9
+    )
+    # stepwise decrease the "winning" probabilities per token to test the different combine_token_scores_methods
+    diff = 0.0
+    for i in range(probabilities.size(1)):
+        probabilities[:, i] -= diff
+        diff += 0.01
+    probabilities[probabilities < 0] = 0.0
+
+    model_output = {"labels": labels, "probabilities": probabilities}
+
+    unbatched_outputs = taskmodule.unbatch_output(model_output)
+
+    if combine_token_scores_method == "UNKNOWN":
+        with pytest.raises(ValueError) as excinfo:
+            taskmodule.decode_annotations(unbatched_outputs[0])
+        assert str(excinfo.value) == "combine_token_scores_method=UNKNOWN is not supported."
+    else:
+        annotations = []
+        scores = []
+        for unbatched_output in unbatched_outputs:
+            decoded_annotations = taskmodule.decode_annotations(unbatched_output)
+            assert set(decoded_annotations.keys()) == {"labeled_spans"}
+            # Sort the annotations in each document by start and end position and label
+            sorted_annotations = sorted(decoded_annotations["labeled_spans"])
+            annotations.append(sorted_annotations)
+            scores.append([round(ann.score, 5) for ann in sorted_annotations])
+
+        # input values are (before combination): [[0.89, 0.88], [[0.89], [0.84]]]
+        if combine_token_scores_method == "mean":
+            assert scores == [[(0.89 + 0.88) / 2], [0.89, 0.84]]
+        elif combine_token_scores_method == "max":
+            assert scores == [[0.89], [0.89, 0.84]]
+        elif combine_token_scores_method == "min":
+            assert scores == [[0.88], [0.89, 0.84]]
+        elif combine_token_scores_method == "product":
+            assert scores == [[0.89 * 0.88], [0.89, 0.84]]
+        else:
+            raise ValueError(f"unknown combine_token_scores_method: {combine_token_scores_method}")
+
+
 def test_unbatched_output(unbatched_outputs, config):
     assert unbatched_outputs is not None
 
