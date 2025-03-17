@@ -33,6 +33,7 @@ def taskmodule_config():
         "include_ill_formed_predictions": True,
         "tokenize_kwargs": None,
         "pad_kwargs": None,
+        "combine_token_scores_method": "mean",
         "log_precision_recall_metrics": True,
     }
 
