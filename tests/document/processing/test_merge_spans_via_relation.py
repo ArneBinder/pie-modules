@@ -74,6 +74,86 @@ def test_merge_spans_via_relation(create_multi_spans: bool):
     assert merged_relations == {BinaryRelation(head=head, tail=tail, label="relation_x")}
 
 
+@pytest.mark.parametrize(
+    "create_multi_spans",
+    [False, True],
+)
+@pytest.mark.parametrize(
+    "combine_scores_method",
+    ["mean", "product", "UNKNOWN"],
+)
+def test_merge_spans_via_relation_with_scores(
+    create_multi_spans: bool, combine_scores_method: str
+):
+    # we have 6 spans and 4 relations
+    # spans 0, 2, 4 are connected via "link" relation, so they should be merged
+    # spans 3, 5 are connected via "link" relation, but they do not have the same label,
+    #   so they should not be merged. But the relation should be removed
+    # spans 0, 3 are connected via "relation_x" relation, its head should be remapped to the new span
+    spans = [
+        LabeledSpan(start=0, end=1, label="label_a"),  # , score=0.9),
+        LabeledSpan(start=2, end=3, label="other"),  # , score=0.89),
+        LabeledSpan(start=4, end=5, label="label_a"),  # , score=0.88),
+        LabeledSpan(start=6, end=7, label="label_b"),  # , score=0.87),
+        LabeledSpan(start=8, end=9, label="label_a"),  # , score=0.86),
+        LabeledSpan(start=10, end=11, label="label_c"),  # , score=0.85),
+    ]
+    relations = [
+        BinaryRelation(head=spans[0], tail=spans[2], label="link"),  # , score=0.8),
+        BinaryRelation(head=spans[0], tail=spans[3], label="relation_x"),  # , score=0.79),
+        BinaryRelation(head=spans[2], tail=spans[4], label="link"),  # , score=0.78),
+        BinaryRelation(head=spans[3], tail=spans[5], label="link"),  # , score=0.77),
+    ]
+
+    if combine_scores_method == "UNKNOWN":
+        with pytest.raises(ValueError) as exc_info:
+            _merge_spans_via_relation(
+                spans=spans,
+                relations=relations,
+                link_relation_label="link",
+                create_multi_spans=create_multi_spans,
+                combine_scores_method=combine_scores_method,
+            )
+        assert str(exc_info.value) == 'combine_scores_method="UNKNOWN" not supported'
+    else:
+        merged_spans, merged_relations = _merge_spans_via_relation(
+            spans=spans,
+            relations=relations,
+            link_relation_label="link",
+            create_multi_spans=create_multi_spans,
+            combine_scores_method=combine_scores_method,
+        )
+        if create_multi_spans:
+            head = LabeledMultiSpan(
+                slices=(
+                    (0, 1),
+                    (4, 5),
+                    (8, 9),
+                ),
+                label="label_a",
+                score=1.0,
+            )
+            tail = LabeledMultiSpan(slices=((6, 7),), label="label_b", score=1.0)
+            assert merged_spans == {
+                head,
+                LabeledMultiSpan(slices=((2, 3),), label="other", score=1.0),
+                tail,
+                LabeledMultiSpan(slices=((10, 11),), label="label_c", score=1.0),
+            }
+        else:
+            head = LabeledSpan(start=0, end=9, label="label_a", score=1.0)
+            tail = LabeledSpan(start=6, end=7, label="label_b", score=1.0)
+            assert merged_spans == {
+                head,
+                tail,
+                LabeledSpan(start=2, end=3, label="other", score=1.0),
+                LabeledSpan(start=10, end=11, label="label_c", score=1.0),
+            }
+        assert merged_relations == {
+            BinaryRelation(head=head, tail=tail, label="relation_x", score=1.0)
+        }
+
+
 def sort_spans(spans):
     if len(spans) == 0:
         return []
