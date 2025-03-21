@@ -366,6 +366,8 @@ class RETextClassificationWithIndicesTaskModule(
         reverse_symmetric_relations: bool = True,
         max_argument_distance: Optional[int] = None,
         max_argument_distance_type: str = "inner",
+        max_argument_distance_tokens: Optional[int] = None,
+        max_argument_distance_type_tokens: str = "inner",
         max_window: Optional[int] = None,
         allow_discontinuous_text: bool = False,
         log_first_n_examples: int = 0,
@@ -411,6 +413,8 @@ class RETextClassificationWithIndicesTaskModule(
         self.reverse_symmetric_relations = reverse_symmetric_relations
         self.max_argument_distance = max_argument_distance
         self.max_argument_distance_type = max_argument_distance_type
+        self.max_argument_distance_tokens = max_argument_distance_tokens
+        self.max_argument_distance_type_tokens = max_argument_distance_type_tokens
         self.max_window = max_window
         self.allow_discontinuous_text = allow_discontinuous_text
         self.handle_relations_with_same_arguments = handle_relations_with_same_arguments
@@ -881,6 +885,37 @@ class RETextClassificationWithIndicesTaskModule(
                     )
                     for span, role, token_span in zip(arg_spans, arg_roles, arg_token_spans)
                 ]
+
+                if self.max_argument_distance_tokens is not None:
+                    token_distances = []
+                    for idx1 in range(len(args) - 1):
+                        for idx in range(idx1 + 1, len(args)):
+                            arg1 = args[idx1]
+                            arg2 = args[idx]
+                            dist = span_distance(
+                                (arg1.token_span.start, arg1.token_span.end),
+                                (arg2.token_span.start, arg2.token_span.end),
+                                self.max_argument_distance_type_tokens,
+                            )
+                            token_distances.append(dist)
+                    if len(token_distances) > 0:
+                        if self.max_argument_distance_type_tokens == "outer":
+                            max_dist = max(token_distances)
+                        elif self.max_argument_distance_type_tokens == "inner":
+                            if len(args) > 2:
+                                raise NotImplementedError(
+                                    f"max_argument_distance_type_tokens={self.max_argument_distance_type_tokens} "
+                                    f"is not supported for relations with more than 2 arguments"
+                                )
+                            max_dist = max(token_distances)
+                        else:
+                            raise NotImplementedError(
+                                f"max_argument_distance_type_tokens={self.max_argument_distance_type_tokens} "
+                                f"is not supported"
+                            )
+                        if max_dist > self.max_argument_distance_tokens:
+                            self.collect_relation("skipped_argument_distance_tokens", rel)
+                            continue
 
                 input_ids = encoding["input_ids"]
 
