@@ -142,7 +142,7 @@ def span_distance(
     elif distance_type == "outer":
         return outer_span_distance(start_end, other_start_end)
     else:
-        raise ValueError(f"unknown distance_type={distance_type}. use one of: inner")
+        raise ValueError(f"Unknown distance_type={distance_type}. Use one of: inner, outer.")
 
 
 def find_sublist(sub: List, bigger: List) -> int:
