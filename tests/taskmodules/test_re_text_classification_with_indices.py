@@ -1729,7 +1729,7 @@ def test_inner_span_distance_overlap():
 def test_span_distance_unknown_type():
     with pytest.raises(ValueError) as excinfo:
         span_distance((0, 1), (2, 3), "unknown")
-    assert str(excinfo.value) == "unknown distance_type=unknown. use one of: inner"
+    assert str(excinfo.value) == "Unknown distance_type=unknown. Use one of: inner, outer."
 
 
 def test_encode_input_with_max_argument_distance():
@@ -1792,6 +1792,89 @@ def test_encode_input_with_max_argument_distance_with_wrong_relation_type(
         == "doc.id=doc_with_nary_relations: the taskmodule does not yet support filtering "
         "relation candidates for type: <class 'pytorch_ie.annotations.NaryRelation'>"
     )
+
+
+@pytest.mark.parametrize("distance_type", ["inner", "outer", "unknown"])
+def test_encode_input_with_max_argument_distance_tokens(distance_type):
+    document = TestDocument(
+        text="Entity A works at B and C.", id="doc_with_three_entities_and_two_relations"
+    )
+    e0 = LabeledSpan(start=0, end=8, label="PER")
+    e1 = LabeledSpan(start=18, end=19, label="PER")
+    e2 = LabeledSpan(start=24, end=25, label="PER")
+    document.entities.extend([e0, e1, e2])
+    assert str(document.entities[0]) == "Entity A"
+    assert str(document.entities[1]) == "B"
+    assert str(document.entities[2]) == "C"
+    document.relations.append(
+        BinaryRelation(
+            head=document.entities[0], tail=document.entities[1], label="per:employee_of"
+        )
+    )
+    document.relations.append(
+        BinaryRelation(
+            head=document.entities[0], tail=document.entities[2], label="per:employee_of"
+        )
+    )
+    dist_01 = span_distance((e0.start, e0.end), (e1.start, e1.end), "inner")
+    dist_02 = span_distance((e0.start, e0.end), (e2.start, e2.end), "inner")
+    assert dist_01 == 10
+    assert dist_02 == 16
+
+    tokenizer_name_or_path = "bert-base-cased"
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path=tokenizer_name_or_path,
+        max_argument_distance_tokens=3 if distance_type == "inner" else 8,
+        max_argument_distance_type_tokens=distance_type,
+    )
+    taskmodule.prepare([document])
+    if distance_type == "unknown":
+        with pytest.raises(ValueError) as excinfo:
+            taskmodule.encode_input(document)
+        assert str(excinfo.value) == "Unknown distance_type=unknown. Use one of: inner, outer."
+        return
+
+    encodings = taskmodule.encode_input(document)
+
+    # there are two relations, but only one is within the max_argument_distance
+    assert len(encodings) == 1
+    encoding = encodings[0]
+    tokens = taskmodule.tokenizer.convert_ids_to_tokens(encoding.inputs["input_ids"])
+    assert tokens == [
+        "[CLS]",
+        "[H]",
+        "En",
+        "##ti",
+        "##ty",
+        "A",
+        "[/H]",
+        "works",
+        "at",
+        "[T]",
+        "B",
+        "[/T]",
+        "and",
+        "C",
+        ".",
+        "[SEP]",
+    ]
+    head_start = tokens.index("[H]") + 1
+    head_end = tokens.index("[/H]")
+    tail_start = tokens.index("[T]") + 1
+    tail_end = tokens.index("[/T]")
+    assert (head_start, head_end, tail_start, tail_end) == (2, 6, 10, 11)
+    # subtract 2 for the special marker tokens [/H] and [T]
+    inner_dist = tail_start - head_end - 2
+    assert inner_dist == 2
+    # subtract 2 for the special marker tokens [H] and [/T]
+    outer_dist = tail_end - head_start - 2
+    assert outer_dist == 7
+
+    relation = encodings[0].metadata["candidate_annotation"]
+    assert str(relation.head) == "Entity A"
+    assert str(relation.tail) == "B"
+    assert relation.label == "per:employee_of"
 
 
 def test_encode_input_with_unknown_label(caplog):
