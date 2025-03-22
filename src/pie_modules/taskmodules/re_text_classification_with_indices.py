@@ -128,11 +128,19 @@ def inner_span_distance(start_end: Tuple[int, int], other_start_end: Tuple[int, 
         return -dist
 
 
+def outer_span_distance(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> int:
+    min_start = min(start_end[0], other_start_end[0])
+    max_end = max(start_end[1], other_start_end[1])
+    return max_end - min_start
+
+
 def span_distance(
     start_end: Tuple[int, int], other_start_end: Tuple[int, int], distance_type: str
 ) -> int:
     if distance_type == "inner":
         return inner_span_distance(start_end, other_start_end)
+    elif distance_type == "outer":
+        return outer_span_distance(start_end, other_start_end)
     else:
         raise ValueError(f"unknown distance_type={distance_type}. use one of: inner")
 
