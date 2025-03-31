@@ -385,6 +385,7 @@ class RETextClassificationWithIndicesTaskModule(
         add_global_attention_mask_to_input: bool = False,
         argument_type_whitelist: Optional[List[List[str]]] = None,
         handle_relations_with_same_arguments: str = "keep_none",
+        argument_and_relation_type_whitelist: Optional[Dict[str, List[str]]] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -427,11 +428,17 @@ class RETextClassificationWithIndicesTaskModule(
         self.allow_discontinuous_text = allow_discontinuous_text
         self.handle_relations_with_same_arguments = handle_relations_with_same_arguments
         self.argument_type_whitelist: Optional[Set[Tuple[str, ...]]] = None
+        self.argument_and_relation_type_whitelist: Optional[Dict[str, Tuple[str, str]]] = None
 
         if argument_type_whitelist is not None:
             # hydra does not support tuples, so we got lists and need to convert them
             self.argument_type_whitelist = {tuple(types) for types in argument_type_whitelist}
-
+        if argument_and_relation_type_whitelist is not None:
+            # hydra does not support tuples, so we got lists and need to convert them
+            self.argument_and_relation_type_whitelist = {
+                rel: (types[0], types[1])
+                for rel, types in argument_and_relation_type_whitelist.items()
+            }
         # overwrite None with 0 for backward compatibility
         self.log_first_n_examples = log_first_n_examples or 0
         self.add_argument_indices_to_input = add_argument_indices_to_input
@@ -614,6 +621,31 @@ class RETextClassificationWithIndicesTaskModule(
                         f"{type(rel)}"
                     )
 
+    def _filter_relations_by_argument_and_relation_type_whitelist(
+        self,
+        arguments2relation: Dict[Tuple[Tuple[str, Annotation], ...], Annotation],
+        doc_id: Optional[str] = None,
+    ) -> None:
+        if self.argument_and_relation_type_whitelist is not None:
+            if self.marker_factory.all_roles == {HEAD, TAIL}:
+                for arguments, relation in list(arguments2relation.items()):
+                    role2arg = dict(arguments)
+                    role2label = {role: getattr(arg, "label") for role, arg in role2arg.items()}
+                    head_tail_labels = (role2label.get(HEAD), role2label.get(TAIL))
+                    rel_label = getattr(relation, "label")
+                    if (
+                        rel_label,
+                        head_tail_labels,
+                    ) not in self.argument_and_relation_type_whitelist.items():
+                        rel = arguments2relation.pop(arguments)
+                        self.collect_relation("skipped_argument_and_relation_type_whitelist", rel)
+            else:
+                raise NotImplementedError(
+                    f"doc.id={doc_id}: the taskmodule does not yet support filtering relations "
+                    f"by argument_and_relation_type_whitelist with argument roles other than 'head' and "
+                    f"'tail': {sorted(self.marker_factory.all_roles)}"
+                )
+
     def _filter_relations_by_argument_type_whitelist(
         self,
         arguments2relation: Dict[Tuple[Tuple[str, Annotation], ...], Annotation],
@@ -640,11 +672,16 @@ class RETextClassificationWithIndicesTaskModule(
                     for tail in entities:
                         if head == tail:
                             continue
-                        # Skip if argument_type_whitelist is defined and current candidates do not fit.
+                        # Skip if argument_type_whitelist and/or argument_and_relation_type_whitelist
+                        # are defined and current candidates do not fit.
                         if (
                             self.argument_type_whitelist is not None
                             and (getattr(head, "label"), getattr(tail, "label"))
                             not in self.argument_type_whitelist
+                        ) or (
+                            self.argument_and_relation_type_whitelist is not None
+                            and (getattr(head, "label"), getattr(tail, "label"))
+                            not in self.argument_and_relation_type_whitelist.values()
                         ):
                             continue
 
@@ -810,6 +847,10 @@ class RETextClassificationWithIndicesTaskModule(
                             f"or as skipped."
                         )
 
+            # We use this filter before adding reversed relations because we also don't want them to be reversed
+            self._filter_relations_by_argument_and_relation_type_whitelist(
+                arguments2relation=arguments2relation, doc_id=document.id
+            )
             self._add_reversed_relations(arguments2relation=arguments2relation, doc_id=document.id)
             self._filter_relations_by_argument_type_whitelist(
                 arguments2relation=arguments2relation, doc_id=document.id
@@ -1325,7 +1366,15 @@ class RETextClassificationWithIndicesTaskModule(
                     f"creating a new annotation from a candidate_annotation of another type than BinaryRelation is "
                     f"not yet supported. candidate_annotation has the type: {type(candidate_annotation)}"
                 )
-            if not (self.add_candidate_relations and label == self.none_label):
+            if not (self.add_candidate_relations and label == self.none_label) and not (
+                isinstance(new_annotation, BinaryRelation)
+                and self.argument_and_relation_type_whitelist is not None
+                and (
+                    label,
+                    (getattr(new_annotation.head, "label"), getattr(new_annotation.tail, "label")),
+                )
+                in self.argument_and_relation_type_whitelist.items()
+            ):
                 yield self.relation_annotation, new_annotation
 
     def _get_global_attention(self, input_ids: torch.LongTensor) -> torch.LongTensor:

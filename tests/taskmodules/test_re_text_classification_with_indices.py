@@ -1494,6 +1494,88 @@ def test_add_candidate_relations_with_argument_type_whitelist(documents):
     assert ("no_relation", (("ORG", "H"), ("ORG", "I"))) not in relation_tuples
 
 
+def test_filter_relations_by_argument_and_relation_type_whitelist(documents):
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path="bert-base-cased",
+        add_candidate_relations=True,
+        argument_and_relation_type_whitelist={
+            "per:employee_of": ["PER", "ORG"],
+            "per:founder": ["PER", "ORG"],
+            "org:founded_by": ["ORG", "PER"],
+        },
+    )
+    doc = documents[4]
+    taskmodule.prepare(documents)
+
+    assert doc.entities.resolve() == [("PER", "Entity G"), ("ORG", "H"), ("ORG", "I")]
+    assert doc.relations.resolve() == [
+        ("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))),
+        ("per:founder", (("PER", "Entity G"), ("ORG", "I"))),
+        ("org:founded_by", (("ORG", "I"), ("ORG", "H"))),
+    ]
+    arguments2relation = {}
+    for rel in doc.relations:
+        arguments2relation[get_relation_argument_spans_and_roles(rel)] = rel
+    assert len(arguments2relation) == 3
+
+    taskmodule._filter_relations_by_argument_and_relation_type_whitelist(
+        arguments2relation=arguments2relation
+    )
+    assert len(arguments2relation) == 2
+
+    relation_tuples = [rel.resolve() for rel in arguments2relation.values()]
+    assert relation_tuples[0] == ("per:employee_of", (("PER", "Entity G"), ("ORG", "H")))
+    assert relation_tuples[1] == ("per:founder", (("PER", "Entity G"), ("ORG", "I")))
+
+    assert ("org:founded_by", (("ORG", "I"), ("ORG", "H"))) not in relation_tuples
+
+
+def test_add_candidate_relations_with_argument_and_relation_type_whitelist(documents):
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path="bert-base-cased",
+        add_candidate_relations=True,
+        argument_and_relation_type_whitelist={
+            "per:employee_of": ["PER", "ORG"],
+            "per:founder": ["PER", "ORG"],
+            "org:founded_by": ["ORG", "PER"],
+        },
+    )
+    doc = documents[4]
+    taskmodule.prepare(documents)
+
+    assert doc.entities.resolve() == [("PER", "Entity G"), ("ORG", "H"), ("ORG", "I")]
+    assert doc.relations.resolve() == [
+        ("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))),
+        ("per:founder", (("PER", "Entity G"), ("ORG", "I"))),
+        ("org:founded_by", (("ORG", "I"), ("ORG", "H"))),
+    ]
+    arguments2relation = {}
+    for rel in doc.relations:
+        arguments2relation[get_relation_argument_spans_and_roles(rel)] = rel
+    assert len(arguments2relation) == 3
+
+    taskmodule._add_candidate_relations(
+        arguments2relation=arguments2relation, entities=doc.entities
+    )
+    assert len(arguments2relation) == 5
+
+    relation_tuples = [rel.resolve() for rel in arguments2relation.values()]
+
+    # Original relations from document (aren't affected by whitelist)
+    assert relation_tuples[0] == ("per:employee_of", (("PER", "Entity G"), ("ORG", "H")))
+    assert relation_tuples[1] == ("per:founder", (("PER", "Entity G"), ("ORG", "I")))
+    assert relation_tuples[2] == ("org:founded_by", (("ORG", "I"), ("ORG", "H")))
+
+    # Relation candidate added by _add_candidate_relations()
+    assert relation_tuples[3] == ("no_relation", (("ORG", "H"), ("PER", "Entity G")))
+    assert relation_tuples[4] == ("no_relation", (("ORG", "I"), ("PER", "Entity G")))
+
+    # Relations not created due to whitelist
+    assert ("no_relation", (("ORG", "H"), ("ORG", "I"))) not in relation_tuples
+
+
 def test_encode_input_with_add_reversed_relations(documents):
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
