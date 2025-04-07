@@ -385,7 +385,7 @@ class RETextClassificationWithIndicesTaskModule(
         add_global_attention_mask_to_input: bool = False,
         argument_type_whitelist: Optional[List[List[str]]] = None,
         handle_relations_with_same_arguments: str = "keep_none",
-        argument_and_relation_type_whitelist: Optional[Dict[str, List[str]]] = None,
+        argument_and_relation_type_whitelist: Optional[Dict[str, List[List[str]]]] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -428,7 +428,9 @@ class RETextClassificationWithIndicesTaskModule(
         self.allow_discontinuous_text = allow_discontinuous_text
         self.handle_relations_with_same_arguments = handle_relations_with_same_arguments
         self.argument_type_whitelist: Optional[Set[Tuple[str, ...]]] = None
-        self.argument_and_relation_type_whitelist: Optional[Dict[str, Tuple[str, str]]] = None
+        self.argument_and_relation_type_whitelist: Optional[Dict[str, List[Tuple[str, str]]]] = (
+            None
+        )
 
         if argument_type_whitelist is not None:
             # hydra does not support tuples, so we got lists and need to convert them
@@ -436,8 +438,8 @@ class RETextClassificationWithIndicesTaskModule(
         if argument_and_relation_type_whitelist is not None:
             # hydra does not support tuples, so we got lists and need to convert them
             self.argument_and_relation_type_whitelist = {
-                rel: (types[0], types[1])
-                for rel, types in argument_and_relation_type_whitelist.items()
+                rel: [(head, tail) for head, tail in args]
+                for rel, args in argument_and_relation_type_whitelist.items()
             }
         # overwrite None with 0 for backward compatibility
         self.log_first_n_examples = log_first_n_examples or 0
@@ -634,9 +636,10 @@ class RETextClassificationWithIndicesTaskModule(
                     head_tail_labels = (role2label.get(HEAD), role2label.get(TAIL))
                     rel_label = getattr(relation, "label")
                     if (
-                        rel_label,
-                        head_tail_labels,
-                    ) not in self.argument_and_relation_type_whitelist.items():
+                        rel_label not in self.argument_and_relation_type_whitelist
+                        or head_tail_labels
+                        not in self.argument_and_relation_type_whitelist[rel_label]
+                    ):
                         rel = arguments2relation.pop(arguments)
                         self.collect_relation("skipped_argument_and_relation_type_whitelist", rel)
             else:
@@ -667,22 +670,16 @@ class RETextClassificationWithIndicesTaskModule(
     ) -> None:
         if self.add_candidate_relations:
             if self.marker_factory.all_roles == {HEAD, TAIL}:
+                # flatten argument_and_relation_type_whitelist values
+                arg_rel_whitelist_vals_set = (
+                    None
+                    if self.argument_and_relation_type_whitelist is None
+                    else {i for j in self.argument_and_relation_type_whitelist.values() for i in j}
+                )
                 # iterate over all possible argument candidates
                 for head in entities:
                     for tail in entities:
                         if head == tail:
-                            continue
-                        # Skip if argument_type_whitelist and/or argument_and_relation_type_whitelist
-                        # are defined and current candidates do not fit.
-                        if (
-                            self.argument_type_whitelist is not None
-                            and (getattr(head, "label"), getattr(tail, "label"))
-                            not in self.argument_type_whitelist
-                        ) or (
-                            self.argument_and_relation_type_whitelist is not None
-                            and (getattr(head, "label"), getattr(tail, "label"))
-                            not in self.argument_and_relation_type_whitelist.values()
-                        ):
                             continue
 
                         # Create a relation candidate with the none label. Otherwise, we use the existing relation.
@@ -690,6 +687,19 @@ class RETextClassificationWithIndicesTaskModule(
                             head=head, tail=tail, label=self.none_label, score=1.0
                         )
                         new_relation_args = get_relation_argument_spans_and_roles(new_relation)
+                        arg_roles, arg_spans = zip(*new_relation_args)
+                        arg_labels = tuple([getattr(ann, "label") for ann in arg_spans])
+
+                        # Skip if argument_type_whitelist and/or argument_and_relation_type_whitelist
+                        # are defined and current candidates do not fit.
+                        if (
+                            self.argument_type_whitelist is not None
+                            and arg_labels not in self.argument_type_whitelist
+                        ) or (
+                            arg_rel_whitelist_vals_set is not None
+                            and arg_labels not in arg_rel_whitelist_vals_set
+                        ):
+                            continue
 
                         # check blacklist
                         if (
@@ -1366,14 +1376,20 @@ class RETextClassificationWithIndicesTaskModule(
                     f"creating a new annotation from a candidate_annotation of another type than BinaryRelation is "
                     f"not yet supported. candidate_annotation has the type: {type(candidate_annotation)}"
                 )
+            # Do not create annotation if
+            # - `add_candidate_relations` is True and relation label is a `none_label`
+            # - `argument_and_relation_type_whitelist` is used and a binary relation is not on a whitelist
             if not (self.add_candidate_relations and label == self.none_label) and not (
                 isinstance(new_annotation, BinaryRelation)
                 and self.argument_and_relation_type_whitelist is not None
-                and (
-                    label,
-                    (getattr(new_annotation.head, "label"), getattr(new_annotation.tail, "label")),
+                and not (
+                    label in self.argument_and_relation_type_whitelist
+                    and (
+                        getattr(new_annotation.head, "label"),
+                        getattr(new_annotation.tail, "label"),
+                    )
+                    in self.argument_and_relation_type_whitelist[label]
                 )
-                in self.argument_and_relation_type_whitelist.items()
             ):
                 yield self.relation_annotation, new_annotation
 

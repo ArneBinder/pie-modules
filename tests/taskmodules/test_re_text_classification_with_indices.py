@@ -1500,9 +1500,9 @@ def test_filter_relations_by_argument_and_relation_type_whitelist(documents):
         tokenizer_name_or_path="bert-base-cased",
         add_candidate_relations=True,
         argument_and_relation_type_whitelist={
-            "per:employee_of": ["PER", "ORG"],
-            "per:founder": ["PER", "ORG"],
-            "org:founded_by": ["ORG", "PER"],
+            "per:employee_of": [["PER", "ORG"]],
+            "per:founder": [["PER", "ORG"]],
+            "org:founded_by": [["ORG", "PER"]],
         },
     )
     doc = documents[4]
@@ -1537,9 +1537,9 @@ def test_add_candidate_relations_with_argument_and_relation_type_whitelist(docum
         tokenizer_name_or_path="bert-base-cased",
         add_candidate_relations=True,
         argument_and_relation_type_whitelist={
-            "per:employee_of": ["PER", "ORG"],
-            "per:founder": ["PER", "ORG"],
-            "org:founded_by": ["ORG", "PER"],
+            "per:employee_of": [["PER", "ORG"]],
+            "per:founder": [["PER", "ORG"]],
+            "org:founded_by": [["ORG", "PER"]],
         },
     )
     doc = documents[4]
@@ -2964,3 +2964,86 @@ def test_encode_with_add_entity_tags_to_input_windowing(documents, insert_marker
                 ("[SEP]", "O"),
             ],
         ]
+
+
+def test_create_annotations_from_output(taskmodule, documents):
+    document = documents[4]
+    model_output = {
+        "labels": torch.tensor([2, 3, 1]),
+        "probabilities": torch.tensor(
+            [
+                # O, org:founded_by, per:employee_of, per:founder
+                [0.1, 0.1, 0.6, 0.2],
+                [0.2, 0.1, 0.2, 0.5],
+                [0.1, 0.6, 0.1, 0.2],
+            ]
+        ),
+    }
+    task_encodings = taskmodule.encode(document, encode_target=True)
+    unbatched_model_outputs = taskmodule.unbatch_output(model_output)
+    result = []
+    for i in range(len(unbatched_model_outputs)):
+        result.extend(
+            list(
+                taskmodule.create_annotations_from_output(
+                    task_encoding=task_encodings[i], task_output=unbatched_model_outputs[i]
+                )
+            )
+        )
+    # assert result == list(document.relations)
+    scores = [0.6000000238418579, 0.5, 0.6000000238418579]
+    for i, ((layer_name, predicted_relation), original_relation) in enumerate(
+        zip(result, list(document.relations))
+    ):
+        assert layer_name == taskmodule.relation_annotation
+        assert predicted_relation == original_relation.copy()
+        assert predicted_relation.score == scores[i]
+
+
+def test_create_annotations_from_output_with_argument_and_relation_type_whitelist(
+    documents, taskmodule
+):
+    document = documents[4]
+    model_output = {
+        "labels": torch.tensor([2, 3, 1]),
+        "probabilities": torch.tensor(
+            [
+                # O, org:founded_by, per:employee_of, per:founder
+                [0.1, 0.1, 0.6, 0.2],
+                [0.2, 0.1, 0.2, 0.5],
+                [0.1, 0.6, 0.1, 0.2],
+            ]
+        ),
+    }
+    task_encodings = taskmodule.encode(document, encode_target=True)
+    unbatched_model_outputs = taskmodule.unbatch_output(model_output)
+
+    assert len(unbatched_model_outputs) == len(task_encodings) == 3
+
+    # We only set whitelist now to check if it works in tested function. Else the target relation with wrong arguments won't appear in task_encodings
+    taskmodule.argument_and_relation_type_whitelist = {
+        "per:employee_of": [("PER", "ORG")],
+        "per:founder": [("PER", "ORG")],
+        "org:founded_by": [("ORG", "PER")],
+    }
+
+    result = []
+    for i in range(len(unbatched_model_outputs)):
+        result.extend(
+            list(
+                taskmodule.create_annotations_from_output(
+                    task_encoding=task_encodings[i], task_output=unbatched_model_outputs[i]
+                )
+            )
+        )
+
+    # Test that [ORG, ORG] relation was filtered from task encoding
+    assert len(result) == 2
+
+    scores = [0.6000000238418579, 0.5, 0.6000000238418579]
+    for i, ((layer_name, predicted_relation), original_relation) in enumerate(
+        zip(result, list(document.relations))
+    ):
+        assert layer_name == taskmodule.relation_annotation
+        assert predicted_relation == original_relation.copy()
+        assert predicted_relation.score == scores[i]
