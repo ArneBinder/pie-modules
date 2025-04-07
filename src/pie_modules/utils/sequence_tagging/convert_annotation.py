@@ -11,7 +11,6 @@ from .encoding import (
 logger = logging.getLogger(__name__)
 
 
-TypedSpan = Tuple[int, Tuple[int, int]]
 TypedStringSpan = Tuple[str, Tuple[int, int]]
 
 
