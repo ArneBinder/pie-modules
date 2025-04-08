@@ -426,13 +426,11 @@ class RETextClassificationWithIndicesTaskModule(
         self.max_window = max_window
         self.allow_discontinuous_text = allow_discontinuous_text
         self.handle_relations_with_same_arguments = handle_relations_with_same_arguments
-        self.argument_type_whitelist: Optional[List[Tuple[str, str]]] = None
+        self.argument_type_whitelist: Optional[Set[Tuple[str, ...]]] = None
 
         if argument_type_whitelist is not None:
             # hydra does not support tuples, so we got lists and need to convert them
-            self.argument_type_whitelist = [
-                (types[0], types[1]) for types in argument_type_whitelist
-            ]
+            self.argument_type_whitelist = {tuple(types) for types in argument_type_whitelist}
 
         # overwrite None with 0 for backward compatibility
         self.log_first_n_examples = log_first_n_examples or 0
@@ -622,20 +620,11 @@ class RETextClassificationWithIndicesTaskModule(
         doc_id: Optional[str] = None,
     ) -> None:
         if self.argument_type_whitelist is not None:
-            if self.marker_factory.all_roles == {HEAD, TAIL}:
-                for arguments in list(arguments2relation.keys()):
-                    role2arg = dict(arguments)
-                    role2label = {role: getattr(arg, "label") for role, arg in role2arg.items()}
-                    head_tail_labels = (role2label.get(HEAD), role2label.get(TAIL))
-                    if head_tail_labels not in self.argument_type_whitelist:
-                        rel = arguments2relation.pop(arguments)
-                        self.collect_relation("skipped_argument_type_whitelist", rel)
-            else:
-                raise NotImplementedError(
-                    f"doc.id={doc_id}: the taskmodule does not yet support filtering relations "
-                    f"by argument_type_whitelist with argument roles other than 'head' and "
-                    f"'tail': {sorted(self.marker_factory.all_roles)}"
-                )
+            for arguments, rel in list(arguments2relation.items()):
+                argument_labels = tuple(getattr(arg, "label") for _, arg in arguments)
+                if argument_labels not in self.argument_type_whitelist:
+                    rel = arguments2relation.pop(arguments)
+                    self.collect_relation("skipped_argument_type_whitelist", rel)
 
     def _add_candidate_relations(
         self,
