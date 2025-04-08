@@ -939,13 +939,13 @@ test-win = ["POT", "pytest", "pytest-cov", "testfixtures"]
 
 [[package]]
 name = "huggingface-hub"
-version = "0.23.2"
+version = "0.25.2"
 description = "Client library to download and publish models, datasets and other repos on the huggingface.co hub"
 optional = false
 python-versions = ">=3.8.0"
 files = [
-    {file = "huggingface_hub-0.23.2-py3-none-any.whl", hash = "sha256:48727a16e704d409c4bb5913613308499664f22a99743435dc3a13b23c485827"},
-    {file = "huggingface_hub-0.23.2.tar.gz", hash = "sha256:f6829b62d5fdecb452a76fdbec620cba4c1573655a8d710c1df71735fd9edbd2"},
+    {file = "huggingface_hub-0.25.2-py3-none-any.whl", hash = "sha256:1897caf88ce7f97fe0110603d8f66ac264e3ba6accdf30cd66cc0fed5282ad25"},
+    {file = "huggingface_hub-0.25.2.tar.gz", hash = "sha256:a1014ea111a5f40ccd23f7f7ba8ac46e20fa3b658ced1f86a00c75c06ec6423c"},
 ]
 
 [package.dependencies]
@@ -958,17 +958,17 @@ tqdm = ">=4.42.1"
 typing-extensions = ">=3.7.4.3"
 
 [package.extras]
-all = ["InquirerPy (==0.3.4)", "Jinja2", "Pillow", "aiohttp", "fastapi", "gradio", "jedi", "minijinja (>=1.0)", "mypy (==1.5.1)", "numpy", "pytest", "pytest-asyncio", "pytest-cov", "pytest-env", "pytest-rerunfailures", "pytest-vcr", "pytest-xdist", "ruff (>=0.3.0)", "soundfile", "types-PyYAML", "types-requests", "types-simplejson", "types-toml", "types-tqdm", "types-urllib3", "typing-extensions (>=4.8.0)", "urllib3 (<2.0)"]
+all = ["InquirerPy (==0.3.4)", "Jinja2", "Pillow", "aiohttp", "fastapi", "gradio", "jedi", "minijinja (>=1.0)", "mypy (==1.5.1)", "numpy", "pytest (>=8.1.1,<8.2.2)", "pytest-asyncio", "pytest-cov", "pytest-env", "pytest-mock", "pytest-rerunfailures", "pytest-vcr", "pytest-xdist", "ruff (>=0.5.0)", "soundfile", "types-PyYAML", "types-requests", "types-simplejson", "types-toml", "types-tqdm", "types-urllib3", "typing-extensions (>=4.8.0)", "urllib3 (<2.0)"]
 cli = ["InquirerPy (==0.3.4)"]
-dev = ["InquirerPy (==0.3.4)", "Jinja2", "Pillow", "aiohttp", "fastapi", "gradio", "jedi", "minijinja (>=1.0)", "mypy (==1.5.1)", "numpy", "pytest", "pytest-asyncio", "pytest-cov", "pytest-env", "pytest-rerunfailures", "pytest-vcr", "pytest-xdist", "ruff (>=0.3.0)", "soundfile", "types-PyYAML", "types-requests", "types-simplejson", "types-toml", "types-tqdm", "types-urllib3", "typing-extensions (>=4.8.0)", "urllib3 (<2.0)"]
+dev = ["InquirerPy (==0.3.4)", "Jinja2", "Pillow", "aiohttp", "fastapi", "gradio", "jedi", "minijinja (>=1.0)", "mypy (==1.5.1)", "numpy", "pytest (>=8.1.1,<8.2.2)", "pytest-asyncio", "pytest-cov", "pytest-env", "pytest-mock", "pytest-rerunfailures", "pytest-vcr", "pytest-xdist", "ruff (>=0.5.0)", "soundfile", "types-PyYAML", "types-requests", "types-simplejson", "types-toml", "types-tqdm", "types-urllib3", "typing-extensions (>=4.8.0)", "urllib3 (<2.0)"]
 fastai = ["fastai (>=2.4)", "fastcore (>=1.3.27)", "toml"]
 hf-transfer = ["hf-transfer (>=0.1.4)"]
 inference = ["aiohttp", "minijinja (>=1.0)"]
-quality = ["mypy (==1.5.1)", "ruff (>=0.3.0)"]
+quality = ["mypy (==1.5.1)", "ruff (>=0.5.0)"]
 tensorflow = ["graphviz", "pydot", "tensorflow"]
 tensorflow-testing = ["keras (<3.0)", "tensorflow"]
-testing = ["InquirerPy (==0.3.4)", "Jinja2", "Pillow", "aiohttp", "fastapi", "gradio", "jedi", "minijinja (>=1.0)", "numpy", "pytest", "pytest-asyncio", "pytest-cov", "pytest-env", "pytest-rerunfailures", "pytest-vcr", "pytest-xdist", "soundfile", "urllib3 (<2.0)"]
-torch = ["safetensors", "torch"]
+testing = ["InquirerPy (==0.3.4)", "Jinja2", "Pillow", "aiohttp", "fastapi", "gradio", "jedi", "minijinja (>=1.0)", "numpy", "pytest (>=8.1.1,<8.2.2)", "pytest-asyncio", "pytest-cov", "pytest-env", "pytest-mock", "pytest-rerunfailures", "pytest-vcr", "pytest-xdist", "soundfile", "urllib3 (<2.0)"]
+torch = ["safetensors[torch]", "torch"]
 typing = ["types-PyYAML", "types-requests", "types-simplejson", "types-toml", "types-tqdm", "types-urllib3", "typing-extensions (>=4.8.0)"]
 
 [[package]]
@@ -1873,6 +1873,21 @@ test = ["hypothesis (>=6.46.1)", "pytest (>=7.3.2)", "pytest-xdist (>=2.2.0)"]
 xml = ["lxml (>=4.9.2)"]
 
 [[package]]
+name = "pie-core"
+version = "0.1.0"
+description = "Core modules of PyTorch-IE"
+optional = false
+python-versions = "<4.0,>=3.9"
+files = [
+    {file = "pie_core-0.1.0-py3-none-any.whl", hash = "sha256:6992e0f79deb838b73c64b3baa6ff112dc91a6ab2676d24583c51a82646a7dbb"},
+    {file = "pie_core-0.1.0.tar.gz", hash = "sha256:1211be9608be1eea24eded1f424c7b077c48155947287645b215387768f4d755"},
+]
+
+[package.dependencies]
+huggingface_hub = ">=0.23.4,<0.26.0"
+pytorch-lightning = ">=2.1.0,<3.0.0"
+
+[[package]]
 name = "pillow"
 version = "10.4.0"
 description = "Python Imaging Library (Fork)"
@@ -2170,23 +2185,28 @@ files = [
 
 [[package]]
 name = "pytorch-ie"
-version = "0.31.2"
+version = "0.31.7"
 description = "State-of-the-art Information Extraction in PyTorch"
 optional = false
-python-versions = "<4.0,>=3.9"
-files = [
-    {file = "pytorch_ie-0.31.2-py3-none-any.whl", hash = "sha256:fef91fb3d4dff84b0b6fd973d5bf7e5be51e0e01393195a01d7d824688c8cb3e"},
-    {file = "pytorch_ie-0.31.2.tar.gz", hash = "sha256:cd9683ef4ba0191854ff1843f22f431f4c38c8745962ee55ba5b5c52f27afd7c"},
-]
+python-versions = "^3.9"
+files = []
+develop = false
 
 [package.dependencies]
-absl-py = ">=1.0.0,<2.0.0"
+absl-py = "^1.0.0"
 fsspec = "<2023.9.0"
-pandas = ">=2.0.0,<3.0.0"
-pytorch-lightning = ">=2,<3"
+pandas = "^2.0.0"
+pie-core = ">=0.1.0,<0.2.0"
+pytorch-lightning = "^2"
 torch = ">=1.10"
-torchmetrics = ">=1,<2"
-transformers = ">=4.18,<5.0"
+torchmetrics = "^1"
+transformers = "^4.18"
+
+[package.source]
+type = "git"
+url = "https://github.com/ArneBinder/pytorch-ie.git"
+reference = "use_pie_core_v2"
+resolved_reference = "0aeb3b7180f73a238c2503c9a19f48f76aa1aa66"
 
 [[package]]
 name = "pytorch-lightning"
@@ -3451,4 +3471,4 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "d4692a47e77f909acc341aac181df02da930d6f8270214f105b0bdd6695f2b2d"
+content-hash = "7f932ef9a2859d886e39726b979bb971d66449633168d0a1bf3624c86398cf1e"
