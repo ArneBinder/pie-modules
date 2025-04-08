@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Union
 
 import pytest
 import torch
+from pytorch_ie import AnnotationLayer
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, NaryRelation
 from pytorch_ie.core import Annotation, AnnotationList, annotation_field
 from pytorch_ie.documents import (
@@ -2966,20 +2967,64 @@ def test_encode_with_add_entity_tags_to_input_windowing(documents, insert_marker
         ]
 
 
-def test_create_annotations_from_output(taskmodule, documents):
-    document = documents[4]
+def test_create_annotations_from_output():
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations", tokenizer_name_or_path="bert-base-cased"
+    )
+
+    document = TestDocument(
+        id="test_doc",
+        text="First sentence. Entity G works at H. And founded I.",
+        metadata={
+            "description": "sentences with multiple relation annotations and cross-sentence relation"
+        },
+    )
+    document.entities.extend(
+        [
+            LabeledSpan(start=16, end=24, label="PER"),
+            LabeledSpan(start=34, end=35, label="ORG"),
+            LabeledSpan(start=49, end=50, label="ORG"),
+        ]
+    )
+    document.relations.extend(
+        [
+            BinaryRelation(
+                head=document.entities[0], tail=document.entities[1], label="per:employee_of"
+            ),
+            BinaryRelation(
+                head=document.entities[0], tail=document.entities[2], label="per:founder"
+            ),
+            BinaryRelation(
+                head=document.entities[2], tail=document.entities[1], label="org:founded_by"
+            ),
+        ]
+    )
+
+    taskmodule.prepare([document])
+
     model_output = {
-        "labels": torch.tensor([2, 3, 1]),
+        "labels": torch.tensor([2, 3, 0]),
         "probabilities": torch.tensor(
             [
                 # O, org:founded_by, per:employee_of, per:founder
                 [0.1, 0.1, 0.6, 0.2],
                 [0.2, 0.1, 0.2, 0.5],
-                [0.1, 0.6, 0.1, 0.2],
+                [0.6, 0.1, 0.1, 0.2],
             ]
         ),
     }
     task_encodings = taskmodule.encode(document, encode_target=True)
+    candidate_relations = [
+        task_encoding.metadata["candidate_annotation"] for task_encoding in task_encodings
+    ]
+
+    resolved_candidate_relations = [rel.resolve() for rel in candidate_relations]
+    assert resolved_candidate_relations == [
+        ("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))),
+        ("per:founder", (("PER", "Entity G"), ("ORG", "I"))),
+        ("org:founded_by", (("ORG", "I"), ("ORG", "H"))),
+    ]
+
     unbatched_model_outputs = taskmodule.unbatch_output(model_output)
     result = []
     for i in range(len(unbatched_model_outputs)):
@@ -2990,43 +3035,93 @@ def test_create_annotations_from_output(taskmodule, documents):
                 )
             )
         )
-    # assert result == list(document.relations)
-    scores = [0.6000000238418579, 0.5, 0.6000000238418579]
-    for i, ((layer_name, predicted_relation), original_relation) in enumerate(
-        zip(result, list(document.relations))
+
+    scores = [0.6000000238418579, 0.5, 0.6000000238418579, 0.6000000238418579]
+    expected_relations = [
+        BinaryRelation(
+            head=document.entities[0], tail=document.entities[1], label="per:employee_of"
+        ),
+        BinaryRelation(head=document.entities[0], tail=document.entities[2], label="per:founder"),
+        # BinaryRelation(head = document.entities[2], tail = document.entities[1], label = "no_relation"),
+        # Is predicted as no_relation so won't be added to result.
+    ]
+    for i, ((layer_name, predicted_relation), expected_relation) in enumerate(
+        zip(result, expected_relations)
     ):
         assert layer_name == taskmodule.relation_annotation
-        assert predicted_relation == original_relation.copy()
+        assert predicted_relation == expected_relation
         assert predicted_relation.score == scores[i]
 
 
-def test_create_annotations_from_output_with_argument_and_relation_type_whitelist(
-    documents, taskmodule
-):
-    document = documents[4]
+def test_create_annotations_from_output_with_argument_and_relation_type_whitelist():
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path="bert-base-cased",
+        add_candidate_relations=True,
+        argument_and_relation_type_whitelist={
+            "per:employee_of": [["PER", "ORG"]],
+            "per:founder": [["PER", "ORG"]],
+            "org:founded_by": [["ORG", "PER"]],
+        },
+    )
+
+    document = TestDocument(
+        id="test_doc",
+        text="First sentence. Entity G works at H. And founded I.",
+        metadata={
+            "description": "sentences with multiple relation annotations and cross-sentence relation"
+        },
+    )
+    document.entities.extend(
+        [
+            LabeledSpan(start=16, end=24, label="PER"),
+            LabeledSpan(start=34, end=35, label="ORG"),
+            LabeledSpan(start=49, end=50, label="ORG"),
+        ]
+    )
+    document.relations.extend(
+        [
+            BinaryRelation(
+                head=document.entities[0], tail=document.entities[1], label="per:employee_of"
+            ),
+            BinaryRelation(
+                head=document.entities[0], tail=document.entities[2], label="per:founder"
+            ),
+            BinaryRelation(
+                head=document.entities[2], tail=document.entities[1], label="org:founded_by"
+            ),
+        ]
+    )
+
+    taskmodule.prepare([document])
+
     model_output = {
-        "labels": torch.tensor([2, 3, 1]),
+        "labels": torch.tensor([2, 3, 2, 1]),
         "probabilities": torch.tensor(
             [
                 # O, org:founded_by, per:employee_of, per:founder
                 [0.1, 0.1, 0.6, 0.2],
                 [0.2, 0.1, 0.2, 0.5],
+                [0.1, 0.1, 0.6, 0.2],
                 [0.1, 0.6, 0.1, 0.2],
             ]
         ),
     }
-    task_encodings = taskmodule.encode(document, encode_target=True)
+
+    task_encodings = taskmodule.encode(document.copy(), encode_target=True)
+    candidate_relations = [
+        task_encoding.metadata["candidate_annotation"] for task_encoding in task_encodings
+    ]
+    resolved_candidate_relations = [rel.resolve() for rel in candidate_relations]
+    assert resolved_candidate_relations == [
+        ("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))),
+        ("per:founder", (("PER", "Entity G"), ("ORG", "I"))),
+        # Original "('org:founded_by',('ORG','ORG'))" is not created due filter, but two new candidates fit
+        ("no_relation", (("ORG", "H"), ("PER", "Entity G"))),
+        ("no_relation", (("ORG", "I"), ("PER", "Entity G"))),
+    ]
+
     unbatched_model_outputs = taskmodule.unbatch_output(model_output)
-
-    assert len(unbatched_model_outputs) == len(task_encodings) == 3
-
-    # We only set whitelist now to check if it works in tested function. Else the target relation with wrong arguments won't appear in task_encodings
-    taskmodule.argument_and_relation_type_whitelist = {
-        "per:employee_of": [("PER", "ORG")],
-        "per:founder": [("PER", "ORG")],
-        "org:founded_by": [("ORG", "PER")],
-    }
-
     result = []
     for i in range(len(unbatched_model_outputs)):
         result.extend(
@@ -3037,13 +3132,23 @@ def test_create_annotations_from_output_with_argument_and_relation_type_whitelis
             )
         )
 
-    # Test that [ORG, ORG] relation was filtered from task encoding
-    assert len(result) == 2
+    assert len(result) == 3
 
-    scores = [0.6000000238418579, 0.5, 0.6000000238418579]
-    for i, ((layer_name, predicted_relation), original_relation) in enumerate(
-        zip(result, list(document.relations))
+    scores = [0.6000000238418579, 0.5, 0.6000000238418579, 0.6000000238418579]
+    expected_relations = [
+        BinaryRelation(
+            head=document.entities[0], tail=document.entities[1], label="per:employee_of"
+        ),
+        BinaryRelation(head=document.entities[0], tail=document.entities[2], label="per:founder"),
+        # BinaryRelation(head = document.entities[2], tail = document.entities[1], label = "per:employee_of"),
+        # Is predicted by the model, but filtered out because of wrong argument types for this relation type.
+        BinaryRelation(
+            head=document.entities[2], tail=document.entities[0], label="org:founded_by"
+        ),
+    ]
+    for i, ((layer_name, predicted_relation), expected_relation) in enumerate(
+        zip(result, expected_relations)
     ):
         assert layer_name == taskmodule.relation_annotation
-        assert predicted_relation == original_relation.copy()
+        assert predicted_relation == expected_relation
         assert predicted_relation.score == scores[i]
