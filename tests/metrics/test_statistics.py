@@ -10,7 +10,7 @@ from pie_modules.metrics.statistics import (
 def test_statistics(document_dataset):
     statistic = DummyCollector()
     values = statistic(document_dataset)
-    assert values == {"test": {"sum": 2}, "train": {"sum": 8}, "val": {"sum": 2}}
+    assert values == {"test": {"sum": 2}, "train": {"sum": 7}, "val": {"sum": 2}}
 
     # note that we check for labels=["LOC", "PER", "ORG"], but the actual labels in the data are just ["PER", "ORG"]
     statistic = LabelCountCollector(field="entities", labels=["LOC", "PER", "ORG"])
@@ -27,21 +27,21 @@ def test_statistics(document_dataset):
             "ORG": {"mean": 1.0, "std": 1.0, "min": 0, "max": 2, "len": 2, "sum": 2},
         },
         "train": {
-            "LOC": {"mean": 0.0, "std": 0.0, "min": 0, "max": 0, "len": 8, "sum": 0},
+            "LOC": {"mean": 0.0, "std": 0.0, "min": 0, "max": 0, "len": 7, "sum": 0},
             "PER": {
-                "mean": 0.875,
-                "std": 0.5994789404140899,
+                "mean": 1.0,
+                "std": 0.5345224838248488,
                 "min": 0,
                 "max": 2,
-                "len": 8,
+                "len": 7,
                 "sum": 7,
             },
             "ORG": {
-                "mean": 1.125,
-                "std": 0.7806247497997998,
+                "mean": 1.2857142857142858,
+                "std": 0.6998542122237652,
                 "min": 0,
                 "max": 2,
-                "len": 8,
+                "len": 7,
                 "sum": 9,
             },
         },
@@ -58,18 +58,18 @@ def test_statistics(document_dataset):
     statistic = FieldLengthCollector(field="text")
     values = statistic(document_dataset)
     assert values == {
-        "test": {"max": 51, "mean": 34.5, "min": 18, "std": 16.5},
-        "train": {"max": 54, "mean": 28.25, "min": 15, "std": 14.694812009685595},
-        "val": {"max": 51, "mean": 34.5, "min": 18, "std": 16.5},
+        "test": {"mean": 34.5, "std": 16.5, "min": 18, "max": 51},
+        "val": {"mean": 34.5, "std": 16.5, "min": 18, "max": 51},
+        "train": {"mean": 29.714285714285715, "std": 15.153634978486993, "min": 15, "max": 54},
     }
 
     # this is not super useful, we just collect the lengths of the labels, but it is enough to test the code
     statistic = SubFieldLengthCollector(field="entities", subfield="label")
     values = statistic(document_dataset)
     assert values == {
-        "test": {"max": 3, "mean": 3.0, "min": 3, "std": 0.0},
-        "train": {"max": 3, "mean": 3.0, "min": 3, "std": 0.0},
-        "val": {"max": 3, "mean": 3.0, "min": 3, "std": 0.0},
+        "test": {"mean": 3.0, "std": 0.0, "min": 3, "max": 3},
+        "val": {"mean": 3.0, "std": 0.0, "min": 3, "max": 3},
+        "train": {"mean": 3.0, "std": 0.0, "min": 3, "max": 3},
     }
 
 
@@ -82,6 +82,6 @@ def test_statistics_with_tokenize(document_dataset):
     values = statistic(document_dataset)
     assert values == {
         "test": {"max": 13, "mean": 8.5, "min": 4, "std": 4.5},
-        "train": {"max": 14, "mean": 7.75, "min": 4, "std": 3.6314597615834874},
+        "train": {"max": 14, "mean": 8.285714285714286, "min": 4, "std": 3.5742845723419436},
         "val": {"max": 13, "mean": 8.5, "min": 4, "std": 4.5},
     }
