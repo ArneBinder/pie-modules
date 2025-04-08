@@ -7,9 +7,8 @@ from typing import Any, Dict, List, Union
 
 import pytest
 import torch
-from pytorch_ie import AnnotationLayer
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, NaryRelation
-from pytorch_ie.core import Annotation, AnnotationList, annotation_field
+from pytorch_ie.core import Annotation, AnnotationList, TaskEncoding, annotation_field
 from pytorch_ie.documents import (
     TextBasedDocument,
     TextDocument,
@@ -2967,68 +2966,50 @@ def test_encode_with_add_entity_tags_to_input_windowing(documents, insert_marker
         ]
 
 
-def test_create_annotations_from_output():
+@pytest.mark.parametrize("add_candidate_relations", [False, True])
+def test_create_annotations_from_output(add_candidate_relations):
     taskmodule = RETextClassificationWithIndicesTaskModule(
-        relation_annotation="relations", tokenizer_name_or_path="bert-base-cased"
+        relation_annotation="relations",
+        tokenizer_name_or_path="bert-base-cased",
+        # pass in the labels and entity_labels to avoid calling prepare
+        # (which would required documents to collect the labels from)
+        labels=["org:founded_by", "per:employee_of", "per:founder"],
+        entity_labels=["PER", "ORG"],
+        # we want to test the effect of creating candidate relations
+        add_candidate_relations=add_candidate_relations,
     )
+    # just call post_prepare to set up the taskmodule since labels
+    # and entity_labels are already set
+    taskmodule.post_prepare()
 
-    document = TestDocument(
-        id="test_doc",
-        text="First sentence. Entity G works at H. And founded I.",
-        metadata={
-            "description": "sentences with multiple relation annotations and cross-sentence relation"
-        },
-    )
-    document.entities.extend(
-        [
-            LabeledSpan(start=16, end=24, label="PER"),
-            LabeledSpan(start=34, end=35, label="ORG"),
-            LabeledSpan(start=49, end=50, label="ORG"),
-        ]
-    )
-    document.relations.extend(
-        [
-            BinaryRelation(
-                head=document.entities[0], tail=document.entities[1], label="per:employee_of"
-            ),
-            BinaryRelation(
-                head=document.entities[0], tail=document.entities[2], label="per:founder"
-            ),
-            BinaryRelation(
-                head=document.entities[2], tail=document.entities[1], label="org:founded_by"
-            ),
-        ]
-    )
+    entities = [
+        LabeledSpan(start=16, end=24, label="PER"),
+        LabeledSpan(start=34, end=35, label="ORG"),
+        LabeledSpan(start=49, end=50, label="ORG"),
+    ]
 
-    taskmodule.prepare([document])
-
-    model_output = {
-        "labels": torch.tensor([2, 3, 0]),
-        "probabilities": torch.tensor(
-            [
-                # O, org:founded_by, per:employee_of, per:founder
-                [0.1, 0.1, 0.6, 0.2],
-                [0.2, 0.1, 0.2, 0.5],
-                [0.6, 0.1, 0.1, 0.2],
-            ]
-        ),
-    }
-    task_encodings = taskmodule.encode(document, encode_target=True)
+    assert taskmodule.none_label == "no_relation"
     candidate_relations = [
-        task_encoding.metadata["candidate_annotation"] for task_encoding in task_encodings
+        BinaryRelation(head=entities[0], tail=entities[1], label="no_relation"),
+        BinaryRelation(head=entities[0], tail=entities[2], label="no_relation"),
+        BinaryRelation(head=entities[2], tail=entities[1], label="no_relation"),
     ]
 
-    resolved_candidate_relations = [rel.resolve() for rel in candidate_relations]
-    assert resolved_candidate_relations == [
-        ("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))),
-        ("per:founder", (("PER", "Entity G"), ("ORG", "I"))),
-        ("org:founded_by", (("ORG", "I"), ("ORG", "H"))),
+    # just create the task encodings with dummy inputs since we do not want to pass them
+    # into the model, but add correct metadata (which is used to create the annotations)
+    task_encodings = [
+        TaskEncoding(inputs={}, metadata={"candidate_annotation": rel})
+        for rel in candidate_relations
+    ]
+    unbatched_model_outputs = [
+        {"labels": ["per:employee_of"], "probabilities": [0.6000000238418579]},
+        {"labels": ["per:founder"], "probabilities": [0.5]},
+        {"labels": ["no_relation"], "probabilities": [0.6000000238418579]},
     ]
 
-    unbatched_model_outputs = taskmodule.unbatch_output(model_output)
-    result = []
+    result_flat = []
     for i in range(len(unbatched_model_outputs)):
-        result.extend(
+        result_flat.extend(
             list(
                 taskmodule.create_annotations_from_output(
                     task_encoding=task_encodings[i], task_output=unbatched_model_outputs[i]
@@ -3036,21 +3017,35 @@ def test_create_annotations_from_output():
             )
         )
 
-    scores = [0.6000000238418579, 0.5, 0.6000000238418579, 0.6000000238418579]
-    expected_relations = [
-        BinaryRelation(
-            head=document.entities[0], tail=document.entities[1], label="per:employee_of"
-        ),
-        BinaryRelation(head=document.entities[0], tail=document.entities[2], label="per:founder"),
-        # BinaryRelation(head = document.entities[2], tail = document.entities[1], label = "no_relation"),
-        # Is predicted as no_relation so won't be added to result.
+    # The entities need to be added to a document. This is only required to resolve
+    # the relations later on for better readability!
+    document = TestDocument(text="First sentence. Entity G works at H. And founded I.")
+    document.entities.extend(entities)
+
+    # this would be the "model input"
+    assert [rel.resolve() for rel in candidate_relations] == [
+        ("no_relation", (("PER", "Entity G"), ("ORG", "H"))),
+        ("no_relation", (("PER", "Entity G"), ("ORG", "I"))),
+        ("no_relation", (("ORG", "I"), ("ORG", "H"))),
     ]
-    for i, ((layer_name, predicted_relation), expected_relation) in enumerate(
-        zip(result, expected_relations)
-    ):
-        assert layer_name == taskmodule.relation_annotation
-        assert predicted_relation == expected_relation
-        assert predicted_relation.score == scores[i]
+
+    # this is the final "output"
+    relations_resolved_with_score = [
+        (rel.resolve(), round(rel.score, 4)) for _, rel in result_flat
+    ]
+    if add_candidate_relations:
+        # if candidate relations were added, the no-relation is removed
+        assert relations_resolved_with_score == [
+            (("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))), 0.6),
+            (("per:founder", (("PER", "Entity G"), ("ORG", "I"))), 0.5),
+        ]
+    else:
+        # if no candidate relations were added, the no-relation is kept
+        assert relations_resolved_with_score == [
+            (("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))), 0.6),
+            (("per:founder", (("PER", "Entity G"), ("ORG", "I"))), 0.5),
+            (("no_relation", (("ORG", "I"), ("ORG", "H"))), 0.6),
+        ]
 
 
 def test_create_annotations_from_output_with_argument_and_relation_type_whitelist():
