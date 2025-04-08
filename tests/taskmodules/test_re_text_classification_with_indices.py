@@ -8,7 +8,13 @@ from typing import Any, Dict, List, Union
 import pytest
 import torch
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, NaryRelation
-from pytorch_ie.core import Annotation, AnnotationList, TaskEncoding, annotation_field
+from pytorch_ie.core import (
+    Annotation,
+    AnnotationList,
+    Document,
+    TaskEncoding,
+    annotation_field,
+)
 from pytorch_ie.documents import (
     TextBasedDocument,
     TextDocument,
@@ -2995,10 +3001,11 @@ def test_create_annotations_from_output(add_candidate_relations):
         BinaryRelation(head=entities[2], tail=entities[1], label="no_relation"),
     ]
 
-    # just create the task encodings with dummy inputs since we do not want to pass them
-    # into the model, but add correct metadata (which is used to create the annotations)
+    # Just create the task encodings with dummy inputs and a dummy document since
+    # we do not want to pass them into the model, but add correct metadata
+    # (which is used to create the annotations).
     task_encodings = [
-        TaskEncoding(inputs={}, metadata={"candidate_annotation": rel})
+        TaskEncoding(inputs={}, metadata={"candidate_annotation": rel}, document=Document())
         for rel in candidate_relations
     ]
     unbatched_model_outputs = [
