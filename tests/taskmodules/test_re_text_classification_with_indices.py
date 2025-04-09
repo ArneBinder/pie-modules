@@ -3055,78 +3055,63 @@ def test_create_annotations_from_output(add_candidate_relations):
         ]
 
 
-def test_create_annotations_from_output_with_argument_and_relation_type_whitelist():
+@pytest.mark.parametrize("add_candidate_relations", [False, True])
+def test_create_annotations_from_output_with_argument_and_relation_type_whitelist(
+    add_candidate_relations,
+):
     taskmodule = RETextClassificationWithIndicesTaskModule(
         relation_annotation="relations",
         tokenizer_name_or_path="bert-base-cased",
-        add_candidate_relations=True,
+        # pass in the labels and entity_labels to avoid calling prepare
+        # (which would required documents to collect the labels from)
+        labels=["org:founded_by", "per:employee_of", "per:founder"],
+        entity_labels=["PER", "ORG"],
+        # we want to test the effect of creating candidate relations
+        add_candidate_relations=add_candidate_relations,
         argument_and_relation_type_whitelist={
             "per:employee_of": [["PER", "ORG"]],
             "per:founder": [["PER", "ORG"]],
             "org:founded_by": [["ORG", "PER"]],
+            "no_relation": [["PER", "ORG"], ["ORG", "PER"]],
         },
     )
+    # just call post_prepare to set up the taskmodule since labels
+    # and entity_labels are already set
+    taskmodule.post_prepare()
 
-    document = TestDocument(
-        id="test_doc",
-        text="First sentence. Entity G works at H. And founded I.",
-        metadata={
-            "description": "sentences with multiple relation annotations and cross-sentence relation"
-        },
-    )
-    document.entities.extend(
-        [
-            LabeledSpan(start=16, end=24, label="PER"),
-            LabeledSpan(start=34, end=35, label="ORG"),
-            LabeledSpan(start=49, end=50, label="ORG"),
-        ]
-    )
-    document.relations.extend(
-        [
-            BinaryRelation(
-                head=document.entities[0], tail=document.entities[1], label="per:employee_of"
-            ),
-            BinaryRelation(
-                head=document.entities[0], tail=document.entities[2], label="per:founder"
-            ),
-            BinaryRelation(
-                head=document.entities[2], tail=document.entities[1], label="org:founded_by"
-            ),
-        ]
-    )
+    entities = [
+        LabeledSpan(start=16, end=24, label="PER"),
+        LabeledSpan(start=34, end=35, label="ORG"),
+        LabeledSpan(start=49, end=50, label="ORG"),
+    ]
 
-    taskmodule.prepare([document])
-
-    model_output = {
-        "labels": torch.tensor([2, 3, 2, 1]),
-        "probabilities": torch.tensor(
-            [
-                # O, org:founded_by, per:employee_of, per:founder
-                [0.1, 0.1, 0.6, 0.2],
-                [0.2, 0.1, 0.2, 0.5],
-                [0.1, 0.1, 0.6, 0.2],
-                [0.1, 0.6, 0.1, 0.2],
-            ]
-        ),
-    }
-
-    task_encodings = taskmodule.encode(document.copy(), encode_target=True)
+    assert taskmodule.none_label == "no_relation"
     candidate_relations = [
-        task_encoding.metadata["candidate_annotation"] for task_encoding in task_encodings
-    ]
-    resolved_candidate_relations = [rel.resolve() for rel in candidate_relations]
-    assert resolved_candidate_relations == [
-        ("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))),
-        ("per:founder", (("PER", "Entity G"), ("ORG", "I"))),
-        # Original "('org:founded_by',('ORG','ORG'))" is not created due filter, but two new candidates fit
-        ("no_relation", (("ORG", "H"), ("PER", "Entity G"))),
-        ("no_relation", (("ORG", "I"), ("PER", "Entity G"))),
+        BinaryRelation(head=entities[0], tail=entities[1], label="no_relation"),
+        BinaryRelation(head=entities[0], tail=entities[2], label="no_relation"),
+        BinaryRelation(head=entities[2], tail=entities[0], label="no_relation"),
+        BinaryRelation(head=entities[2], tail=entities[1], label="no_relation"),
+        BinaryRelation(head=entities[1], tail=entities[2], label="no_relation"),
     ]
 
-    unbatched_model_outputs = taskmodule.unbatch_output(model_output)
-    result = []
+    # Just create the task encodings with dummy inputs and a dummy document since
+    # we do not want to pass them into the model, but add correct metadata
+    # (which is used to create the annotations).
+    task_encodings = [
+        TaskEncoding(inputs={}, metadata={"candidate_annotation": rel}, document=Document())
+        for rel in candidate_relations
+    ]
+    unbatched_model_outputs = [
+        {"labels": ["per:employee_of"], "probabilities": [0.6000000238418579]},
+        {"labels": ["per:founder"], "probabilities": [0.5]},
+        {"labels": ["no_relation"], "probabilities": [0.6000000238418579]},
+        {"labels": ["org:founded_by"], "probabilities": [0.6000000238418579]},
+        {"labels": ["no_relation"], "probabilities": [0.6000000238418579]},
+    ]
+
+    result_flat = []
     for i in range(len(unbatched_model_outputs)):
-        result.extend(
+        result_flat.extend(
             list(
                 taskmodule.create_annotations_from_output(
                     task_encoding=task_encodings[i], task_output=unbatched_model_outputs[i]
@@ -3134,23 +3119,37 @@ def test_create_annotations_from_output_with_argument_and_relation_type_whitelis
             )
         )
 
-    assert len(result) == 3
+    # The entities need to be added to a document. This is only required to resolve
+    # the relations later on for better readability!
+    document = TestDocument(text="First sentence. Entity G works at H. And founded I.")
+    document.entities.extend(entities)
 
-    scores = [0.6000000238418579, 0.5, 0.6000000238418579, 0.6000000238418579]
-    expected_relations = [
-        BinaryRelation(
-            head=document.entities[0], tail=document.entities[1], label="per:employee_of"
-        ),
-        BinaryRelation(head=document.entities[0], tail=document.entities[2], label="per:founder"),
-        # BinaryRelation(head = document.entities[2], tail = document.entities[1], label = "per:employee_of"),
-        # Is predicted by the model, but filtered out because of wrong argument types for this relation type.
-        BinaryRelation(
-            head=document.entities[2], tail=document.entities[0], label="org:founded_by"
-        ),
+    # this would be the "model input"
+    assert [rel.resolve() for rel in candidate_relations] == [
+        ("no_relation", (("PER", "Entity G"), ("ORG", "H"))),
+        ("no_relation", (("PER", "Entity G"), ("ORG", "I"))),
+        ("no_relation", (("ORG", "I"), ("PER", "Entity G"))),
+        ("no_relation", (("ORG", "I"), ("ORG", "H"))),
+        ("no_relation", (("ORG", "H"), ("ORG", "I"))),
     ]
-    for i, ((layer_name, predicted_relation), expected_relation) in enumerate(
-        zip(result, expected_relations)
-    ):
-        assert layer_name == taskmodule.relation_annotation
-        assert predicted_relation == expected_relation
-        assert predicted_relation.score == scores[i]
+
+    # this is the final "output"
+    relations_resolved_with_score = [
+        (rel.resolve(), round(rel.score, 4)) for _, rel in result_flat
+    ]
+    if add_candidate_relations:
+        # if candidate relations were added, no-relations are removed
+        # relations with wrong entity types are also removed.
+        assert relations_resolved_with_score == [
+            (("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))), 0.6),
+            (("per:founder", (("PER", "Entity G"), ("ORG", "I"))), 0.5),
+        ]
+    else:
+        # if no candidate relations were added, only relations not fitting the filter
+        # are removed. We explicitly need to add "no_relation" with possible argument types
+        # to whitelist if we don't want them to be filtered.
+        assert relations_resolved_with_score == [
+            (("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))), 0.6),
+            (("per:founder", (("PER", "Entity G"), ("ORG", "I"))), 0.5),
+            (("no_relation", (("ORG", "I"), ("PER", "Entity G"))), 0.6),
+        ]
