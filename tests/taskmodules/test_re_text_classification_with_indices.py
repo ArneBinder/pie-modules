@@ -3055,10 +3055,26 @@ def test_create_annotations_from_output(add_candidate_relations):
         ]
 
 
+@pytest.mark.parametrize("as_list", [False, True])
 @pytest.mark.parametrize("add_candidate_relations", [False, True])
 def test_create_annotations_from_output_with_argument_and_relation_type_whitelist(
-    add_candidate_relations,
+    add_candidate_relations, as_list
 ):
+    if as_list:
+        argument_and_relation_type_whitelist = [
+            ["per:employee_of", "PER", "ORG"],
+            ["per:founder", "PER", "ORG"],
+            ["org:founded_by", "ORG", "PER"],
+            ["no_relation", "PER", "ORG"],
+            ["no_relation", "ORG", "PER"],
+        ]
+    else:
+        argument_and_relation_type_whitelist = {
+            "per:employee_of": [["PER", "ORG"]],
+            "per:founder": [["PER", "ORG"]],
+            "org:founded_by": [["ORG", "PER"]],
+            "no_relation": [["PER", "ORG"], ["ORG", "PER"]],
+        }
     taskmodule = RETextClassificationWithIndicesTaskModule(
         relation_annotation="relations",
         tokenizer_name_or_path="bert-base-cased",
@@ -3068,12 +3084,7 @@ def test_create_annotations_from_output_with_argument_and_relation_type_whitelis
         entity_labels=["PER", "ORG"],
         # we want to test the effect of creating candidate relations
         add_candidate_relations=add_candidate_relations,
-        argument_and_relation_type_whitelist={
-            "per:employee_of": [["PER", "ORG"]],
-            "per:founder": [["PER", "ORG"]],
-            "org:founded_by": [["ORG", "PER"]],
-            "no_relation": [["PER", "ORG"], ["ORG", "PER"]],
-        },
+        argument_and_relation_type_whitelist=argument_and_relation_type_whitelist,
     )
     # just call post_prepare to set up the taskmodule since labels
     # and entity_labels are already set
