@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 
 import pytest
@@ -6,7 +7,6 @@ from pytorch_ie.core import AnnotationLayer, annotation_field
 from pytorch_ie.documents import TextBasedDocument
 
 from pie_modules.metrics import ConfusionMatrix
-import logging
 
 
 @pytest.fixture
@@ -93,7 +93,9 @@ def test_documents_with_several_gold_labels(documents_with_several_gold_labels, 
 
     metric = ConfusionMatrix(layer="entities", strict=False)
     metric(documents_with_several_gold_labels)
-    assert caplog.messages[0].startswith("The base annotation LabeledSpan(start=4, end=19, label='DUMMY_LABEL', score=1.0) has multiple gold labels")
+    assert caplog.messages[0].startswith(
+        "The base annotation LabeledSpan(start=4, end=19, label='DUMMY_LABEL', score=1.0) has multiple gold labels"
+    )
     # I only assert the start of the message here. The full warning includes the list of labels
     # (e.g. ['cat', 'animal']), but the order of the list seems to me to be random.
 
@@ -112,7 +114,7 @@ def documents_without_predictions(documents):
 def test_documents_without_predictions(documents_without_predictions):
     metric = ConfusionMatrix(layer="entities")
     metric(documents_without_predictions)
-    assert dict(metric.counts) == {('animal', 'UNASSIGNABLE'): 2, ('company', 'UNASSIGNABLE'): 1}
+    assert dict(metric.counts) == {("animal", "UNASSIGNABLE"): 2, ("company", "UNASSIGNABLE"): 1}
 
 
 def test_show_as_markdown(documents, caplog):
@@ -120,7 +122,9 @@ def test_show_as_markdown(documents, caplog):
     metric = ConfusionMatrix(layer="entities", show_as_markdown=True)
     metric(documents)
 
-    markdown = ['\nentities:\n|            |   animal |   cat |   company |\n|:-----------|---------:|------:|----------:|\n| animal     |        1 |     1 |         0 |\n| company    |        0 |     0 |         1 |\n| UNDETECTED |        0 |     0 |         1 |']
+    markdown = [
+        "\nentities:\n|            |   animal |   cat |   company |\n|:-----------|---------:|------:|----------:|\n| animal     |        1 |     1 |         0 |\n| company    |        0 |     0 |         1 |\n| UNDETECTED |        0 |     0 |         1 |"
+    ]
 
     assert caplog.messages == markdown
 
@@ -129,3 +133,4 @@ def test_annotation_processor_str(documents):
     # annotation_processor = ""
     # metric = ConfusionMatrix(layer="entities", annotation_processor=annotation_processor)
     # Do you have any ideas for a good processor to use here?
+    pass
