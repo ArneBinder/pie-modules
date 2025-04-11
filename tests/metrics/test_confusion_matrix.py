@@ -129,6 +129,18 @@ def test_show_as_markdown(documents, caplog):
     assert caplog.messages == markdown
 
 
+def test_show_as_markdown_without_predictions(documents_without_predictions, caplog):
+    caplog.set_level(logging.INFO)
+    metric = ConfusionMatrix(layer="entities", show_as_markdown=True)
+    metric(documents_without_predictions)
+
+    markdown = [
+        "\nentities:\n|         |   UNASSIGNABLE |\n|:--------|---------------:|\n| animal  |              2 |\n| company |              1 |"
+    ]
+
+    assert caplog.messages == markdown
+
+
 def test_annotation_processor_str(documents):
     # annotation_processor = ""
     # metric = ConfusionMatrix(layer="entities", annotation_processor=annotation_processor)
