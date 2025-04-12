@@ -94,10 +94,8 @@ def test_documents_with_several_gold_labels(documents_with_several_gold_labels, 
     metric = ConfusionMatrix(layer="entities", strict=False)
     metric(documents_with_several_gold_labels)
     assert caplog.messages[0].startswith(
-        "The base annotation LabeledSpan(start=4, end=19, label='DUMMY_LABEL', score=1.0) has multiple gold labels"
+        "The base annotation LabeledSpan(start=4, end=19, label='DUMMY_LABEL', score=1.0) has multiple gold labels: ['animal', 'cat']. Skip this base annotation."
     )
-    # I only assert the start of the message here. The full warning includes the list of labels
-    # (e.g. ['cat', 'animal']), but the order of the list seems to me to be random.
 
 
 @pytest.fixture

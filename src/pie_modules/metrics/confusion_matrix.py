@@ -93,7 +93,7 @@ class ConfusionMatrix(DocumentMetric):
                 )
 
             if len(gold_labels) > 1:
-                msg = f"The base annotation {base_ann} has multiple gold labels: {gold_labels}."
+                msg = f"The base annotation {base_ann} has multiple gold labels: {sorted(gold_labels)}."
                 if self.strict:
                     raise ValueError(msg)
                 else:
