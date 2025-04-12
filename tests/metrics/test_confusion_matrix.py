@@ -1,9 +1,11 @@
 import logging
 from dataclasses import dataclass
+from functools import partial
+from typing import Dict
 
 import pytest
 from pytorch_ie.annotations import LabeledSpan
-from pytorch_ie.core import AnnotationLayer, annotation_field
+from pytorch_ie.core import Annotation, AnnotationLayer, annotation_field
 from pytorch_ie.documents import TextBasedDocument
 
 from pie_modules.metrics import ConfusionMatrix
@@ -139,8 +141,37 @@ def test_show_as_markdown_without_predictions(documents_without_predictions, cap
     assert caplog.messages == markdown
 
 
+MAPPING = {"cat": "My beautified Cat", "company": "The Super-Company", "animal": "Hrrr"}
+
+
+def relabel_annotation(ann: Annotation, mapping: Dict[str, str] = MAPPING) -> Annotation:
+    return ann.copy(label=mapping[ann.label])
+
+
+def test_annotation_processor(documents):
+    annotation_processor = partial(
+        relabel_annotation,
+        mapping=MAPPING,
+    )
+    metric = ConfusionMatrix(layer="entities", annotation_processor=annotation_processor)
+    metric(documents)
+
+    assert dict(metric.counts) == {
+        ("Hrrr", "My beautified Cat"): 1,
+        ("Hrrr", "Hrrr"): 1,
+        ("The Super-Company", "The Super-Company"): 1,
+        ("UNDETECTED", "The Super-Company"): 1,
+    }
+
+
 def test_annotation_processor_str(documents):
-    # annotation_processor = ""
-    # metric = ConfusionMatrix(layer="entities", annotation_processor=annotation_processor)
-    # Do you have any ideas for a good processor to use here?
-    pass
+    annotation_processor = "tests.metrics.test_confusion_matrix.relabel_annotation"
+    metric = ConfusionMatrix(layer="entities", annotation_processor=annotation_processor)
+    metric(documents)
+
+    assert dict(metric.counts) == {
+        ("Hrrr", "My beautified Cat"): 1,
+        ("Hrrr", "Hrrr"): 1,
+        ("The Super-Company", "The Super-Company"): 1,
+        ("UNDETECTED", "The Super-Company"): 1,
+    }
