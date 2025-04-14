@@ -8,7 +8,13 @@ from typing import Any, Dict, List, Union
 import pytest
 import torch
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, NaryRelation
-from pytorch_ie.core import Annotation, AnnotationList, annotation_field
+from pytorch_ie.core import (
+    Annotation,
+    AnnotationList,
+    Document,
+    TaskEncoding,
+    annotation_field,
+)
 from pytorch_ie.documents import (
     TextBasedDocument,
     TextDocument,
@@ -1494,6 +1500,88 @@ def test_add_candidate_relations_with_argument_type_whitelist(documents):
     assert ("no_relation", (("ORG", "H"), ("ORG", "I"))) not in relation_tuples
 
 
+def test_filter_relations_by_argument_and_relation_type_whitelist(documents):
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path="bert-base-cased",
+        add_candidate_relations=True,
+        argument_and_relation_type_whitelist={
+            "per:employee_of": [["PER", "ORG"]],
+            "per:founder": [["PER", "ORG"]],
+            "org:founded_by": [["ORG", "PER"]],
+        },
+    )
+    doc = documents[4]
+    taskmodule.prepare(documents)
+
+    assert doc.entities.resolve() == [("PER", "Entity G"), ("ORG", "H"), ("ORG", "I")]
+    assert doc.relations.resolve() == [
+        ("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))),
+        ("per:founder", (("PER", "Entity G"), ("ORG", "I"))),
+        ("org:founded_by", (("ORG", "I"), ("ORG", "H"))),
+    ]
+    arguments2relation = {}
+    for rel in doc.relations:
+        arguments2relation[get_relation_argument_spans_and_roles(rel)] = rel
+    assert len(arguments2relation) == 3
+
+    taskmodule._filter_relations_by_argument_and_relation_type_whitelist(
+        arguments2relation=arguments2relation
+    )
+    assert len(arguments2relation) == 2
+
+    relation_tuples = [rel.resolve() for rel in arguments2relation.values()]
+    assert relation_tuples[0] == ("per:employee_of", (("PER", "Entity G"), ("ORG", "H")))
+    assert relation_tuples[1] == ("per:founder", (("PER", "Entity G"), ("ORG", "I")))
+
+    assert ("org:founded_by", (("ORG", "I"), ("ORG", "H"))) not in relation_tuples
+
+
+def test_add_candidate_relations_with_argument_and_relation_type_whitelist(documents):
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path="bert-base-cased",
+        add_candidate_relations=True,
+        argument_and_relation_type_whitelist={
+            "per:employee_of": [["PER", "ORG"]],
+            "per:founder": [["PER", "ORG"]],
+            "org:founded_by": [["ORG", "PER"]],
+        },
+    )
+    doc = documents[4]
+    taskmodule.prepare(documents)
+
+    assert doc.entities.resolve() == [("PER", "Entity G"), ("ORG", "H"), ("ORG", "I")]
+    assert doc.relations.resolve() == [
+        ("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))),
+        ("per:founder", (("PER", "Entity G"), ("ORG", "I"))),
+        ("org:founded_by", (("ORG", "I"), ("ORG", "H"))),
+    ]
+    arguments2relation = {}
+    for rel in doc.relations:
+        arguments2relation[get_relation_argument_spans_and_roles(rel)] = rel
+    assert len(arguments2relation) == 3
+
+    taskmodule._add_candidate_relations(
+        arguments2relation=arguments2relation, entities=doc.entities
+    )
+    assert len(arguments2relation) == 5
+
+    relation_tuples = [rel.resolve() for rel in arguments2relation.values()]
+
+    # Original relations from document (aren't affected by whitelist)
+    assert relation_tuples[0] == ("per:employee_of", (("PER", "Entity G"), ("ORG", "H")))
+    assert relation_tuples[1] == ("per:founder", (("PER", "Entity G"), ("ORG", "I")))
+    assert relation_tuples[2] == ("org:founded_by", (("ORG", "I"), ("ORG", "H")))
+
+    # Relation candidate added by _add_candidate_relations()
+    assert relation_tuples[3] == ("no_relation", (("ORG", "H"), ("PER", "Entity G")))
+    assert relation_tuples[4] == ("no_relation", (("ORG", "I"), ("PER", "Entity G")))
+
+    # Relations not created due to whitelist
+    assert ("no_relation", (("ORG", "H"), ("ORG", "I"))) not in relation_tuples
+
+
 def test_encode_input_with_add_reversed_relations(documents):
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = RETextClassificationWithIndicesTaskModule(
@@ -2881,4 +2969,198 @@ def test_encode_with_add_entity_tags_to_input_windowing(documents, insert_marker
                 (".", "O"),
                 ("[SEP]", "O"),
             ],
+        ]
+
+
+@pytest.mark.parametrize("add_candidate_relations", [False, True])
+def test_create_annotations_from_output(add_candidate_relations):
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path="bert-base-cased",
+        # pass in the labels and entity_labels to avoid calling prepare
+        # (which would required documents to collect the labels from)
+        labels=["org:founded_by", "per:employee_of", "per:founder"],
+        entity_labels=["PER", "ORG"],
+        # we want to test the effect of creating candidate relations
+        add_candidate_relations=add_candidate_relations,
+    )
+    # just call post_prepare to set up the taskmodule since labels
+    # and entity_labels are already set
+    taskmodule.post_prepare()
+
+    entities = [
+        LabeledSpan(start=16, end=24, label="PER"),
+        LabeledSpan(start=34, end=35, label="ORG"),
+        LabeledSpan(start=49, end=50, label="ORG"),
+    ]
+
+    assert taskmodule.none_label == "no_relation"
+    candidate_relations = [
+        BinaryRelation(head=entities[0], tail=entities[1], label="no_relation"),
+        BinaryRelation(head=entities[0], tail=entities[2], label="no_relation"),
+        BinaryRelation(head=entities[2], tail=entities[1], label="no_relation"),
+    ]
+
+    # Just create the task encodings with dummy inputs and a dummy document since
+    # we do not want to pass them into the model, but add correct metadata
+    # (which is used to create the annotations).
+    task_encodings = [
+        TaskEncoding(inputs={}, metadata={"candidate_annotation": rel}, document=Document())
+        for rel in candidate_relations
+    ]
+    unbatched_model_outputs = [
+        {"labels": ["per:employee_of"], "probabilities": [0.6000000238418579]},
+        {"labels": ["per:founder"], "probabilities": [0.5]},
+        {"labels": ["no_relation"], "probabilities": [0.6000000238418579]},
+    ]
+
+    result_flat = []
+    for i in range(len(unbatched_model_outputs)):
+        result_flat.extend(
+            list(
+                taskmodule.create_annotations_from_output(
+                    task_encoding=task_encodings[i], task_output=unbatched_model_outputs[i]
+                )
+            )
+        )
+
+    # The entities need to be added to a document. This is only required to resolve
+    # the relations later on for better readability!
+    document = TestDocument(text="First sentence. Entity G works at H. And founded I.")
+    document.entities.extend(entities)
+
+    # this would be the "model input"
+    assert [rel.resolve() for rel in candidate_relations] == [
+        ("no_relation", (("PER", "Entity G"), ("ORG", "H"))),
+        ("no_relation", (("PER", "Entity G"), ("ORG", "I"))),
+        ("no_relation", (("ORG", "I"), ("ORG", "H"))),
+    ]
+
+    # this is the final "output"
+    relations_resolved_with_score = [
+        (rel.resolve(), round(rel.score, 4)) for _, rel in result_flat
+    ]
+    if add_candidate_relations:
+        # if candidate relations were added, the no-relation is removed
+        assert relations_resolved_with_score == [
+            (("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))), 0.6),
+            (("per:founder", (("PER", "Entity G"), ("ORG", "I"))), 0.5),
+        ]
+    else:
+        # if no candidate relations were added, the no-relation is kept
+        assert relations_resolved_with_score == [
+            (("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))), 0.6),
+            (("per:founder", (("PER", "Entity G"), ("ORG", "I"))), 0.5),
+            (("no_relation", (("ORG", "I"), ("ORG", "H"))), 0.6),
+        ]
+
+
+@pytest.mark.parametrize("as_list", [False, True])
+@pytest.mark.parametrize("add_candidate_relations", [False, True])
+def test_create_annotations_from_output_with_argument_and_relation_type_whitelist(
+    add_candidate_relations, as_list
+):
+    if as_list:
+        argument_and_relation_type_whitelist = [
+            ["per:employee_of", "PER", "ORG"],
+            ["per:founder", "PER", "ORG"],
+            ["org:founded_by", "ORG", "PER"],
+            ["no_relation", "PER", "ORG"],
+            ["no_relation", "ORG", "PER"],
+        ]
+    else:
+        argument_and_relation_type_whitelist = {
+            "per:employee_of": [["PER", "ORG"]],
+            "per:founder": [["PER", "ORG"]],
+            "org:founded_by": [["ORG", "PER"]],
+            "no_relation": [["PER", "ORG"], ["ORG", "PER"]],
+        }
+    taskmodule = RETextClassificationWithIndicesTaskModule(
+        relation_annotation="relations",
+        tokenizer_name_or_path="bert-base-cased",
+        # pass in the labels and entity_labels to avoid calling prepare
+        # (which would required documents to collect the labels from)
+        labels=["org:founded_by", "per:employee_of", "per:founder"],
+        entity_labels=["PER", "ORG"],
+        # we want to test the effect of creating candidate relations
+        add_candidate_relations=add_candidate_relations,
+        argument_and_relation_type_whitelist=argument_and_relation_type_whitelist,
+    )
+    # just call post_prepare to set up the taskmodule since labels
+    # and entity_labels are already set
+    taskmodule.post_prepare()
+
+    entities = [
+        LabeledSpan(start=16, end=24, label="PER"),
+        LabeledSpan(start=34, end=35, label="ORG"),
+        LabeledSpan(start=49, end=50, label="ORG"),
+    ]
+
+    assert taskmodule.none_label == "no_relation"
+    candidate_relations = [
+        BinaryRelation(head=entities[0], tail=entities[1], label="no_relation"),
+        BinaryRelation(head=entities[0], tail=entities[2], label="no_relation"),
+        BinaryRelation(head=entities[2], tail=entities[0], label="no_relation"),
+        BinaryRelation(head=entities[2], tail=entities[1], label="no_relation"),
+        BinaryRelation(head=entities[1], tail=entities[2], label="no_relation"),
+    ]
+
+    # Just create the task encodings with dummy inputs and a dummy document since
+    # we do not want to pass them into the model, but add correct metadata
+    # (which is used to create the annotations).
+    task_encodings = [
+        TaskEncoding(inputs={}, metadata={"candidate_annotation": rel}, document=Document())
+        for rel in candidate_relations
+    ]
+    unbatched_model_outputs = [
+        {"labels": ["per:employee_of"], "probabilities": [0.6000000238418579]},
+        {"labels": ["per:founder"], "probabilities": [0.5]},
+        {"labels": ["no_relation"], "probabilities": [0.6000000238418579]},
+        {"labels": ["org:founded_by"], "probabilities": [0.6000000238418579]},
+        {"labels": ["no_relation"], "probabilities": [0.6000000238418579]},
+    ]
+
+    result_flat = []
+    for i in range(len(unbatched_model_outputs)):
+        result_flat.extend(
+            list(
+                taskmodule.create_annotations_from_output(
+                    task_encoding=task_encodings[i], task_output=unbatched_model_outputs[i]
+                )
+            )
+        )
+
+    # The entities need to be added to a document. This is only required to resolve
+    # the relations later on for better readability!
+    document = TestDocument(text="First sentence. Entity G works at H. And founded I.")
+    document.entities.extend(entities)
+
+    # this would be the "model input"
+    assert [rel.resolve() for rel in candidate_relations] == [
+        ("no_relation", (("PER", "Entity G"), ("ORG", "H"))),
+        ("no_relation", (("PER", "Entity G"), ("ORG", "I"))),
+        ("no_relation", (("ORG", "I"), ("PER", "Entity G"))),
+        ("no_relation", (("ORG", "I"), ("ORG", "H"))),
+        ("no_relation", (("ORG", "H"), ("ORG", "I"))),
+    ]
+
+    # this is the final "output"
+    relations_resolved_with_score = [
+        (rel.resolve(), round(rel.score, 4)) for _, rel in result_flat
+    ]
+    if add_candidate_relations:
+        # if candidate relations were added, no-relations are removed
+        # relations with wrong entity types are also removed.
+        assert relations_resolved_with_score == [
+            (("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))), 0.6),
+            (("per:founder", (("PER", "Entity G"), ("ORG", "I"))), 0.5),
+        ]
+    else:
+        # if no candidate relations were added, only relations not fitting the filter
+        # are removed. We explicitly need to add "no_relation" with possible argument types
+        # to whitelist if we don't want them to be filtered.
+        assert relations_resolved_with_score == [
+            (("per:employee_of", (("PER", "Entity G"), ("ORG", "H"))), 0.6),
+            (("per:founder", (("PER", "Entity G"), ("ORG", "I"))), 0.5),
+            (("no_relation", (("ORG", "I"), ("PER", "Entity G"))), 0.6),
         ]
