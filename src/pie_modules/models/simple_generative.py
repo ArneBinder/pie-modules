@@ -7,7 +7,7 @@ from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch import FloatTensor, LongTensor
 from torch.optim import Optimizer
-from transformers import PreTrainedModel, get_linear_schedule_with_warmup
+from transformers import PreTrainedModel, SchedulerType, get_scheduler
 from transformers.modeling_outputs import Seq2SeqLMOutput
 from typing_extensions import TypeAlias
 
@@ -63,20 +63,32 @@ class SimpleGenerativeModel(
         base_model_config: Dict[str, Any],
         # generation
         override_generation_kwargs: Optional[Dict[str, Any]] = None,
-        # scheduler / optimizer
-        warmup_proportion: float = 0.0,
-        # important: the following entries are only used if the base model does not have a configure_optimizer method!
-        learning_rate: Optional[float] = None,
+        # optimizer / schedular
+        # important: the following entries (optimizer_type and learning_rate) are only used
+        # if the base model does not have a configure_optimizer method!
         optimizer_type: Optional[Union[str, Type[Optimizer]]] = None,
+        learning_rate: Optional[float] = None,
+        warmup_proportion: float = 0.0,
+        scheduler_name: Optional[Union[str, SchedulerType]] = None,
+        scheduler_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        if scheduler_name is None and warmup_proportion > 0.0:
+            logger.warning(
+                "warmup_proportion is set to a value > 0.0, but scheduler_name is not set. "
+                "Setting scheduler_name to 'linear' by default."
+            )
+            scheduler_name = "linear"
+
         self.save_hyperparameters()
 
         # optimizer / scheduler
         self.learning_rate = learning_rate
         self.optimizer_type = optimizer_type
+        self.scheduler_name = scheduler_name
         self.warmup_proportion = warmup_proportion
+        self.scheduler_kwargs = scheduler_kwargs or {}
 
         # Note: We do not set expected_super_type=PreTrainedModel for resolve_type() because
         #   AutoModel* classed such as AutoModelForSeq2SeqLM do not inherit from that.
@@ -151,10 +163,15 @@ class SimpleGenerativeModel(
             )
             optimizer = resolved_optimizer_type(self.parameters(), lr=self.learning_rate)
 
-        if self.warmup_proportion > 0.0:
-            stepping_batches = self.trainer.estimated_stepping_batches
-            scheduler = get_linear_schedule_with_warmup(
-                optimizer, int(stepping_batches * self.warmup_proportion), stepping_batches
+        if self.scheduler_name is not None:
+            num_training_steps = self.trainer.estimated_stepping_batches
+            num_warmup_steps = int(num_training_steps * self.warmup_proportion)
+            scheduler = get_scheduler(
+                name=self.scheduler_name,
+                optimizer=optimizer,
+                num_warmup_steps=num_warmup_steps,
+                num_training_steps=num_training_steps,
+                scheduler_specific_kwargs=self.scheduler_kwargs,
             )
             return [optimizer], [{"scheduler": scheduler, "interval": "step"}]
         else:
