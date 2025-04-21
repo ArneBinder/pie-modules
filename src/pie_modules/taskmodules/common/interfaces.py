@@ -46,3 +46,18 @@ class AnnotationEncoderDecoder(abc.ABC, Generic[A, AE]):
         raise NotImplementedError(
             "build_decoder_constraints is not implemented for this encoder/decoder."
         )
+
+    def parse(self, encoding: AE) -> Tuple[List[A], Dict[str, int], AE]:
+        """Parse the encoding and return a list of annotations. This should be error tolerant and
+        return all annotations that can be parsed and the remaining encoding.
+
+        Args:
+            encoding: The encoding to parse. Can be incomplete.
+
+        Returns:
+            - A tuple of three elements:
+                - A list of encoded annotations.
+                - A dictionary mapping error messages to their counts.
+                - The remaining encoding after parsing.
+        """
+        raise NotImplementedError("parse is not implemented for this encoder/decoder.")
