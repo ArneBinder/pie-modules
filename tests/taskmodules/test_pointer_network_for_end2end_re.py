@@ -749,59 +749,6 @@ def _separate_constraint(constraint, taskmodule):
     return result
 
 
-def test_build_constraints(taskmodule, task_encoding, config):
-    input_len = len(task_encoding.inputs.input_ids)
-    target_ids = task_encoding.targets.labels
-    max_id = input_len + taskmodule.pointer_offset
-    if config == {}:
-        assert input_len == 13
-        assert target_ids == [14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]
-        assert len(target_ids) == 15
-        constraints = taskmodule.build_constraints(input_len, target_ids)
-        assert max_id == 20
-        assert constraints.shape == (len(target_ids), max_id)
-        constraints_formatted = [_separate_constraint(c, taskmodule) for c in constraints.tolist()]
-        # [bos, eos], [none], [content, person, topic], [is_about] [offsets (all remaining)]
-        assert constraints_formatted == [
-            [[0, 1], [0], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],  # 14
-            [[0, 0], [0], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1]],  # 14
-            [[0, 0], [0], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 5
-            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1]],  # 11
-            [[0, 0], [0], [0, 0, 0], [0], [0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0]],  # 12
-            [[0, 0], [0], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 3
-            [[0, 0], [0], [0, 0, 0], [1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 6
-            [[0, 1], [0], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],  # 17
-            [[0, 0], [0], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]],  # 17
-            [[0, 0], [0], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 4
-            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1]],  # 2
-            [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 2
-            [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 2
-            [[0, 0], [1], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 2
-            [[0, 1], [0], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 1
-        ]
-    elif config == {"partition_layer_name": "sentences"}:
-        assert input_len == 10
-        assert target_ids == [14, 14, 5, 11, 12, 3, 6, 1]
-        assert len(target_ids) == 8
-        constraints = taskmodule.build_constraints(input_len, target_ids)
-        assert max_id == 17
-        assert constraints.shape == (len(target_ids), max_id)
-        constraints_formatted = [_separate_constraint(c, taskmodule) for c in constraints.tolist()]
-        # [bos, eos], [none], [content, person, topic], [is_about] [offsets (all remaining)]
-        assert constraints_formatted == [
-            [[0, 1], [0], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],  # 14
-            [[0, 0], [0], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 1, 1, 1]],  # 14
-            [[0, 0], [0], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 5
-            [[0, 0], [1], [0, 0, 0], [0], [1, 1, 1, 1, 1, 1, 1, 0, 1, 1]],  # 11
-            [[0, 0], [0], [0, 0, 0], [0], [0, 0, 0, 0, 1, 1, 1, 0, 0, 0]],  # 12
-            [[0, 0], [0], [1, 1, 1], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 3
-            [[0, 0], [0], [0, 0, 0], [1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 6
-            [[0, 1], [0], [0, 0, 0], [0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # 1
-        ]
-    else:
-        raise Exception(f"unknown config: {config}")
-
-
 def test_build_constraint(taskmodule):
     target_ids = [14, 14, 5, 11, 12, 3, 6, 17, 17, 4, 2, 2, 2, 2, 1]
     input_len = 13

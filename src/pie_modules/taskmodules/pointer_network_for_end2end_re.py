@@ -39,12 +39,13 @@ from pie_modules.documents import (
 
 from ..document.processing import token_based_document_to_text_based, tokenize_document
 from ..utils import resolve_type
-from .common import BatchableMixin, DecodingException, get_first_occurrence_index
+from .common import BatchableMixin, get_first_occurrence_index
 from .metrics import (
     PrecisionRecallAndF1ForLabeledAnnotations,
     WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction,
 )
 from .pointer_network.annotation_encoder_decoder import (
+    KEY_INVALID_CORRECT,
     BinaryRelationEncoderDecoder,
     LabeledSpanEncoderDecoder,
     SpanEncoderDecoderWithOffset,
@@ -82,8 +83,6 @@ TaskEncodingType: TypeAlias = TaskEncoding[
     TargetEncodingType,
 ]
 TaskOutputType: TypeAlias = LabelsAndOptionalConstraints
-
-KEY_INVALID_CORRECT = "correct"
 
 
 def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
@@ -258,7 +257,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             )[0].labels
         else:
             unpadded_label_ids = []
-        _, _, remaining = self.decode_relations(label_ids=unpadded_label_ids)
+        _, _, remaining = self.relation_encoder_decoder.parse(encoding=unpadded_label_ids)
         # this is a binary mask
         constraint = self._build_constraint(
             previous_ids=remaining, input_len=maximum - self.pointer_offset
@@ -437,34 +436,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             error_key_correct=KEY_INVALID_CORRECT,
         )
 
-    def decode_relations(
-        self,
-        label_ids: List[int],
-    ) -> Tuple[List[BinaryRelation], Dict[str, int], List[int]]:
-        errors: Dict[str, int] = defaultdict(int)
-        encodings = []
-        current_encoding: List[int] = []
-        valid_encoding: BinaryRelation
-        if len(label_ids):
-            for i in label_ids:
-                current_encoding.append(i)
-                # An encoding is complete when it ends with a relation_id
-                # or when it contains a none_id and has a length of 7
-                if i in self.relation_ids or (i == self.none_id and len(current_encoding) == 7):
-                    # try to decode the current relation encoding
-                    try:
-                        valid_encoding = self.relation_encoder_decoder.decode(
-                            encoding=current_encoding
-                        )
-                        encodings.append(valid_encoding)
-                        errors[KEY_INVALID_CORRECT] += 1
-                    except DecodingException as e:
-                        errors[e.identifier] += 1
-
-                    current_encoding = []
-
-        return encodings, dict(errors), current_encoding
-
     def reverse_relation(self, relation: Annotation) -> BinaryRelation:
         if isinstance(relation, BinaryRelation):
             reversed_label = relation.label
@@ -546,15 +517,49 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         # sort relations by start indices of head and tail # TODO: is this correct?
         sorted_relations = sorted(relation_encodings, key=cmp_to_key(cmp_src_rel))
 
+        # this should never be accessed as it is, so use negative pointer offset to provoke an error
+        input_len = -self.pointer_offset - 1
+        if self.create_constraints:
+            if metadata is None or "src_len" not in metadata:
+                raise Exception("metadata with 'src_len' is required to create constraints")
+            input_len = metadata["src_len"]
+
         # build target_ids
         target_ids = []
+        constraints_list = []
         for rel in sorted_relations:
             encoded_relation = relation_encodings[rel]
             target_ids.extend(encoded_relation)
+
+            if self.create_constraints:
+                # iterate over all prefixes of the relation encoding
+                for idx, t in enumerate(encoded_relation):
+                    # get the constraints for the current prefix
+                    current_constraints = self._build_constraint(
+                        previous_ids=encoded_relation[:idx], input_len=input_len
+                    )
+                    # sanity check
+                    if current_constraints[t] == 0:
+                        raise Exception(
+                            f"current_constraints[{t}] is 0, but should be 1: {current_constraints}"
+                        )
+                    # add the constraints to the list
+                    constraints_list.append(current_constraints)
+
         target_ids.append(self.eos_id)
 
+        if self.create_constraints:
+            # add constraints for the eos_id
+            eos_constraint = torch.zeros(input_len + self.pointer_offset, dtype=torch.int64)
+            eos_constraint[self.eos_id] = 1
+            constraints_list.append(eos_constraint)
+            # combine all constraints
+            constraints = torch.stack(constraints_list).tolist()
+        else:
+            constraints = None
+
         # sanity check
-        _, encoding_errors, remaining = self.decode_relations(label_ids=target_ids)
+        _, encoding_errors, remaining = self.relation_encoder_decoder.parse(encoding=target_ids)
         if (
             not all(v == 0 for k, v in encoding_errors.items() if k != "correct")
             or len(remaining) > 0
@@ -580,47 +585,41 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                     f"encoding errors: {encoding_errors}, remaining encoding ids: {remaining}"
                 )
 
-        if self.create_constraints:
-            if metadata is None or "src_len" not in metadata:
-                raise Exception("metadata with 'src_len' is required to create constraints")
-            constraints = self.build_constraints(
-                input_len=metadata["src_len"], target_ids=target_ids
-            ).tolist()
-        else:
-            constraints = None
         return LabelsAndOptionalConstraints(labels=target_ids, constraints=constraints)
 
     def decode_annotations(
         self, encoding: TaskOutputType
     ) -> Tuple[Dict[str, Iterable[Annotation]], Dict[str, int]]:
-        decoded_relations, errors, remaining = self.decode_relations(label_ids=encoding.labels)
-        relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
-        entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
+        decoded_relations, errors, remaining = self.relation_encoder_decoder.parse(
+            encoding=encoding.labels
+        )
+        relation_tuples: List[Tuple[Annotation, Annotation, str]] = []
+        entity_labels: Dict[Annotation, List[str]] = defaultdict(list)
         for rel in decoded_relations:
-            head_span = (rel.head.start, rel.head.end)
-            entity_labels[head_span].append(rel.head.label)
+            head_dummy = rel.head.copy(label="dummy")
+            entity_labels[head_dummy].append(rel.head.label)
 
             if rel.label != self.loop_dummy_relation_name:
-                tail_span = (rel.tail.start, rel.tail.end)
-                entity_labels[tail_span].append(rel.tail.label)
-                relation_tuples.append((head_span, tail_span, rel.label))
+                tail_dummy = rel.tail.copy(label="dummy")
+                entity_labels[tail_dummy].append(rel.tail.label)
+                relation_tuples.append((head_dummy, tail_dummy, rel.label))
             else:
                 assert rel.head == rel.tail
 
         # It may happen that some spans take part in multiple relations, but got generated with different labels.
         # In this case, we just create one span and take the most common label.
-        entities: Dict[Tuple[int, int], LabeledSpan] = {}
-        for (start, end), labels in entity_labels.items():
+        entities: Dict[Annotation, Annotation] = {}
+        for entity_dummy, labels in entity_labels.items():
             c = Counter(labels)
             # if len(c) > 1:
             #    logger.warning(f"multiple labels for span, take the most common: {dict(c)}")
             most_common_label = c.most_common(1)[0][0]
-            entities[(start, end)] = LabeledSpan(start=start, end=end, label=most_common_label)
+            entities[entity_dummy] = entity_dummy.copy(label=most_common_label)
 
         entity_layer = list(entities.values())
         relation_layer = [
-            BinaryRelation(head=entities[head_span], tail=entities[tail_span], label=label)
-            for head_span, tail_span, label in relation_tuples
+            BinaryRelation(head=entities[head_dummy], tail=entities[tail_dummy], label=label)
+            for head_dummy, tail_dummy, label in relation_tuples
         ]
         return {
             self.span_layer_name: entity_layer,
@@ -632,122 +631,53 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         previous_ids: List[int],
         input_len: int,
     ) -> torch.LongTensor:
+        """Build a constraint for the decoder. The constraint is a binary mask that indicates which
+        ids are allowed to be predicted in the next decoding step. The mask is of size input_len +
+        pointer_offset, where input_len is the length of the input sequence and pointer_offset is
+        the number of labels and special tokens. Uses the relation_encoder_decoder to build the
+        actual constraints.
+
+        Args:
+            previous_ids: previously decoded ids
+            input_len: length of the input sequence
+
+        Returns:
+            A binary mask of size input_len + pointer_offset, where 1 indicates that the id is
+            allowed to be predicted next, and 0 indicates that the id is not allowed to be predicted next.
+        """
         result: torch.LongTensor = torch.zeros(input_len + self.pointer_offset, dtype=torch.int64)
         if self.eos_id in previous_ids:
             # once eos is predicted, only allow padding
             result[self.target_pad_id] = 1
             return result
-        contains_none = self.none_id in previous_ids
-        idx = len(previous_ids)
-        if idx == 0:  # [] -> first span start or eos
-            # Allow all offsets ...
-            result[self.pointer_offset :] = 1
-            # ... and the eos token.
-            result[self.eos_id] = 1
-        elif idx == 1:  # [14] -> first span end
-            # Allow all offsets greater than the span start.
-            span_start = previous_ids[-1]
-            result[span_start:] = 1
-        elif idx == 2:  # [14,14] -> first span label
-            # Allow only span ids.
-            result[self.span_ids] = 1
-        elif idx == 3:  # [14,14,s1] -> second span start or none
-            # Allow all offsets ...
-            result[self.pointer_offset :] = 1
-            # ... and the none token (for single spans).
-            result[self.none_id] = 1
-            # But exclude offsets covered by the first span.
-            first_span_start = previous_ids[0]
-            first_span_end = previous_ids[1] + 1
-            result[first_span_start:first_span_end] = 0
-        elif idx == 4:  # [14,14,s1,23] -> second span end or none
-            # if we have a none label, allow only none
-            if contains_none:
-                result[self.none_id] = 1
-            else:
-                # Allow all offsets after the second span start ...
-                second_span_start = previous_ids[-1]
-                result[second_span_start:] = 1
-                # ... but exclude offsets covered by the first span.
-                first_span_start = previous_ids[0]
-                first_span_end = previous_ids[1] + 1
-                result[first_span_start:first_span_end] = 0
-                # Mitigate overlap of first and second span:
-                # if first span is after the second span,
-                # disallow all offsets after the first span end
-                if first_span_start > second_span_start:
-                    result[first_span_end:] = 0
-        elif idx == 5:  # [14,14,s1,23,25] -> second span label or none
-            # if we have a none label, allow only none
-            if contains_none:
-                result[self.none_id] = 1
-            else:
-                # allow only span ids
-                result[self.span_ids] = 1
-        elif idx == 6:  # [14,14,s1,23,25,s2] -> relation label or none
-            # if we have a none label, allow only none
-            if contains_none:
-                result[self.none_id] = 1
-            else:
-                # allow only relation ids
-                result[self.relation_ids] = 1
-        else:
-            # any longer sequence can only be completed with padding
-            result[self.target_pad_id] = 1
-        return result
 
-    def build_constraints(
-        self,
-        input_len: int,
-        target_ids: List[int],
-    ) -> torch.LongTensor:
-        if not (
-            isinstance(self.relation_encoder_decoder, BinaryRelationEncoderDecoder)
-            and self.relation_encoder_decoder.mode == "tail_head_label"
-            and isinstance(
-                self.relation_encoder_decoder.head_encoder_decoder, LabeledSpanEncoderDecoder
-            )
-            and self.relation_encoder_decoder.head_encoder_decoder.mode == "indices_label"
-            and isinstance(
-                self.relation_encoder_decoder.head_encoder_decoder.span_encoder_decoder,
-                SpanEncoderDecoderWithOffset,
-            )
-            and self.relation_encoder_decoder.head_encoder_decoder.span_encoder_decoder.offset
-            == self.pointer_offset
-            and not self.relation_encoder_decoder.head_encoder_decoder.span_encoder_decoder.exclusive_end
-            and self.relation_encoder_decoder.head_encoder_decoder
-            == self.relation_encoder_decoder.tail_encoder_decoder
-        ):
-            raise Exception(
-                "build_constraints() is only supported for BinaryRelationEncoderDecoder with mode 'tail_head_label' and LabeledSpanEncoderDecoder as (head|tail)_encoder_decoder with mode 'indices_label'"
-            )
-        if target_ids[-1] != self.eos_id:
-            raise Exception(
-                f"expected eos_id [{self.eos_id}] at the end of target_ids: {target_ids}"
-            )
-        labels_without_eos = target_ids[:-1]
-        if len(labels_without_eos) % 7 != 0:
-            raise Exception(
-                f"expected the number of labels_without_eos to be a multiple of 7: {target_ids}"
-            )
-        constraints: List[torch.LongTensor] = []
-        for idx, t in enumerate(labels_without_eos):
-            current_tuple_start = (idx // 7) * 7
-            current_tuple = target_ids[current_tuple_start:idx]
-            current_constraints = self._build_constraint(
-                previous_ids=current_tuple, input_len=input_len
-            )
-            if current_constraints[t] == 0:
-                raise Exception(
-                    f"current_constraints[{t}] is 0, but should be 1: {current_constraints}"
-                )
-            constraints.append(current_constraints)
-        eos_constraint: torch.LongTensor = torch.zeros(
-            input_len + self.pointer_offset, dtype=torch.int64
+        allowed_ids, disallowed_ids = self.relation_encoder_decoder.build_decoding_constraints(
+            partial_encoding=previous_ids
         )
-        eos_constraint[self.eos_id] = 1
-        constraints.append(eos_constraint)
-        result: torch.LongTensor = torch.stack(constraints)
+        if allowed_ids is not None and disallowed_ids is not None:
+            raise Exception(
+                f"allowed_ids and disallowed_ids are both not None: {allowed_ids}, {disallowed_ids}"
+            )
+        elif allowed_ids is not None:
+            for allowed_id in allowed_ids:
+                result[allowed_id] = 1
+        elif disallowed_ids is not None:
+            for id in range(len(result)):
+                if id not in disallowed_ids:
+                    result[id] = 1
+        else:
+            raise Exception(
+                f"allowed_ids and disallowed_ids are both None: {allowed_ids}, {disallowed_ids}"
+            )
+        if len(previous_ids) == 0:
+            # if there are no previous ids, we also allow the eos_id
+            result[self.eos_id] = 1
+        else:
+            # if there are previous ids, we don't allow the eos_id
+            result[self.eos_id] = 0
+        # never allow the bos_id
+        result[self.bos_id] = 0
+
         return result
 
     def maybe_log_example(
