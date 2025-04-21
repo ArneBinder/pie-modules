@@ -57,7 +57,7 @@ class AnnotationEncoderDecoder(abc.ABC, Generic[A, AE]):
         Returns:
             - A tuple of three elements:
                 - A list of encoded annotations.
-                - A dictionary mapping error messages to their counts.
+                - A dictionary mapping error types to their counts.
                 - The remaining encoding after parsing.
         """
         raise NotImplementedError("parse is not implemented for this encoder/decoder.")
