@@ -1,5 +1,5 @@
 import abc
-from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
+from typing import Any, Dict, Generic, List, Optional, Set, Tuple, TypeVar
 
 from pytorch_ie import Annotation
 
@@ -32,3 +32,17 @@ class AnnotationEncoderDecoder(abc.ABC, Generic[A, AE]):
     @abc.abstractmethod
     def decode(self, encoding: AE, metadata: Optional[Dict[str, Any]] = None) -> A:
         pass
+
+    def build_decoding_constraints(
+        self, partial_encoding: AE
+    ) -> Tuple[Optional[Any], Optional[Any]]:
+        """Given a partial encoding, build the constraints for the next encoding step.
+
+        Returns:
+            - A tuple of two elements:
+                - The first element is a set of positive constraints for the decoder.
+                - The second element is a set of negative constraints for the decoder.
+        """
+        raise NotImplementedError(
+            "build_decoder_constraints is not implemented for this encoder/decoder."
+        )
