@@ -39,7 +39,7 @@ from pie_modules.documents import (
 
 from ..document.processing import token_based_document_to_text_based, tokenize_document
 from ..utils import resolve_type
-from .common import BatchableMixin, DecodingException, get_first_occurrence_index
+from .common import BatchableMixin, get_first_occurrence_index
 from .metrics import (
     PrecisionRecallAndF1ForLabeledAnnotations,
     WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction,

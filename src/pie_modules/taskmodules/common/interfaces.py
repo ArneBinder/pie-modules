@@ -1,5 +1,5 @@
 import abc
-from typing import Any, Dict, Generic, List, Optional, Set, Tuple, TypeVar
+from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
 
 from pytorch_ie import Annotation
 
