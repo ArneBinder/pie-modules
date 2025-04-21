@@ -658,6 +658,20 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         previous_ids: List[int],
         input_len: int,
     ) -> torch.LongTensor:
+        """Build a constraint for the decoder. The constraint is a binary mask that indicates which
+        ids are allowed to be predicted in the next decoding step. The mask is of size input_len +
+        pointer_offset, where input_len is the length of the input sequence and pointer_offset is
+        the number of labels and special tokens. Uses the relation_encoder_decoder to build the
+        actual constraints.
+
+        Args:
+            previous_ids: previously decoded ids
+            input_len: length of the input sequence
+
+        Returns:
+            A binary mask of size input_len + pointer_offset, where 1 indicates that the id is
+            allowed to be predicted next, and 0 indicates that the id is not allowed to be predicted next.
+        """
         result: torch.LongTensor = torch.zeros(input_len + self.pointer_offset, dtype=torch.int64)
         if self.eos_id in previous_ids:
             # once eos is predicted, only allow padding
