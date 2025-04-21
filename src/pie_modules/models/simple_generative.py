@@ -7,12 +7,7 @@ from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch import FloatTensor, LongTensor
 from torch.optim import Optimizer
-from transformers import (
-    PreTrainedModel,
-    SchedulerType,
-    get_linear_schedule_with_warmup,
-    get_scheduler,
-)
+from transformers import PreTrainedModel, SchedulerType, get_scheduler
 from transformers.modeling_outputs import Seq2SeqLMOutput
 from typing_extensions import TypeAlias
 
