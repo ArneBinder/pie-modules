@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
@@ -27,6 +28,9 @@ class DecodingLabelException(DecodingException[List[int]]):
 
 class DecodingNegativeIndexException(DecodingException[List[int]]):
     identifier = "index"
+
+
+KEY_INVALID_CORRECT = "correct"
 
 
 class SpanEncoderDecoder(AnnotationEncoderDecoder[Span, List[int]]):
@@ -364,3 +368,32 @@ class BinaryRelationEncoderDecoder(AnnotationEncoderDecoder[BinaryRelation, List
             )
 
         return allowed, disallowed
+
+    def parse(self, encoding: List[int]) -> Tuple[List[BinaryRelation], Dict[str, int], List[int]]:
+        errors: Dict[str, int] = defaultdict(int)
+        if self.none_label is None:
+            raise ValueError(
+                f"none_label is not set, but is required for parsing: {self.none_label}"
+            )
+        none_id = self.label2id[self.none_label]
+        relation_ids = set(self.label2id.values()) - {none_id}
+        encodings = []
+        current_encoding: List[int] = []
+        valid_encoding: BinaryRelation
+        if len(encoding):
+            for i in encoding:
+                current_encoding.append(i)
+                # An encoding is complete when it ends with a relation_id
+                # or when it contains a none_id and has a length of 7
+                if i in relation_ids or (i == none_id and len(current_encoding) == 7):
+                    # try to decode the current relation encoding
+                    try:
+                        valid_encoding = self.decode(encoding=current_encoding)
+                        encodings.append(valid_encoding)
+                        errors[KEY_INVALID_CORRECT] += 1
+                    except DecodingException as e:
+                        errors[e.identifier] += 1
+
+                    current_encoding = []
+
+        return encodings, dict(errors), current_encoding
