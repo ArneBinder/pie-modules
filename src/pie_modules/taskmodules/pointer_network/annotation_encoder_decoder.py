@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 
@@ -241,3 +241,126 @@ class BinaryRelationEncoderDecoder(AnnotationEncoderDecoder[BinaryRelation, List
             rel = BinaryRelation(head=head, tail=tail, label=label)
 
         return rel
+
+    def build_decoding_constraints(
+        self, partial_encoding: List[int]
+    ) -> Tuple[Optional[Set[int]], Optional[Set[int]]]:
+        """Given a partial encoding, build the constraints for the next encoding step.
+
+        Returns:
+            Tuple[Optional[Set[int]], Optional[Set[int]]]: A tuple of two sets of integers representing the allowed
+                and disallowed next indices. The first set contains the allowed indices, and the second set contains
+                the disallowed indices. If no constraints are needed, both sets can be None.
+        """
+        allowed = None
+        disallowed = None
+
+        if self.mode != "tail_head_label":
+            raise NotImplementedError(
+                f"build_decoder_constraints is not implemented for mode {self.mode}"
+            )
+
+        if self.none_label not in self.label2id:
+            raise ValueError(
+                f"none_label not found in label2id: {self.label2id} (none_label: {self.none_label})"
+            )
+        none_id = self.label2id[self.none_label]
+        if self.head_encoder_decoder != self.tail_encoder_decoder:
+            raise NotImplementedError(
+                "head and tail encoder/decoder must be the same for build_decoder_constraints"
+            )
+
+        if not isinstance(self.head_encoder_decoder, LabeledSpanEncoderDecoder):
+            raise NotImplementedError(
+                "head and tail encoder/decoder must be LabeledSpanEncoderDecoder for build_decoder_constraints"
+            )
+        if not isinstance(
+            self.head_encoder_decoder.span_encoder_decoder, SpanEncoderDecoderWithOffset
+        ):
+            raise NotImplementedError(
+                "head and tail encoder/decoder must be SpanEncoderDecoderWithOffset for build_decoder_constraints"
+            )
+        pointer_offset = self.head_encoder_decoder.span_encoder_decoder.offset
+        if self.head_encoder_decoder.mode != "indices_label":
+            raise NotImplementedError(
+                "head and tail encoder/decoder must be indices_label for build_decoder_constraints"
+            )
+        if (
+            not isinstance(self.head_encoder_decoder.span_encoder_decoder, SpanEncoderDecoder)
+            or self.head_encoder_decoder.span_encoder_decoder.exclusive_end
+        ):
+            raise NotImplementedError(
+                "head and tail encoder/decoder must be exclusive_end for build_decoder_constraints"
+            )
+        span_ids = set(self.head_encoder_decoder.label2id.values())
+        relation_ids = set(self.label2id.values()) - {self.label2id[self.none_label]}
+        contains_none = none_id in partial_encoding
+        idx = len(partial_encoding)
+        if idx == 0:  # [] -> first span start or eos
+            # Disallow all labels:
+            disallowed = set(range(pointer_offset))
+        elif idx == 1:  # [14] -> first span end
+            # Allow all offsets greater than the span start.
+            span_start = partial_encoding[-1]
+            # result[span_start:] = 1
+            disallowed = set(range(span_start))
+            # Disallow the none label:
+            disallowed.add(none_id)
+        elif idx == 2:  # [14,14] -> first span label
+            # Allow only span ids.
+            allowed = span_ids
+        elif idx == 3:  # [14,14,s1] -> second span start or none
+            # Disallow overlap of first and second span:
+            first_span_start = partial_encoding[0]
+            first_span_end = partial_encoding[1] + 1
+            disallowed = set(range(first_span_start, first_span_end))
+            # Disallow all span labels:
+            disallowed.update(span_ids)
+            # Disallow all relation labels:
+            disallowed.update(relation_ids)
+            # But allow the none label:
+            disallowed.discard(none_id)
+
+        elif idx == 4:  # [14,14,s1,23] -> second span end or none
+            # if we have a none label, allow only none
+            if contains_none:
+                allowed = {none_id}
+            else:
+
+                first_span_start = partial_encoding[0]
+                # first_span_end = partial_encoding[1] + 1
+                second_span_start = partial_encoding[-1]
+                # if first span is after the second span,
+                if second_span_start < first_span_start:
+                    # just allow the offsets between the two spans:
+                    allowed = set(range(second_span_start, first_span_start))
+                else:
+                    # otherwise, disallow all offsets before the second span start:
+                    disallowed = set(range(second_span_start))
+
+                    # Disallow all span labels:
+                    disallowed.update(span_ids)
+                    # Disallow all relation labels:
+                    disallowed.update(relation_ids)
+
+        elif idx == 5:  # [14,14,s1,23,25] -> second span label or none
+            # if we have a none label, allow only none
+            if contains_none:
+                # result[none_id] = 1
+                allowed = {none_id}
+            else:
+                # allow only span ids
+                allowed = span_ids
+        elif idx == 6:  # [14,14,s1,23,25,s2] -> relation label or none
+            # if we have a none label, allow only none
+            if contains_none:
+                allowed = {none_id}
+            else:
+                # allow only relation ids
+                allowed = relation_ids
+        else:
+            raise ValueError(
+                f"unknown partial encoding length: {len(partial_encoding)} (encoding: {partial_encoding})"
+            )
+
+        return allowed, disallowed
