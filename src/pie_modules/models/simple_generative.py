@@ -7,8 +7,12 @@ from pytorch_ie.core import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch import FloatTensor, LongTensor
 from torch.optim import Optimizer
-from transformers import PreTrainedModel, SchedulerType, get_scheduler
-from transformers import PreTrainedModel, get_linear_schedule_with_warmup
+from transformers import (
+    PreTrainedModel,
+    SchedulerType,
+    get_linear_schedule_with_warmup,
+    get_scheduler,
+)
 from transformers.modeling_outputs import Seq2SeqLMOutput
 from typing_extensions import TypeAlias
 
@@ -77,6 +81,7 @@ class SimpleGenerativeModel(
         **kwargs,
     ):
         super().__init__(**kwargs)
+
         if base_model is None:
             if base_model_type is None:
                 raise ValueError(
@@ -90,7 +95,6 @@ class SimpleGenerativeModel(
             )
             base_model = {"_type_": base_model_type, **(base_model_config or {})}
 
-        self.save_hyperparameters(ignore=["base_model_type", "base_model_config"])
         if scheduler_name is None and warmup_proportion > 0.0:
             logger.warning(
                 "warmup_proportion is set to a value > 0.0, but scheduler_name is not set. "
@@ -98,7 +102,7 @@ class SimpleGenerativeModel(
             )
             scheduler_name = "linear"
 
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=["base_model_type", "base_model_config"])
 
         # optimizer / scheduler
         self.learning_rate = learning_rate
