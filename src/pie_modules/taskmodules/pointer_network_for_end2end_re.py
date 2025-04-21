@@ -45,6 +45,7 @@ from .metrics import (
     WrappedLayerMetricsWithUnbatchAndDecodeWithErrorsFunction,
 )
 from .pointer_network.annotation_encoder_decoder import (
+    KEY_INVALID_CORRECT,
     BinaryRelationEncoderDecoder,
     LabeledSpanEncoderDecoder,
     SpanEncoderDecoderWithOffset,
@@ -82,8 +83,6 @@ TaskEncodingType: TypeAlias = TaskEncoding[
     TargetEncodingType,
 ]
 TaskOutputType: TypeAlias = LabelsAndOptionalConstraints
-
-KEY_INVALID_CORRECT = "correct"
 
 
 def cmp_src_rel(v1: BinaryRelation, v2: BinaryRelation) -> int:
@@ -258,7 +257,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             )[0].labels
         else:
             unpadded_label_ids = []
-        _, _, remaining = self.decode_relations(label_ids=unpadded_label_ids)
+        _, _, remaining = self.relation_encoder_decoder.parse(encoding=unpadded_label_ids)
         # this is a binary mask
         constraint = self._build_constraint(
             previous_ids=remaining, input_len=maximum - self.pointer_offset
@@ -437,34 +436,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             error_key_correct=KEY_INVALID_CORRECT,
         )
 
-    def decode_relations(
-        self,
-        label_ids: List[int],
-    ) -> Tuple[List[BinaryRelation], Dict[str, int], List[int]]:
-        errors: Dict[str, int] = defaultdict(int)
-        encodings = []
-        current_encoding: List[int] = []
-        valid_encoding: BinaryRelation
-        if len(label_ids):
-            for i in label_ids:
-                current_encoding.append(i)
-                # An encoding is complete when it ends with a relation_id
-                # or when it contains a none_id and has a length of 7
-                if i in self.relation_ids or (i == self.none_id and len(current_encoding) == 7):
-                    # try to decode the current relation encoding
-                    try:
-                        valid_encoding = self.relation_encoder_decoder.decode(
-                            encoding=current_encoding
-                        )
-                        encodings.append(valid_encoding)
-                        errors[KEY_INVALID_CORRECT] += 1
-                    except DecodingException as e:
-                        errors[e.identifier] += 1
-
-                    current_encoding = []
-
-        return encodings, dict(errors), current_encoding
-
     def reverse_relation(self, relation: Annotation) -> BinaryRelation:
         if isinstance(relation, BinaryRelation):
             reversed_label = relation.label
@@ -588,7 +559,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             constraints = None
 
         # sanity check
-        _, encoding_errors, remaining = self.decode_relations(label_ids=target_ids)
+        _, encoding_errors, remaining = self.relation_encoder_decoder.parse(encoding=target_ids)
         if (
             not all(v == 0 for k, v in encoding_errors.items() if k != "correct")
             or len(remaining) > 0
@@ -619,7 +590,9 @@ class PointerNetworkTaskModuleForEnd2EndRE(
     def decode_annotations(
         self, encoding: TaskOutputType
     ) -> Tuple[Dict[str, Iterable[Annotation]], Dict[str, int]]:
-        decoded_relations, errors, remaining = self.decode_relations(label_ids=encoding.labels)
+        decoded_relations, errors, remaining = self.relation_encoder_decoder.parse(
+            encoding=encoding.labels
+        )
         relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
         entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
         for rel in decoded_relations:
