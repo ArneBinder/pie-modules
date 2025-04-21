@@ -6,7 +6,11 @@ import pytest
 import torch
 from pytorch_ie import AnnotationLayer, annotation_field
 from pytorch_ie.annotations import BinaryRelation, LabeledSpan
-from pytorch_ie.documents import TextBasedDocument
+from pytorch_ie.documents import (
+    TextBasedDocument,
+    TextDocumentWithLabeledSpansAndBinaryRelations,
+    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
+)
 from torch import tensor
 from torchmetrics import Metric, MetricCollection
 
@@ -17,7 +21,10 @@ from tests import _config_to_str
 
 TOKENIZER_NAME_OR_PATH = "bert-base-cased"
 
-CONFIGS = [{}, {"partition_annotation": "sentences"}]
+CONFIGS = [
+    {},
+    {"partition_annotation": "sentences"},
+]
 CONFIGS_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
 
 
@@ -159,6 +166,55 @@ def task_encodings(taskmodule, document):
     return result
 
 
+@pytest.fixture(scope="module")
+def normalized_document(taskmodule, document):
+    return taskmodule.normalize_document(document)
+
+
+def test_normalize_document(taskmodule, document, normalized_document):
+    assert normalized_document is not None
+    assert isinstance(normalized_document, TextDocumentWithLabeledSpansAndBinaryRelations)
+    assert len(normalized_document.labeled_spans) > 0
+    assert normalized_document.labeled_spans.resolve() == document.entities.resolve()
+    assert len(normalized_document.binary_relations) > 0
+    assert normalized_document.binary_relations.resolve() == document.relations.resolve()
+
+
+def test_inject_markers_for_labeled_spans(taskmodule, normalized_document):
+    document_with_markers, injected2original_spans = taskmodule.inject_markers_for_labeled_spans(
+        normalized_document
+    )
+    assert document_with_markers is not None
+    assert (
+        document_with_markers.text
+        == "First sentence. [SPAN:PER]Entity G[/SPAN:PER] works at [SPAN:ORG]H[/SPAN:ORG]. And founded [SPAN:ORG]I[/SPAN:ORG]."
+    )
+    assert (
+        document_with_markers.labeled_spans.resolve()
+        == normalized_document.labeled_spans.resolve()
+        == [("PER", "Entity G"), ("ORG", "H"), ("ORG", "I")]
+    )
+    assert len(injected2original_spans) == 3
+    assert all(
+        labeled_span in injected2original_spans
+        for labeled_span in document_with_markers.labeled_spans
+    )
+    if isinstance(
+        normalized_document, TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
+    ):
+        assert isinstance(
+            document_with_markers, TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions
+        )
+        assert len(document_with_markers.labeled_partitions) == len(
+            normalized_document.labeled_partitions
+        )
+        assert document_with_markers.labeled_partitions.resolve() == [
+            ("sentence", "First sentence."),
+            ("sentence", "[SPAN:PER]Entity G[/SPAN:PER] works at [SPAN:ORG]H[/SPAN:ORG]."),
+            ("sentence", "And founded [SPAN:ORG]I[/SPAN:ORG]."),
+        ]
+
+
 def test_encode_input(task_encodings, document, taskmodule, cfg):
     assert task_encodings is not None
     if cfg == {}:
@@ -198,8 +254,17 @@ def test_encode_input(task_encodings, document, taskmodule, cfg):
             ".",
             "[SEP]",
         ]
+        span_start_and_end_tokens = [
+            (tokens[start], tokens[end])
+            for start, end in zip(inputs["span_start_indices"], inputs["span_end_indices"])
+        ]
+        assert span_start_and_end_tokens == [
+            ("[SPAN:PER]", "[/SPAN:PER]"),
+            ("[SPAN:ORG]", "[/SPAN:ORG]"),
+            ("[SPAN:ORG]", "[/SPAN:ORG]"),
+        ]
         span_tokens = [
-            tokens[start:end]
+            tokens[start : end + 1]
             for start, end in zip(inputs["span_start_indices"], inputs["span_end_indices"])
         ]
         assert span_tokens == [
@@ -235,8 +300,13 @@ def test_encode_input(task_encodings, document, taskmodule, cfg):
                 "tuple_indices_mask",
             }
             tokens = taskmodule.tokenizer.convert_ids_to_tokens(inputs["input_ids"])
+            span_start_and_end_tokens = [
+                (tokens[start], tokens[end])
+                for start, end in zip(inputs["span_start_indices"], inputs["span_end_indices"])
+            ]
+
             span_tokens = [
-                tokens[start:end]
+                tokens[start : end + 1]
                 for start, end in zip(inputs["span_start_indices"], inputs["span_end_indices"])
             ]
             tuple_spans = [
@@ -245,6 +315,7 @@ def test_encode_input(task_encodings, document, taskmodule, cfg):
             if idx == 0:
                 assert tokens == [
                     "[CLS]",
+                    "[SPAN:PER]",
                     "En",
                     "##ti",
                     "##ty",
@@ -258,13 +329,17 @@ def test_encode_input(task_encodings, document, taskmodule, cfg):
                     ".",
                     "[SEP]",
                 ]
+                assert span_start_and_end_tokens == [
+                    ("[SPAN:PER]", "[/SPAN:PER]"),
+                    ("[SPAN:ORG]", "[/SPAN:ORG]"),
+                ]
                 assert span_tokens == [
-                    ["[CLS]", "En", "##ti", "##ty", "G", "[/SPAN:PER]"],
+                    ["[SPAN:PER]", "En", "##ti", "##ty", "G", "[/SPAN:PER]"],
                     ["[SPAN:ORG]", "H", "[/SPAN:ORG]"],
                 ]
                 assert tuple_spans == [
                     [
-                        ["[CLS]", "En", "##ti", "##ty", "G", "[/SPAN:PER]"],
+                        ["[SPAN:PER]", "En", "##ti", "##ty", "G", "[/SPAN:PER]"],
                         ["[SPAN:ORG]", "H", "[/SPAN:ORG]"],
                     ]
                 ]
@@ -346,18 +421,18 @@ def test_encode_with_multiple_gold_relations_with_same_arguments(document, caplo
     assert (
         caplog.messages[0]
         == "skip the candidate relation because there are more than one gold relation for "
-        "its args and roles: [BinaryRelation(head=LabeledSpan(start=5, end=10, label='PER', score=1.0), "
-        "tail=LabeledSpan(start=13, end=15, label='ORG', score=1.0), label='org:founded_by', score=1.0), "
-        "BinaryRelation(head=LabeledSpan(start=5, end=10, label='PER', score=1.0), "
-        "tail=LabeledSpan(start=13, end=15, label='ORG', score=1.0), label='per:employee_of', score=1.0)]"
+        "its args and roles: [BinaryRelation(head=LabeledSpan(start=5, end=9, label='PER', score=1.0), "
+        "tail=LabeledSpan(start=13, end=14, label='ORG', score=1.0), label='org:founded_by', score=1.0), "
+        "BinaryRelation(head=LabeledSpan(start=5, end=9, label='PER', score=1.0), "
+        "tail=LabeledSpan(start=13, end=14, label='ORG', score=1.0), label='per:employee_of', score=1.0)]"
     )
     assert (
         caplog.messages[1]
         == "skip the candidate relation because there are more than one gold relation for "
-        "its args and roles: [BinaryRelation(head=LabeledSpan(start=5, end=10, label='PER', score=1.0), "
-        "tail=LabeledSpan(start=13, end=15, label='ORG', score=1.0), label='org:founded_by', score=1.0), "
-        "BinaryRelation(head=LabeledSpan(start=5, end=10, label='PER', score=1.0), "
-        "tail=LabeledSpan(start=13, end=15, label='ORG', score=1.0), label='per:employee_of', score=1.0)]"
+        "its args and roles: [BinaryRelation(head=LabeledSpan(start=5, end=9, label='PER', score=1.0), "
+        "tail=LabeledSpan(start=13, end=14, label='ORG', score=1.0), label='org:founded_by', score=1.0), "
+        "BinaryRelation(head=LabeledSpan(start=5, end=9, label='PER', score=1.0), "
+        "tail=LabeledSpan(start=13, end=14, label='ORG', score=1.0), label='per:employee_of', score=1.0)]"
     )
 
     assert len(encodings) == 1
@@ -396,10 +471,10 @@ def test_maybe_log_example(taskmodule, task_encodings, caplog, cfg):
         assert caplog.messages == [
             "*** Example ***",
             "doc id: train_doc5",
-            "tokens: [CLS] En ##ti ##ty G [/SPAN:PER] works at [SPAN:ORG] H [/SPAN:ORG] . [SEP]",
-            "input_ids: 101 13832 3121 2340 144 28998 1759 1120 28999 145 28997 119 102",
+            "tokens: [CLS] [SPAN:PER] En ##ti ##ty G [/SPAN:PER] works at [SPAN:ORG] H [/SPAN:ORG] . [SEP]",
+            "input_ids: 101 28996 13832 3121 2340 144 28998 1759 1120 28999 145 28997 119 102",
             "relation 0: per:employee_of",
-            "\targ 0: [CLS] En ##ti ##ty G [/SPAN:PER]",
+            "\targ 0: [SPAN:PER] En ##ti ##ty G [/SPAN:PER]",
             "\targ 1: [SPAN:ORG] H [/SPAN:ORG]",
         ]
     else:
@@ -483,7 +558,7 @@ def test_collate(taskmodule, task_encodings, cfg):
         )
         torch.testing.assert_close(inputs["attention_mask"], torch.ones_like(inputs["input_ids"]))
         torch.testing.assert_close(inputs["span_start_indices"], tensor([[4, 12, 18]]))
-        torch.testing.assert_close(inputs["span_end_indices"], tensor([[10, 15, 21]]))
+        torch.testing.assert_close(inputs["span_end_indices"], tensor([[9, 14, 20]]))
         torch.testing.assert_close(inputs["tuple_indices"], tensor([[[0, 1], [0, 2], [2, 1]]]))
         torch.testing.assert_close(inputs["tuple_indices_mask"], tensor([[True, True, True]]))
         assert set(targets) == {"labels"}
@@ -492,13 +567,30 @@ def test_collate(taskmodule, task_encodings, cfg):
         torch.testing.assert_close(
             inputs["input_ids"],
             tensor(
-                [[101, 13832, 3121, 2340, 144, 28998, 1759, 1120, 28999, 145, 28997, 119, 102]]
+                [
+                    [
+                        101,
+                        28996,
+                        13832,
+                        3121,
+                        2340,
+                        144,
+                        28998,
+                        1759,
+                        1120,
+                        28999,
+                        145,
+                        28997,
+                        119,
+                        102,
+                    ]
+                ]
             ),
         )
         torch.testing.assert_close(
-            inputs["attention_mask"], tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+            inputs["attention_mask"], tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         )
-        torch.testing.assert_close(inputs["span_start_indices"], tensor([[0, 8]]))
+        torch.testing.assert_close(inputs["span_start_indices"], tensor([[1, 9]]))
         torch.testing.assert_close(inputs["span_end_indices"], tensor([[6, 11]]))
         torch.testing.assert_close(inputs["tuple_indices"], tensor([[[0, 1]]]))
         torch.testing.assert_close(inputs["tuple_indices_mask"], tensor([[True]]))
