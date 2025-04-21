@@ -593,33 +593,33 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         decoded_relations, errors, remaining = self.relation_encoder_decoder.parse(
             encoding=encoding.labels
         )
-        relation_tuples: List[Tuple[Tuple[int, int], Tuple[int, int], str]] = []
-        entity_labels: Dict[Tuple[int, int], List[str]] = defaultdict(list)
+        relation_tuples: List[Tuple[Annotation, Annotation, str]] = []
+        entity_labels: Dict[Annotation, List[str]] = defaultdict(list)
         for rel in decoded_relations:
-            head_span = (rel.head.start, rel.head.end)
-            entity_labels[head_span].append(rel.head.label)
+            head_dummy = rel.head.copy(label="dummy")
+            entity_labels[head_dummy].append(rel.head.label)
 
             if rel.label != self.loop_dummy_relation_name:
-                tail_span = (rel.tail.start, rel.tail.end)
-                entity_labels[tail_span].append(rel.tail.label)
-                relation_tuples.append((head_span, tail_span, rel.label))
+                tail_dummy = rel.tail.copy(label="dummy")
+                entity_labels[tail_dummy].append(rel.tail.label)
+                relation_tuples.append((head_dummy, tail_dummy, rel.label))
             else:
                 assert rel.head == rel.tail
 
         # It may happen that some spans take part in multiple relations, but got generated with different labels.
         # In this case, we just create one span and take the most common label.
-        entities: Dict[Tuple[int, int], LabeledSpan] = {}
-        for (start, end), labels in entity_labels.items():
+        entities: Dict[Annotation, Annotation] = {}
+        for entity_dummy, labels in entity_labels.items():
             c = Counter(labels)
             # if len(c) > 1:
             #    logger.warning(f"multiple labels for span, take the most common: {dict(c)}")
             most_common_label = c.most_common(1)[0][0]
-            entities[(start, end)] = LabeledSpan(start=start, end=end, label=most_common_label)
+            entities[entity_dummy] = entity_dummy.copy(label=most_common_label)
 
         entity_layer = list(entities.values())
         relation_layer = [
-            BinaryRelation(head=entities[head_span], tail=entities[tail_span], label=label)
-            for head_span, tail_span, label in relation_tuples
+            BinaryRelation(head=entities[head_dummy], tail=entities[tail_dummy], label=label)
+            for head_dummy, tail_dummy, label in relation_tuples
         ]
         return {
             self.span_layer_name: entity_layer,
