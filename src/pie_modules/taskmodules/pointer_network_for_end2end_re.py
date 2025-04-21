@@ -546,12 +546,46 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         # sort relations by start indices of head and tail # TODO: is this correct?
         sorted_relations = sorted(relation_encodings, key=cmp_to_key(cmp_src_rel))
 
+        # this should never be accessed as it is, so use negative pointer offset to provoke an error
+        input_len = -self.pointer_offset - 1
+        if self.create_constraints:
+            if metadata is None or "src_len" not in metadata:
+                raise Exception("metadata with 'src_len' is required to create constraints")
+            input_len = metadata["src_len"]
+
         # build target_ids
         target_ids = []
+        constraints_list = []
         for rel in sorted_relations:
             encoded_relation = relation_encodings[rel]
             target_ids.extend(encoded_relation)
+
+            if self.create_constraints:
+                # iterate over all prefixes of the relation encoding
+                for idx, t in enumerate(encoded_relation):
+                    # get the constraints for the current prefix
+                    current_constraints = self._build_constraint(
+                        previous_ids=encoded_relation[:idx], input_len=input_len
+                    )
+                    # sanity check
+                    if current_constraints[t] == 0:
+                        raise Exception(
+                            f"current_constraints[{t}] is 0, but should be 1: {current_constraints}"
+                        )
+                    # add the constraints to the list
+                    constraints_list.append(current_constraints)
+
         target_ids.append(self.eos_id)
+
+        if self.create_constraints:
+            # add constraints for the eos_id
+            eos_constraint = torch.zeros(input_len + self.pointer_offset, dtype=torch.int64)
+            eos_constraint[self.eos_id] = 1
+            constraints_list.append(eos_constraint)
+            # combine all constraints
+            constraints = torch.stack(constraints_list).tolist()
+        else:
+            constraints = None
 
         # sanity check
         _, encoding_errors, remaining = self.decode_relations(label_ids=target_ids)
@@ -580,14 +614,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
                     f"encoding errors: {encoding_errors}, remaining encoding ids: {remaining}"
                 )
 
-        if self.create_constraints:
-            if metadata is None or "src_len" not in metadata:
-                raise Exception("metadata with 'src_len' is required to create constraints")
-            constraints = self.build_constraints(
-                input_len=metadata["src_len"], target_ids=target_ids
-            ).tolist()
-        else:
-            constraints = None
         return LabelsAndOptionalConstraints(labels=target_ids, constraints=constraints)
 
     def decode_annotations(
@@ -665,40 +691,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         # never allow the bos_id
         result[self.bos_id] = 0
 
-        return result
-
-    def build_constraints(
-        self,
-        input_len: int,
-        target_ids: List[int],
-    ) -> torch.LongTensor:
-        if target_ids[-1] != self.eos_id:
-            raise Exception(
-                f"expected eos_id [{self.eos_id}] at the end of target_ids: {target_ids}"
-            )
-        labels_without_eos = target_ids[:-1]
-        if len(labels_without_eos) % 7 != 0:
-            raise Exception(
-                f"expected the number of labels_without_eos to be a multiple of 7: {target_ids}"
-            )
-        constraints: List[torch.LongTensor] = []
-        for idx, t in enumerate(labels_without_eos):
-            current_tuple_start = (idx // 7) * 7
-            current_tuple = target_ids[current_tuple_start:idx]
-            current_constraints = self._build_constraint(
-                previous_ids=current_tuple, input_len=input_len
-            )
-            if current_constraints[t] == 0:
-                raise Exception(
-                    f"current_constraints[{t}] is 0, but should be 1: {current_constraints}"
-                )
-            constraints.append(current_constraints)
-        eos_constraint: torch.LongTensor = torch.zeros(
-            input_len + self.pointer_offset, dtype=torch.int64
-        )
-        eos_constraint[self.eos_id] = 1
-        constraints.append(eos_constraint)
-        result: torch.LongTensor = torch.stack(constraints)
         return result
 
     def maybe_log_example(
