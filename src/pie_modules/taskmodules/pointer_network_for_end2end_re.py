@@ -689,7 +689,7 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             for allowed_id in allowed_ids:
                 result[allowed_id] = 1
         elif disallowed_ids is not None:
-            for id in range(input_len + self.pointer_offset):
+            for id in range(len(result)):
                 if id not in disallowed_ids:
                     result[id] = 1
         else:
