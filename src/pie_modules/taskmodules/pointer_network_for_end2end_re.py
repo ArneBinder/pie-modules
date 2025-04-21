@@ -637,63 +637,34 @@ class PointerNetworkTaskModuleForEnd2EndRE(
             # once eos is predicted, only allow padding
             result[self.target_pad_id] = 1
             return result
-        contains_none = self.none_id in previous_ids
-        idx = len(previous_ids)
-        if idx == 0:  # [] -> first span start or eos
-            # Allow all offsets ...
-            result[self.pointer_offset :] = 1
-            # ... and the eos token.
-            result[self.eos_id] = 1
-        elif idx == 1:  # [14] -> first span end
-            # Allow all offsets greater than the span start.
-            span_start = previous_ids[-1]
-            result[span_start:] = 1
-        elif idx == 2:  # [14,14] -> first span label
-            # Allow only span ids.
-            result[self.span_ids] = 1
-        elif idx == 3:  # [14,14,s1] -> second span start or none
-            # Allow all offsets ...
-            result[self.pointer_offset :] = 1
-            # ... and the none token (for single spans).
-            result[self.none_id] = 1
-            # But exclude offsets covered by the first span.
-            first_span_start = previous_ids[0]
-            first_span_end = previous_ids[1] + 1
-            result[first_span_start:first_span_end] = 0
-        elif idx == 4:  # [14,14,s1,23] -> second span end or none
-            # if we have a none label, allow only none
-            if contains_none:
-                result[self.none_id] = 1
-            else:
-                # Allow all offsets after the second span start ...
-                second_span_start = previous_ids[-1]
-                result[second_span_start:] = 1
-                # ... but exclude offsets covered by the first span.
-                first_span_start = previous_ids[0]
-                first_span_end = previous_ids[1] + 1
-                result[first_span_start:first_span_end] = 0
-                # Mitigate overlap of first and second span:
-                # if first span is after the second span,
-                # disallow all offsets after the first span end
-                if first_span_start > second_span_start:
-                    result[first_span_end:] = 0
-        elif idx == 5:  # [14,14,s1,23,25] -> second span label or none
-            # if we have a none label, allow only none
-            if contains_none:
-                result[self.none_id] = 1
-            else:
-                # allow only span ids
-                result[self.span_ids] = 1
-        elif idx == 6:  # [14,14,s1,23,25,s2] -> relation label or none
-            # if we have a none label, allow only none
-            if contains_none:
-                result[self.none_id] = 1
-            else:
-                # allow only relation ids
-                result[self.relation_ids] = 1
+
+        allowed_ids, disallowed_ids = self.relation_encoder_decoder.build_decoding_constraints(
+            partial_encoding=previous_ids
+        )
+        if allowed_ids is not None and disallowed_ids is not None:
+            raise Exception(
+                f"allowed_ids and disallowed_ids are both not None: {allowed_ids}, {disallowed_ids}"
+            )
+        elif allowed_ids is not None:
+            for allowed_id in allowed_ids:
+                result[allowed_id] = 1
+        elif disallowed_ids is not None:
+            for id in range(input_len + self.pointer_offset):
+                if id not in disallowed_ids:
+                    result[id] = 1
         else:
-            # any longer sequence can only be completed with padding
-            result[self.target_pad_id] = 1
+            raise Exception(
+                f"allowed_ids and disallowed_ids are both None: {allowed_ids}, {disallowed_ids}"
+            )
+        if len(previous_ids) == 0:
+            # if there are no previous ids, we also allow the eos_id
+            result[self.eos_id] = 1
+        else:
+            # if there are previous ids, we don't allow the eos_id
+            result[self.eos_id] = 0
+        # never allow the bos_id
+        result[self.bos_id] = 0
+
         return result
 
     def build_constraints(
@@ -701,26 +672,6 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         input_len: int,
         target_ids: List[int],
     ) -> torch.LongTensor:
-        if not (
-            isinstance(self.relation_encoder_decoder, BinaryRelationEncoderDecoder)
-            and self.relation_encoder_decoder.mode == "tail_head_label"
-            and isinstance(
-                self.relation_encoder_decoder.head_encoder_decoder, LabeledSpanEncoderDecoder
-            )
-            and self.relation_encoder_decoder.head_encoder_decoder.mode == "indices_label"
-            and isinstance(
-                self.relation_encoder_decoder.head_encoder_decoder.span_encoder_decoder,
-                SpanEncoderDecoderWithOffset,
-            )
-            and self.relation_encoder_decoder.head_encoder_decoder.span_encoder_decoder.offset
-            == self.pointer_offset
-            and not self.relation_encoder_decoder.head_encoder_decoder.span_encoder_decoder.exclusive_end
-            and self.relation_encoder_decoder.head_encoder_decoder
-            == self.relation_encoder_decoder.tail_encoder_decoder
-        ):
-            raise Exception(
-                "build_constraints() is only supported for BinaryRelationEncoderDecoder with mode 'tail_head_label' and LabeledSpanEncoderDecoder as (head|tail)_encoder_decoder with mode 'indices_label'"
-            )
         if target_ids[-1] != self.eos_id:
             raise Exception(
                 f"expected eos_id [{self.eos_id}] at the end of target_ids: {target_ids}"
