@@ -2,19 +2,23 @@ import dataclasses
 import logging
 
 import pytest
-from pytorch_ie import Annotation, AnnotationLayer, annotation_field
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan, NaryRelation
-from pytorch_ie.documents import (
-    TextBasedDocument,
-    TextDocumentWithLabeledSpans,
-    TextDocumentWithLabeledSpansAndBinaryRelations,
-)
+from pytorch_ie.core import Annotation, AnnotationLayer, annotation_field
 
-from pie_modules.annotations import LabeledMultiSpan
+from pie_modules.annotations import (
+    BinaryRelation,
+    LabeledMultiSpan,
+    LabeledSpan,
+    NaryRelation,
+)
 from pie_modules.document.processing import RelationArgumentSorter
 from pie_modules.document.processing.relation_argument_sorter import (
     construct_relation_with_new_args,
     get_relation_args,
+)
+from pie_modules.documents import (
+    TextBasedDocument,
+    TextDocumentWithLabeledSpans,
+    TextDocumentWithLabeledSpansAndBinaryRelations,
 )
 
 

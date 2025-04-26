@@ -66,6 +66,7 @@ class TokenDocumentWithQuestionsAndExtractiveAnswers(TokenBasedDocument):
 # backwards compatibility
 ExtractiveQADocument = TextDocumentWithQuestionsAndExtractiveAnswers
 TokenizedExtractiveQADocument = TokenDocumentWithQuestionsAndExtractiveAnswers
+TextDocument = TextBasedDocument
 
 
 @dataclasses.dataclass

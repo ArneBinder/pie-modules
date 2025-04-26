@@ -5,11 +5,11 @@ from typing import Dict, List, Set
 
 import pytest
 import torch
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.core import AnnotationList, Document, annotation_field
-from pytorch_ie.documents import TextBasedDocument
 from transformers import LogitsProcessorList
 
+from pie_modules.annotations import BinaryRelation, LabeledSpan
+from pie_modules.documents import TextBasedDocument
 from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 from pie_modules.taskmodules.pointer_network.logits_processor import (
     PrefixConstrainedLogitsProcessorWithMaximum,

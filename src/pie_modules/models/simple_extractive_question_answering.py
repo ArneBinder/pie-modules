@@ -1,6 +1,6 @@
 from typing import Any, Dict, MutableMapping, Optional, Tuple
 
-from pytorch_ie.core import PyTorchIEModel
+from pytorch_ie import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch import Tensor

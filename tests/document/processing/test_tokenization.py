@@ -3,9 +3,7 @@ from collections import defaultdict
 from typing import Dict
 
 import pytest
-from pytorch_ie import Annotation, Document
-from pytorch_ie.core import AnnotationList, annotation_field
-from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
+from pytorch_ie.core import Annotation, AnnotationList, Document, annotation_field
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
 from pie_modules.annotations import (
@@ -21,6 +19,7 @@ from pie_modules.document.processing import (
     tokenize_document,
 )
 from pie_modules.document.processing.tokenization import find_token_offset_mapping
+from pie_modules.documents import TextBasedDocument, TokenBasedDocument
 from tests.conftest import TestDocument
 
 

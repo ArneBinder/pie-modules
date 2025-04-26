@@ -1,7 +1,7 @@
 import pytest
-from pytorch_ie.annotations import LabeledSpan
 from torch import tensor
 
+from pie_modules.annotations import LabeledSpan
 from pie_modules.taskmodules.metrics import PrecisionRecallAndF1ForLabeledAnnotations
 
 

@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, MutableMapping, Optional, Tuple, Union
 
 import torch
-from pytorch_ie.core import PyTorchIEModel
+from pytorch_ie import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch import FloatTensor, LongTensor, nn

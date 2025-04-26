@@ -1,11 +1,11 @@
 import pytest
-from pytorch_ie.annotations import LabeledSpan
-from pytorch_ie.documents import TextDocumentWithLabeledPartitions
 
+from pie_modules.annotations import LabeledSpan
 from pie_modules.document.processing import (
     FlairSegtokSentenceSplitter,
     NltkSentenceSplitter,
 )
+from pie_modules.documents import TextDocumentWithLabeledPartitions
 
 
 @pytest.mark.parametrize("inplace", [True, False])

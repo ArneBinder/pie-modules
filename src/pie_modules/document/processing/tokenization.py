@@ -17,10 +17,10 @@ from typing import (
 )
 
 from pytorch_ie.core import Annotation
-from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from transformers import PreTrainedTokenizer
 
 from pie_modules.annotations import MultiSpan, Span
+from pie_modules.documents import TextBasedDocument, TokenBasedDocument
 from pie_modules.utils import resolve_type
 
 logger = logging.getLogger(__name__)

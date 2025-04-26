@@ -2,7 +2,7 @@ import logging
 from typing import Iterator, MutableMapping, Optional, Tuple, Union
 
 import torch.nn
-from pytorch_ie.core import PyTorchIEModel
+from pytorch_ie import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
 from torch import FloatTensor, LongTensor
 from torch.nn import Parameter

@@ -2,8 +2,7 @@ import logging
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
-
+from pie_modules.annotations import BinaryRelation, LabeledSpan, Span
 from pie_modules.taskmodules.common import AnnotationEncoderDecoder, DecodingException
 
 logger = logging.getLogger(__name__)

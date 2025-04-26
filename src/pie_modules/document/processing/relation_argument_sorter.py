@@ -3,10 +3,9 @@ from __future__ import annotations
 import logging
 from typing import TypeVar
 
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan
 from pytorch_ie.core import Annotation, AnnotationList, Document
 
-from pie_modules.annotations import LabeledMultiSpan
+from pie_modules.annotations import BinaryRelation, LabeledMultiSpan, LabeledSpan
 
 logger = logging.getLogger(__name__)
 

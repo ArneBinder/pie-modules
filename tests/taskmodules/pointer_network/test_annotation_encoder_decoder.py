@@ -1,6 +1,6 @@
 import pytest
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan, Span
 
+from pie_modules.annotations import BinaryRelation, LabeledSpan, Span
 from pie_modules.taskmodules.pointer_network.annotation_encoder_decoder import (
     BinaryRelationEncoderDecoder,
     DecodingLabelException,

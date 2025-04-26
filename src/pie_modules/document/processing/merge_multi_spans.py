@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Generic, TypeVar, get_args
 
-from pytorch_ie import Annotation, Document
+from pytorch_ie.core import Annotation, Document
 
 from pie_modules.annotations import MultiSpan, Span
 

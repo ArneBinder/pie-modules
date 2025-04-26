@@ -1,6 +1,6 @@
 from typing import Optional, Type, TypeVar, Union
 
-from pytorch_ie import Document
+from pytorch_ie.core import Document
 from pytorch_ie.utils.hydra import resolve_target
 
 T = TypeVar("T", bound=Document)

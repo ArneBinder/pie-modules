@@ -34,8 +34,8 @@ def config(config_str):
 
 @pytest.fixture(scope="module")
 def document():
-    from pytorch_ie.annotations import BinaryRelation, LabeledSpan
-    from pytorch_ie.documents import (
+    from pie_modules.annotations import BinaryRelation, LabeledSpan
+    from pie_modules.documents import (
         TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
     )
 

@@ -4,10 +4,10 @@ from typing import Any, Dict, Union
 
 import pytest
 import torch.testing
-from pytorch_ie.annotations import LabeledSpan
 from torch import tensor
 from torchmetrics import Metric, MetricCollection
 
+from pie_modules.annotations import LabeledSpan
 from pie_modules.document.processing.text_pair import add_negative_coref_relations
 from pie_modules.documents import (
     BinaryCorefRelation,

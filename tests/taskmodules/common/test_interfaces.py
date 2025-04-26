@@ -1,7 +1,6 @@
 from typing import Any, Dict, List, Set, Tuple
 
-from pytorch_ie.annotations import Span
-
+from pie_modules.annotations import Span
 from pie_modules.taskmodules.common import AnnotationEncoderDecoder
 
 

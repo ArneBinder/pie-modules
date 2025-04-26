@@ -1,6 +1,9 @@
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan
-
-from pie_modules.annotations import ExtractiveAnswer, Question
+from pie_modules.annotations import (
+    BinaryRelation,
+    ExtractiveAnswer,
+    LabeledSpan,
+    Question,
+)
 from pie_modules.documents import (
     TextDocumentWithQuestionsAndExtractiveAnswers,
     TokenDocumentWithLabeledPartitions,

@@ -2,11 +2,8 @@ import random
 from typing import List
 
 import pytest
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan
-from pytorch_ie.documents import (
-    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
-)
 
+from pie_modules.annotations import BinaryRelation, LabeledSpan
 from pie_modules.document.processing.text_pair import (
     add_negative_coref_relations,
     construct_text_document_from_text_pair_coref_document,
@@ -14,6 +11,7 @@ from pie_modules.document.processing.text_pair import (
 )
 from pie_modules.documents import (
     BinaryCorefRelation,
+    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
     TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
 )
 

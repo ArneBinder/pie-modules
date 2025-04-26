@@ -4,10 +4,10 @@ from functools import partial
 from typing import Dict
 
 import pytest
-from pytorch_ie.annotations import LabeledSpan
 from pytorch_ie.core import Annotation, AnnotationLayer, annotation_field
-from pytorch_ie.documents import TextBasedDocument
 
+from pie_modules.annotations import LabeledSpan
+from pie_modules.documents import TextBasedDocument
 from pie_modules.metrics import ConfusionMatrix
 
 

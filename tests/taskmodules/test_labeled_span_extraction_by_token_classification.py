@@ -6,16 +6,16 @@ from typing import Any, Dict, List
 
 import pytest
 import torch
-from pytorch_ie import AnnotationLayer, annotation_field
-from pytorch_ie.annotations import LabeledSpan
-from pytorch_ie.documents import (
+from pytorch_ie.core import AnnotationLayer, annotation_field
+from torch import tensor
+from transformers import BatchEncoding
+
+from pie_modules.annotations import LabeledSpan
+from pie_modules.documents import (
     TextBasedDocument,
     TextDocumentWithLabeledSpans,
     TextDocumentWithLabeledSpansAndLabeledPartitions,
 )
-from torch import tensor
-from transformers import BatchEncoding
-
 from pie_modules.taskmodules import LabeledSpanExtractionByTokenClassificationTaskModule
 from pie_modules.taskmodules.labeled_span_extraction_by_token_classification import (
     ModelOutputType,

@@ -27,24 +27,12 @@ from typing import (
 
 import numpy as np
 import torch
-from pytorch_ie.annotations import (
-    BinaryRelation,
-    LabeledSpan,
-    MultiLabeledBinaryRelation,
-    NaryRelation,
-    Span,
-)
 from pytorch_ie.core import (
     Annotation,
     AnnotationList,
     Document,
     TaskEncoding,
     TaskModule,
-)
-from pytorch_ie.documents import (
-    TextDocument,
-    TextDocumentWithLabeledSpansAndBinaryRelations,
-    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
 from pytorch_ie.utils.span import has_overlap, is_contained_in
@@ -56,6 +44,18 @@ from transformers.file_utils import PaddingStrategy
 from transformers.tokenization_utils_base import TruncationStrategy
 from typing_extensions import TypeAlias, TypeVar
 
+from pie_modules.annotations import (
+    BinaryRelation,
+    LabeledSpan,
+    MultiLabeledBinaryRelation,
+    NaryRelation,
+    Span,
+)
+from pie_modules.documents import (
+    TextBasedDocument,
+    TextDocumentWithLabeledSpansAndBinaryRelations,
+    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
+)
 from pie_modules.models.simple_sequence_classification import (
     InputType as ModelInputType,
 )
@@ -71,7 +71,7 @@ from pie_modules.utils.tokenization import (
 
 InputEncodingType: TypeAlias = Dict[str, Any]
 TargetEncodingType: TypeAlias = Sequence[int]
-DocumentType: TypeAlias = TextDocument
+DocumentType: TypeAlias = TextBasedDocument
 
 TaskEncodingType: TypeAlias = TaskEncoding[
     DocumentType,

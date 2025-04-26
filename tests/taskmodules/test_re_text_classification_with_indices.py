@@ -7,7 +7,6 @@ from typing import Any, Dict, List, Union
 
 import pytest
 import torch
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan, NaryRelation
 from pytorch_ie.core import (
     Annotation,
     AnnotationList,
@@ -15,14 +14,14 @@ from pytorch_ie.core import (
     TaskEncoding,
     annotation_field,
 )
-from pytorch_ie.documents import (
-    TextBasedDocument,
-    TextDocument,
-    TextDocumentWithLabeledSpansAndBinaryRelations,
-)
 from torch import tensor
 from torchmetrics import Metric, MetricCollection
 
+from pie_modules.annotations import BinaryRelation, LabeledSpan, NaryRelation
+from pie_modules.documents import (
+    TextBasedDocument,
+    TextDocumentWithLabeledSpansAndBinaryRelations,
+)
 from pie_modules.taskmodules import RETextClassificationWithIndicesTaskModule
 from pie_modules.taskmodules.re_text_classification_with_indices import (
     HEAD,
@@ -2031,7 +2030,7 @@ def test_encode_nary_relatio():
     taskmodule._post_prepare()
 
     @dataclass
-    class DocWithNaryRelation(TextDocument):
+    class DocWithNaryRelation(TextBasedDocument):
         entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
         relations: AnnotationList[NaryRelation] = annotation_field(target="entities")
 
@@ -2077,7 +2076,7 @@ def test_encode_unknown_relation_type():
         label: str
 
     @dataclass
-    class DocWithUnknownRelationType(TextDocument):
+    class DocWithUnknownRelationType(TextBasedDocument):
         entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
         relations: AnnotationList[UnknownRelation] = annotation_field(target="entities")
 
@@ -2105,7 +2104,7 @@ def test_encode_with_unaligned_span(caplog):
     taskmodule._post_prepare()
 
     @dataclass
-    class MyDocument(TextDocument):
+    class MyDocument(TextBasedDocument):
         entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
         relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
 
@@ -2138,7 +2137,7 @@ def test_encode_with_unaligned_span(caplog):
 
 def test_encode_with_log_first_n_examples(caplog):
     @dataclass
-    class DocumentWithLabeledEntitiesAndRelations(TextDocument):
+    class DocumentWithLabeledEntitiesAndRelations(TextBasedDocument):
         entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
         relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
 

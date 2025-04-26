@@ -2,12 +2,12 @@ import logging
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
-from pytorch_ie.annotations import Span
 from pytorch_ie.core import Document, DocumentStatistic
-from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
+from pie_modules.annotations import Span
 from pie_modules.document.processing import tokenize_document
+from pie_modules.documents import TextBasedDocument, TokenBasedDocument
 from pie_modules.utils import resolve_type
 
 logger = logging.getLogger(__name__)

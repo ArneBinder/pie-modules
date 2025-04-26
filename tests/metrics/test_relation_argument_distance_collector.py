@@ -1,11 +1,10 @@
 import dataclasses
 
 import pytest
-from pytorch_ie import Annotation, Document
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan, NaryRelation
-from pytorch_ie.core import AnnotationList, annotation_field
-from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
+from pytorch_ie.core import Annotation, AnnotationList, Document, annotation_field
 
+from pie_modules.annotations import BinaryRelation, LabeledSpan, NaryRelation
+from pie_modules.documents import TextBasedDocument, TokenBasedDocument
 from pie_modules.metrics import RelationArgumentDistanceCollector
 
 

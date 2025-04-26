@@ -5,7 +5,6 @@ from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import torch
 from pytorch_ie.core import Annotation, AnnotationLayer, TaskEncoding, TaskModule
-from pytorch_ie.documents import TextBasedDocument
 from tokenizers import Encoding
 from transformers import AutoTokenizer, BatchEncoding, PreTrainedTokenizer
 from transformers.modeling_outputs import QuestionAnsweringModelOutput
@@ -14,6 +13,7 @@ from typing_extensions import TypeAlias
 from pie_modules.annotations import ExtractiveAnswer, Question
 from pie_modules.document.processing import tokenize_document
 from pie_modules.documents import (
+    TextBasedDocument,
     TextDocumentWithQuestionsAndExtractiveAnswers,
     TokenDocumentWithQuestionsAndExtractiveAnswers,
 )

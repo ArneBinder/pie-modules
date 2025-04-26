@@ -1,10 +1,10 @@
 from typing import Optional, Type
 
 import pytest
-from pytorch_ie import Document
-from pytorch_ie.documents import TextDocumentWithLabeledSpansAndBinaryRelations
+from pytorch_ie.core import Document
 from typing_extensions import TypeAlias
 
+from pie_modules.documents import TextDocumentWithLabeledSpansAndBinaryRelations
 from pie_modules.taskmodules import RETextClassificationWithIndicesTaskModule
 from pie_modules.taskmodules.common import TaskModuleWithDocumentConverter
 from tests.conftest import TestDocument

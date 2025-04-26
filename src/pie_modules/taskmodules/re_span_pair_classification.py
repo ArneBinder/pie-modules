@@ -27,24 +27,12 @@ from typing import (
 
 import pandas as pd
 import torch
-from pytorch_ie.annotations import (
-    BinaryRelation,
-    LabeledSpan,
-    MultiLabeledBinaryRelation,
-    NaryRelation,
-)
 from pytorch_ie.core import (
     Annotation,
     AnnotationList,
     Document,
     TaskEncoding,
     TaskModule,
-)
-from pytorch_ie.documents import (
-    TextDocument,
-    TextDocumentWithLabeledPartitions,
-    TextDocumentWithLabeledSpansAndBinaryRelations,
-    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
 from tokenizers import AddedToken
@@ -54,11 +42,21 @@ from torchmetrics import ClasswiseWrapper, F1Score, Metric, MetricCollection
 from transformers import AutoTokenizer
 from typing_extensions import TypeAlias
 
+from pie_modules.annotations import (
+    BinaryRelation,
+    LabeledSpan,
+    MultiLabeledBinaryRelation,
+    NaryRelation,
+)
 from pie_modules.document.processing import (
     token_based_document_to_text_based,
     tokenize_document,
 )
 from pie_modules.documents import (
+    TextBasedDocument,
+    TextDocumentWithLabeledPartitions,
+    TextDocumentWithLabeledSpansAndBinaryRelations,
+    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
     TokenDocumentWithLabeledSpansAndBinaryRelations,
     TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
@@ -105,7 +103,7 @@ class TargetEncodingType(TypedDict, total=False):
     labels: LongTensor
 
 
-DocumentType: TypeAlias = TextDocument
+DocumentType: TypeAlias = TextBasedDocument
 TaskEncodingType: TypeAlias = TaskEncoding[
     DocumentType,
     InputEncodingType,

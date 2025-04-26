@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Iterator, List, MutableMapping, Optional, Tuple, TypeVar, Union
 
 import torch
-from pytorch_ie.core import PyTorchIEModel
+from pytorch_ie import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
 from torch import BoolTensor, FloatTensor, LongTensor, Tensor, nn
 from torch.nn import Dropout, Parameter
