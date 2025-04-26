@@ -205,7 +205,7 @@ def iob2_tags_to_spans(
         which should be ignored when extracting the spans.
     # Returns
     spans : `List[TypedStringSpan]`
-        The typed, extracted spans from the sequence, in the format (label, (span_start, span_end)).
+        The typed, extracted spans from the sequence, in the format (label, (span_start, span_end_inclusive)).
         Note that the label `does not` contain any IOB2 tag prefixes.
     """
     spans = []
@@ -255,7 +255,7 @@ def bioul_tags_to_spans(
 
     # Returns
     spans : `List[TypedStringSpan]`
-        The typed, extracted spans from the sequence, in the format (label, (span_start, span_end)).
+        The typed, extracted spans from the sequence, in the format (label, (span_start, span_end_inclusive)).
     """
 
     spans = []
@@ -295,7 +295,7 @@ def boul_tags_to_spans(
 
     # Returns
     spans : `List[TypedStringSpan]`
-        The typed, extracted spans from the sequence, in the format (label, (span_start, span_end)).
+        The typed, extracted spans from the sequence, in the format (label, (span_start, span_end_inclusive)).
     """
     bioul_tags = _boul_to_bioul(tag_sequence=tag_sequence)
     return bioul_tags_to_spans(
@@ -376,7 +376,7 @@ def tag_sequence_to_token_spans(
             (if True) or removed (if False)
        # Returns
        spans : `List[TypedStringSpan]`
-           The typed, extracted spans from the sequence, in the format (label, (span_start, span_end)).
+           The typed, extracted spans from the sequence, in the format (label, (span_start, span_end_inclusive)).
     """
 
     if include_ill_formed:
