@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import TypeVar
 
-from pytorch_ie.core import AnnotationList, Document
+from pytorch_ie.core import AnnotationLayer, Document
 
 from pie_modules.annotations import LabeledMultiSpan, LabeledSpan, Span
 
@@ -38,7 +38,7 @@ def trim_text_spans(
         {k: v for k, v in document.asdict().items() if k not in annotation_layer_names}
     )
 
-    spans: AnnotationList[LabeledSpan] = document[layer]
+    spans: AnnotationLayer[LabeledSpan] = document[layer]
 
     old2new_spans = {}
     removed_span_ids = []

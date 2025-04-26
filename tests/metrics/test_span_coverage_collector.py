@@ -1,7 +1,7 @@
 import dataclasses
 
 import pytest
-from pytorch_ie.core import Annotation, AnnotationList, Document, annotation_field
+from pytorch_ie.core import Annotation, AnnotationLayer, Document, annotation_field
 
 from pie_modules.annotations import LabeledMultiSpan, LabeledSpan
 from pie_modules.documents import TextBasedDocument, TokenBasedDocument
@@ -10,7 +10,7 @@ from pie_modules.metrics import SpanCoverageCollector
 
 @dataclasses.dataclass
 class TestDocument(TextBasedDocument):
-    entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
+    entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
 
 
 def test_span_coverage_collector():
@@ -26,7 +26,7 @@ def test_span_coverage_collector():
 def test_span_coverage_collector_with_multi_span():
     @dataclasses.dataclass
     class TestDocument(TextBasedDocument):
-        entities: AnnotationList[LabeledMultiSpan] = annotation_field(target="text")
+        entities: AnnotationLayer[LabeledMultiSpan] = annotation_field(target="text")
 
     doc = TestDocument(text="A and O.")
     doc.entities.append(LabeledMultiSpan(slices=((0, 1),), label="entity"))
@@ -60,7 +60,7 @@ def test_span_coverage_collector_with_tokenize():
 
     @dataclasses.dataclass
     class TokenizedTestDocument(TokenBasedDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="tokens")
 
     statistic = SpanCoverageCollector(
         layer="entities",
@@ -108,13 +108,13 @@ def test_span_coverage_collector_with_tokenize_wrong_document_type():
     @dataclasses.dataclass
     class TestDocument(Document):
         data: str
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="data")
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="data")
 
     doc = TestDocument(data="A and O")
 
     @dataclasses.dataclass
     class TokenizedTestDocument(TokenBasedDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="tokens")
 
     statistic = SpanCoverageCollector(
         layer="entities",
@@ -139,7 +139,7 @@ def test_span_coverage_collector_with_tokenize_wrong_annotation_type():
 
     @dataclasses.dataclass
     class TestDocument(TextBasedDocument):
-        labeled_multi_spans: AnnotationList[UnknownSpan] = annotation_field(target="text")
+        labeled_multi_spans: AnnotationLayer[UnknownSpan] = annotation_field(target="text")
 
     doc = TestDocument(text="First sentence. Entity M works at N. And it founded O.")
     doc.labeled_multi_spans.append(UnknownSpan(start=16, end=24))

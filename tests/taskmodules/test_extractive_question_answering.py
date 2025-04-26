@@ -1,7 +1,7 @@
 import pytest
 import torch
 import transformers
-from pytorch_ie.core import AnnotationList
+from pytorch_ie.core import AnnotationLayer
 
 from pie_modules.annotations import ExtractiveAnswer, Question
 from pie_modules.documents import TextDocumentWithQuestionsAndExtractiveAnswers
@@ -114,14 +114,14 @@ def test_get_question_layer(taskmodule, document, document_with_no_answer):
     question_layer = taskmodule.get_question_layer(document)
     assert question_layer is not None
     assert len(question_layer) == 1
-    assert type(question_layer) is AnnotationList
+    assert type(question_layer) is AnnotationLayer
     assert type(question_layer[0]) is Question
     assert question_layer[0].text == "What is the first word?"
 
     question_layer = taskmodule.get_question_layer(document_with_no_answer)
     assert question_layer is not None
     assert len(question_layer) == 1
-    assert type(question_layer) is AnnotationList
+    assert type(question_layer) is AnnotationLayer
     assert type(question_layer[0]) is Question
     assert question_layer[0].text == "What is the first word?"
 
@@ -130,7 +130,7 @@ def test_get_answer_layer(taskmodule, document, document_with_no_answer):
     answer_layer = taskmodule.get_answer_layer(document)
     assert answer_layer is not None
     assert len(answer_layer) == 1
-    assert type(answer_layer) is AnnotationList
+    assert type(answer_layer) is AnnotationLayer
     assert type(answer_layer[0]) is ExtractiveAnswer
     assert answer_layer[0].question.text == "What is the first word?"
     assert answer_layer[0].start == 0
@@ -139,7 +139,7 @@ def test_get_answer_layer(taskmodule, document, document_with_no_answer):
     answer_layer = taskmodule.get_answer_layer(document_with_no_answer)
     assert answer_layer is not None
     assert len(answer_layer) == 0
-    assert type(answer_layer) is AnnotationList
+    assert type(answer_layer) is AnnotationLayer
 
 
 def test_get_context(taskmodule, document, document_with_no_answer):

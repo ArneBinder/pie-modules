@@ -1,7 +1,7 @@
 import dataclasses
 
 import pytest
-from pytorch_ie.core import AnnotationList, Document, annotation_field
+from pytorch_ie.core import AnnotationLayer, Document, annotation_field
 
 from pie_modules.annotations import Label, LabeledSpan
 from pie_modules.documents import TextBasedDocument, TokenBasedDocument
@@ -12,7 +12,7 @@ from pie_modules.metrics import SpanLengthCollector
 def documents():
     @dataclasses.dataclass
     class TestDocument(TextBasedDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
 
     result = []
     doc = TestDocument(text="First sentence. Entity M works at N. And it founded O.")
@@ -81,7 +81,7 @@ def test_span_length_collector_wrong_label_value():
 def test_span_length_collector_with_tokenize(documents):
     @dataclasses.dataclass
     class TokenizedTestDocument(TokenBasedDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="tokens")
 
     statistic = SpanLengthCollector(
         layer="entities",
@@ -129,7 +129,7 @@ def test_span_length_collector_with_tokenize_wrong_document_type():
     @dataclasses.dataclass
     class TestDocument(Document):
         data: str
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="data")
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="data")
 
     doc = TestDocument(data="First sentence. Entity M works at N. And it founded O.")
     doc.entities.append(LabeledSpan(start=16, end=24, label="per"))
@@ -137,7 +137,7 @@ def test_span_length_collector_with_tokenize_wrong_document_type():
 
     @dataclasses.dataclass
     class TokenizedTestDocument(TokenBasedDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="tokens")
 
     statistic = SpanLengthCollector(
         layer="entities",
@@ -157,7 +157,7 @@ def test_span_length_collector_with_tokenize_wrong_document_type():
 def test_span_length_collector_with_tokenize_wrong_annotation_type():
     @dataclasses.dataclass
     class TestDocument(TextBasedDocument):
-        label: AnnotationList[Label] = annotation_field()
+        label: AnnotationLayer[Label] = annotation_field()
 
     doc = TestDocument(text="First sentence. Entity M works at N. And it founded O.")
     doc.label.append(Label(label="example"))

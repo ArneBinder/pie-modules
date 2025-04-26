@@ -3,7 +3,7 @@ from collections import defaultdict
 from typing import Dict
 
 import pytest
-from pytorch_ie.core import Annotation, AnnotationList, Document, annotation_field
+from pytorch_ie.core import Annotation, AnnotationLayer, Document, annotation_field
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
 from pie_modules.annotations import (
@@ -25,21 +25,21 @@ from tests.conftest import TestDocument
 
 @dataclasses.dataclass
 class TokenizedTestDocument(TokenBasedDocument):
-    sentences: AnnotationList[Span] = annotation_field(target="tokens")
-    entities: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
-    relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+    sentences: AnnotationLayer[Span] = annotation_field(target="tokens")
+    entities: AnnotationLayer[LabeledSpan] = annotation_field(target="tokens")
+    relations: AnnotationLayer[BinaryRelation] = annotation_field(target="entities")
 
 
 @dataclasses.dataclass
 class TestDocumentWithMultiSpans(TextBasedDocument):
-    entities: AnnotationList[LabeledMultiSpan] = annotation_field(target="text")
-    relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+    entities: AnnotationLayer[LabeledMultiSpan] = annotation_field(target="text")
+    relations: AnnotationLayer[BinaryRelation] = annotation_field(target="entities")
 
 
 @dataclasses.dataclass
 class TokenizedTestDocumentWithMultiSpans(TokenBasedDocument):
-    entities: AnnotationList[LabeledMultiSpan] = annotation_field(target="tokens")
-    relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+    entities: AnnotationLayer[LabeledMultiSpan] = annotation_field(target="tokens")
+    relations: AnnotationLayer[BinaryRelation] = annotation_field(target="entities")
 
 
 @pytest.fixture
@@ -545,7 +545,7 @@ def test_token_based_document_to_text_based_strip_multi_span(
 def test_text_based_document_to_token_based_wrong_annotation_type():
     @dataclasses.dataclass
     class WrongAnnotationType(TextBasedDocument):
-        wrong_annotations: AnnotationList[Label] = annotation_field(target="text")
+        wrong_annotations: AnnotationLayer[Label] = annotation_field(target="text")
 
     doc = WrongAnnotationType(text="First sentence. Entity M works at N. And it founded O.")
     doc.wrong_annotations.append(Label(label="wrong"))
@@ -636,7 +636,7 @@ def test_token_based_document_token_based_offset_mapping_from_metadata(
 def test_token_based_document_to_text_based_wrong_annotation_type():
     @dataclasses.dataclass
     class WrongAnnotationType(TokenBasedDocument):
-        wrong_annotations: AnnotationList[Label] = annotation_field(target="tokens")
+        wrong_annotations: AnnotationLayer[Label] = annotation_field(target="tokens")
 
     doc = WrongAnnotationType(tokens=("Hallo", "World"))
     doc.wrong_annotations.append(Label(label="wrong"))

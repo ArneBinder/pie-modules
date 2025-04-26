@@ -1,7 +1,7 @@
 import dataclasses
 
 import pytest
-from pytorch_ie.core import AnnotationList, annotation_field
+from pytorch_ie.core import AnnotationLayer, annotation_field
 
 from pie_modules.annotations import BinaryRelation, LabeledMultiSpan, LabeledSpan
 from pie_modules.document.processing import TextSpanTrimmer
@@ -10,9 +10,9 @@ from pie_modules.documents import TextBasedDocument
 
 @dataclasses.dataclass
 class DocumentWithEntitiesRelationsAndPartitions(TextBasedDocument):
-    entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
-    relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
-    partitions: AnnotationList[LabeledSpan] = annotation_field(target="text")
+    entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
+    relations: AnnotationLayer[BinaryRelation] = annotation_field(target="entities")
+    partitions: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
 
 
 @pytest.fixture
@@ -121,8 +121,8 @@ def test_text_span_trimmer_remove_entity_of_relations(document1):
 
 @dataclasses.dataclass
 class DocumentWithLabeledMultiSpansAndBinaryRelations(TextBasedDocument):
-    labeled_multi_spans: AnnotationList[LabeledMultiSpan] = annotation_field(target="text")
-    binary_relations: AnnotationList[BinaryRelation] = annotation_field(
+    labeled_multi_spans: AnnotationLayer[LabeledMultiSpan] = annotation_field(target="text")
+    binary_relations: AnnotationLayer[BinaryRelation] = annotation_field(
         target="labeled_multi_spans"
     )
 

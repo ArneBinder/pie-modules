@@ -9,7 +9,7 @@ import pytest
 import torch
 from pytorch_ie.core import (
     Annotation,
-    AnnotationList,
+    AnnotationLayer,
     Document,
     TaskEncoding,
     annotation_field,
@@ -1388,8 +1388,8 @@ def test_encode_input_with_add_candidate_relations(documents):
 def document_with_nary_relations():
     @dataclasses.dataclass
     class TestDocumentWithNaryRelations(TextBasedDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
-        relations: AnnotationList[NaryRelation] = annotation_field(target="entities")
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
+        relations: AnnotationLayer[NaryRelation] = annotation_field(target="entities")
 
     document = TestDocumentWithNaryRelations(
         text="Entity A works at B.", id="doc_with_nary_relations"
@@ -2031,8 +2031,8 @@ def test_encode_nary_relatio():
 
     @dataclass
     class DocWithNaryRelation(TextBasedDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
-        relations: AnnotationList[NaryRelation] = annotation_field(target="entities")
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
+        relations: AnnotationLayer[NaryRelation] = annotation_field(target="entities")
 
     doc = DocWithNaryRelation(text="hello my world")
     entity1 = LabeledSpan(start=0, end=5, label="a")
@@ -2077,8 +2077,8 @@ def test_encode_unknown_relation_type():
 
     @dataclass
     class DocWithUnknownRelationType(TextBasedDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
-        relations: AnnotationList[UnknownRelation] = annotation_field(target="entities")
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
+        relations: AnnotationLayer[UnknownRelation] = annotation_field(target="entities")
 
     doc = DocWithUnknownRelationType(text="hello world")
     entity = LabeledSpan(start=0, end=1, label="a")
@@ -2105,8 +2105,8 @@ def test_encode_with_unaligned_span(caplog):
 
     @dataclass
     class MyDocument(TextBasedDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
-        relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
+        relations: AnnotationLayer[BinaryRelation] = annotation_field(target="entities")
 
     doc = MyDocument(text="hello   space", id="doc1")
     entity1 = LabeledSpan(start=0, end=5, label="a")
@@ -2138,8 +2138,8 @@ def test_encode_with_unaligned_span(caplog):
 def test_encode_with_log_first_n_examples(caplog):
     @dataclass
     class DocumentWithLabeledEntitiesAndRelations(TextBasedDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
-        relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
+        relations: AnnotationLayer[BinaryRelation] = annotation_field(target="entities")
 
     doc = DocumentWithLabeledEntitiesAndRelations(text="hello world", id="doc1")
     entity1 = LabeledSpan(start=0, end=5, label="a")

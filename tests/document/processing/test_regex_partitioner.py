@@ -4,7 +4,7 @@ import logging
 from typing import Tuple
 
 import pytest
-from pytorch_ie.core import AnnotationList, annotation_field
+from pytorch_ie.core import AnnotationLayer, annotation_field
 
 from pie_modules.annotations import LabeledSpan
 from pie_modules.document.processing import RegexPartitioner
@@ -16,7 +16,7 @@ from pie_modules.documents import TextBasedDocument
 
 @dataclasses.dataclass
 class TextDocumentWithPartitions(TextBasedDocument):
-    partitions: AnnotationList[LabeledSpan] = annotation_field(target="text")
+    partitions: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
 
 
 def have_overlap(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> bool:
