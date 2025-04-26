@@ -1919,7 +1919,9 @@ def test_encode_input_with_max_argument_distance_tokens(distance_type):
     if distance_type == "unknown":
         with pytest.raises(ValueError) as excinfo:
             taskmodule.encode_input(document)
-        assert str(excinfo.value) == "unknown distance_type=unknown. use one of: center, inner, outer"
+        assert (
+            str(excinfo.value) == "unknown distance_type=unknown. use one of: center, inner, outer"
+        )
         return
 
     encodings = taskmodule.encode_input(document)
