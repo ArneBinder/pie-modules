@@ -25,7 +25,6 @@ from typing import (
 
 import torch
 from pytorch_ie.core import AnnotationLayer, TaskEncoding, TaskModule
-from pytorch_ie.utils.span import bio_tags_to_spans
 from tokenizers import Encoding
 from torchmetrics import F1Score, Metric, MetricCollection, Precision, Recall
 from transformers import AutoTokenizer
@@ -50,6 +49,7 @@ from pie_modules.taskmodules.metrics import (
     WrappedMetricWithPrepareFunction,
 )
 from pie_modules.utils import list_of_dicts2dict_of_lists
+from pie_modules.utils.sequence_tagging import tag_sequence_to_token_spans
 
 DocumentType: TypeAlias = TextBasedDocument
 
@@ -352,8 +352,10 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
             for tag_id in labels.tolist()
         ]
         labeled_spans: List[LabeledSpan] = []
-        for label, (start, end_inclusive) in bio_tags_to_spans(
-            tag_sequence, include_ill_formed=self.include_ill_formed_predictions
+        for label, (start, end_inclusive) in tag_sequence_to_token_spans(
+            tag_sequence,
+            coding_scheme="IOB2",
+            include_ill_formed=self.include_ill_formed_predictions,
         ):
             end = end_inclusive + 1
             # do not set the score if the probabilities are not available
