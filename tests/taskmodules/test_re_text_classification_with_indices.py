@@ -28,10 +28,10 @@ from pie_modules.taskmodules.re_text_classification_with_indices import (
     TAIL,
     find_sublist,
     get_relation_argument_spans_and_roles,
-    inner_span_distance,
     span_distance,
 )
 from pie_modules.utils import flatten_dict
+from pie_modules.utils.span import distance_inner
 from tests import _config_to_str
 from tests.conftest import _TABULATE_AVAILABLE, TestDocument
 
@@ -1809,14 +1809,14 @@ def test_encode_input_with_add_reversed_relations_with_wrong_relation_type(
 
 
 def test_inner_span_distance_overlap():
-    dist = inner_span_distance((0, 2), (1, 3))
+    dist = distance_inner((0, 2), (1, 3))
     assert dist == -1
 
 
 def test_span_distance_unknown_type():
     with pytest.raises(ValueError) as excinfo:
         span_distance((0, 1), (2, 3), "unknown")
-    assert str(excinfo.value) == "Unknown distance_type=unknown. Use one of: inner, outer."
+    assert str(excinfo.value) == "unknown distance_type=unknown. use one of: center, inner, outer"
 
 
 def test_encode_input_with_max_argument_distance():
@@ -1919,7 +1919,9 @@ def test_encode_input_with_max_argument_distance_tokens(distance_type):
     if distance_type == "unknown":
         with pytest.raises(ValueError) as excinfo:
             taskmodule.encode_input(document)
-        assert str(excinfo.value) == "Unknown distance_type=unknown. Use one of: inner, outer."
+        assert (
+            str(excinfo.value) == "unknown distance_type=unknown. use one of: center, inner, outer"
+        )
         return
 
     encodings = taskmodule.encode_input(document)

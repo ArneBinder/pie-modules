@@ -35,7 +35,6 @@ from pytorch_ie.core import (
     TaskModule,
 )
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
-from pytorch_ie.utils.span import has_overlap, is_contained_in
 from pytorch_ie.utils.window import get_window_around_slice
 from torch import LongTensor
 from torchmetrics import ClasswiseWrapper, F1Score, MetricCollection
@@ -64,6 +63,8 @@ from pie_modules.models.simple_sequence_classification import (
 )
 from pie_modules.taskmodules.common.mixins import RelationStatisticsMixin
 from pie_modules.taskmodules.metrics import WrappedMetricWithPrepareFunction
+from pie_modules.utils.span import distance as span_distance
+from pie_modules.utils.span import is_contained_in
 from pie_modules.utils.tokenization import (
     SpanNotAlignedWithTokenException,
     get_aligned_token_span,
@@ -116,33 +117,6 @@ def _get_labels_together_remove_none_label(
     predictions_not_none = predictions["labels"][mask_not_both_none]
     targets_not_none = targets["labels"][mask_not_both_none]
     return predictions_not_none, targets_not_none
-
-
-def inner_span_distance(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> int:
-    dist_start_other_end = abs(start_end[0] - other_start_end[1])
-    dist_end_other_start = abs(start_end[1] - other_start_end[0])
-    dist = min(dist_start_other_end, dist_end_other_start)
-    if not has_overlap(start_end, other_start_end):
-        return dist
-    else:
-        return -dist
-
-
-def outer_span_distance(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> int:
-    min_start = min(start_end[0], other_start_end[0])
-    max_end = max(start_end[1], other_start_end[1])
-    return max_end - min_start
-
-
-def span_distance(
-    start_end: Tuple[int, int], other_start_end: Tuple[int, int], distance_type: str
-) -> int:
-    if distance_type == "inner":
-        return inner_span_distance(start_end, other_start_end)
-    elif distance_type == "outer":
-        return outer_span_distance(start_end, other_start_end)
-    else:
-        raise ValueError(f"Unknown distance_type={distance_type}. Use one of: inner, outer.")
 
 
 def find_sublist(sub: List, bigger: List) -> int:

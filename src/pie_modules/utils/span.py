@@ -1,14 +1,24 @@
 from typing import Tuple
 
 
+def is_contained_in(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> bool:
+    """Check if one span is contained in another. The spans are defined by their start and end
+    indices.
+
+    Note that the span is considered to be contained in the other span if it is completely within
+    the other span, including the case where they are identical.
+    """
+    return other_start_end[0] <= start_end[0] and start_end[1] <= other_start_end[1]
+
+
 def are_nested(start_end: Tuple[int, int], other_start_end: Tuple[int, int]) -> bool:
     """Check if two spans are nested. The spans are defined by their start and end indices.
 
     Note that spans are considered to be nested if one is completely contained in the other,
     including the case where they are identical.
     """
-    return (start_end[0] <= other_start_end[0] and start_end[1] >= other_start_end[1]) or (
-        other_start_end[0] <= start_end[0] and other_start_end[1] >= start_end[1]
+    return is_contained_in(start_end, other_start_end) or is_contained_in(
+        other_start_end, start_end
     )
 
 
