@@ -4,12 +4,12 @@ from typing import Any, Dict, Union
 
 import pytest
 import torch
-from pytorch_ie import AnnotationLayer, annotation_field
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan
-from pytorch_ie.documents import TextBasedDocument
+from pytorch_ie.core import AnnotationLayer, annotation_field
 from torch import tensor
 from torchmetrics import Metric, MetricCollection
 
+from pie_modules.annotations import BinaryRelation, LabeledSpan
+from pie_modules.documents import TextBasedDocument
 from pie_modules.taskmodules import RESpanPairClassificationTaskModule
 from pie_modules.utils import flatten_dict
 from pie_modules.utils.span import distance

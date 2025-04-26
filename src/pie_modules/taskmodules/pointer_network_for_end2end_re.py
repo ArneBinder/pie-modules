@@ -18,22 +18,29 @@ from typing import (
 )
 
 import torch
-from pytorch_ie import AnnotationLayer, Document
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan
-from pytorch_ie.core import Annotation, TaskEncoding, TaskModule
+from pytorch_ie.core import (
+    Annotation,
+    AnnotationLayer,
+    Document,
+    TaskModule,
+)
 from pytorch_ie.core.taskmodule import (
     InputEncoding,
     ModelBatchOutput,
     TargetEncoding,
     TaskBatchEncoding,
+    TaskEncoding,
 )
-from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from torchmetrics import Metric
 from transformers import AutoTokenizer, LogitsProcessorList, PreTrainedTokenizer
 from typing_extensions import TypeAlias
 
+from pie_modules.annotations import BinaryRelation, LabeledSpan
+
 # import for backwards compatibility (don't remove!)
 from pie_modules.documents import (
+    TextBasedDocument,
+    TokenBasedDocument,
     TokenDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
 

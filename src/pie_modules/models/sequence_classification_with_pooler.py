@@ -14,7 +14,7 @@ from typing import (
 )
 
 import torch
-from pytorch_ie.core import PyTorchIEModel
+from pytorch_ie import PyTorchIEModel
 from pytorch_ie.models.interface import RequiresModelNameOrPath, RequiresNumClasses
 from torch import FloatTensor, LongTensor, nn
 from torch.nn import Parameter

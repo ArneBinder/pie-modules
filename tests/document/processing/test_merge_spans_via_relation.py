@@ -1,7 +1,4 @@
 import pytest
-from pytorch_ie.documents import (
-    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
-)
 
 from pie_modules.annotations import BinaryRelation, LabeledMultiSpan, LabeledSpan
 from pie_modules.document.processing import SpansViaRelationMerger
@@ -12,6 +9,7 @@ from pie_modules.documents import (
     TextDocumentWithLabeledMultiSpansAndBinaryRelations,
     TextDocumentWithLabeledMultiSpansBinaryRelationsAndLabeledPartitions,
     TextDocumentWithLabeledSpansAndBinaryRelations,
+    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
 
 

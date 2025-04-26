@@ -1,7 +1,8 @@
 from typing import TypeVar
 
-from pytorch_ie.annotations import Span
 from transformers import BatchEncoding
+
+from pie_modules.annotations import Span
 
 S = TypeVar("S", bound=Span)
 

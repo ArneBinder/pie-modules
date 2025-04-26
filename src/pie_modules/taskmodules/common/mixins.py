@@ -6,7 +6,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from pytorch_ie import Annotation
+from pytorch_ie.core import Annotation
 from torch import Tensor
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,7 @@
 from typing import Any, Dict, Optional
 
-from pytorch_ie import AutoTaskModule, TaskModule
+from pytorch_ie.auto import AutoTaskModule
+from pytorch_ie.core import TaskModule
 
 from pie_modules.models.interface import RequiresTaskmoduleConfig
 

@@ -2,7 +2,7 @@ import json
 from typing import Dict, Optional
 
 import pytest
-from pytorch_ie import Annotation
+from pytorch_ie.core import Annotation
 
 from pie_modules.annotations import LabeledMultiSpan
 

@@ -27,24 +27,12 @@ from typing import (
 
 import numpy as np
 import torch
-from pytorch_ie.annotations import (
-    BinaryRelation,
-    LabeledSpan,
-    MultiLabeledBinaryRelation,
-    NaryRelation,
-    Span,
-)
 from pytorch_ie.core import (
     Annotation,
-    AnnotationList,
+    AnnotationLayer,
     Document,
     TaskEncoding,
     TaskModule,
-)
-from pytorch_ie.documents import (
-    TextDocument,
-    TextDocumentWithLabeledSpansAndBinaryRelations,
-    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
 )
 from pytorch_ie.taskmodules.interface import ChangesTokenizerVocabSize
 from pytorch_ie.utils.span import has_overlap, is_contained_in
@@ -56,6 +44,18 @@ from transformers.file_utils import PaddingStrategy
 from transformers.tokenization_utils_base import TruncationStrategy
 from typing_extensions import TypeAlias, TypeVar
 
+from pie_modules.annotations import (
+    BinaryRelation,
+    LabeledSpan,
+    MultiLabeledBinaryRelation,
+    NaryRelation,
+    Span,
+)
+from pie_modules.documents import (
+    TextBasedDocument,
+    TextDocumentWithLabeledSpansAndBinaryRelations,
+    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
+)
 from pie_modules.models.simple_sequence_classification import (
     InputType as ModelInputType,
 )
@@ -71,7 +71,7 @@ from pie_modules.utils.tokenization import (
 
 InputEncodingType: TypeAlias = Dict[str, Any]
 TargetEncodingType: TypeAlias = Sequence[int]
-DocumentType: TypeAlias = TextDocument
+DocumentType: TypeAlias = TextBasedDocument
 
 TaskEncodingType: TypeAlias = TaskEncoding[
     DocumentType,
@@ -503,11 +503,11 @@ class RETextClassificationWithIndicesTaskModule(
             )
             return None
 
-    def get_relation_layer(self, document: Document) -> AnnotationList[BinaryRelation]:
+    def get_relation_layer(self, document: Document) -> AnnotationLayer[BinaryRelation]:
         return document[self.relation_annotation]
 
-    def get_entity_layer(self, document: Document) -> AnnotationList[LabeledSpan]:
-        relations: AnnotationList[BinaryRelation] = self.get_relation_layer(document)
+    def get_entity_layer(self, document: Document) -> AnnotationLayer[LabeledSpan]:
+        relations: AnnotationLayer[BinaryRelation] = self.get_relation_layer(document)
         return relations.target_layer
 
     def get_marker_factory(self) -> MarkerFactory:
@@ -517,8 +517,8 @@ class RETextClassificationWithIndicesTaskModule(
         entity_labels: Set[str] = set()
         relation_labels: Set[str] = set()
         for document in documents:
-            relations: AnnotationList[BinaryRelation] = self.get_relation_layer(document)
-            entities: AnnotationList[LabeledSpan] = self.get_entity_layer(document)
+            relations: AnnotationLayer[BinaryRelation] = self.get_relation_layer(document)
+            entities: AnnotationLayer[LabeledSpan] = self.get_entity_layer(document)
 
             for entity in entities:
                 entity_labels.add(entity.label)

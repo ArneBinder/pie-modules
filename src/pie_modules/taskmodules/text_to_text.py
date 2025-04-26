@@ -15,15 +15,19 @@ from typing import (
 )
 
 import torch
-from pytorch_ie import AnnotationLayer, Document
-from pytorch_ie.core import Annotation, TaskEncoding, TaskModule
+from pytorch_ie.core import (
+    Annotation,
+    AnnotationLayer,
+    Document,
+    TaskModule,
+)
 from pytorch_ie.core.taskmodule import (
     InputEncoding,
     ModelBatchOutput,
     TargetEncoding,
     TaskBatchEncoding,
+    TaskEncoding,
 )
-from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
 from torchmetrics import Metric
 from transformers import AutoTokenizer, PreTrainedTokenizer
 from typing_extensions import TypeAlias
@@ -33,6 +37,7 @@ from pie_modules.document.processing import (
     token_based_document_to_text_based,
     tokenize_document,
 )
+from pie_modules.documents import TextBasedDocument, TokenBasedDocument
 from pie_modules.utils import resolve_type
 
 from .common import BatchableMixin, get_first_occurrence_index

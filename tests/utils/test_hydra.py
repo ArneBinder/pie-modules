@@ -1,10 +1,10 @@
 import dataclasses
 
 import pytest
-from pytorch_ie import AnnotationLayer, annotation_field
-from pytorch_ie.annotations import LabeledSpan, Span
-from pytorch_ie.documents import TextBasedDocument
+from pytorch_ie.core import AnnotationLayer, annotation_field
 
+from pie_modules.annotations import LabeledSpan, Span
+from pie_modules.documents import TextBasedDocument
 from pie_modules.utils import resolve_type
 
 

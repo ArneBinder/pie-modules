@@ -3,7 +3,7 @@ from collections import Counter
 from typing import Any, Collection, Dict, Iterable, Optional, Union
 
 import torch
-from pytorch_ie import Annotation
+from pytorch_ie.core import Annotation
 from torch import LongTensor
 
 from pie_modules.utils import flatten_dict

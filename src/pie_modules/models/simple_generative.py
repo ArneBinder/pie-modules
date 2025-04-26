@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, Optional, Tuple, Type, Union
 
 import torch
-from pytorch_ie.core import PyTorchIEModel
+from pytorch_ie import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch import FloatTensor, LongTensor
 from torch.optim import Optimizer

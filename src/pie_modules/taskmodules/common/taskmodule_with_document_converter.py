@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import Generic, Iterable, Iterator, Optional, Sequence, Type, TypeVar, Union
 
-from pytorch_ie import Document, TaskEncoding, TaskModule
+from pytorch_ie.core import Document, TaskModule
 from pytorch_ie.core.taskmodule import (
     IterableTaskEncodingDataset,
+    TaskEncoding,
     TaskEncodingDataset,
     TaskEncodingSequence,
 )

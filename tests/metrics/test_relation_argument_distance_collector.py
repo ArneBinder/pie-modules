@@ -1,18 +1,17 @@
 import dataclasses
 
 import pytest
-from pytorch_ie import Annotation, Document
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan, NaryRelation
-from pytorch_ie.core import AnnotationList, annotation_field
-from pytorch_ie.documents import TextBasedDocument, TokenBasedDocument
+from pytorch_ie.core import Annotation, AnnotationLayer, Document, annotation_field
 
+from pie_modules.annotations import BinaryRelation, LabeledSpan, NaryRelation
+from pie_modules.documents import TextBasedDocument, TokenBasedDocument
 from pie_modules.metrics import RelationArgumentDistanceCollector
 
 
 @dataclasses.dataclass
 class TestDocument(TextBasedDocument):
-    entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
-    relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+    entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
+    relations: AnnotationLayer[BinaryRelation] = annotation_field(target="entities")
 
 
 def test_relation_argument_distance_collector():
@@ -100,8 +99,8 @@ def test_relation_argument_distance_collector_with_tokenize():
 
     @dataclasses.dataclass
     class TokenizedTestDocument(TokenBasedDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
-        relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="tokens")
+        relations: AnnotationLayer[BinaryRelation] = annotation_field(target="entities")
 
     statistic = RelationArgumentDistanceCollector(
         layer="relations",
@@ -146,8 +145,8 @@ def test_relation_argument_distance_collector_with_tokenize_wrong_document_type(
     @dataclasses.dataclass
     class TestDocument(Document):
         data: str
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="data")
-        relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="data")
+        relations: AnnotationLayer[BinaryRelation] = annotation_field(target="entities")
 
     doc = TestDocument(
         data="This is the first entity. This is the second entity. This is the third entity."
@@ -165,8 +164,8 @@ def test_relation_argument_distance_collector_with_tokenize_wrong_document_type(
 
     @dataclasses.dataclass
     class TokenizedTestDocument(TokenBasedDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="tokens")
-        relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="tokens")
+        relations: AnnotationLayer[BinaryRelation] = annotation_field(target="entities")
 
     statistic = RelationArgumentDistanceCollector(
         layer="relations",
@@ -191,8 +190,8 @@ def test_relation_argument_distance_collector_with_tokenize_wrong_span_annotatio
 
     @dataclasses.dataclass
     class TestDocument(TextBasedDocument):
-        labeled_multi_spans: AnnotationList[UnknownSpan] = annotation_field(target="text")
-        binary_relations: AnnotationList[BinaryRelation] = annotation_field(
+        labeled_multi_spans: AnnotationLayer[UnknownSpan] = annotation_field(target="text")
+        binary_relations: AnnotationLayer[BinaryRelation] = annotation_field(
             target="labeled_multi_spans"
         )
 
@@ -225,8 +224,8 @@ def test_relation_argument_distance_collector_with_tokenize_wrong_relation_annot
 
     @dataclasses.dataclass
     class TestDocument(TextBasedDocument):
-        labeled_spans: AnnotationList[LabeledSpan] = annotation_field(target="text")
-        not_binary_relations: AnnotationList[UnknownRelation] = annotation_field(
+        labeled_spans: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
+        not_binary_relations: AnnotationLayer[UnknownRelation] = annotation_field(
             target="labeled_spans"
         )
 

@@ -24,25 +24,22 @@ from typing import (
 )
 
 import torch
-from pytorch_ie import AnnotationLayer
-from pytorch_ie.annotations import LabeledSpan
-from pytorch_ie.core import TaskEncoding, TaskModule
-from pytorch_ie.documents import (
-    TextDocument,
-    TextDocumentWithLabeledSpans,
-    TextDocumentWithLabeledSpansAndLabeledPartitions,
-)
+from pytorch_ie.core import AnnotationLayer, TaskEncoding, TaskModule
 from pytorch_ie.utils.span import bio_tags_to_spans
 from tokenizers import Encoding
 from torchmetrics import F1Score, Metric, MetricCollection, Precision, Recall
 from transformers import AutoTokenizer
 from typing_extensions import TypeAlias
 
+from pie_modules.annotations import LabeledSpan
 from pie_modules.document.processing import (
     token_based_document_to_text_based,
     tokenize_document,
 )
 from pie_modules.documents import (
+    TextBasedDocument,
+    TextDocumentWithLabeledSpans,
+    TextDocumentWithLabeledSpansAndLabeledPartitions,
     TokenDocumentWithLabeledSpans,
     TokenDocumentWithLabeledSpansAndLabeledPartitions,
 )
@@ -54,7 +51,7 @@ from pie_modules.taskmodules.metrics import (
 )
 from pie_modules.utils import list_of_dicts2dict_of_lists
 
-DocumentType: TypeAlias = TextDocument
+DocumentType: TypeAlias = TextBasedDocument
 
 InputEncodingType: TypeAlias = Encoding
 TargetEncodingType: TypeAlias = Sequence[int]
@@ -181,8 +178,8 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
 
     @property
-    def document_type(self) -> Optional[Type[TextDocument]]:
-        dt: Type[TextDocument]
+    def document_type(self) -> Optional[Type[TextBasedDocument]]:
+        dt: Type[TextBasedDocument]
         errors = []
         if self.span_annotation != "labeled_spans":
             errors.append(
@@ -236,7 +233,7 @@ class LabeledSpanExtractionByTokenClassificationTaskModule(TaskModuleType):
 
     def encode_input(
         self,
-        document: TextDocument,
+        document: TextBasedDocument,
     ) -> Optional[Union[TaskEncodingType, Sequence[TaskEncodingType]]]:
         if self.partition_annotation is None:
             tokenized_document_type = TokenDocumentWithLabeledSpans

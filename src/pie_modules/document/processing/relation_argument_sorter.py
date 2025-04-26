@@ -3,10 +3,9 @@ from __future__ import annotations
 import logging
 from typing import TypeVar
 
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan
-from pytorch_ie.core import Annotation, AnnotationList, Document
+from pytorch_ie.core import Annotation, AnnotationLayer, Document
 
-from pie_modules.annotations import LabeledMultiSpan
+from pie_modules.annotations import BinaryRelation, LabeledMultiSpan, LabeledSpan
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +75,7 @@ class RelationArgumentSorter:
         self.verbose = verbose
 
     def __call__(self, doc: D) -> D:
-        rel_layer: AnnotationList[BinaryRelation] = doc[self.relation_layer]
+        rel_layer: AnnotationLayer[BinaryRelation] = doc[self.relation_layer]
         args2relations: dict[tuple[LabeledSpan, ...], BinaryRelation] = {
             get_relation_args(rel): rel for rel in rel_layer
         }

@@ -7,22 +7,21 @@ from typing import Any, Dict, List, Union
 
 import pytest
 import torch
-from pytorch_ie.annotations import BinaryRelation, LabeledSpan, NaryRelation
 from pytorch_ie.core import (
     Annotation,
-    AnnotationList,
+    AnnotationLayer,
     Document,
     TaskEncoding,
     annotation_field,
 )
-from pytorch_ie.documents import (
-    TextBasedDocument,
-    TextDocument,
-    TextDocumentWithLabeledSpansAndBinaryRelations,
-)
 from torch import tensor
 from torchmetrics import Metric, MetricCollection
 
+from pie_modules.annotations import BinaryRelation, LabeledSpan, NaryRelation
+from pie_modules.documents import (
+    TextBasedDocument,
+    TextDocumentWithLabeledSpansAndBinaryRelations,
+)
 from pie_modules.taskmodules import RETextClassificationWithIndicesTaskModule
 from pie_modules.taskmodules.re_text_classification_with_indices import (
     HEAD,
@@ -1389,8 +1388,8 @@ def test_encode_input_with_add_candidate_relations(documents):
 def document_with_nary_relations():
     @dataclasses.dataclass
     class TestDocumentWithNaryRelations(TextBasedDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
-        relations: AnnotationList[NaryRelation] = annotation_field(target="entities")
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
+        relations: AnnotationLayer[NaryRelation] = annotation_field(target="entities")
 
     document = TestDocumentWithNaryRelations(
         text="Entity A works at B.", id="doc_with_nary_relations"
@@ -2031,9 +2030,9 @@ def test_encode_nary_relatio():
     taskmodule._post_prepare()
 
     @dataclass
-    class DocWithNaryRelation(TextDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
-        relations: AnnotationList[NaryRelation] = annotation_field(target="entities")
+    class DocWithNaryRelation(TextBasedDocument):
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
+        relations: AnnotationLayer[NaryRelation] = annotation_field(target="entities")
 
     doc = DocWithNaryRelation(text="hello my world")
     entity1 = LabeledSpan(start=0, end=5, label="a")
@@ -2077,9 +2076,9 @@ def test_encode_unknown_relation_type():
         label: str
 
     @dataclass
-    class DocWithUnknownRelationType(TextDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
-        relations: AnnotationList[UnknownRelation] = annotation_field(target="entities")
+    class DocWithUnknownRelationType(TextBasedDocument):
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
+        relations: AnnotationLayer[UnknownRelation] = annotation_field(target="entities")
 
     doc = DocWithUnknownRelationType(text="hello world")
     entity = LabeledSpan(start=0, end=1, label="a")
@@ -2105,9 +2104,9 @@ def test_encode_with_unaligned_span(caplog):
     taskmodule._post_prepare()
 
     @dataclass
-    class MyDocument(TextDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
-        relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+    class MyDocument(TextBasedDocument):
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
+        relations: AnnotationLayer[BinaryRelation] = annotation_field(target="entities")
 
     doc = MyDocument(text="hello   space", id="doc1")
     entity1 = LabeledSpan(start=0, end=5, label="a")
@@ -2138,9 +2137,9 @@ def test_encode_with_unaligned_span(caplog):
 
 def test_encode_with_log_first_n_examples(caplog):
     @dataclass
-    class DocumentWithLabeledEntitiesAndRelations(TextDocument):
-        entities: AnnotationList[LabeledSpan] = annotation_field(target="text")
-        relations: AnnotationList[BinaryRelation] = annotation_field(target="entities")
+    class DocumentWithLabeledEntitiesAndRelations(TextBasedDocument):
+        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="text")
+        relations: AnnotationLayer[BinaryRelation] = annotation_field(target="entities")
 
     doc = DocumentWithLabeledEntitiesAndRelations(text="hello world", id="doc1")
     entity1 = LabeledSpan(start=0, end=5, label="a")

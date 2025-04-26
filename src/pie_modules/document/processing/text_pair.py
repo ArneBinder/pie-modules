@@ -6,15 +6,13 @@ from collections.abc import Iterator
 from itertools import chain
 from typing import Dict, Iterable, List, Optional, Tuple, TypeVar
 
-from pytorch_ie.annotations import LabeledSpan, Span
-from pytorch_ie.documents import (
-    TextDocumentWithLabeledSpansAndBinaryRelations,
-    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
-)
 from tqdm import tqdm
 
+from pie_modules.annotations import LabeledSpan, Span
 from pie_modules.documents import (
     BinaryCorefRelation,
+    TextDocumentWithLabeledSpansAndBinaryRelations,
+    TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
     TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
 )
 from pie_modules.utils.span import are_nested

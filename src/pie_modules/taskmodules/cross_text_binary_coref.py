@@ -15,9 +15,7 @@ from typing import (
 )
 
 import torch
-from pytorch_ie import Annotation
-from pytorch_ie.annotations import Span
-from pytorch_ie.core import TaskEncoding, TaskModule
+from pytorch_ie.core import Annotation, TaskEncoding, TaskModule
 from pytorch_ie.utils.window import get_window_around_slice
 from torchmetrics import MetricCollection
 from torchmetrics.classification import (
@@ -28,6 +26,7 @@ from torchmetrics.classification import (
 from transformers import AutoTokenizer, BatchEncoding
 from typing_extensions import TypeAlias
 
+from pie_modules.annotations import Span
 from pie_modules.documents import (
     TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
 )

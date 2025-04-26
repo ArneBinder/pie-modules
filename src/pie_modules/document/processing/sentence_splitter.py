@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 from typing import TypeVar
 
-from pytorch_ie.annotations import LabeledSpan
-from pytorch_ie.documents import TextDocumentWithLabeledPartitions
+from pie_modules.annotations import LabeledSpan
+from pie_modules.documents import TextDocumentWithLabeledPartitions
 
 logger = logging.getLogger(__name__)
 

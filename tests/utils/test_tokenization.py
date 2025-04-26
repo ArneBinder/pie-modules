@@ -1,7 +1,7 @@
 import pytest
-from pytorch_ie.annotations import Span
 from transformers import AutoTokenizer
 
+from pie_modules.annotations import Span
 from pie_modules.utils.tokenization import (
     SpanNotAlignedWithTokenException,
     get_aligned_token_span,
