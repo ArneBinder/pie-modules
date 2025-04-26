@@ -282,7 +282,7 @@ def bioul_tags_to_spans(
 def boul_tags_to_spans(
     tag_sequence: List[str],
     classes_to_ignore: Optional[List[str]] = None,
-):
+) -> List[TypedStringSpan]:
     """Given a sequence corresponding to BOUL tags, extracts spans. It converts BOUL tags to BIOUL
     tags and then BIOUL tags are converted to spans.
 
@@ -358,7 +358,7 @@ def tag_sequence_to_token_spans(
     coding_scheme: str = "IOB2",
     classes_to_ignore: Optional[List[str]] = None,
     include_ill_formed: bool = True,
-):
+) -> List[TypedStringSpan]:
     """Given a sequence corresponding to a coding scheme (IOB2, BIOUL and BOUL), this method
     converts it into the token spans. It first fixes or removes the ill formed tag sequence (if
     any) and then converts the tag sequence to the spans.
