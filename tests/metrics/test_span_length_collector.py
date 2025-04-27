@@ -168,5 +168,5 @@ def test_span_length_collector_with_tokenize_wrong_annotation_type():
         statistic(doc)
     assert (
         str(excinfo.value)
-        == "span length calculation is not yet supported for <class 'pytorch_ie.annotations.Label'>"
+        == "span length calculation is not yet supported for <class 'pie_modules.annotations.Label'>"
     )

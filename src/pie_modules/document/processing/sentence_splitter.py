@@ -46,6 +46,7 @@ class NltkSentenceSplitter:
         self.inplace = inplace
         # download the NLTK Punkt tokenizer model
         nltk.download("punkt")
+        nltk.download("punkt_tab")
         self.sentencizer = nltk.data.load(sentencizer_url)
 
     def __call__(self, document: D) -> D:

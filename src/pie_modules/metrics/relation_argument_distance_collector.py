@@ -82,7 +82,7 @@ class RelationArgumentDistanceCollector(DocumentStatistic):
 
             for binary_relation in layer_obj:
                 if isinstance(binary_relation, BinaryRelation):
-                    args = [binary_relation.head, binary_relation.tail]
+                    args = (binary_relation.head, binary_relation.tail)
                     label = binary_relation.label
                 elif isinstance(binary_relation, NaryRelation):
                     args = binary_relation.arguments

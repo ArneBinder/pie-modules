@@ -4,8 +4,8 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "pie-modules"
-version = "0.15.9"
-description = "Model and Taskmodule implementations for PyTorch-IE"
+version = "0.15.6"
+description = "Utility modules for Python-IE"
 authors = ["Arne Binder <arne.binder@dfki.de>"]
 readme = "README.md"
 homepage = "https://github.com/arnebinder/pie-modules"
@@ -24,22 +24,16 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.9"
-# TODO: remove and use pie-core instead
-pytorch-ie = ">=0.31.9,<0.32.0"
-pytorch-lightning = "^2.1.0"
-torchmetrics = "^1"
-# >=4.35 because of BartModelWithDecoderPositionIds, <4.37 because of generation config
-# created from model config in BartAsPointerNetwork
-transformers = ">=4.35.0,<4.37.0"
+pie-core = ">=0.1.2,<0.2.0"
+pandas = ">=2.0.3,<3.0.0"
+# required for AutoTokenizer, PreTrainedTokenizer, BatchEncoding
+transformers = ">=4.0.0,<5.0.0"
 
 [tool.poetry.group.dev.dependencies]
-torch = {version = "^2.1.0+cpu", source = "pytorch"}
 pytest = "^7.4.2"
 pytest-cov = "^4.1.0"
 pre-commit = "^3.4.0"
 tabulate = "^0.9"
-# for TokenClassificationModelWithSeq2SeqEncoderAndCrf
-pytorch-crf = ">=0.7.2"
 # for rouge metric (tests only) and for NltkSentenceSplitter
 nltk = "^3.8.1"
 # for NltkSentenceSplitter
@@ -51,15 +45,9 @@ networkx = "^3.0.0"
 optional = true
 
 [[tool.poetry.source]]
-name = "pytorch"
-url = "https://download.pytorch.org/whl/cpu"
-priority = "explicit"
-
-[[tool.poetry.source]]
 name = "pre-release"
 url = "https://test.pypi.org/simple/"
 priority = "explicit"
-
 
 [tool.pytest.ini_options]
 addopts = [

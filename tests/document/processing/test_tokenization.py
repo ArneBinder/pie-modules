@@ -559,7 +559,7 @@ def test_text_based_document_to_token_based_wrong_annotation_type():
     assert (
         str(excinfo.value)
         == "can not convert layers that target the text but contain non-span annotations, "
-        "but found <class 'pytorch_ie.annotations.Label'>"
+        "but found <class 'pie_modules.annotations.Label'>"
     )
 
 
@@ -650,7 +650,7 @@ def test_token_based_document_to_text_based_wrong_annotation_type():
     assert (
         str(excinfo.value)
         == "can not convert layers that target the tokens but contain non-span annotations, "
-        "but found <class 'pytorch_ie.annotations.Label'>"
+        "but found <class 'pie_modules.annotations.Label'>"
     )
 
 

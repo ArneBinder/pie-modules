@@ -18,7 +18,6 @@ from typing import (
 
 from pie_core import Annotation
 from pie_core.utils.hydra import resolve_type
-from transformers import PreTrainedTokenizer
 
 from pie_modules.annotations import MultiSpan, Span
 from pie_modules.documents import TextBasedDocument, TokenBasedDocument
@@ -105,13 +104,13 @@ def char_span_to_token_span(
                     f"The first target of a text targeting span must be a string, but found {type(base_text)} as first "
                     f"target type. Can not convert the span {span}."
                 )
-            stripped_slices = [
-                get_stripped_offsets(start, end, base_text) for start, end in span.slices
-            ]
+            stripped_slices = tuple(
+                [get_stripped_offsets(start, end, base_text) for start, end in span.slices]
+            )
         else:
             stripped_slices = span.slices
         # remove empty and invalid slices
-        stripped_slices = [(start, end) for start, end in stripped_slices if start < end]
+        stripped_slices = tuple([(start, end) for start, end in stripped_slices if start < end])
         if len(stripped_slices) == 0:
             return None
         slices_inclusive_end = [
@@ -453,7 +452,7 @@ def token_based_document_to_text_based(
 
 def tokenize_document(
     doc: TextBasedDocument,
-    tokenizer: PreTrainedTokenizer,
+    tokenizer: Callable,
     result_document_type: Type[ToD],
     partition_layer: Optional[str] = None,
     strip_spans: bool = False,
