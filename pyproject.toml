@@ -45,6 +45,11 @@ networkx = "^3.0.0"
 optional = true
 
 [[tool.poetry.source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
+
+[[tool.poetry.source]]
 name = "pre-release"
 url = "https://test.pypi.org/simple/"
 priority = "explicit"
