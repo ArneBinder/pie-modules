@@ -1,10 +1,10 @@
 import dataclasses
 
 import pytest
-from pie_core import Annotation, AnnotationLayer, Document, annotation_field
+from pie_core import Annotation, AnnotationLayer, annotation_field
 
 from pie_modules.annotations import LabeledMultiSpan, LabeledSpan
-from pie_modules.documents import TextBasedDocument, TokenBasedDocument
+from pie_modules.documents import TextBasedDocument
 from pie_modules.metrics import SpanCoverageCollector
 
 
@@ -53,85 +53,7 @@ def test_span_coverage_collector_with_labels():
     assert values == {"len": 1, "max": 0.125, "mean": 0.125, "min": 0.125, "std": 0.0}
 
 
-def test_span_coverage_collector_with_tokenize():
-    doc = TestDocument(text="A and O.")
-    doc.entities.append(LabeledSpan(start=0, end=1, label="entity"))
-    doc.entities.append(LabeledSpan(start=6, end=7, label="entity"))
-
-    @dataclasses.dataclass
-    class TokenizedTestDocument(TokenBasedDocument):
-        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="tokens")
-
-    statistic = SpanCoverageCollector(
-        layer="entities",
-        tokenize=True,
-        tokenizer="bert-base-uncased",
-        tokenized_document_type=TokenizedTestDocument,
-    )
-    values = statistic(doc)
-    assert values == {
-        "len": 1,
-        "max": 0.3333333333333333,
-        "mean": 0.3333333333333333,
-        "min": 0.3333333333333333,
-        "std": 0.0,
-    }
-
-
-def test_span_coverage_collector_with_tokenize_missing_tokenizer():
-    with pytest.raises(ValueError) as excinfo:
-        SpanCoverageCollector(
-            layer="entities",
-            tokenize=True,
-            tokenized_document_type=TokenBasedDocument,
-        )
-    assert (
-        str(excinfo.value)
-        == "tokenizer must be provided to calculate the span coverage in means of tokens"
-    )
-
-
-def test_span_coverage_collector_with_tokenize_missing_tokenized_document_type():
-    with pytest.raises(ValueError) as excinfo:
-        SpanCoverageCollector(
-            layer="entities",
-            tokenize=True,
-            tokenizer="bert-base-uncased",
-        )
-    assert (
-        str(excinfo.value)
-        == "tokenized_document_type must be provided to calculate the span coverage in means of tokens"
-    )
-
-
-def test_span_coverage_collector_with_tokenize_wrong_document_type():
-    @dataclasses.dataclass
-    class TestDocument(Document):
-        data: str
-        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="data")
-
-    doc = TestDocument(data="A and O")
-
-    @dataclasses.dataclass
-    class TokenizedTestDocument(TokenBasedDocument):
-        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="tokens")
-
-    statistic = SpanCoverageCollector(
-        layer="entities",
-        tokenize=True,
-        tokenizer="bert-base-uncased",
-        tokenized_document_type=TokenizedTestDocument,
-    )
-
-    with pytest.raises(ValueError) as excinfo:
-        statistic(doc)
-    assert (
-        str(excinfo.value)
-        == "doc must be a TextBasedDocument to calculate the span coverage in means of tokens"
-    )
-
-
-def test_span_coverage_collector_with_tokenize_wrong_annotation_type():
+def test_span_coverage_collector_with_wrong_annotation_type():
     @dataclasses.dataclass(eq=True, frozen=True)
     class UnknownSpan(Annotation):
         start: int
