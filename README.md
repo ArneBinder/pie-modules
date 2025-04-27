@@ -1,8 +1,6 @@
 # pie-modules
 
-<a href="https://pytorch.org/get-started/locally/"><img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-ee4c2c?logo=pytorch&logoColor=white"></a>
-<a href="https://pytorchlightning.ai/"><img alt="Lightning" src="https://img.shields.io/badge/-Lightning-792ee5?logo=pytorchlightning&logoColor=white"></a>
-<a href="https://github.com/ChristophAlt/pytorch-ie"><img alt="PyTorch-IE" src="https://img.shields.io/badge/-PyTorch--IE-017F2F?style=flat&logo=github&labelColor=gray"></a><br>
+<a href="https://github.com/ArneBinder/pie-core"><img alt="PythonIE" src="https://img.shields.io/badge/-PythonIE-017F2F?style=flat&logo=github&labelColor=gray"></a><br>
 
 [![PyPI](https://img.shields.io/pypi/v/pie-modules.svg)][pypi status]
 [![Tests](https://github.com/arnebinder/pie-modules/workflows/Tests/badge.svg)][tests]
@@ -10,31 +8,16 @@
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)][pre-commit]
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)][black]
 
-Model-, taskmodule-, and metric-implementations as well as document processing utilities for [PyTorch-IE](https://github.com/ChristophAlt/pytorch-ie).
+Annotation-, document- and metric implementations as well as utilities for [Python-IE](https://github.com/ArneBinder/pie-core).
 
-Available models:
+Available annotation types: see [here](src/pie_modules/annotations.py).
 
-- [SimpleSequenceClassificationModel](src/pie_modules/models/simple_sequence_classification.py)
-- [SequenceClassificationModelWithPooler](src/pie_modules/models/sequence_classification_with_pooler.py)
-- [SequencePairSimilarityModelWithPooler](src/pie_modules/models/sequence_classification_with_pooler.py)
-- [SimpleTokenClassificationModel](src/pie_modules/models/simple_token_classification.py)
-- [TokenClassificationModelWithSeq2SeqEncoderAndCrf](src/pie_modules/models/token_classification_with_seq2seq_encoder_and_crf.py)
-- [SimpleExtractiveQuestionAnsweringModel](src/pie_modules/models/simple_extractive_question_answering.py)
-- [SimpleGenerativeModel](src/pie_modules/models/simple_generative.py)
-- [SpanTupleClassificationModel](src/pie_modules/models/span_tuple_classification.py)
-
-Available taskmodules:
-
-- [RETextClassificationWithIndicesTaskModule](src/pie_modules/taskmodules/re_text_classification_with_indices.py)
-- [CrossTextBinaryCorefTaskModule](src/pie_modules/taskmodules/cross_text_binary_coref.py)
-- [LabeledSpanExtractionByTokenClassificationTaskModule](src/pie_modules/taskmodules/labeled_span_extraction_by_token_classification.py)
-- [ExtractiveQuestionAnsweringTaskModule](src/pie_modules/taskmodules/extractive_question_answering.py)
-- [TextToTextTaskModule](src/pie_modules/taskmodules/text_to_text.py)
-- [PointerNetworkTaskModuleForEnd2EndRE](src/pie_modules/taskmodules/pointer_network_for_end2end_re.py)
-- [RESpanPairClassificationTaskModule](src/pie_modules/taskmodules/re_span_pair_classification.py)
+Available document types: see [here](src/pie_modules/documents.py).
 
 Available metrics:
 
+- [F1Metric](src/pie_modules/metrics/f1.py)
+- [ConfusionMatrix](src/pie_modules/metrics/confusion_matrix.py)
 - [SpanLengthCollector](src/pie_modules/metrics/span_length_collector.py)
 - [RelationArgumentDistanceCollector](src/pie_modules/metrics/relation_argument_distance_collector.py)
 - [SpanCoverageCollector](src/pie_modules/metrics/span_coverage_collector.py)
@@ -48,7 +31,7 @@ Document processing utilities:
 - [RelationArgumentSorter](src/pie_modules/document/processing/relation_argument_sorter.py)
 - [SentenceSplitter](src/pie_modules/document/processing/sentence_splitter.py)
 - [TextSpanTrimmer](src/pie_modules/document/processing/text_span_trimmer.py)
-- [tokenize_document](src/pie_modules/document/processing/tokenization.py)
+- [tokenization utils](src/pie_modules/document/processing/tokenization.py), e.g., `text_based_document_to_token_based` and `token_based_document_to_text_based`
 
 ## Setup
 
