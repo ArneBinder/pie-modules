@@ -42,6 +42,11 @@ flair = "^0.13.1"
 networkx = "^3.0.0"
 
 [[tool.poetry.source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
+
+[[tool.poetry.source]]
 name = "pre-release"
 url = "https://test.pypi.org/simple/"
 priority = "explicit"
