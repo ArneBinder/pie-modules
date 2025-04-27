@@ -3,7 +3,7 @@ from collections import defaultdict
 from typing import Dict
 
 import pytest
-from pytorch_ie.core import Annotation, AnnotationLayer, Document, annotation_field
+from pie_core import Annotation, AnnotationLayer, Document, annotation_field
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
 from pie_modules.annotations import (
@@ -559,7 +559,7 @@ def test_text_based_document_to_token_based_wrong_annotation_type():
     assert (
         str(excinfo.value)
         == "can not convert layers that target the text but contain non-span annotations, "
-        "but found <class 'pytorch_ie.annotations.Label'>"
+        "but found <class 'pie_modules.annotations.Label'>"
     )
 
 
@@ -650,7 +650,7 @@ def test_token_based_document_to_text_based_wrong_annotation_type():
     assert (
         str(excinfo.value)
         == "can not convert layers that target the tokens but contain non-span annotations, "
-        "but found <class 'pytorch_ie.annotations.Label'>"
+        "but found <class 'pie_modules.annotations.Label'>"
     )
 
 

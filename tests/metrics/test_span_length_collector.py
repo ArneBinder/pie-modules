@@ -1,7 +1,7 @@
 import dataclasses
 
 import pytest
-from pytorch_ie.core import AnnotationLayer, Document, annotation_field
+from pie_core import AnnotationLayer, Document, annotation_field
 
 from pie_modules.annotations import Label, LabeledSpan
 from pie_modules.documents import TextBasedDocument, TokenBasedDocument
@@ -168,5 +168,5 @@ def test_span_length_collector_with_tokenize_wrong_annotation_type():
         statistic(doc)
     assert (
         str(excinfo.value)
-        == "span length calculation is not yet supported for <class 'pytorch_ie.annotations.Label'>"
+        == "span length calculation is not yet supported for <class 'pie_modules.annotations.Label'>"
     )
