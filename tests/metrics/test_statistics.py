@@ -3,7 +3,6 @@ from pie_modules.metrics.statistics import (
     FieldLengthCollector,
     LabelCountCollector,
     SubFieldLengthCollector,
-    TokenCountCollector,
 )
 
 
@@ -70,18 +69,4 @@ def test_statistics(document_dataset):
         "test": {"mean": 3.0, "std": 0.0, "min": 3, "max": 3},
         "val": {"mean": 3.0, "std": 0.0, "min": 3, "max": 3},
         "train": {"mean": 3.0, "std": 0.0, "min": 3, "max": 3},
-    }
-
-
-def test_statistics_with_tokenize(document_dataset):
-    statistic = TokenCountCollector(
-        text_field="text",
-        tokenizer="bert-base-uncased",
-        tokenizer_kwargs=dict(add_special_tokens=False),
-    )
-    values = statistic(document_dataset)
-    assert values == {
-        "test": {"max": 13, "mean": 8.5, "min": 4, "std": 4.5},
-        "train": {"max": 14, "mean": 8.285714285714286, "min": 4, "std": 3.5742845723419436},
-        "val": {"max": 13, "mean": 8.5, "min": 4, "std": 4.5},
     }

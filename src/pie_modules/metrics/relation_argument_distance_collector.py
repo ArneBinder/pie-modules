@@ -1,13 +1,9 @@
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Dict, List
 
 from pie_core import Document, DocumentStatistic
-from pie_core.utils.hydra import resolve_target
-from transformers import AutoTokenizer, PreTrainedTokenizer
 
 from pie_modules.annotations import BinaryRelation, NaryRelation, Span
-from pie_modules.document.processing import tokenize_document
-from pie_modules.documents import TextBasedDocument, TokenBasedDocument
 from pie_modules.utils.span import distance
 
 
@@ -33,10 +29,6 @@ class RelationArgumentDistanceCollector(DocumentStatistic):
         self,
         layer: str,
         distance_type: str = "outer",
-        tokenize: bool = False,
-        tokenize_kwargs: Optional[Dict[str, Any]] = None,
-        tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
-        tokenized_document_type: Optional[Union[str, Type[TokenBasedDocument]]] = None,
         key_all: str = "ALL",
         **kwargs,
     ):
@@ -44,38 +36,9 @@ class RelationArgumentDistanceCollector(DocumentStatistic):
         self.layer = layer
         self.distance_type = distance_type
         self.key_all = key_all
-        self.tokenize = tokenize
-        self.tokenize_kwargs = tokenize_kwargs or {}
-        if self.tokenize:
-            if tokenizer is None:
-                raise ValueError(
-                    "tokenizer must be provided to calculate distance in means of tokens"
-                )
-            if isinstance(tokenizer, str):
-                tokenizer = AutoTokenizer.from_pretrained(tokenizer)
-            self.tokenizer = tokenizer
-            if tokenized_document_type is None:
-                raise ValueError(
-                    "tokenized_document_type must be provided to calculate distance in means of tokens"
-                )
-            self.tokenized_document_type: Type[TokenBasedDocument] = resolve_target(
-                tokenized_document_type
-            )
 
     def _collect(self, doc: Document) -> Dict[str, List[float]]:
-        if self.tokenize:
-            if not isinstance(doc, TextBasedDocument):
-                raise ValueError(
-                    "doc must be a TextBasedDocument to calculate distance in means of tokens"
-                )
-            docs = tokenize_document(
-                doc,
-                tokenizer=self.tokenizer,
-                result_document_type=self.tokenized_document_type,
-                **self.tokenize_kwargs,
-            )
-        else:
-            docs = [doc]
+        docs = [doc]
         values: Dict[str, List[float]] = defaultdict(list)
         for doc in docs:
             layer_obj = getattr(doc, self.layer)
