@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict, List, Optional, Set, Type, Union
 
-from pytorch_ie.core import Document, DocumentStatistic
+from pie_core import Document, DocumentStatistic
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
 from pie_modules.annotations import LabeledMultiSpan, Span

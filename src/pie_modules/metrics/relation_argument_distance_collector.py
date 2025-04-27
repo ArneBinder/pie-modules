@@ -1,8 +1,8 @@
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Type, Union
 
-from pytorch_ie.core import Document, DocumentStatistic
-from pytorch_ie.utils.hydra import resolve_target
+from pie_core import Document, DocumentStatistic
+from pie_core.utils.hydra import resolve_target
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
 from pie_modules.annotations import BinaryRelation, NaryRelation, Span
@@ -82,7 +82,7 @@ class RelationArgumentDistanceCollector(DocumentStatistic):
 
             for binary_relation in layer_obj:
                 if isinstance(binary_relation, BinaryRelation):
-                    args = [binary_relation.head, binary_relation.tail]
+                    args = (binary_relation.head, binary_relation.tail)
                     label = binary_relation.label
                 elif isinstance(binary_relation, NaryRelation):
                     args = binary_relation.arguments

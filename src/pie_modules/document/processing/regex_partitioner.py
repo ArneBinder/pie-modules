@@ -6,7 +6,7 @@ import re
 import statistics
 from typing import Any, Callable, Iterable, Iterator, Match, TypeVar
 
-from pytorch_ie.core import EnterDatasetMixin, ExitDatasetMixin
+from pie_core import EnterDatasetMixin, ExitDatasetMixin
 
 from pie_modules.annotations import LabeledSpan
 from pie_modules.documents import TextBasedDocument

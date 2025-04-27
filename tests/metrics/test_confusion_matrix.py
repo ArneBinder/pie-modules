@@ -4,7 +4,7 @@ from functools import partial
 from typing import Dict
 
 import pytest
-from pytorch_ie.core import Annotation, AnnotationLayer, annotation_field
+from pie_core import Annotation, AnnotationLayer, annotation_field
 
 from pie_modules.annotations import LabeledSpan
 from pie_modules.documents import TextBasedDocument
