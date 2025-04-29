@@ -68,7 +68,10 @@ def test_undetected_is_gold_label(documents):
     with pytest.raises(ValueError) as exception:
         metric(documents)
 
-    assert str(exception.value).startswith("The gold annotation has the label")
+    assert (
+        str(exception.value)
+        == "The gold annotation has the label 'animal' for unassignable instances. Set a different unassignable_label."
+    )
 
 
 def test_unassignable_is_pred_label(documents):
@@ -76,7 +79,10 @@ def test_unassignable_is_pred_label(documents):
     with pytest.raises(ValueError) as exception:
         metric(documents)
 
-    assert str(exception.value).startswith("The predicted annotation has the label")
+    assert (
+        str(exception.value)
+        == "The predicted annotation has the label 'cat' for undetected instances. Set a different undetected_label."
+    )
 
 
 @pytest.fixture
