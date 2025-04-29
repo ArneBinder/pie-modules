@@ -81,14 +81,14 @@ class ConfusionMatrix(DocumentMetric):
             gold_labels = [getattr(ann, self.label_field) for ann in base2gold[base_ann]]
             pred_labels = [getattr(ann, self.label_field) for ann in base2pred[base_ann]]
 
-            if self.undetected_label in gold_labels:
+            if self.unassignable_label in gold_labels:
                 raise ValueError(
-                    f"The gold annotation has the label '{self.undetected_label}' for undetected instances. "
+                    f"The gold annotation has the label '{self.unassignable_label}' for unassignable instances. "
                     f"Set a different undetected_label."
                 )
-            if self.unassignable_label in pred_labels:
+            if self.undetected_label in pred_labels:
                 raise ValueError(
-                    f"The predicted annotation has the label '{self.unassignable_label}' for unassignable predictions. "
+                    f"The predicted annotation has the label '{self.undetected_label}' for undetected instances. "
                     f"Set a different unassignable_label."
                 )
 
@@ -102,9 +102,9 @@ class ConfusionMatrix(DocumentMetric):
 
             # use placeholder labels for empty gold or prediction labels
             if len(gold_labels) == 0:
-                gold_labels.append(self.undetected_label)
+                gold_labels.append(self.unassignable_label)
             if len(pred_labels) == 0:
-                pred_labels.append(self.unassignable_label)
+                pred_labels.append(self.undetected_label)
 
             # main logic
             for gold_label in gold_labels:
