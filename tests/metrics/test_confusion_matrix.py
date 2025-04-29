@@ -53,30 +53,36 @@ def test_confusion_matrix(documents):
     assert dict(metric.counts) == {
         ("animal", "animal"): 1,
         ("animal", "cat"): 1,
-        ("UNDETECTED", "company"): 1,
+        ("UNASSIGNABLE", "company"): 1,
         ("company", "company"): 1,
     }
     assert metric.compute() == {
         "animal": {"animal": 1, "cat": 1},
-        "UNDETECTED": {"company": 1},
+        "UNASSIGNABLE": {"company": 1},
         "company": {"company": 1},
     }
 
 
 def test_undetected_is_gold_label(documents):
-    metric = ConfusionMatrix(layer="entities", undetected_label="animal")
+    metric = ConfusionMatrix(layer="entities", unassignable_label="animal")
     with pytest.raises(ValueError) as exception:
         metric(documents)
 
-    assert str(exception.value).startswith("The gold annotation has the label")
+    assert (
+        str(exception.value)
+        == "The gold annotation has the label 'animal' for unassignable instances. Set a different unassignable_label."
+    )
 
 
 def test_unassignable_is_pred_label(documents):
-    metric = ConfusionMatrix(layer="entities", unassignable_label="cat")
+    metric = ConfusionMatrix(layer="entities", undetected_label="cat")
     with pytest.raises(ValueError) as exception:
         metric(documents)
 
-    assert str(exception.value).startswith("The predicted annotation has the label")
+    assert (
+        str(exception.value)
+        == "The predicted annotation has the label 'cat' for undetected instances. Set a different undetected_label."
+    )
 
 
 @pytest.fixture
@@ -114,7 +120,7 @@ def documents_without_predictions(documents):
 def test_documents_without_predictions(documents_without_predictions):
     metric = ConfusionMatrix(layer="entities")
     metric(documents_without_predictions)
-    assert dict(metric.counts) == {("animal", "UNASSIGNABLE"): 2, ("company", "UNASSIGNABLE"): 1}
+    assert dict(metric.counts) == {("animal", "UNDETECTED"): 2, ("company", "UNDETECTED"): 1}
 
 
 def test_show_as_markdown(documents, caplog):
@@ -123,9 +129,8 @@ def test_show_as_markdown(documents, caplog):
     metric(documents)
 
     markdown = [
-        "\nentities:\n|            |   animal |   cat |   company |\n|:-----------|---------:|------:|----------:|\n| animal     |        1 |     1 |         0 |\n| company    |        0 |     0 |         1 |\n| UNDETECTED |        0 |     0 |         1 |"
+        "\nentities:\n|              |   animal |   cat |   company |\n|:-------------|---------:|------:|----------:|\n| UNASSIGNABLE |        0 |     0 |         1 |\n| animal       |        1 |     1 |         0 |\n| company      |        0 |     0 |         1 |"
     ]
-
     assert caplog.messages == markdown
 
 
@@ -135,7 +140,7 @@ def test_show_as_markdown_without_predictions(documents_without_predictions, cap
     metric(documents_without_predictions)
 
     markdown = [
-        "\nentities:\n|         |   UNASSIGNABLE |\n|:--------|---------------:|\n| animal  |              2 |\n| company |              1 |"
+        "\nentities:\n|         |   UNDETECTED |\n|:--------|-------------:|\n| animal  |            2 |\n| company |            1 |"
     ]
 
     assert caplog.messages == markdown
@@ -160,7 +165,7 @@ def test_annotation_processor(documents):
         ("Hrrr", "My beautified Cat"): 1,
         ("Hrrr", "Hrrr"): 1,
         ("The Super-Company", "The Super-Company"): 1,
-        ("UNDETECTED", "The Super-Company"): 1,
+        ("UNASSIGNABLE", "The Super-Company"): 1,
     }
 
 
@@ -173,5 +178,5 @@ def test_annotation_processor_str(documents):
         ("Hrrr", "My beautified Cat"): 1,
         ("Hrrr", "Hrrr"): 1,
         ("The Super-Company", "The Super-Company"): 1,
-        ("UNDETECTED", "The Super-Company"): 1,
+        ("UNASSIGNABLE", "The Super-Company"): 1,
     }
