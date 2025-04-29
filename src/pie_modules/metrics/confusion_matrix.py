@@ -84,12 +84,12 @@ class ConfusionMatrix(DocumentMetric):
             if self.unassignable_label in gold_labels:
                 raise ValueError(
                     f"The gold annotation has the label '{self.unassignable_label}' for unassignable instances. "
-                    f"Set a different undetected_label."
+                    f"Set a different unassignable_label."
                 )
             if self.undetected_label in pred_labels:
                 raise ValueError(
                     f"The predicted annotation has the label '{self.undetected_label}' for undetected instances. "
-                    f"Set a different unassignable_label."
+                    f"Set a different undetected_label."
                 )
 
             if len(gold_labels) > 1:
