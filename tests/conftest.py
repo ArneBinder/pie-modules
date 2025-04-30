@@ -3,7 +3,7 @@ import json
 
 import pkg_resources
 import pytest
-from pytorch_ie.core import AnnotationLayer, annotation_field
+from pie_core import AnnotationLayer, annotation_field
 
 from pie_modules.annotations import BinaryRelation, LabeledSpan, Span
 from pie_modules.documents import TextBasedDocument
