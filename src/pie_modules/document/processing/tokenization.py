@@ -15,10 +15,10 @@ from typing import (
 )
 
 from pie_core import Annotation
+from pie_core.utils.hydra import resolve_type
 
 from pie_modules.annotations import MultiSpan, Span
 from pie_modules.documents import TextBasedDocument, TokenBasedDocument
-from pie_modules.utils import resolve_type
 
 logger = logging.getLogger(__name__)
 
