@@ -49,6 +49,14 @@ def test_get_pooler_and_output_size_mention(aggregate):
         raise ValueError(f"Unknown aggregate type {aggregate}")
 
 
+def test_get_pooler_and_output_size_mention_unknown_aggregate():
+    with pytest.raises(ValueError) as excinfo:
+        get_pooler_and_output_size(
+            config={"type": MENTION_POOLING, "aggregate": "unknown"}, input_dim=20
+        )
+    assert str(excinfo.value) == 'Unknown aggregation method for mention pooling: "unknown"'
+
+
 def test_get_pooler_and_output_size_wrong_type():
     with pytest.raises(ValueError) as excinfo:
         get_pooler_and_output_size(config={"type": "wrong_type"}, input_dim=20)

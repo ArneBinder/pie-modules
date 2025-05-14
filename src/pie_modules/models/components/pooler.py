@@ -269,6 +269,6 @@ def get_pooler_and_output_size(config: Dict[str, Any], input_dim: int) -> Tuple[
             pooler = SpanMeanPooler(input_dim=input_dim, **pooler_config)
             return pooler, pooler.output_dim
         else:
-            raise ValueError(f"Unknown aggregation method for mention pooling: {aggregate}")
+            raise ValueError(f'Unknown aggregation method for mention pooling: "{aggregate}"')
     else:
         raise ValueError(f'Unknown pooler type "{pooler_type}"')
