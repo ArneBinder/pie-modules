@@ -34,6 +34,21 @@ def test_get_pooler_and_output_size(pooler_type):
         raise ValueError(f"Unknown pooler type {pooler_type}")
 
 
+@pytest.mark.parametrize("aggregate", ["max", "mean"])
+def test_get_pooler_and_output_size_mention(aggregate):
+    pooler, output_size = get_pooler_and_output_size(
+        config={"type": MENTION_POOLING, "aggregate": aggregate}, input_dim=20
+    )
+    assert pooler is not None
+    assert output_size == 20 * 2
+    if aggregate == "max":
+        assert isinstance(pooler, SpanMaxPooler)
+    elif aggregate == "mean":
+        assert isinstance(pooler, SpanMeanPooler)
+    else:
+        raise ValueError(f"Unknown aggregate type {aggregate}")
+
+
 def test_get_pooler_and_output_size_wrong_type():
     with pytest.raises(ValueError) as excinfo:
         get_pooler_and_output_size(config={"type": "wrong_type"}, input_dim=20)
