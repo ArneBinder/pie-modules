@@ -51,15 +51,6 @@ def test_relation_statistics_mixin_show_statistics(caplog):
 
     x = Foo(collect_statistics=True)
 
-    # Test with no relations collected
-    x.collect_all_relations(kind="available", relations=[])
-    x.collect_all_relations(kind="used", relations=[])
-    with caplog.at_level(logging.INFO):
-        x.show_statistics()
-    assert caplog.messages[0] == ("statistics:\n" "| 0   |\n" "|-----|")
-
-    # Test Regular case
-    x.reset_statistics()
     relations = [
         TestAnnotation(label="A", score=1),
         TestAnnotation(label="B", score=0.5),
@@ -74,7 +65,7 @@ def test_relation_statistics_mixin_show_statistics(caplog):
     )
     with caplog.at_level(logging.INFO):
         x.show_statistics()
-    assert caplog.messages[1] == (
+    assert caplog.messages[0] == (
         "statistics:\n"
         "|              |   A |   B |   C |   all_relations |\n"
         "|:-------------|----:|----:|----:|----------------:|\n"
@@ -83,3 +74,28 @@ def test_relation_statistics_mixin_show_statistics(caplog):
         "| used         |   1 |   0 |   1 |               2 |\n"
         "| used %       | 100 |   0 | 100 |              67 |"
     )
+
+
+def test_relation_statistics_mixin_show_statistics_no_relations(caplog):
+    """Test the RelationStatisticsMixin class."""
+
+    @dataclasses.dataclass
+    class Foo(RelationStatisticsMixin):
+        """A class that uses the RelationStatisticsMixin class."""
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+
+    @dataclasses.dataclass(eq=True, frozen=True)
+    class TestAnnotation(Annotation):
+        label: str
+        score: float = dataclasses.field(default=1.0, compare=False)
+
+    x = Foo(collect_statistics=True)
+
+    # Test with no relations collected
+    x.collect_all_relations(kind="available", relations=[])
+    x.collect_all_relations(kind="used", relations=[])
+    with caplog.at_level(logging.INFO):
+        x.show_statistics()
+    assert caplog.messages[0] == ("statistics:\n" "| 0   |\n" "|-----|")
