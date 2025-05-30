@@ -72,9 +72,9 @@ pip install git+https://git@github.com/ArneBinder/pie-modules.git
    git clone https://github.com/ArneBinder/pie-modules
    cd pie-modules
    ```
-3. Create a virtual environment and install the dependencies:
+3. Create a virtual environment and install the dependencies (including development dependencies):
    ```bash
-   poetry install
+   poetry install --with dev
    ```
 
 Finally, to run any of the below commands, you need to activate the virtual environment:
