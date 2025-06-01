@@ -204,6 +204,8 @@ def add_negative_coref_relations(
     text2spans = defaultdict(set)
     text2original_doc_id = dict()
     text2span = dict()
+    num_inter_text_relations = 0
+    num_intra_text_relations = 0
     for doc in documents:
         for labeled_span in doc.labeled_spans:
             text2spans[doc.text].add(labeled_span.copy())
@@ -213,10 +215,20 @@ def add_negative_coref_relations(
         for coref in doc.binary_coref_relations:
             positive_tuples[(doc.text, doc.text_pair)].add((coref.head.copy(), coref.tail.copy()))
             positive_tuples[(doc.text_pair, doc.text)].add((coref.tail.copy(), coref.head.copy()))
+            if doc.text == doc.text_pair:
+                num_intra_text_relations += 1
+            else:
+                num_inter_text_relations += 1
         text2original_doc_id[doc.text] = doc.metadata.get("original_doc_id")
         text2original_doc_id[doc.text_pair] = doc.metadata.get("original_doc_id_pair")
         text2span[doc.text] = doc.metadata.get("original_doc_span")
         text2span[doc.text_pair] = doc.metadata.get("original_doc_span_pair")
+
+    logger.info(
+        f"found {len(text2spans)} texts with "
+        f"{num_inter_text_relations} inter-text and "
+        f"{num_intra_text_relations} intra-text positive relations"
+    )
 
     new_docs = []
     new_rels2new_docs = {}
