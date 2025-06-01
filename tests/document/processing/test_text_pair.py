@@ -125,14 +125,35 @@ def test_simple_text_documents(text_documents):
     ]
 
 
-def test_construct_text_pair_coref_documents_from_partitions_via_relations(text_documents):
+@pytest.mark.parametrize("include_empty_pairs", [False, True])
+def test_construct_text_pair_coref_documents_from_partitions_via_relations(
+    text_documents, include_empty_pairs
+):
     all_docs = {
         doc.id: doc
         for doc in construct_text_pair_coref_documents_from_partitions_via_relations(
-            documents=text_documents, relation_label="semantically_same"
+            documents=text_documents,
+            relation_label="semantically_same",
+            include_empty_pairs=include_empty_pairs,
         )
     }
-    assert set(all_docs) == {"doc2[0:18]+doc2[19:36]", "doc1[0:20]+doc1[21:39]"}
+    doc_ids_with_relations = {"doc1[0:20]+doc1[21:39]", "doc2[0:18]+doc2[19:36]"}
+
+    if include_empty_pairs:
+        doc_ids_without_relations = {
+            "doc1[0:20]+doc1[0:20]",
+            "doc1[21:39]+doc1[0:20]",
+            "doc1[21:39]+doc1[21:39]",
+            "doc2[0:18]+doc2[0:18]",
+            "doc2[19:36]+doc2[0:18]",
+            "doc2[19:36]+doc2[19:36]",
+        }
+        assert set(all_docs) == doc_ids_with_relations | doc_ids_without_relations
+        for doc_id in doc_ids_without_relations:
+            doc = all_docs[doc_id]
+            assert doc.binary_coref_relations.resolve() == []
+    else:
+        assert set(all_docs) == doc_ids_with_relations
 
     doc = all_docs["doc2[0:18]+doc2[19:36]"]
     assert doc.metadata["original_doc_id"] == "doc2"
