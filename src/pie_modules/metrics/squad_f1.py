@@ -6,7 +6,7 @@ from collections import defaultdict
 from typing import Dict, List
 
 import pandas as pd
-from pytorch_ie.core import DocumentMetric
+from pie_core import DocumentMetric
 
 from pie_modules.documents import TextDocumentWithQuestionsAndExtractiveAnswers
 

@@ -1,7 +1,7 @@
 import dataclasses
 
 import pytest
-from pytorch_ie.core import AnnotationLayer, annotation_field
+from pie_core import AnnotationLayer, annotation_field
 
 from pie_modules.annotations import BinaryRelation, LabeledMultiSpan, LabeledSpan
 from pie_modules.document.processing import TextSpanTrimmer
