@@ -197,10 +197,16 @@ def add_negative_coref_relations(
     random_seed: Optional[int] = None,
     enforce_same_original_doc_id: bool = False,
     enforce_different_original_doc_id: bool = False,
+    document_label_whitelist: Optional[List[List[str]]] = None,
 ) -> Iterable[TextPairDocumentWithLabeledSpansAndBinaryCorefRelations]:
+    if document_label_whitelist is not None:
+        document_label_whitelist_tuples = [tuple(labels) for labels in document_label_whitelist]
+    else:
+        document_label_whitelist_tuples = None
     positive_tuples = defaultdict(set)
     text2spans = defaultdict(set)
     text2original_doc_id = dict()
+    text2original_doc_label = dict()
     text2span = dict()
     num_inter_text_relations = 0
     num_intra_text_relations = 0
@@ -221,6 +227,8 @@ def add_negative_coref_relations(
         text2original_doc_id[doc.text_pair] = doc.metadata.get("original_doc_id_pair")
         text2span[doc.text] = doc.metadata.get("original_doc_span")
         text2span[doc.text_pair] = doc.metadata.get("original_doc_span_pair")
+        text2original_doc_label[doc.text] = doc.metadata.get("original_doc_label")
+        text2original_doc_label[doc.text_pair] = doc.metadata.get("original_doc_label_pair")
 
     logger.info(
         f"found {len(text2spans)} texts with "
@@ -234,8 +242,16 @@ def add_negative_coref_relations(
     negative_rels = []
     for text in tqdm(sorted(text2spans)):
         original_doc_id = text2original_doc_id[text]
+        original_doc_label = text2original_doc_label[text]
         for text_pair in sorted(text2spans):
             original_doc_id_pair = text2original_doc_id[text_pair]
+            original_doc_label_pair = text2original_doc_label[text_pair]
+            if (
+                document_label_whitelist_tuples is not None
+                and (original_doc_label, original_doc_label_pair)
+                not in document_label_whitelist_tuples
+            ):
+                continue
             if enforce_same_original_doc_id:
                 if original_doc_id is None or original_doc_id_pair is None:
                     raise ValueError(
