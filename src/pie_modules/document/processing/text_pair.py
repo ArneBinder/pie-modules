@@ -97,6 +97,8 @@ def _construct_text_pair_coref_documents_from_partitions_via_relations(
                         "start": tail_partition.start,
                         "end": tail_partition.end,
                     },
+                    "original_doc_label": head_partition.label,
+                    "original_doc_label_pair": tail_partition.label,
                 },
             )
 
