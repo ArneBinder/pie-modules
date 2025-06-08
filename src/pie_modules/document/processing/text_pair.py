@@ -275,6 +275,8 @@ def add_negative_coref_relations(
                     "original_doc_id_pair": original_doc_id_pair,
                     "original_doc_span": text2span[text],
                     "original_doc_span_pair": text2span[text_pair],
+                    "original_doc_label": original_doc_label,
+                    "original_doc_label_pair": original_doc_label_pair,
                 },
             )
             new_doc.labeled_spans.extend(labeled_span.copy() for labeled_span in text2spans[text])
