@@ -260,7 +260,8 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[str, int]]):
         to_show = pd.Series(statistics)
         if len(to_show.index.names) > 1:
             to_show = to_show.unstack()
-        to_show = to_show.fillna(0)
+        # fill missing values with 0 and convert back to int (unstacking may introduce NaNs which are float type)
+        to_show = to_show.fillna(0).astype(int)
         if to_show.columns.size > 1:
             # TODO: "no_relation" should be "parameterized" (not trivial, because that parameter
             #  is defined in the taskmodule, e.g, none_label for RETextClassificationWithIndicesTaskModule)
