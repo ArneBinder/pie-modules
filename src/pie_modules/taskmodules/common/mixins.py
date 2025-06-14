@@ -266,6 +266,8 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[Tuple[str, str], int]]):
             # TODO: "no_relation" should be "parameterized" (not trivial, because that parameter
             #  is defined in the taskmodule, e.g, none_label for RETextClassificationWithIndicesTaskModule)
             to_show["all_relations"] = to_show.loc[:, to_show.columns != "no_relation"].sum(axis=1)
+
+        # TODO: transpose to have the labels (which may be a lot) as index and allow to keep counts as int columns
         if "used" in to_show.index and "available" in to_show.index:
             to_show.loc["used %"] = (100 * to_show.loc["used"] / to_show.loc["available"]).round()
 
