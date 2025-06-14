@@ -1,7 +1,8 @@
 import dataclasses
 import logging
+from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Generic, Iterable, List, Optional, Tuple, TypeVar
 
 import pandas as pd
 import torch
@@ -151,14 +152,69 @@ class BatchableMixin:
         }
 
 
-class RelationStatisticsMixin:
+T = TypeVar("T")
+
+
+def increase_counter(
+    key: Tuple[Any, ...],
+    statistics: Dict[Tuple[Any, ...], int],
+    value: int = 1,
+):
+    key_s = tuple(str(k) for k in key)
+    statistics[key_s] += value
+
+
+class StatisticsMixin(ABC, Generic[T]):
+    """A mixin class that provides methods to collect and format statistics.
+
+    Args:
+        collect_statistics: Control whether statistics should be collected.
+            If `False`, the mixin will not show any statistics when calling
+            `show_statistics`. Further effects depend on the implementation
+            of the mixin.
+        **kwargs: Additional keyword arguments to pass to the parent class.
+    """
+
     def __init__(self, collect_statistics: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.collect_statistics = collect_statistics
         self.reset_statistics()
 
+    @abstractmethod
     def reset_statistics(self):
-        self._statistics = defaultdict(int)
+        """Reset the statistics collected by this mixin (state)."""
+        pass
+
+    @abstractmethod
+    def get_statistics(self) -> T:
+        """Get the statistics collected by this mixin.
+
+        This should *not* modify the state of the mixin, repeated calls should return the same
+        result!
+        """
+        pass
+
+    def format_statistics(self, statistics: T) -> str:
+        """Format the statistics collected by this mixin as string for display (usually on
+        console)."""
+        raise NotImplementedError(
+            f"format_statistics is not implemented for {self.__class__.__name__}. "
+            "Please implement this method to show formatted statistics."
+        )
+
+    def show_statistics(self):
+        if self.collect_statistics:
+            logger.info(f"statistics:\n{self.format_statistics(self.get_statistics())}")
+
+
+class RelationStatisticsMixin(StatisticsMixin[Dict[Tuple[str, str], int]]):
+    """A mixin class that provides methods to collect and format statistics about relations.
+
+    This mixin collects statistics about relations, such as the number of available, used, and
+    skipped relations.
+    """
+
+    def reset_statistics(self):
         self._collected_relations: Dict[str, List[Annotation]] = defaultdict(list)
 
     def collect_relation(self, kind: str, relation: Annotation):
@@ -169,8 +225,10 @@ class RelationStatisticsMixin:
         if self.collect_statistics:
             self._collected_relations[kind].extend(relations)
 
-    def finalize_statistics(self):
+    def get_statistics(self) -> Dict[Tuple[str, str], int]:
         if self.collect_statistics:
+            # create statistics from the collected relations
+            statistics: Dict[Tuple[str, str], int] = defaultdict(int)
             all_relations = set(self._collected_relations["available"])
             used_relations = set(self._collected_relations["used"])
             skipped_other = all_relations - used_relations
@@ -185,32 +243,34 @@ class RelationStatisticsMixin:
                 else:
                     raise ValueError(f"unknown key: {key}")
                 for rel in rels_set:
+                    # TODO: "no_relation" should be "parameterized" (not trivial, because that parameter
+                    #  is defined in the taskmodule, e.g, none_label for RETextClassificationWithIndicesTaskModule)
                     # Set "no_relation" as label when the score is zero. We encode negative relations
                     # in such a way in the case of multi-label or binary (similarity for coref).
                     label = rel.label if rel.score > 0 else "no_relation"
-                    self.increase_counter(key=(key, label))
+                    increase_counter(key=(key, label), statistics=statistics)
             for rel in skipped_other:
-                self.increase_counter(key=("skipped_other", rel.label))
+                increase_counter(key=("skipped_other", rel.label), statistics=statistics)
 
-    def show_statistics(self):
-        if self.collect_statistics:
-            self.finalize_statistics()
+            return dict(statistics)
+        else:
+            return {}
 
-            to_show = pd.Series(self._statistics)
-            if len(to_show.index.names) > 1:
-                to_show = to_show.unstack()
-            to_show = to_show.fillna(0)
-            if to_show.columns.size > 1:
-                to_show["all_relations"] = to_show.loc[:, to_show.columns != "no_relation"].sum(
-                    axis=1
-                )
-            if "used" in to_show.index and "available" in to_show.index:
-                to_show.loc["used %"] = (
-                    100 * to_show.loc["used"] / to_show.loc["available"]
-                ).round()
-            logger.info(f"statistics:\n{to_show.to_markdown()}")
+    def format_statistics(self, statistics: Dict[Tuple[str, str], int]) -> str:
+        to_show = pd.Series(statistics)
+        if len(to_show.index.names) > 1:
+            to_show = to_show.unstack()
+        # fill missing values with 0 and convert back to int (unstacking may introduce NaNs which are float type)
+        to_show = to_show.fillna(0).astype(int)
+        if to_show.columns.size > 1:
+            # TODO: "no_relation" should be "parameterized" (not trivial, because that parameter
+            #  is defined in the taskmodule, e.g, none_label for RETextClassificationWithIndicesTaskModule)
+            to_show["all_relations"] = to_show.loc[:, to_show.columns != "no_relation"].sum(axis=1)
 
-    def increase_counter(self, key: Tuple[Any, ...], value: Optional[int] = 1):
-        if self.collect_statistics:
-            key_str = tuple(str(k) for k in key)
-            self._statistics[key_str] += value
+        # TODO: transpose
+        #  to have the labels (which may be a lot) as index for improved readability and
+        #  to allow to keep counts as int columns (dtypes are per-column, not per-row)
+        if "used" in to_show.index and "available" in to_show.index:
+            to_show.loc["used %"] = (100 * to_show.loc["used"] / to_show.loc["available"]).round()
+
+        return to_show.to_markdown()
