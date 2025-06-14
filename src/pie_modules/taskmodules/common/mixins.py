@@ -209,9 +209,10 @@ class StatisticsMixin(ABC, Generic[T]):
 
 
 class RelationStatisticsMixin(StatisticsMixin[Dict[Tuple[str, str], int]]):
-    """A mixin class that provides methods to collect and format statistics about relations. This
-    mixin collects statistics about relations, such as the number of available, used, and skipped
-    relations.
+    """A mixin class that provides methods to collect and format statistics about relations.
+
+    This mixin collects statistics about relations, such as the number of available, used, and
+    skipped relations.
     """
 
     def reset_statistics(self):
