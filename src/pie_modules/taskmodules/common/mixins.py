@@ -156,6 +156,15 @@ class BatchableMixin:
 T = TypeVar("T")
 
 
+def increase_counter(
+    key: Tuple[Any, ...],
+    statistics: Dict[Tuple[Any, ...], int],
+    value: int = 1,
+):
+    key_s = tuple(str(k) for k in key)
+    statistics[key_s] += value
+
+
 class StatisticsMixin(ABC, Generic[T]):
     """A mixin class that provides methods to collect and format statistics.
 
@@ -199,18 +208,13 @@ class StatisticsMixin(ABC, Generic[T]):
             logger.info(f"statistics:\n{self.format_statistics(self.get_statistics())}")
 
 
-class RelationStatisticsMixin(StatisticsMixin[Dict[str, int]]):
+class RelationStatisticsMixin(StatisticsMixin[Dict[Tuple[str, str], int]]):
     """A mixin class that provides methods to collect and format statistics about relations. This
     mixin collects statistics about relations, such as the number of available, used, and skipped
     relations.
-
-    Args:
-        collect_statistics: Whether to collect statistics or not. If `False`, the mixin will not
-            collect any statistics and the `get_statistics` method will return an empty dictionary.
     """
 
     def reset_statistics(self):
-        self._statistics = defaultdict(int)
         self._collected_relations: Dict[str, List[Annotation]] = defaultdict(list)
 
     def collect_relation(self, kind: str, relation: Annotation):
@@ -221,14 +225,10 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[str, int]]):
         if self.collect_statistics:
             self._collected_relations[kind].extend(relations)
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> Dict[Tuple[str, str], int]:
         if self.collect_statistics:
-            # finalize statistics from the collected relations
-
-            # Deep copy to avoid modifying the original statistics.
-            # Otherwise, calling `get_statistics` multiple times would
-            # result in wrong statistics.
-            statistics = deepcopy(self._statistics)
+            # create statistics from the collected relations
+            statistics: Dict[Tuple[str, str], int] = defaultdict(int)
             all_relations = set(self._collected_relations["available"])
             used_relations = set(self._collected_relations["used"])
             skipped_other = all_relations - used_relations
@@ -248,15 +248,15 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[str, int]]):
                     # Set "no_relation" as label when the score is zero. We encode negative relations
                     # in such a way in the case of multi-label or binary (similarity for coref).
                     label = rel.label if rel.score > 0 else "no_relation"
-                    self.increase_counter(key=(key, label), statistics=statistics)
+                    increase_counter(key=(key, label), statistics=statistics)
             for rel in skipped_other:
-                self.increase_counter(key=("skipped_other", rel.label), statistics=statistics)
+                increase_counter(key=("skipped_other", rel.label), statistics=statistics)
 
             return dict(statistics)
         else:
             return {}
 
-    def format_statistics(self, statistics: Dict[str, int]) -> str:
+    def format_statistics(self, statistics: Dict[Tuple[str, str], int]) -> str:
         to_show = pd.Series(statistics)
         if len(to_show.index.names) > 1:
             to_show = to_show.unstack()
@@ -270,14 +270,3 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[str, int]]):
             to_show.loc["used %"] = (100 * to_show.loc["used"] / to_show.loc["available"]).round()
 
         return to_show.to_markdown()
-
-    def increase_counter(
-        self,
-        key: Tuple[Any, ...],
-        value: int = 1,
-        statistics: Optional[Dict[Tuple[Any, ...], int]] = None,
-    ):
-        if self.collect_statistics:
-            statistics = statistics if statistics is not None else self._statistics
-            key_str = tuple(str(k) for k in key)
-            statistics[key_str] += value
