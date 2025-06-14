@@ -243,7 +243,8 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[str, int]]):
                 else:
                     raise ValueError(f"unknown key: {key}")
                 for rel in rels_set:
-                    # TODO: "no_relation" should be parameterized
+                    # TODO: "no_relation" should be "parameterized" (not trivial, because that parameter
+                    #  is defined in the taskmodule, e.g, none_label for RETextClassificationWithIndicesTaskModule)
                     # Set "no_relation" as label when the score is zero. We encode negative relations
                     # in such a way in the case of multi-label or binary (similarity for coref).
                     label = rel.label if rel.score > 0 else "no_relation"
@@ -261,7 +262,8 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[str, int]]):
             to_show = to_show.unstack()
         to_show = to_show.fillna(0)
         if to_show.columns.size > 1:
-            # TODO: "no_relation" should be parameterized
+            # TODO: "no_relation" should be "parameterized" (not trivial, because that parameter
+            #  is defined in the taskmodule, e.g, none_label for RETextClassificationWithIndicesTaskModule)
             to_show["all_relations"] = to_show.loc[:, to_show.columns != "no_relation"].sum(axis=1)
         if "used" in to_show.index and "available" in to_show.index:
             to_show.loc["used %"] = (100 * to_show.loc["used"] / to_show.loc["available"]).round()
