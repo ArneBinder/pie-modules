@@ -55,9 +55,13 @@ def test_relation_statistics_mixin_show_statistics(caplog):
         TestAnnotation(label="C"),
         TestAnnotation(label="D"),
     ]
+    # all available relations
     x.collect_all_relations(kind="available", relations=relations)
+    # relations skipped for a reason ("test")
     x.collect_relation(kind="skipped_test", relation=relations[1])
+    # mark two relations as used, one of them is skipped for another (unknown) reason
     x.collect_all_relations(kind="used", relations=[relations[0], relations[2]])
+
     with caplog.at_level(logging.INFO):
         x.show_statistics()
     assert caplog.messages[0] == (
