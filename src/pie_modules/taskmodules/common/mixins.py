@@ -3,7 +3,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from copy import deepcopy
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Generic, Iterable, List, Optional, Tuple, TypeVar
 
 import pandas as pd
 import torch
@@ -153,7 +153,19 @@ class BatchableMixin:
         }
 
 
-class StatisticsMixin(ABC):
+T = TypeVar("T")
+
+
+class StatisticsMixin(ABC, Generic[T]):
+    """A mixin class that provides methods to collect and format statistics.
+
+    Args:
+        collect_statistics: Whether to collect statistics or not. If `False`,
+            the mixin will not collect any statistics and the `get_statistics`
+            method will return an empty dictionary.
+        **kwargs: Additional keyword arguments to pass to the parent class.
+    """
+
     def __init__(self, collect_statistics: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.collect_statistics = collect_statistics
@@ -165,23 +177,27 @@ class StatisticsMixin(ABC):
         pass
 
     @abstractmethod
-    def get_statistics(self) -> Any:
+    def get_statistics(self) -> T:
         """Get the statistics collected by this mixin.
 
         May do some finalization if needed.
         """
         pass
 
-    @abstractmethod
+    def format_statistics(self, statistics: T) -> str:
+        """Format the statistics collected by this mixin as string for display (usually on
+        console)."""
+        raise NotImplementedError(
+            f"format_statistics is not implemented for {self.__class__.__name__}. "
+            "Please implement this method to show formatted statistics."
+        )
+
     def show_statistics(self):
-        """Show the statistics collected by this mixin.
-
-        This should use get_statistics() internally.
-        """
-        pass
+        if self.collect_statistics:
+            logger.info(f"statistics:\n{self.format_statistics(self.get_statistics())}")
 
 
-class RelationStatisticsMixin(StatisticsMixin):
+class RelationStatisticsMixin(StatisticsMixin[Dict[str, int]]):
 
     def reset_statistics(self):
         self._statistics = defaultdict(int)
@@ -228,21 +244,17 @@ class RelationStatisticsMixin(StatisticsMixin):
         else:
             return {}
 
-    def show_statistics(self):
-        if self.collect_statistics:
-            to_show = pd.Series(self.get_statistics())
-            if len(to_show.index.names) > 1:
-                to_show = to_show.unstack()
-            to_show = to_show.fillna(0)
-            if to_show.columns.size > 1:
-                to_show["all_relations"] = to_show.loc[:, to_show.columns != "no_relation"].sum(
-                    axis=1
-                )
-            if "used" in to_show.index and "available" in to_show.index:
-                to_show.loc["used %"] = (
-                    100 * to_show.loc["used"] / to_show.loc["available"]
-                ).round()
-            logger.info(f"statistics:\n{to_show.to_markdown()}")
+    def format_statistics(self, statistics: Dict[str, int]) -> str:
+        to_show = pd.Series(statistics)
+        if len(to_show.index.names) > 1:
+            to_show = to_show.unstack()
+        to_show = to_show.fillna(0)
+        if to_show.columns.size > 1:
+            to_show["all_relations"] = to_show.loc[:, to_show.columns != "no_relation"].sum(axis=1)
+        if "used" in to_show.index and "available" in to_show.index:
+            to_show.loc["used %"] = (100 * to_show.loc["used"] / to_show.loc["available"]).round()
+
+        return to_show.to_markdown()
 
     def increase_counter(
         self,
