@@ -1,6 +1,8 @@
 import dataclasses
 import logging
+from abc import ABC, abstractmethod
 from collections import defaultdict
+from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
@@ -151,11 +153,35 @@ class BatchableMixin:
         }
 
 
-class RelationStatisticsMixin:
+class StatisticsMixin(ABC):
     def __init__(self, collect_statistics: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.collect_statistics = collect_statistics
         self.reset_statistics()
+
+    @abstractmethod
+    def reset_statistics(self):
+        """Reset the statistics collected by this mixin."""
+        pass
+
+    @abstractmethod
+    def get_statistics(self) -> Any:
+        """Get the statistics collected by this mixin.
+
+        May do some finalization if needed.
+        """
+        pass
+
+    @abstractmethod
+    def show_statistics(self):
+        """Show the statistics collected by this mixin.
+
+        This should use get_statistics() internally.
+        """
+        pass
+
+
+class RelationStatisticsMixin(StatisticsMixin):
 
     def reset_statistics(self):
         self._statistics = defaultdict(int)
@@ -169,8 +195,14 @@ class RelationStatisticsMixin:
         if self.collect_statistics:
             self._collected_relations[kind].extend(relations)
 
-    def finalize_statistics(self):
+    def get_statistics(self) -> Dict[str, Any]:
         if self.collect_statistics:
+            # finalize statistics from the collected relations
+
+            # Deep copy to avoid modifying the original statistics.
+            # Otherwise, calling `get_statistics` multiple times would
+            # result in wrong statistics.
+            statistics = deepcopy(self._statistics)
             all_relations = set(self._collected_relations["available"])
             used_relations = set(self._collected_relations["used"])
             skipped_other = all_relations - used_relations
@@ -188,15 +220,17 @@ class RelationStatisticsMixin:
                     # Set "no_relation" as label when the score is zero. We encode negative relations
                     # in such a way in the case of multi-label or binary (similarity for coref).
                     label = rel.label if rel.score > 0 else "no_relation"
-                    self.increase_counter(key=(key, label))
+                    self.increase_counter(key=(key, label), statistics=statistics)
             for rel in skipped_other:
-                self.increase_counter(key=("skipped_other", rel.label))
+                self.increase_counter(key=("skipped_other", rel.label), statistics=statistics)
+
+            return dict(statistics)
+        else:
+            return {}
 
     def show_statistics(self):
         if self.collect_statistics:
-            self.finalize_statistics()
-
-            to_show = pd.Series(self._statistics)
+            to_show = pd.Series(self.get_statistics())
             if len(to_show.index.names) > 1:
                 to_show = to_show.unstack()
             to_show = to_show.fillna(0)
@@ -210,7 +244,13 @@ class RelationStatisticsMixin:
                 ).round()
             logger.info(f"statistics:\n{to_show.to_markdown()}")
 
-    def increase_counter(self, key: Tuple[Any, ...], value: Optional[int] = 1):
+    def increase_counter(
+        self,
+        key: Tuple[Any, ...],
+        value: int = 1,
+        statistics: Optional[Dict[Tuple[Any, ...], int]] = None,
+    ):
         if self.collect_statistics:
+            statistics = statistics if statistics is not None else self._statistics
             key_str = tuple(str(k) for k in key)
-            self._statistics[key_str] += value
+            statistics[key_str] += value
