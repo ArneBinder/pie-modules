@@ -53,6 +53,7 @@ def test_relation_statistics_mixin_show_statistics(caplog):
         TestAnnotation(label="A"),
         TestAnnotation(label="B"),
         TestAnnotation(label="C"),
+        TestAnnotation(label="D"),
     ]
     x.collect_all_relations(kind="available", relations=relations)
     x.collect_relation(kind="skipped_test", relation=relations[1])
@@ -61,10 +62,11 @@ def test_relation_statistics_mixin_show_statistics(caplog):
         x.show_statistics()
     assert caplog.messages[0] == (
         "statistics:\n"
-        "|              |   A |   B |   C |   all_relations |\n"
-        "|:-------------|----:|----:|----:|----------------:|\n"
-        "| available    |   1 |   1 |   1 |               3 |\n"
-        "| skipped_test |   0 |   1 |   0 |               1 |\n"
-        "| used         |   1 |   0 |   1 |               2 |\n"
-        "| used %       | 100 |   0 | 100 |              67 |"
+        "|               |   A |   B |   C |   D |   all_relations |\n"
+        "|:--------------|----:|----:|----:|----:|----------------:|\n"
+        "| available     |   1 |   1 |   1 |   1 |               4 |\n"
+        "| skipped_other |   0 |   0 |   0 |   1 |               1 |\n"
+        "| skipped_test  |   0 |   1 |   0 |   0 |               1 |\n"
+        "| used          |   1 |   0 |   1 |   0 |               2 |\n"
+        "| used %        | 100 |   0 | 100 |   0 |              50 |"
     )
