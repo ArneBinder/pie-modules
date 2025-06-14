@@ -160,9 +160,10 @@ class StatisticsMixin(ABC, Generic[T]):
     """A mixin class that provides methods to collect and format statistics.
 
     Args:
-        collect_statistics: Whether to collect statistics or not. If `False`,
-            the mixin will not collect any statistics and the `get_statistics`
-            method will return an empty dictionary.
+        collect_statistics: Control whether statistics should be collected.
+            If `False`, the mixin will not show any statistics when calling
+            `show_statistics`. Further effects depend on the implementation
+            of the mixin.
         **kwargs: Additional keyword arguments to pass to the parent class.
     """
 
@@ -199,6 +200,14 @@ class StatisticsMixin(ABC, Generic[T]):
 
 
 class RelationStatisticsMixin(StatisticsMixin[Dict[str, int]]):
+    """A mixin class that provides methods to collect and format statistics about relations. This
+    mixin collects statistics about relations, such as the number of available, used, and skipped
+    relations.
+
+    Args:
+        collect_statistics: Whether to collect statistics or not. If `False`, the mixin will not
+            collect any statistics and the `get_statistics` method will return an empty dictionary.
+    """
 
     def reset_statistics(self):
         self._statistics = defaultdict(int)
@@ -234,6 +243,7 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[str, int]]):
                 else:
                     raise ValueError(f"unknown key: {key}")
                 for rel in rels_set:
+                    # TODO: "no_relation" should be parameterized
                     # Set "no_relation" as label when the score is zero. We encode negative relations
                     # in such a way in the case of multi-label or binary (similarity for coref).
                     label = rel.label if rel.score > 0 else "no_relation"
@@ -251,6 +261,7 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[str, int]]):
             to_show = to_show.unstack()
         to_show = to_show.fillna(0)
         if to_show.columns.size > 1:
+            # TODO: "no_relation" should be parameterized
             to_show["all_relations"] = to_show.loc[:, to_show.columns != "no_relation"].sum(axis=1)
         if "used" in to_show.index and "available" in to_show.index:
             to_show.loc["used %"] = (100 * to_show.loc["used"] / to_show.loc["available"]).round()
