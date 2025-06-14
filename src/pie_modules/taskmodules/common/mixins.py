@@ -2,7 +2,6 @@ import dataclasses
 import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from copy import deepcopy
 from typing import Any, Dict, Generic, Iterable, List, Optional, Tuple, TypeVar
 
 import pandas as pd
