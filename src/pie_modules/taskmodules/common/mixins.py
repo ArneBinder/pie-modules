@@ -173,14 +173,15 @@ class StatisticsMixin(ABC, Generic[T]):
 
     @abstractmethod
     def reset_statistics(self):
-        """Reset the statistics collected by this mixin."""
+        """Reset the statistics collected by this mixin (state)."""
         pass
 
     @abstractmethod
     def get_statistics(self) -> T:
         """Get the statistics collected by this mixin.
 
-        May do some finalization if needed.
+        This should *not* modify the state of the mixin, repeated calls should return the same
+        result!
         """
         pass
 
