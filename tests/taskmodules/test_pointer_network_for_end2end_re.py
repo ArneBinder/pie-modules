@@ -12,6 +12,7 @@ from pie_modules.annotations import BinaryRelation, LabeledSpan
 from pie_modules.documents import TextBasedDocument
 from pie_modules.taskmodules import PointerNetworkTaskModuleForEnd2EndRE
 from pie_modules.taskmodules.pointer_network.logits_processor import (
+    FinitizeLogitsProcessor,
     PrefixConstrainedLogitsProcessorWithMaximum,
 )
 from pie_modules.taskmodules.pointer_network_for_end2end_re import (
@@ -1189,7 +1190,8 @@ def test_configure_model_generation_with_constrained_generation():
     assert generation_config["no_repeat_ngram_size"] == 7
     logits_processor = generation_config["logits_processor"]
     assert isinstance(logits_processor, LogitsProcessorList)
-    assert len(logits_processor) == 1
+    assert len(logits_processor) == 2
+    assert isinstance(logits_processor[0], FinitizeLogitsProcessor)
     assert isinstance(logits_processor[0], PrefixConstrainedLogitsProcessorWithMaximum)
 
 
