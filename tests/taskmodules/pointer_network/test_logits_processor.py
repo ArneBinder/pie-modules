@@ -49,6 +49,21 @@ def test_prefix_constrained_logits_processor_with_maximum_with_inf_scores():
         logits_processor(input_ids, scores_with_neg_inf)
 
 
+def test_prefix_constrained_logits_processor_with_maximum_without_allowed_tokens():
+    def allow_no_tokens(batch_id, sent, max_index):
+        return []
+
+    logits_processor = PrefixConstrainedLogitsProcessorWithMaximum(
+        prefix_allowed_tokens_fn=allow_no_tokens, num_beams=1
+    )
+
+    input_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7]]).to(dtype=torch.long)
+    scores = torch.tensor([[0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.0]]).to(dtype=torch.float)
+
+    with pytest.raises(ValueError, match="No allowed token ids for batch_id"):
+        logits_processor(input_ids, scores)
+
+
 def test_finitize_logits_processor():
     logits_processor = FinitizeLogitsProcessor()
 

@@ -40,10 +40,15 @@ class PrefixConstrainedLogitsProcessorWithMaximum(LogitsProcessor):
             input_ids.view(-1, self._num_beams, input_ids.shape[-1])
         ):
             for beam_id, sent in enumerate(beam_sent):
-                mask[
-                    batch_id * self._num_beams + beam_id,
-                    self._prefix_allowed_tokens_fn(batch_id, sent, mask.size(1)),
-                ] = 0
+                allowed_ids = self._prefix_allowed_tokens_fn(batch_id, sent, mask.size(1))
+                if len(allowed_ids) == 0:
+                    raise ValueError(
+                        f"No allowed token ids for batch_id {batch_id}, beam_id {beam_id} with "
+                        f"previous ids: {sent}. This would result in undefined behaviour, "
+                        "so this is not allowed. Please adjust the prefix_allowed_tokens_fn "
+                        "implementation."
+                    )
+                mask[batch_id * self._num_beams + beam_id, allowed_ids] = 0
 
         return scores + mask
 
