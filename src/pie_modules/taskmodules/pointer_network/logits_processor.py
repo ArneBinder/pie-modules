@@ -46,3 +46,17 @@ class PrefixConstrainedLogitsProcessorWithMaximum(LogitsProcessor):
                 ] = 0
 
         return scores + mask
+
+
+class FinitizeLogitsProcessor(LogitsProcessor):
+    r"""Replaces any `±inf` logits with the largest-magnitude finite values for the tensor’s dtype,
+    ensuring all logits are valid for downstream ops."""
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor
+    ) -> torch.FloatTensor:
+        finite_min = torch.finfo(scores.dtype).min
+        finite_max = torch.finfo(scores.dtype).max
+        # Use nan_to_num for a fast, fused replacement (PyTorch ≥ 1.8)
+        return torch.nan_to_num(scores, neginf=finite_min, posinf=finite_max)

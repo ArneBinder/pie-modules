@@ -2,6 +2,7 @@ import pytest
 import torch
 
 from pie_modules.taskmodules.pointer_network.logits_processor import (
+    FinitizeLogitsProcessor,
     PrefixConstrainedLogitsProcessorWithMaximum,
 )
 
@@ -46,3 +47,19 @@ def test_prefix_constrained_logits_processor_with_maximum_with_inf_scores():
 
     with pytest.raises(ValueError, match="scores contains ±inf or NaN"):
         logits_processor(input_ids, scores_with_neg_inf)
+
+
+def test_finitize_logits_processor():
+    logits_processor = FinitizeLogitsProcessor()
+
+    input_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7]]).to(dtype=torch.long)
+    scores = torch.tensor([[0.9, 0.9, float("inf"), 0.9, 0.9, -float("inf"), 0.0]]).to(
+        dtype=torch.float
+    )
+    new_scores = logits_processor(input_ids, scores)
+
+    assert new_scores.shape == scores.shape
+    torch.testing.assert_close(
+        new_scores,
+        torch.tensor([[0.9, 0.9, 3.4028235e38, 0.9, 0.9, -3.4028235e38, 0.0]]),
+    )
