@@ -12,11 +12,9 @@ class PrefixConstrainedLogitsProcessorWithMaximum(LogitsProcessor):
     can be an index into the input which depends on the length of that input.
 
     Args:
-        prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor, int], List[int]]`):
-            This function constraints the beam search to allowed tokens only at each step. This function takes 2
-            arguments `inputs_ids` and the batch ID `batch_id`. It has to return a list with the allowed tokens for the
-            next generation step conditioned on the previously generated tokens `inputs_ids` and the batch ID
-            `batch_id`.
+        prefix_allowed_tokens_fn (Callable[[int, torch.LongTensor, int], List[int]]):
+            Should return the list of token ids allowed at the next generation step,
+            given (`batch_id`, `input_ids_so_far`, `max_index`).
     """
 
     def __init__(
@@ -31,14 +29,39 @@ class PrefixConstrainedLogitsProcessorWithMaximum(LogitsProcessor):
     def __call__(
         self, input_ids: torch.LongTensor, scores: torch.FloatTensor
     ) -> torch.FloatTensor:
+        if not torch.isfinite(scores).all():
+            raise ValueError(
+                "scores contains ±inf or NaN, which is not allowed by "
+                "PrefixConstrainedLogitsProcessorWithMaximum. "
+                "Insert FinitizeLogitsProcessor earlier to clean them."
+            )
         mask = torch.full_like(scores, -math.inf)
         for batch_id, beam_sent in enumerate(
             input_ids.view(-1, self._num_beams, input_ids.shape[-1])
         ):
             for beam_id, sent in enumerate(beam_sent):
-                mask[
-                    batch_id * self._num_beams + beam_id,
-                    self._prefix_allowed_tokens_fn(batch_id, sent, mask.size(1)),
-                ] = 0
+                allowed_ids = self._prefix_allowed_tokens_fn(batch_id, sent, mask.size(1))
+                if len(allowed_ids) == 0:
+                    raise ValueError(
+                        f"No allowed token ids for batch_id {batch_id}, beam_id {beam_id} with "
+                        f"previous ids: {sent}. This would result in undefined behaviour, "
+                        "so this is not allowed. Please adjust the prefix_allowed_tokens_fn "
+                        "implementation."
+                    )
+                mask[batch_id * self._num_beams + beam_id, allowed_ids] = 0
 
         return scores + mask
+
+
+class FinitizeLogitsProcessor(LogitsProcessor):
+    r"""Replaces any `±inf` logits with the largest-magnitude finite values for the tensor’s dtype,
+    ensuring all logits are valid for downstream ops."""
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor
+    ) -> torch.FloatTensor:
+        finite_min = torch.finfo(scores.dtype).min
+        finite_max = torch.finfo(scores.dtype).max
+        # Use nan_to_num for a fast, fused replacement (PyTorch ≥ 1.8)
+        return torch.nan_to_num(scores, neginf=finite_min, posinf=finite_max)

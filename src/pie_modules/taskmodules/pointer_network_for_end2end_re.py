@@ -58,6 +58,7 @@ from .pointer_network.annotation_encoder_decoder import (
     SpanEncoderDecoderWithOffset,
 )
 from .pointer_network.logits_processor import (
+    FinitizeLogitsProcessor,
     PrefixConstrainedLogitsProcessorWithMaximum,
 )
 
@@ -242,6 +243,8 @@ class PointerNetworkTaskModuleForEnd2EndRE(
         result: Dict[str, Any] = {"no_repeat_ngram_size": 7}
         if self.constrained_generation:
             logits_processor = LogitsProcessorList()
+            # PrefixConstrainedLogitsProcessorWithMaximum requires finite logits
+            logits_processor.append(FinitizeLogitsProcessor())
             logits_processor.append(
                 PrefixConstrainedLogitsProcessorWithMaximum(
                     prefix_allowed_tokens_fn=self._prefix_allowed_tokens_fn_with_maximum,
