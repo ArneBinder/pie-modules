@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from pie_modules.taskmodules.pointer_network.logits_processor import (
@@ -23,3 +24,25 @@ def test_prefix_constrained_logits_processor_with_maximum():
             [[-float("inf"), -float("inf"), -float("inf"), -float("inf"), 0.9, 0.9, 0.0]]
         ),
     )
+
+
+def test_prefix_constrained_logits_processor_with_maximum_with_inf_scores():
+    def allow_last_three(batch_id, sent, max_index):
+        return list(range(max_index - 3, max_index))
+
+    logits_processor = PrefixConstrainedLogitsProcessorWithMaximum(
+        prefix_allowed_tokens_fn=allow_last_three, num_beams=1
+    )
+    input_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7]]).to(dtype=torch.long)
+    scores_with_pos_inf = torch.tensor([[0.9, 0.9, float("inf"), 0.9, 0.9, 0.9, 0.0]]).to(
+        dtype=torch.float
+    )
+    scores_with_neg_inf = torch.tensor([[0.9, 0.9, -float("inf"), 0.9, 0.9, 0.9, 0.0]]).to(
+        dtype=torch.float
+    )
+
+    with pytest.raises(ValueError, match="scores contains ±inf or NaN"):
+        logits_processor(input_ids, scores_with_pos_inf)
+
+    with pytest.raises(ValueError, match="scores contains ±inf or NaN"):
+        logits_processor(input_ids, scores_with_neg_inf)
