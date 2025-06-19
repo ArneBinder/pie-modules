@@ -1192,7 +1192,7 @@ def test_configure_model_generation_with_constrained_generation():
     assert isinstance(logits_processor, LogitsProcessorList)
     assert len(logits_processor) == 2
     assert isinstance(logits_processor[0], FinitizeLogitsProcessor)
-    assert isinstance(logits_processor[0], PrefixConstrainedLogitsProcessorWithMaximum)
+    assert isinstance(logits_processor[1], PrefixConstrainedLogitsProcessorWithMaximum)
 
 
 def test_prefix_allowed_tokens_fn_with_maximum():
