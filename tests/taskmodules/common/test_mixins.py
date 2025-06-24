@@ -74,3 +74,21 @@ def test_relation_statistics_mixin_show_statistics(caplog):
         "| used          |   1 |   0 |   1 |   0 |               2 |\n"
         "| used %        | 100 |   0 | 100 |   0 |              50 |"
     )
+
+
+def test_relation_statistics_mixin_show_statistics_no_relations(caplog):
+    """Test the RelationStatisticsMixin class."""
+
+    class Foo(RelationStatisticsMixin):
+        """A class that uses the RelationStatisticsMixin class."""
+
+        pass
+
+    x = Foo(collect_statistics=True)
+
+    # Test with no relations collected
+    x.collect_all_relations(kind="available", relations=[])
+    x.collect_all_relations(kind="used", relations=[])
+    with caplog.at_level(logging.INFO):
+        x.show_statistics()
+    assert caplog.messages[0] == ("statistics:\n" "| 0   |\n" "|-----|")

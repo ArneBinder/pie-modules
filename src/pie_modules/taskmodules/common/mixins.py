@@ -257,9 +257,13 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[Tuple[str, str], int]]):
             return {}
 
     def format_statistics(self, statistics: Dict[Tuple[str, str], int]) -> str:
-        to_show = pd.Series(statistics)
-        if len(to_show.index.names) > 1:
-            to_show = to_show.unstack()
+        if len(statistics) > 0:
+            to_show_series = pd.Series(statistics)
+            # unstack index to have relation labels as column names
+            to_show = to_show_series.unstack()
+        else:
+            # If there were no statistics, create an empty dummy dataframe.
+            to_show = pd.DataFrame(pd.Series(dict()))
         # fill missing values with 0 and convert back to int (unstacking may introduce NaNs which are float type)
         to_show = to_show.fillna(0).astype(int)
         if to_show.columns.size > 1:
