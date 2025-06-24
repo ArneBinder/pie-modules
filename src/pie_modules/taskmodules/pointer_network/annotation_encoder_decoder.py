@@ -381,8 +381,10 @@ class BinaryRelationEncoderDecoder(AnnotationEncoderDecoder[BinaryRelation, List
         if len(encoding):
             for i in encoding:
                 current_encoding.append(i)
-                # An encoding is complete when it ends with a relation_id
-                # or when it has a length of 7
+                # An encoding is complete when it ends with a relation_id or when it has
+                # a length of 7, encodings with length above 7 are never valid. Note that
+                # all incomplete encodings (the 3rd return value of this method) need to
+                # be processable by build_decoding_constraints!
                 if i in relation_ids or len(current_encoding) == 7:
                     # try to decode the current relation encoding
                     try:
