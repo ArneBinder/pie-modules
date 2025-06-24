@@ -37,12 +37,10 @@ def test_batchable_mixin():
 def test_relation_statistics_mixin_show_statistics(caplog):
     """Test the RelationStatisticsMixin class."""
 
-    @dataclasses.dataclass
     class Foo(RelationStatisticsMixin):
         """A class that uses the RelationStatisticsMixin class."""
 
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
+        pass
 
     @dataclasses.dataclass(eq=True, frozen=True)
     class TestAnnotation(Annotation):
@@ -52,27 +50,29 @@ def test_relation_statistics_mixin_show_statistics(caplog):
     x = Foo(collect_statistics=True)
 
     relations = [
-        TestAnnotation(label="A", score=1),
-        TestAnnotation(label="B", score=0.5),
-        TestAnnotation(label="C", score=0.3),
+        TestAnnotation(label="A"),
+        TestAnnotation(label="B"),
+        TestAnnotation(label="C"),
+        TestAnnotation(label="D"),
     ]
+    # all available relations
     x.collect_all_relations(kind="available", relations=relations)
+    # relations skipped for a reason ("test")
     x.collect_relation(kind="skipped_test", relation=relations[1])
-    x.collect_all_relations(
-        kind="used",
-        relations=set(x._collected_relations["available"])
-        - set(x._collected_relations["skipped_test"]),
-    )
+    # mark two relations as used, one of them is skipped for another (unknown) reason
+    x.collect_all_relations(kind="used", relations=[relations[0], relations[2]])
+
     with caplog.at_level(logging.INFO):
         x.show_statistics()
     assert caplog.messages[0] == (
         "statistics:\n"
-        "|              |   A |   B |   C |   all_relations |\n"
-        "|:-------------|----:|----:|----:|----------------:|\n"
-        "| available    |   1 |   1 |   1 |               3 |\n"
-        "| skipped_test |   0 |   1 |   0 |               1 |\n"
-        "| used         |   1 |   0 |   1 |               2 |\n"
-        "| used %       | 100 |   0 | 100 |              67 |"
+        "|               |   A |   B |   C |   D |   all_relations |\n"
+        "|:--------------|----:|----:|----:|----:|----------------:|\n"
+        "| available     |   1 |   1 |   1 |   1 |               4 |\n"
+        "| skipped_other |   0 |   0 |   0 |   1 |               1 |\n"
+        "| skipped_test  |   0 |   1 |   0 |   0 |               1 |\n"
+        "| used          |   1 |   0 |   1 |   0 |               2 |\n"
+        "| used %        | 100 |   0 | 100 |   0 |              50 |"
     )
 
 

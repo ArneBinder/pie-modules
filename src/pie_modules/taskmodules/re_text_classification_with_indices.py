@@ -580,7 +580,7 @@ class RETextClassificationWithIndicesTaskModule(
                             f"relation (with label {prev_label}) for these arguments"
                         )
                         if self.collect_statistics:
-                            self.increase_counter(("skipped_reversed_same_arguments", rel.label))
+                            self.collect_relation("skipped_reversed_same_arguments", reversed_rel)
                         continue
                     elif rel.label in self.symmetric_relations:
                         # warn if the original relation arguments were not sorted by their start and end positions
@@ -605,8 +605,8 @@ class RETextClassificationWithIndicesTaskModule(
                                 f"relations on your own and then setting *reverse_symmetric_relations* to False."
                             )
                             if self.collect_statistics:
-                                self.increase_counter(
-                                    ("used_not_sorted_reversed_arguments", rel.label)
+                                self.collect_relation(
+                                    "used_not_sorted_reversed_arguments", reversed_rel
                                 )
 
                     arguments2relation[reversed_arguments] = reversed_rel

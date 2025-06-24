@@ -40,7 +40,9 @@ def _span_copy_shifted(span: S, offset: int) -> S:
 
 
 def _construct_text_pair_coref_documents_from_partitions_via_relations(
-    document: TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions, relation_label: str
+    document: TextDocumentWithLabeledSpansBinaryRelationsAndLabeledPartitions,
+    relation_label: str,
+    include_empty_pairs: bool = False,
 ) -> List[TextPairDocumentWithLabeledSpansAndBinaryCorefRelations]:
     span2partition = _span2partition_mapping(
         spans=document.labeled_spans, partitions=document.labeled_partitions
@@ -49,34 +51,30 @@ def _construct_text_pair_coref_documents_from_partitions_via_relations(
     for span, partition in span2partition.items():
         partition2spans[partition].append(span)
 
-    texts2docs_and_span_mappings: Dict[
-        Tuple[str, str],
-        Tuple[
-            TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
-            Dict[LabeledSpan, LabeledSpan],
-            Dict[LabeledSpan, LabeledSpan],
-        ],
-    ] = dict()
-    result = []
+    head_and_tail_partition2relations = defaultdict(list)
     for rel in document.binary_relations:
         if rel.label != relation_label:
             continue
-
         if rel.head not in span2partition:
             raise ValueError(f"head not in any partition: {rel.head}")
         head_partition = span2partition[rel.head]
-        text = document.text[head_partition.start : head_partition.end]
-
         if rel.tail not in span2partition:
             raise ValueError(f"tail not in any partition: {rel.tail}")
         tail_partition = span2partition[rel.tail]
-        text_pair = document.text[tail_partition.start : tail_partition.end]
+        head_and_tail_partition2relations[(head_partition, tail_partition)].append(rel)
 
-        if (text, text_pair) in texts2docs_and_span_mappings:
-            new_doc, head_spans_mapping, tail_spans_mapping = texts2docs_and_span_mappings[
-                (text, text_pair)
-            ]
-        else:
+    result = []
+    for head_partition in document.labeled_partitions:
+        for tail_partition in document.labeled_partitions:
+
+            rels = head_and_tail_partition2relations.get((head_partition, tail_partition), [])
+
+            if len(rels) == 0 and not include_empty_pairs:
+                continue
+
+            text = document.text[head_partition.start : head_partition.end]
+            text_pair = document.text[tail_partition.start : tail_partition.end]
+
             if document.id is not None:
                 doc_id = (
                     f"{document.id}[{head_partition.start}:{head_partition.end}]"
@@ -99,6 +97,8 @@ def _construct_text_pair_coref_documents_from_partitions_via_relations(
                         "start": tail_partition.start,
                         "end": tail_partition.end,
                     },
+                    "original_doc_label": head_partition.label,
+                    "original_doc_label_pair": tail_partition.label,
                 },
             )
 
@@ -114,17 +114,15 @@ def _construct_text_pair_coref_documents_from_partitions_via_relations(
             }
             new_doc.labeled_spans_pair.extend(tail_spans_mapping.values())
 
-            texts2docs_and_span_mappings[(text, text_pair)] = (
-                new_doc,
-                head_spans_mapping,
-                tail_spans_mapping,
-            )
-            result.append(new_doc)
+            for rel in rels:
+                coref_rel = BinaryCorefRelation(
+                    head=head_spans_mapping[rel.head],
+                    tail=tail_spans_mapping[rel.tail],
+                    score=1.0,
+                )
+                new_doc.binary_coref_relations.append(coref_rel)
 
-        coref_rel = BinaryCorefRelation(
-            head=head_spans_mapping[rel.head], tail=tail_spans_mapping[rel.tail], score=1.0
-        )
-        new_doc.binary_coref_relations.append(coref_rel)
+            result.append(new_doc)
 
     return result
 
@@ -199,11 +197,19 @@ def add_negative_coref_relations(
     random_seed: Optional[int] = None,
     enforce_same_original_doc_id: bool = False,
     enforce_different_original_doc_id: bool = False,
+    document_label_whitelist: Optional[List[List[str]]] = None,
 ) -> Iterable[TextPairDocumentWithLabeledSpansAndBinaryCorefRelations]:
+    if document_label_whitelist is not None:
+        document_label_whitelist_tuples = [tuple(labels) for labels in document_label_whitelist]
+    else:
+        document_label_whitelist_tuples = None
     positive_tuples = defaultdict(set)
     text2spans = defaultdict(set)
     text2original_doc_id = dict()
+    text2original_doc_label = dict()
     text2span = dict()
+    num_inter_text_relations = 0
+    num_intra_text_relations = 0
     for doc in documents:
         for labeled_span in doc.labeled_spans:
             text2spans[doc.text].add(labeled_span.copy())
@@ -213,10 +219,22 @@ def add_negative_coref_relations(
         for coref in doc.binary_coref_relations:
             positive_tuples[(doc.text, doc.text_pair)].add((coref.head.copy(), coref.tail.copy()))
             positive_tuples[(doc.text_pair, doc.text)].add((coref.tail.copy(), coref.head.copy()))
+            if doc.text == doc.text_pair:
+                num_intra_text_relations += 1
+            else:
+                num_inter_text_relations += 1
         text2original_doc_id[doc.text] = doc.metadata.get("original_doc_id")
         text2original_doc_id[doc.text_pair] = doc.metadata.get("original_doc_id_pair")
         text2span[doc.text] = doc.metadata.get("original_doc_span")
         text2span[doc.text_pair] = doc.metadata.get("original_doc_span_pair")
+        text2original_doc_label[doc.text] = doc.metadata.get("original_doc_label")
+        text2original_doc_label[doc.text_pair] = doc.metadata.get("original_doc_label_pair")
+
+    logger.info(
+        f"found {len(text2spans)} texts with "
+        f"{num_inter_text_relations} inter-text and "
+        f"{num_intra_text_relations} intra-text positive relations"
+    )
 
     new_docs = []
     new_rels2new_docs = {}
@@ -224,8 +242,16 @@ def add_negative_coref_relations(
     negative_rels = []
     for text in tqdm(sorted(text2spans)):
         original_doc_id = text2original_doc_id[text]
+        original_doc_label = text2original_doc_label[text]
         for text_pair in sorted(text2spans):
             original_doc_id_pair = text2original_doc_id[text_pair]
+            original_doc_label_pair = text2original_doc_label[text_pair]
+            if (
+                document_label_whitelist_tuples is not None
+                and (original_doc_label, original_doc_label_pair)
+                not in document_label_whitelist_tuples
+            ):
+                continue
             if enforce_same_original_doc_id:
                 if original_doc_id is None or original_doc_id_pair is None:
                     raise ValueError(
@@ -249,6 +275,8 @@ def add_negative_coref_relations(
                     "original_doc_id_pair": original_doc_id_pair,
                     "original_doc_span": text2span[text],
                     "original_doc_span_pair": text2span[text_pair],
+                    "original_doc_label": original_doc_label,
+                    "original_doc_label_pair": original_doc_label_pair,
                 },
             )
             new_doc.labeled_spans.extend(labeled_span.copy() for labeled_span in text2spans[text])
