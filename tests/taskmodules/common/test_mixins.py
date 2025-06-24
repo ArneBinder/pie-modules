@@ -79,17 +79,10 @@ def test_relation_statistics_mixin_show_statistics(caplog):
 def test_relation_statistics_mixin_show_statistics_no_relations(caplog):
     """Test the RelationStatisticsMixin class."""
 
-    @dataclasses.dataclass
     class Foo(RelationStatisticsMixin):
         """A class that uses the RelationStatisticsMixin class."""
 
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-
-    @dataclasses.dataclass(eq=True, frozen=True)
-    class TestAnnotation(Annotation):
-        label: str
-        score: float = dataclasses.field(default=1.0, compare=False)
+        pass
 
     x = Foo(collect_statistics=True)
 
