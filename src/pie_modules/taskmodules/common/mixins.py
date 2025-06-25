@@ -215,8 +215,9 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[Tuple[str, str], int]]):
     """
 
     def __init__(self, none_label: str = "no_relation", **kwargs):
-        self.none_label = none_label
         super().__init__(**kwargs)
+        if not hasattr(self, "none_label"):
+            self.none_label = none_label
 
     def reset_statistics(self):
         self._collected_relations: Dict[str, List[Annotation]] = defaultdict(list)
