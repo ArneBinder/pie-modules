@@ -169,9 +169,13 @@ def test_encode_with_collect_statistics(taskmodule, positive_documents, caplog):
         taskmodule.encode(documents_with_negatives, encode_target=True)
         taskmodule.collect_statistics = original_values
 
-    assert len(caplog.messages) == 1
+    assert len(caplog.messages) == 2
     assert (
-        caplog.messages[0] == "statistics:\n"
+        caplog.messages[0]
+        == "CrossTextBinaryCorefTaskModule does not have a `none_label` attribute. Using 'no_relation' as the label for relations with score 0."
+    )
+    assert (
+        caplog.messages[1] == "statistics:\n"
         "|           |   coref |   no_relation |   all_relations |\n"
         "|:----------|--------:|--------------:|----------------:|\n"
         "| available |       4 |             6 |               4 |\n"
