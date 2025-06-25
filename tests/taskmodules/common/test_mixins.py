@@ -66,13 +66,13 @@ def test_relation_statistics_mixin_show_statistics(caplog):
         x.show_statistics()
     assert caplog.messages[0] == (
         "statistics:\n"
-        "|               |   A |   B |   C |   D |   all_relations |\n"
-        "|:--------------|----:|----:|----:|----:|----------------:|\n"
-        "| available     |   1 |   1 |   1 |   1 |               4 |\n"
-        "| skipped_other |   0 |   0 |   0 |   1 |               1 |\n"
-        "| skipped_test  |   0 |   1 |   0 |   0 |               1 |\n"
-        "| used          |   1 |   0 |   1 |   0 |               2 |\n"
-        "| used %        | 100 |   0 | 100 |   0 |              50 |"
+        "|               |   available |   skipped_other |   skipped_test |   used |   used % |\n"
+        "|:--------------|------------:|----------------:|---------------:|-------:|---------:|\n"
+        "| A             |           1 |               0 |              0 |      1 |      100 |\n"
+        "| B             |           1 |               0 |              1 |      0 |        0 |\n"
+        "| C             |           1 |               0 |              0 |      1 |      100 |\n"
+        "| D             |           1 |               1 |              0 |      0 |        0 |\n"
+        "| all_relations |           4 |               1 |              1 |      2 |       50 |"
     )
 
 
@@ -91,4 +91,4 @@ def test_relation_statistics_mixin_show_statistics_no_relations(caplog):
     x.collect_all_relations(kind="used", relations=[])
     with caplog.at_level(logging.INFO):
         x.show_statistics()
-    assert caplog.messages[0] == ("statistics:\n" "| 0   |\n" "|-----|")
+    assert caplog.messages[0] == ("statistics:\n" "|--:|\n" "| 0 |")
