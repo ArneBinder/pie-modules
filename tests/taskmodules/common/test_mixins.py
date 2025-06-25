@@ -91,4 +91,51 @@ def test_relation_statistics_mixin_show_statistics_no_relations(caplog):
     x.collect_all_relations(kind="used", relations=[])
     with caplog.at_level(logging.INFO):
         x.show_statistics()
-    assert caplog.messages[0] == ("statistics:\n" "| 0   |\n" "|-----|")
+    assert caplog.messages[0] == "statistics:\n" "| 0   |\n" "|-----|"
+
+
+def test_relation_statistics_mixin_show_statistics_custom_none_relation(caplog):
+    """Test the RelationStatisticsMixin class."""
+
+    class Foo(RelationStatisticsMixin):
+        """A class that uses the RelationStatisticsMixin class.
+
+        It also consumes none_label parameter to show it still works.
+        """
+
+        def __init__(self, none_label: str = "no_relation", **kwargs):
+            super().__init__(**kwargs)
+            self.none_label = none_label
+
+    @dataclasses.dataclass(eq=True, frozen=True)
+    class TestAnnotation(Annotation):
+        label: str
+        score: float = dataclasses.field(default=1.0, compare=False)
+
+    x = Foo(collect_statistics=True, none_label="None_Label")
+
+    relations = [
+        TestAnnotation(label="A", score=1.0),
+        TestAnnotation(label="B", score=0.5),
+        TestAnnotation(label="C", score=0.0),
+        TestAnnotation(label="D", score=0.3),
+    ]
+    # all available relations
+    x.collect_all_relations(kind="available", relations=relations)
+    # relations skipped for a reason ("test")
+    x.collect_relation(kind="skipped_test", relation=relations[1])
+    # mark two relations as used, one of them is skipped for another (unknown) reason
+    x.collect_all_relations(kind="used", relations=[relations[0], relations[2]])
+
+    with caplog.at_level(logging.INFO):
+        x.show_statistics()
+    assert caplog.messages[0] == (
+        "statistics:\n"
+        "|               |   A |   B |   D |   None_Label |   all_relations |\n"
+        "|:--------------|----:|----:|----:|-------------:|----------------:|\n"
+        "| available     |   1 |   1 |   1 |            1 |               3 |\n"
+        "| skipped_other |   0 |   0 |   1 |            0 |               1 |\n"
+        "| skipped_test  |   0 |   1 |   0 |            0 |               1 |\n"
+        "| used          |   1 |   0 |   0 |            1 |               1 |\n"
+        "| used %        | 100 |   0 |   0 |          100 |              33 |"
+    )
