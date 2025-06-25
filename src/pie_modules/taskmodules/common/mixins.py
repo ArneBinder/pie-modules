@@ -214,10 +214,19 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[Tuple[str, str], int]]):
     skipped relations.
     """
 
-    def __init__(self, none_label: str = "no_relation", **kwargs):
-        super().__init__(**kwargs)
-        if not hasattr(self, "none_label"):
-            self.none_label = none_label
+    def get_none_label_for_statistics(self) -> str:
+        if not hasattr(self, "_statistics_none_label"):
+            if hasattr(self, "none_label"):
+                # If the mixin has a `none_label` attribute, use it as the label for "no relation".
+                self._statistics_none_label = self.none_label
+            else:
+                self._statistics_none_label = "no_relation"
+                logger.warning(
+                    f"{type(self).__name__} does not have a `none_label` attribute. "
+                    "Using 'no_relation' as the label for relations with score 0."
+                )
+
+        return self._statistics_none_label
 
     def reset_statistics(self):
         self._collected_relations: Dict[str, List[Annotation]] = defaultdict(list)
@@ -250,7 +259,7 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[Tuple[str, str], int]]):
                 for rel in rels_set:
                     # Set `none_label` as label when the score is zero. We encode negative relations
                     # in such a way in the case of multi-label or binary (similarity for coref).
-                    label = rel.label if rel.score > 0 else self.none_label
+                    label = rel.label if rel.score > 0 else self.get_none_label_for_statistics()
                     increase_counter(key=(key, label), statistics=statistics)
             for rel in skipped_other:
                 increase_counter(key=("skipped_other", rel.label), statistics=statistics)
@@ -270,9 +279,9 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[Tuple[str, str], int]]):
         # fill missing values with 0 and convert back to int (unstacking may introduce NaNs which are float type)
         to_show = to_show.fillna(0).astype(int)
         if to_show.columns.size > 1:
-            to_show["all_relations"] = to_show.loc[:, to_show.columns != self.none_label].sum(
-                axis=1
-            )
+            to_show["all_relations"] = to_show.loc[
+                :, to_show.columns != self.get_none_label_for_statistics()
+            ].sum(axis=1)
 
         # TODO: transpose
         #  to have the labels (which may be a lot) as index for improved readability and
