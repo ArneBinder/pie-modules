@@ -223,7 +223,9 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[Tuple[str, str], int]]):
                 self._statistics_none_label = "no_relation"
                 logger.warning(
                     f"{type(self).__name__} does not have a `none_label` attribute. "
-                    "Using 'no_relation' as the label for relations with score 0."
+                    "Using 'no_relation' as the label for relations with score 0 in statistics. "
+                    f"Set the `none_label` or `_statistics_none_label` attribute before using statistics or "
+                    f"overwrite `get_none_label_for_statistics()` function to get rid of this message."
                 )
 
         return self._statistics_none_label

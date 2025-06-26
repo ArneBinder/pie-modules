@@ -65,7 +65,7 @@ def test_relation_statistics_mixin_show_statistics(caplog):
     with caplog.at_level(logging.INFO):
         x.show_statistics()
     assert caplog.messages[0] == (
-        "Foo does not have a `none_label` attribute. Using 'no_relation' as the label for relations with score 0."
+        "Foo does not have a `none_label` attribute. Using 'no_relation' as the label for relations with score 0 in statistics. Set the `none_label` or `_statistics_none_label` attribute before using statistics or overwrite `get_none_label_for_statistics()` function to get rid of this message."
     )
     assert caplog.messages[1] == (
         "statistics:\n"
@@ -80,7 +80,7 @@ def test_relation_statistics_mixin_show_statistics(caplog):
 
 
 def test_relation_statistics_mixin_show_statistics_no_relations(caplog):
-    """Test the RelationStatisticsMixin class."""
+    """Test the RelationStatisticsMixin class with 0 score prediction."""
 
     class Foo(RelationStatisticsMixin):
         """A class that uses the RelationStatisticsMixin class."""
@@ -97,13 +97,13 @@ def test_relation_statistics_mixin_show_statistics_no_relations(caplog):
     assert caplog.messages[0] == "statistics:\n" "| 0   |\n" "|-----|"
 
 
-def test_relation_statistics_mixin_show_statistics_custom_none_relation(caplog):
-    """Test the RelationStatisticsMixin class."""
+def test_relation_statistics_mixin_show_statistics_custom_none_label(caplog):
+    """Test the RelationStatisticsMixin class with custom none_label."""
 
     class Foo(RelationStatisticsMixin):
         """A class that uses the RelationStatisticsMixin class.
 
-        It also consumes none_label parameter to show it still works.
+        It also sets the `none_label` attribute which will be used by statistics.
         """
 
         def __init__(self, none_label: str = "no_relation", **kwargs):
