@@ -172,7 +172,10 @@ def test_encode_with_collect_statistics(taskmodule, positive_documents, caplog):
     assert len(caplog.messages) == 2
     assert (
         caplog.messages[0]
-        == "CrossTextBinaryCorefTaskModule does not have a `none_label` attribute. Using 'no_relation' as the label for relations with score 0."
+        == "CrossTextBinaryCorefTaskModule does not have a `none_label` attribute. "
+        "Using 'no_relation' as the label for relations with score 0 in statistics. "
+        "Set the `none_label` or `_statistics_none_label` attribute before using statistics or "
+        "overwrite `get_none_label_for_statistics()` function to get rid of this message."
     )
     assert (
         caplog.messages[1] == "statistics:\n"
