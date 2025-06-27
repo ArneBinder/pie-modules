@@ -808,6 +808,9 @@ class RETextClassificationWithIndicesTaskModule(
                         }:  # remove all other relations
                             self.collect_relation("skipped_same_arguments", discard_rel)
                         if not self.collect_statistics:
+                            # We show this warning only if statistics are disabled.
+                            # We want to be informed if such skip occurs, but having it in statistics and
+                            # getting lots of warnings in the same time seemed overwhelming.
                             logger.warning(
                                 f"doc.id={document.id}: there are multiple relations with the same arguments "
                                 f"{arguments_resolved}, but different labels: {labels}. We only keep the first "
