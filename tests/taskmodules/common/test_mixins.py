@@ -62,17 +62,30 @@ def test_relation_statistics_mixin_show_statistics(caplog):
     # mark two relations as used, one of them is skipped for another (unknown) reason
     x.collect_all_relations(kind="used", relations=[relations[0], relations[2]])
 
+    statistics = x.get_statistics()
+
+    assert statistics == {
+        ("available", "A"): 1,
+        ("available", "B"): 1,
+        ("available", "C"): 1,
+        ("available", "D"): 1,
+        ("skipped_other", "D"): 1,
+        ("skipped_test", "B"): 1,
+        ("used", "A"): 1,
+        ("used", "C"): 1,
+    }
+
     with caplog.at_level(logging.INFO):
         x.show_statistics()
     assert caplog.messages[0] == (
         "statistics:\n"
-        "|               |   A |   B |   C |   D |   all_relations |\n"
-        "|:--------------|----:|----:|----:|----:|----------------:|\n"
-        "| available     |   1 |   1 |   1 |   1 |               4 |\n"
-        "| skipped_other |   0 |   0 |   0 |   1 |               1 |\n"
-        "| skipped_test  |   0 |   1 |   0 |   0 |               1 |\n"
-        "| used          |   1 |   0 |   1 |   0 |               2 |\n"
-        "| used %        | 100 |   0 | 100 |   0 |              50 |"
+        "|               |   available |   skipped_other |   skipped_test |   used |   used % |\n"
+        "|:--------------|------------:|----------------:|---------------:|-------:|---------:|\n"
+        "| A             |           1 |               0 |              0 |      1 |      100 |\n"
+        "| B             |           1 |               0 |              1 |      0 |        0 |\n"
+        "| C             |           1 |               0 |              0 |      1 |      100 |\n"
+        "| D             |           1 |               1 |              0 |      0 |        0 |\n"
+        "| all_relations |           4 |               1 |              1 |      2 |       50 |"
     )
 
 
@@ -89,6 +102,11 @@ def test_relation_statistics_mixin_show_statistics_no_relations(caplog):
     # Test with no relations collected
     x.collect_all_relations(kind="available", relations=[])
     x.collect_all_relations(kind="used", relations=[])
+
+    statistics = x.get_statistics()
+
+    assert statistics == {}
+
     with caplog.at_level(logging.INFO):
         x.show_statistics()
-    assert caplog.messages[0] == ("statistics:\n" "| 0   |\n" "|-----|")
+    assert caplog.messages[0] == ("statistics:\n" "|--:|\n" "| 0 |")
