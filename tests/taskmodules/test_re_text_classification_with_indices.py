@@ -1145,6 +1145,8 @@ def test_encode_input_multiple_relations_for_same_arguments(
     ]
 
     if handle_relations_with_same_arguments == "keep_first":
+        # Note: Warnings are shown only if statistics are disabled. For details see comment at
+        # src/pie_modules/taskmodules/re_text_classification_with_indices.py:811-818
         expected_warning = (
             "doc.id=test_doc: there are multiple relations with the same arguments "
             "(('head', ('PER', 'A')), ('tail', ('PER', 'B'))), but different labels: "
@@ -1182,10 +1184,14 @@ def test_encode_input_multiple_relations_for_same_arguments(
                     ("used", "per:founded_by"): 1,
                     ("skipped_same_arguments", "per:founder"): 1,
                 }
+                assert caplog.messages == []
             else:
                 assert statistics == {}
+                assert caplog.messages == [expected_warning]
 
     elif handle_relations_with_same_arguments == "keep_none":
+        # Note: Warnings are shown only if statistics are disabled. For details see comment at
+        # src/pie_modules/taskmodules/re_text_classification_with_indices.py:811-818
         expected_warning = (
             "doc.id=test_doc: there are multiple relations with the same arguments "
             "(('head', ('PER', 'A')), ('tail', ('PER', 'B'))), but different labels: "
