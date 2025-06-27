@@ -226,8 +226,8 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[Tuple[str, str], int]]):
                     "Using default value 'no_relation'. "
                     "`none_label` is used as the label for relations with score 0 in statistics and "
                     "all relations with label different from `none_label` will be summarized to 'all_relations'. "
-                    f"Set the `none_label` or `_statistics_none_label` attribute before using statistics or "
-                    f"overwrite `get_none_label_for_statistics()` function to get rid of this message."
+                    "Set the `none_label` attribute before using statistics or "
+                    "overwrite `get_none_label_for_statistics()` function to get rid of this message."
                 )
 
         return self._statistics_none_label
