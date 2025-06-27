@@ -62,6 +62,19 @@ def test_relation_statistics_mixin_show_statistics(caplog):
     # mark two relations as used, one of them is skipped for another (unknown) reason
     x.collect_all_relations(kind="used", relations=[relations[0], relations[2]])
 
+    statistics = x.get_statistics()
+
+    assert statistics == {
+        ("available", "A"): 1,
+        ("available", "B"): 1,
+        ("available", "C"): 1,
+        ("available", "D"): 1,
+        ("skipped_other", "D"): 1,
+        ("skipped_test", "B"): 1,
+        ("used", "A"): 1,
+        ("used", "C"): 1,
+    }
+
     with caplog.at_level(logging.INFO):
         x.show_statistics()
     assert caplog.messages[0] == (
@@ -89,6 +102,11 @@ def test_relation_statistics_mixin_show_statistics_no_relations(caplog):
     # Test with no relations collected
     x.collect_all_relations(kind="available", relations=[])
     x.collect_all_relations(kind="used", relations=[])
+
+    statistics = x.get_statistics()
+
+    assert statistics == {}
+
     with caplog.at_level(logging.INFO):
         x.show_statistics()
     assert caplog.messages[0] == ("statistics:\n" "|--:|\n" "| 0 |")
