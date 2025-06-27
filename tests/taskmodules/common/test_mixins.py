@@ -50,10 +50,10 @@ def test_relation_statistics_mixin_show_statistics(caplog):
     x = Foo(collect_statistics=True)
 
     relations = [
-        TestAnnotation(label="A"),
-        TestAnnotation(label="B"),
-        TestAnnotation(label="C"),
-        TestAnnotation(label="D"),
+        TestAnnotation(label="A", score=1.0),
+        TestAnnotation(label="B", score=0.5),
+        TestAnnotation(label="C", score=0.0),
+        TestAnnotation(label="D", score=0.3),
     ]
     # all available relations
     x.collect_all_relations(kind="available", relations=relations)
@@ -67,12 +67,12 @@ def test_relation_statistics_mixin_show_statistics(caplog):
     assert statistics == {
         ("available", "A"): 1,
         ("available", "B"): 1,
-        ("available", "C"): 1,
         ("available", "D"): 1,
+        ("available", "no_relation"): 1,
         ("skipped_other", "D"): 1,
         ("skipped_test", "B"): 1,
         ("used", "A"): 1,
-        ("used", "C"): 1,
+        ("used", "no_relation"): 1,
     }
 
     with caplog.at_level(logging.INFO):
@@ -89,9 +89,9 @@ def test_relation_statistics_mixin_show_statistics(caplog):
         "|:--------------|------------:|----------------:|---------------:|-------:|---------:|\n"
         "| A             |           1 |               0 |              0 |      1 |      100 |\n"
         "| B             |           1 |               0 |              1 |      0 |        0 |\n"
-        "| C             |           1 |               0 |              0 |      1 |      100 |\n"
         "| D             |           1 |               1 |              0 |      0 |        0 |\n"
-        "| all_relations |           4 |               1 |              1 |      2 |       50 |"
+        "| no_relation   |           1 |               0 |              0 |      1 |      100 |\n"
+        "| all_relations |           3 |               1 |              1 |      1 |       33 |"
     )
 
 
