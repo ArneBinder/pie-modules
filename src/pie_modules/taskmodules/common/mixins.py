@@ -214,6 +214,24 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[Tuple[str, str], int]]):
     skipped relations.
     """
 
+    def get_none_label_for_statistics(self) -> str:
+        if not hasattr(self, "_statistics_none_label"):
+            if hasattr(self, "none_label"):
+                # If the mixin has a `none_label` attribute, use it as the label for "no relation".
+                self._statistics_none_label = self.none_label
+            else:
+                self._statistics_none_label = "no_relation"
+                logger.warning(
+                    f"{type(self).__name__} does not have a `none_label` attribute. "
+                    "Using default value 'no_relation'. "
+                    "`none_label` is used as the label for relations with score 0 in statistics and "
+                    "all relations with label different from `none_label` will be summarized to 'all_relations'. "
+                    "Set the `none_label` attribute before using statistics or "
+                    "overwrite `get_none_label_for_statistics()` function to get rid of this message."
+                )
+
+        return self._statistics_none_label
+
     def reset_statistics(self):
         self._collected_relations: Dict[str, List[Annotation]] = defaultdict(list)
 
@@ -243,11 +261,9 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[Tuple[str, str], int]]):
                 else:
                     raise ValueError(f"unknown key: {key}")
                 for rel in rels_set:
-                    # TODO: "no_relation" should be "parameterized" (not trivial, because that parameter
-                    #  is defined in the taskmodule, e.g, none_label for RETextClassificationWithIndicesTaskModule)
-                    # Set "no_relation" as label when the score is zero. We encode negative relations
+                    # Set `none_label` as label when the score is zero. We encode negative relations
                     # in such a way in the case of multi-label or binary (similarity for coref).
-                    label = rel.label if rel.score > 0 else "no_relation"
+                    label = rel.label if rel.score > 0 else self.get_none_label_for_statistics()
                     increase_counter(key=(key, label), statistics=statistics)
             for rel in skipped_other:
                 increase_counter(key=("skipped_other", rel.label), statistics=statistics)
@@ -267,9 +283,9 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[Tuple[str, str], int]]):
         # fill missing values with 0 and convert back to int (unstacking may introduce NaNs which are float type)
         to_show = to_show.fillna(0).astype(int)
         if to_show.columns.size > 1:
-            # TODO: "no_relation" should be "parameterized" (not trivial, because that parameter
-            #  is defined in the taskmodule, e.g, none_label for RETextClassificationWithIndicesTaskModule)
-            to_show["all_relations"] = to_show.loc[:, to_show.columns != "no_relation"].sum(axis=1)
+            to_show["all_relations"] = to_show.loc[
+                :, to_show.columns != self.get_none_label_for_statistics()
+            ].sum(axis=1)
 
         #  transpose
         #  to have the labels (which may be a lot) as index for improved readability and
