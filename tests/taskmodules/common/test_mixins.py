@@ -96,7 +96,7 @@ def test_relation_statistics_mixin_show_statistics(caplog):
 
 
 def test_relation_statistics_mixin_show_statistics_no_relations(caplog):
-    """Test the RelationStatisticsMixin class with 0 score prediction."""
+    """Test the RelationStatisticsMixin class with no predictions."""
 
     class Foo(RelationStatisticsMixin):
         """A class that uses the RelationStatisticsMixin class."""
