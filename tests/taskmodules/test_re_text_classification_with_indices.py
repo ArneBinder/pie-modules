@@ -1187,7 +1187,7 @@ def test_encode_input_multiple_relations_for_same_arguments(
                 assert caplog.messages == []
             else:
                 assert statistics == {}
-                assert caplog.messages == []
+                assert caplog.messages == [expected_warning]
 
     elif handle_relations_with_same_arguments == "keep_none":
         # Note: Warnings are shown only if statistics are disabled. For details see comment at
