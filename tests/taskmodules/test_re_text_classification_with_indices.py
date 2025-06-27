@@ -1163,9 +1163,10 @@ def test_encode_input_multiple_relations_for_same_arguments(
                     ("skipped_same_arguments", "per:founder"): 1,
                     ("used", "per:founded_by"): 1,
                 }
+                assert caplog.messages == []
             else:
-                assert len(caplog.messages) == 1
-                assert caplog.messages[0] == expected_warning
+                assert statistics == {}
+                assert caplog.messages == [expected_warning]
 
         else:
             # as above, but with candidate (negative) relations added
@@ -1181,6 +1182,8 @@ def test_encode_input_multiple_relations_for_same_arguments(
                     ("used", "per:founded_by"): 1,
                     ("skipped_same_arguments", "per:founder"): 1,
                 }
+            else:
+                assert statistics == {}
 
     elif handle_relations_with_same_arguments == "keep_none":
         expected_warning = (
@@ -1200,9 +1203,10 @@ def test_encode_input_multiple_relations_for_same_arguments(
                     ("skipped_same_arguments", "per:founder"): 1,
                     ("skipped_same_arguments", "per:founded_by"): 1,
                 }
+                assert caplog.messages == []
             else:
-                assert len(caplog.messages) == 1
-                assert caplog.messages[0] == expected_warning
+                assert statistics == {}
+                assert caplog.messages == [expected_warning]
         else:
             # all conflicting relations go into the same direction, so we can create a candidate (negative)
             # relation for the other direction.
@@ -1215,9 +1219,10 @@ def test_encode_input_multiple_relations_for_same_arguments(
                     ("skipped_same_arguments", "per:founder"): 1,
                     ("used", "no_relation"): 1,
                 }
+                assert caplog.messages == []
             else:
-                assert len(caplog.messages) == 1
-                assert caplog.messages[0] == expected_warning
+                assert statistics == {}
+                assert caplog.messages == [expected_warning]
 
 
 def test_encode_input_handle_relations_with_same_arguments_unknown_value():
@@ -1304,6 +1309,8 @@ def test_encode_input_duplicated_relations(
                 ("used", "no_relation"): 1,
                 ("used", "per:founded_by"): 1,
             }
+        else:
+            assert statistics == {}
     else:
         assert candidate_relation_tuples == [(("PER", "A"), "per:founded_by", ("PER", "B"))]
         if collect_statistics:
@@ -1311,6 +1318,8 @@ def test_encode_input_duplicated_relations(
                 ("available", "per:founded_by"): 1,
                 ("used", "per:founded_by"): 1,
             }
+        else:
+            assert statistics == {}
 
 
 def test_encode_input_argument_role_unknown(documents):
