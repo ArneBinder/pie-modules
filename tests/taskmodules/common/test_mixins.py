@@ -12,7 +12,6 @@ from pie_modules.taskmodules.common.mixins import RelationStatisticsMixin
 def test_batchable_mixin():
     """Test the BatchableMixin class."""
 
-    # pylint: disable=too-few-public-methods
     @dataclasses.dataclass
     class Foo(BatchableMixin):
         """A class that uses the BatchableMixin class."""
