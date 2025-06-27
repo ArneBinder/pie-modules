@@ -1135,16 +1135,15 @@ def test_encode_input_multiple_relations_for_same_arguments(
     )
     taskmodule.prepare([document])
 
-    encodings = taskmodule.encode_input(document)
+    with caplog.at_level(logging.WARNING):
+        encodings = taskmodule.encode_input(document)
 
-    with caplog.at_level(logging.INFO):
-        taskmodule.show_statistics()
+    statistics = taskmodule.get_statistics()
     candidate_relation = [enc.metadata["candidate_annotation"] for enc in encodings]
     candidate_relation_tuples = [
         (rel.head.resolve(), rel.label, rel.tail.resolve()) for rel in candidate_relation
     ]
 
-    assert len(caplog.messages) == 1
     if handle_relations_with_same_arguments == "keep_first":
         expected_warning = (
             "doc.id=test_doc: there are multiple relations with the same arguments "
@@ -1158,17 +1157,16 @@ def test_encode_input_multiple_relations_for_same_arguments(
             # nor as skipped in statistics.
             assert candidate_relation_tuples == [(("PER", "A"), "per:founded_by", ("PER", "B"))]
             if collect_statistics:
-                assert (
-                    caplog.messages[0] == "statistics:\n"
-                    "|                        |   per:founded_by |   per:founder |   all_relations |\n"
-                    "|:-----------------------|-----------------:|--------------:|----------------:|\n"
-                    "| available              |                1 |             1 |               2 |\n"
-                    "| skipped_same_arguments |                0 |             1 |               1 |\n"
-                    "| used                   |                1 |             0 |               1 |\n"
-                    "| used %                 |              100 |             0 |              50 |"
-                )
+                assert statistics == {
+                    ("available", "per:founded_by"): 1,
+                    ("available", "per:founder"): 1,
+                    ("skipped_same_arguments", "per:founder"): 1,
+                    ("used", "per:founded_by"): 1,
+                }
+                assert caplog.messages == []
             else:
-                assert caplog.messages[0] == expected_warning
+                assert statistics == {}
+                assert caplog.messages == [expected_warning]
 
         else:
             # as above, but with candidate (negative) relations added
@@ -1177,15 +1175,15 @@ def test_encode_input_multiple_relations_for_same_arguments(
                 (("PER", "B"), "no_relation", ("PER", "A")),
             ]
             if collect_statistics:
-                assert (
-                    caplog.messages[0] == "statistics:\n"
-                    "|                        |   no_relation |   per:founded_by |   per:founder |   all_relations |\n"
-                    "|:-----------------------|--------------:|-----------------:|--------------:|----------------:|\n"
-                    "| available              |             0 |                1 |             1 |               2 |\n"
-                    "| skipped_same_arguments |             0 |                0 |             1 |               1 |\n"
-                    "| used                   |             1 |                1 |             0 |               1 |\n"
-                    "| used %                 |           inf |              100 |             0 |              50 |"
-                )
+                assert statistics == {
+                    ("available", "per:founded_by"): 1,
+                    ("available", "per:founder"): 1,
+                    ("used", "no_relation"): 1,
+                    ("used", "per:founded_by"): 1,
+                    ("skipped_same_arguments", "per:founder"): 1,
+                }
+            else:
+                assert statistics == {}
 
     elif handle_relations_with_same_arguments == "keep_none":
         expected_warning = (
@@ -1199,34 +1197,35 @@ def test_encode_input_multiple_relations_for_same_arguments(
             # nor as skipped in statistics.
             assert candidate_relation_tuples == []
             if collect_statistics:
-                assert (
-                    caplog.messages[0] == "statistics:\n"
-                    "|                        |   per:founded_by |   per:founder |   all_relations |\n"
-                    "|:-----------------------|-----------------:|--------------:|----------------:|\n"
-                    "| available              |                1 |             1 |               2 |\n"
-                    "| skipped_same_arguments |                1 |             1 |               2 |"
-                )
+                assert statistics == {
+                    ("available", "per:founded_by"): 1,
+                    ("available", "per:founder"): 1,
+                    ("skipped_same_arguments", "per:founder"): 1,
+                    ("skipped_same_arguments", "per:founded_by"): 1,
+                }
+                assert caplog.messages == []
             else:
-                assert caplog.messages[0] == expected_warning
+                assert statistics == {}
+                assert caplog.messages == [expected_warning]
         else:
             # all conflicting relations go into the same direction, so we can create a candidate (negative)
             # relation for the other direction.
             assert candidate_relation_tuples == [(("PER", "B"), "no_relation", ("PER", "A"))]
             if collect_statistics:
-                assert (
-                    caplog.messages[0] == "statistics:\n"
-                    "|                        |   no_relation |   per:founded_by |   per:founder |   all_relations |\n"
-                    "|:-----------------------|--------------:|-----------------:|--------------:|----------------:|\n"
-                    "| available              |             0 |                1 |             1 |               2 |\n"
-                    "| skipped_same_arguments |             0 |                1 |             1 |               2 |\n"
-                    "| used                   |             1 |                0 |             0 |               0 |\n"
-                    "| used %                 |           inf |                0 |             0 |               0 |"
-                )
+                assert statistics == {
+                    ("available", "per:founded_by"): 1,
+                    ("available", "per:founder"): 1,
+                    ("skipped_same_arguments", "per:founded_by"): 1,
+                    ("skipped_same_arguments", "per:founder"): 1,
+                    ("used", "no_relation"): 1,
+                }
+                assert caplog.messages == []
             else:
-                assert caplog.messages[0] == expected_warning
+                assert statistics == {}
+                assert caplog.messages == [expected_warning]
 
 
-def test_encode_input_handle_relations_with_same_arguments_unknown_value(caplog):
+def test_encode_input_handle_relations_with_same_arguments_unknown_value():
     taskmodule = RETextClassificationWithIndicesTaskModule(
         relation_annotation="relations",
         tokenizer_name_or_path="bert-base-cased",
@@ -1282,14 +1281,12 @@ def test_encode_input_duplicated_relations(
         ]
     )
     taskmodule.prepare([document])
-    encodings = taskmodule.encode_input(document)
+    with caplog.at_level(logging.WARNING):
+        encodings = taskmodule.encode_input(document)
 
-    with caplog.at_level(logging.INFO):
-        taskmodule.show_statistics()
-    if collect_statistics:
-        assert len(caplog.messages) == 2
-    else:
-        assert len(caplog.messages) == 1
+    statistics = taskmodule.get_statistics()
+
+    assert len(caplog.messages) == 1
     assert (
         caplog.messages[0] == "doc.id=test_doc: Relation annotation "
         "`('per:founded_by', (('PER', 'A'), ('PER', 'B')))` is duplicated. We keep "
@@ -1307,25 +1304,22 @@ def test_encode_input_duplicated_relations(
             (("PER", "B"), "no_relation", ("PER", "A")),
         ]
         if collect_statistics:
-            assert (
-                caplog.messages[-1] == "statistics:\n"
-                "|           |   no_relation |   per:founded_by |   all_relations |\n"
-                "|:----------|--------------:|-----------------:|----------------:|\n"
-                "| available |             0 |                1 |               1 |\n"
-                "| used      |             1 |                1 |               1 |\n"
-                "| used %    |           inf |              100 |             100 |"
-            )
+            assert statistics == {
+                ("available", "per:founded_by"): 1,
+                ("used", "no_relation"): 1,
+                ("used", "per:founded_by"): 1,
+            }
+        else:
+            assert statistics == {}
     else:
         assert candidate_relation_tuples == [(("PER", "A"), "per:founded_by", ("PER", "B"))]
         if collect_statistics:
-            assert (
-                caplog.messages[-1] == "statistics:\n"
-                "|           |   per:founded_by |\n"
-                "|:----------|-----------------:|\n"
-                "| available |                1 |\n"
-                "| used      |                1 |\n"
-                "| used %    |              100 |"
-            )
+            assert statistics == {
+                ("available", "per:founded_by"): 1,
+                ("used", "per:founded_by"): 1,
+            }
+        else:
+            assert statistics == {}
 
 
 def test_encode_input_argument_role_unknown(documents):
@@ -1966,7 +1960,7 @@ def test_encode_input_with_max_argument_distance_tokens(distance_type):
     assert relation.label == "per:employee_of"
 
 
-def test_encode_input_with_unknown_label(caplog):
+def test_encode_input_with_unknown_label():
     taskmodule = RETextClassificationWithIndicesTaskModule(
         relation_annotation="relations",
         tokenizer_name_or_path="bert-base-cased",
@@ -1986,16 +1980,8 @@ def test_encode_input_with_unknown_label(caplog):
     task_encodings = taskmodule.encode_input(doc)
     assert len(task_encodings) == 0
 
-    with caplog.at_level(logging.INFO):
-        taskmodule.show_statistics()
-    assert len(caplog.messages) == 1
-    assert (
-        caplog.messages[0] == "statistics:\n"
-        "|                       |   unknown |\n"
-        "|:----------------------|----------:|\n"
-        "| available             |         1 |\n"
-        "| skipped_unknown_label |         1 |"
-    )
+    statistics = taskmodule.get_statistics()
+    assert statistics == {("available", "unknown"): 1, ("skipped_unknown_label", "unknown"): 1}
 
 
 def test_encode_with_empty_partition_layer(documents):
@@ -2173,27 +2159,25 @@ def test_encode_with_log_first_n_examples(caplog):
 
 
 @pytest.mark.skipif(condition=not _TABULATE_AVAILABLE, reason="requires the 'tabulate' package")
-def test_encode_with_collect_statistics(documents, caplog):
+def test_encode_with_collect_statistics(documents):
     taskmodule = RETextClassificationWithIndicesTaskModule(
         relation_annotation="relations",
         tokenizer_name_or_path="bert-base-cased",
         collect_statistics=True,
     )
     taskmodule.prepare(documents)
-    # we need to set the log level to INFO, otherwise the log messages are not captured
-    with caplog.at_level(logging.INFO):
-        task_encodings = taskmodule.encode(documents)
+    task_encodings = taskmodule.encode(documents)
+    statistics = taskmodule.get_statistics()
     assert len(task_encodings) == 7
 
-    assert len(caplog.messages) == 1
-    assert caplog.messages[0] == (
-        "statistics:\n"
-        "|           |   org:founded_by |   per:employee_of |   per:founder |   all_relations |\n"
-        "|:----------|-----------------:|------------------:|--------------:|----------------:|\n"
-        "| available |                2 |                 3 |             2 |               7 |\n"
-        "| used      |                2 |                 3 |             2 |               7 |\n"
-        "| used %    |              100 |               100 |           100 |             100 |"
-    )
+    assert statistics == {
+        ("available", "org:founded_by"): 2,
+        ("available", "per:employee_of"): 3,
+        ("available", "per:founder"): 2,
+        ("used", "org:founded_by"): 2,
+        ("used", "per:employee_of"): 3,
+        ("used", "per:founder"): 2,
+    }
 
 
 def test_get_global_attention(taskmodule, batch, cfg):

@@ -285,10 +285,11 @@ class RelationStatisticsMixin(StatisticsMixin[Dict[Tuple[str, str], int]]):
                 :, to_show.columns != self.get_none_label_for_statistics()
             ].sum(axis=1)
 
-        # TODO: transpose
+        #  transpose
         #  to have the labels (which may be a lot) as index for improved readability and
         #  to allow to keep counts as int columns (dtypes are per-column, not per-row)
-        if "used" in to_show.index and "available" in to_show.index:
-            to_show.loc["used %"] = (100 * to_show.loc["used"] / to_show.loc["available"]).round()
+        to_show = to_show.T
+        if "used" in to_show.columns and "available" in to_show.columns:
+            to_show["used %"] = (100 * to_show["used"] / to_show["available"]).round()
 
         return to_show.to_markdown()

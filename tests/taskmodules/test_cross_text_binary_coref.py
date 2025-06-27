@@ -1,5 +1,4 @@
 import json
-import logging
 from typing import Any, Dict, Union
 
 import pytest
@@ -160,34 +159,23 @@ def test_encode_target(task_encodings_without_target, taskmodule):
     assert targets == [1.0, 0.0]
 
 
-def test_encode_with_collect_statistics(taskmodule, positive_documents, caplog):
+def test_encode_with_collect_statistics(taskmodule, positive_documents):
     documents_with_negatives = add_negative_coref_relations(positive_documents)
-    caplog.clear()
-    with caplog.at_level(logging.INFO):
-        original_values = taskmodule.collect_statistics
-        taskmodule.collect_statistics = True
-        taskmodule.encode(documents_with_negatives, encode_target=True)
-        taskmodule.collect_statistics = original_values
+    original_values = taskmodule.collect_statistics
+    taskmodule.collect_statistics = True
+    taskmodule.encode(documents_with_negatives, encode_target=True)
+    statistics = taskmodule.get_statistics()
+    taskmodule.collect_statistics = original_values
 
-    assert len(caplog.messages) == 2
-    assert (
-        caplog.messages[0]
-        == "CrossTextBinaryCorefTaskModule does not have a `none_label` attribute. "
-        "Using 'no_relation' as the label for relations with score 0 in statistics. "
-        "Set the `none_label` or `_statistics_none_label` attribute before using statistics or "
-        "overwrite `get_none_label_for_statistics()` function to get rid of this message."
-    )
-    assert (
-        caplog.messages[1] == "statistics:\n"
-        "|           |   coref |   no_relation |   all_relations |\n"
-        "|:----------|--------:|--------------:|----------------:|\n"
-        "| available |       4 |             6 |               4 |\n"
-        "| used      |       4 |             6 |               4 |\n"
-        "| used %    |     100 |           100 |             100 |"
-    )
+    assert statistics == {
+        ("available", "coref"): 4,
+        ("available", "no_relation"): 6,
+        ("used", "coref"): 4,
+        ("used", "no_relation"): 6,
+    }
 
 
-def test_encode_with_windowing(documents_with_negatives, caplog):
+def test_encode_with_windowing(documents_with_negatives):
     tokenizer_name_or_path = "bert-base-cased"
     taskmodule = CrossTextBinaryCorefTaskModule(
         tokenizer_name_or_path=tokenizer_name_or_path,
@@ -198,19 +186,18 @@ def test_encode_with_windowing(documents_with_negatives, caplog):
     taskmodule.prepare(documents_with_negatives)
 
     assert len(documents_with_negatives) == 16
-    caplog.clear()
-    with caplog.at_level(logging.INFO):
-        task_encodings = taskmodule.encode(documents_with_negatives)
-    assert len(caplog.messages) > 0
-    assert (
-        caplog.messages[-1] == "statistics:\n"
-        "|                                       |   coref |   no_relation |   all_relations |\n"
-        "|:--------------------------------------|--------:|--------------:|----------------:|\n"
-        "| available                             |       4 |             6 |               4 |\n"
-        "| skipped_span_does_not_fit_into_window |       2 |             2 |               2 |\n"
-        "| used                                  |       2 |             4 |               2 |\n"
-        "| used %                                |      50 |            67 |              50 |"
-    )
+
+    task_encodings = taskmodule.encode(documents_with_negatives)
+    statistics = taskmodule.get_statistics()
+
+    assert statistics == {
+        ("available", "coref"): 4,
+        ("available", "no_relation"): 6,
+        ("skipped_span_does_not_fit_into_window", "coref"): 2,
+        ("skipped_span_does_not_fit_into_window", "no_relation"): 2,
+        ("used", "coref"): 2,
+        ("used", "no_relation"): 4,
+    }
 
     assert len(task_encodings) == 6
     for task_encoding in task_encodings:
