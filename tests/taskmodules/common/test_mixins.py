@@ -79,7 +79,9 @@ def test_relation_statistics_mixin_show_statistics(caplog):
         x.show_statistics()
     assert caplog.messages[0] == (
         "Foo does not have a `none_label` attribute. "
-        "Using 'no_relation' as the label for relations with score 0 in statistics. "
+        "Using default value 'no_relation'. "
+        "`none_label` is used as the label for relations with score 0 in statistics and "
+        "all relations with label different from `none_label` will be summarized to 'all_relations'. "
         "Set the `none_label` or `_statistics_none_label` attribute before using statistics or "
         "overwrite `get_none_label_for_statistics()` function to get rid of this message."
     )
