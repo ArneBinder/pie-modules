@@ -284,7 +284,7 @@ def test_encode(taskmodule, documents, encode_target):
     else:
         assert not encoding.has_targets
 
-        with pytest.raises(AssertionError, match=re.escape("task encoding has no target")):
+        with pytest.raises(ValueError, match=re.escape("task encoding has no target")):
             encoding.targets
 
 
