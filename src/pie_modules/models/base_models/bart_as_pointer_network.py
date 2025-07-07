@@ -4,7 +4,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import Parameter
 from torch.optim import Optimizer
-from transformers import BartConfig, BartModel, BartPreTrainedModel
+from transformers import BartConfig, BartModel, BartPreTrainedModel, GenerationConfig
 from transformers.modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
 from transformers.models.bart.modeling_bart import shift_tokens_right
 from transformers.utils import logging
@@ -159,6 +159,8 @@ class BartAsPointerNetwork(BartPreTrainedModel):
         self.config.forced_bos_token_id = None
         # disable ForcedEOSTokenLogitsProcessor
         self.config.forced_eos_token_id = None
+        # update the generation config accordingly
+        self.generation_config = GenerationConfig.from_model_config(self.config)
 
     def base_model_named_params(self, prefix: str = "") -> Iterator[Tuple[str, Parameter]]:
         yield from self.model.named_parameters(prefix=prefix + self.base_model_prefix)
