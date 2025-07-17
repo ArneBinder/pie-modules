@@ -3,6 +3,7 @@ import logging
 from typing import Any, Dict, Optional, Tuple, Type, Union
 
 import torch
+from pie_core.utils.hydra import resolve_type
 from pytorch_ie import PyTorchIEModel
 from pytorch_lightning.utilities.types import OptimizerLRScheduler
 from torch import FloatTensor, LongTensor
@@ -12,7 +13,6 @@ from transformers.modeling_outputs import Seq2SeqLMOutput
 from typing_extensions import TypeAlias
 
 from pie_modules.models.common import ModelWithBoilerplate
-from pie_modules.utils import resolve_type
 
 logger = logging.getLogger(__name__)
 

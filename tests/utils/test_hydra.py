@@ -2,10 +2,10 @@ import dataclasses
 
 import pytest
 from pie_core import AnnotationLayer, annotation_field
+from pie_core.utils.hydra import resolve_type
 
 from pie_modules.annotations import LabeledSpan, Span
 from pie_modules.documents import TextBasedDocument
-from pie_modules.utils import resolve_type
 
 
 @dataclasses.dataclass

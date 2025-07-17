@@ -2,12 +2,12 @@ import logging
 from typing import Any, Dict, List, Optional, Set, Type, Union
 
 from pie_core import Document, DocumentStatistic
+from pie_core.utils.hydra import resolve_type
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
 from pie_modules.annotations import LabeledMultiSpan, Span
 from pie_modules.document.processing import tokenize_document
 from pie_modules.documents import TextBasedDocument, TokenBasedDocument
-from pie_modules.utils import resolve_type
 
 logger = logging.getLogger(__name__)
 

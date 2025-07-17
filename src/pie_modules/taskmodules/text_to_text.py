@@ -28,6 +28,7 @@ from pie_core.taskmodule import (
     TargetEncoding,
     TaskBatchEncoding,
 )
+from pie_core.utils.hydra import resolve_type
 from torchmetrics import Metric
 from transformers import AutoTokenizer, PreTrainedTokenizer
 from typing_extensions import TypeAlias
@@ -38,7 +39,6 @@ from pie_modules.document.processing import (
     tokenize_document,
 )
 from pie_modules.documents import TextBasedDocument, TokenBasedDocument
-from pie_modules.utils import resolve_type
 
 from .common import BatchableMixin, get_first_occurrence_index
 from .metrics import WrappedMetricWithPrepareFunction

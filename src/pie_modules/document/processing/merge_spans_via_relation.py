@@ -2,9 +2,9 @@ import logging
 from typing import Optional, Sequence, Set, Tuple, TypeVar, Union
 
 from pie_core import AnnotationLayer, Document
+from pie_core.utils.hydra import resolve_type
 
 from pie_modules.annotations import BinaryRelation, LabeledMultiSpan, LabeledSpan
-from pie_modules.utils import resolve_type
 
 logger = logging.getLogger(__name__)
 
