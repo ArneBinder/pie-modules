@@ -25,6 +25,7 @@ from typing import (
 
 import torch
 from pie_core import AnnotationLayer, TaskEncoding, TaskModule
+from pie_core.utils.dictionary import list_of_dicts2dict_of_lists
 from tokenizers import Encoding
 from torchmetrics import F1Score, Metric, MetricCollection, Precision, Recall
 from transformers import AutoTokenizer
@@ -48,7 +49,6 @@ from pie_modules.taskmodules.metrics import (
     PrecisionRecallAndF1ForLabeledAnnotations,
     WrappedMetricWithPrepareFunction,
 )
-from pie_modules.utils import list_of_dicts2dict_of_lists
 from pie_modules.utils.sequence_tagging import tag_sequence_to_token_spans
 
 DocumentType: TypeAlias = TextBasedDocument

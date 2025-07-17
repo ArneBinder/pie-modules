@@ -16,6 +16,7 @@ from typing import (
 
 import torch
 from pie_core import Annotation, TaskEncoding, TaskModule
+from pie_core.utils.dictionary import list_of_dicts2dict_of_lists
 from pytorch_ie.utils.window import get_window_around_slice
 from torchmetrics import MetricCollection
 from torchmetrics.classification import (
@@ -32,7 +33,6 @@ from pie_modules.documents import (
 )
 from pie_modules.taskmodules.common.mixins import RelationStatisticsMixin
 from pie_modules.taskmodules.metrics import WrappedMetricWithPrepareFunction
-from pie_modules.utils import list_of_dicts2dict_of_lists
 from pie_modules.utils.tokenization import (
     SpanNotAlignedWithTokenException,
     get_aligned_token_span,

@@ -3,6 +3,7 @@ from typing import Any, Dict, Union
 
 import pytest
 import torch.testing
+from pie_core.utils.dictionary import list_of_dicts2dict_of_lists
 from torch import tensor
 from torchmetrics import Metric, MetricCollection
 
@@ -13,7 +14,7 @@ from pie_modules.documents import (
     TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
 )
 from pie_modules.taskmodules import CrossTextBinaryCorefTaskModule
-from pie_modules.utils import flatten_dict, list_of_dicts2dict_of_lists
+from pie_modules.utils import flatten_dict
 from tests import FIXTURES_ROOT, _config_to_str
 
 TOKENIZER_NAME_OR_PATH = "bert-base-cased"
