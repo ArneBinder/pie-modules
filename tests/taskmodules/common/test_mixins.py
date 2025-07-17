@@ -3,7 +3,7 @@ import logging
 from typing import List
 
 import torch
-from pytorch_ie import Annotation
+from pie_core import Annotation
 
 from pie_modules.taskmodules.common import BatchableMixin
 from pie_modules.taskmodules.common.mixins import RelationStatisticsMixin

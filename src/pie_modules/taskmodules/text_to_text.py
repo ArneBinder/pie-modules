@@ -15,18 +15,18 @@ from typing import (
 )
 
 import torch
-from pytorch_ie.core import (
+from pie_core import (
     Annotation,
     AnnotationLayer,
     Document,
+    TaskEncoding,
     TaskModule,
 )
-from pytorch_ie.core.taskmodule import (
+from pie_core.taskmodule import (
     InputEncoding,
     ModelBatchOutput,
     TargetEncoding,
     TaskBatchEncoding,
-    TaskEncoding,
 )
 from torchmetrics import Metric
 from transformers import AutoTokenizer, PreTrainedTokenizer

@@ -16,7 +16,7 @@ from typing import (
     Union,
 )
 
-from pytorch_ie.core import Annotation
+from pie_core import Annotation
 from transformers import PreTrainedTokenizer
 
 from pie_modules.annotations import MultiSpan, Span

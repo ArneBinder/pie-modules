@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 
 import pytest
 import torch
-from pytorch_ie.core import AnnotationLayer, annotation_field
+from pie_core import AnnotationLayer, annotation_field
 from torch import tensor
 from transformers import BatchEncoding
 

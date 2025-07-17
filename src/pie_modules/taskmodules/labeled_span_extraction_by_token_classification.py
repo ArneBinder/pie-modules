@@ -24,7 +24,7 @@ from typing import (
 )
 
 import torch
-from pytorch_ie.core import AnnotationLayer, TaskEncoding, TaskModule
+from pie_core import AnnotationLayer, TaskEncoding, TaskModule
 from tokenizers import Encoding
 from torchmetrics import F1Score, Metric, MetricCollection, Precision, Recall
 from transformers import AutoTokenizer

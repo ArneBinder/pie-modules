@@ -4,7 +4,7 @@ from typing import Any, Dict, Union
 
 import pytest
 import torch
-from pytorch_ie.core import AnnotationLayer, annotation_field
+from pie_core import AnnotationLayer, annotation_field
 from torch import tensor
 from torchmetrics import Metric, MetricCollection
 

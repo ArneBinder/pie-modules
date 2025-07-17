@@ -1,7 +1,7 @@
 import abc
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
 
-from pytorch_ie.core import Annotation
+from pie_core import Annotation
 
 # Annotation Encoding type: encoding for a single annotation
 AE = TypeVar("AE")

@@ -1,7 +1,7 @@
 import dataclasses
 
 import pytest
-from pytorch_ie.core import AnnotationLayer, Document, annotation_field
+from pie_core import AnnotationLayer, Document, annotation_field
 
 from pie_modules.annotations import Label, LabeledSpan
 from pie_modules.documents import TextBasedDocument, TokenBasedDocument

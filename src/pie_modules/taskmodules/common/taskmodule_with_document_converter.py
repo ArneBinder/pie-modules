@@ -1,12 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import Generic, Iterable, Iterator, Optional, Sequence, Type, TypeVar, Union
 
-from pytorch_ie.core import Document, TaskModule
-from pytorch_ie.core.taskmodule import (
+from pie_core import (
+    Document,
     IterableTaskEncodingDataset,
     TaskEncoding,
     TaskEncodingDataset,
     TaskEncodingSequence,
+    TaskModule,
 )
 from typing_extensions import TypeAlias
 

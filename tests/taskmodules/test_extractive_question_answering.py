@@ -1,7 +1,7 @@
 import pytest
 import torch
 import transformers
-from pytorch_ie.core import AnnotationLayer
+from pie_core import AnnotationLayer
 
 from pie_modules.annotations import ExtractiveAnswer, Question
 from pie_modules.documents import TextDocumentWithQuestionsAndExtractiveAnswers

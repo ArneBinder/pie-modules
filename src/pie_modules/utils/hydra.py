@@ -1,7 +1,7 @@
 from typing import Optional, Type, TypeVar, Union
 
-from pytorch_ie.core import Document
-from pytorch_ie.utils.hydra import resolve_target
+from pie_core import Document
+from pie_core.utils.hydra import resolve_target
 
 T = TypeVar("T", bound=Document)
 T_super = TypeVar("T_super", bound=Document)

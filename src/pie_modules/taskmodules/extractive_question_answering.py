@@ -4,7 +4,7 @@ from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
-from pytorch_ie.core import Annotation, AnnotationLayer, TaskEncoding, TaskModule
+from pie_core import Annotation, AnnotationLayer, TaskEncoding, TaskModule
 from tokenizers import Encoding
 from transformers import AutoTokenizer, BatchEncoding, PreTrainedTokenizer
 from transformers.modeling_outputs import QuestionAnsweringModelOutput

@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Sequence, Tuple
 
 import pytest
 import torch
-from pytorch_ie.core import Annotation, TaskEncoding
+from pie_core import Annotation, TaskEncoding
 
 from pie_modules.annotations import AbstractiveSummary
 from pie_modules.documents import (

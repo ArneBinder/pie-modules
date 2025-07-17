@@ -1,6 +1,6 @@
 import dataclasses
 
-from pytorch_ie.core import AnnotationLayer, annotation_field
+from pie_core import AnnotationLayer, annotation_field
 
 # re-export all documents from pytorch_ie to have a single entry point
 from pytorch_ie.documents import (
