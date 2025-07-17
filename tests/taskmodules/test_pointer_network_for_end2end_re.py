@@ -5,7 +5,7 @@ from typing import Dict, List, Set
 
 import pytest
 import torch
-from pytorch_ie.core import AnnotationLayer, Document, annotation_field
+from pie_core import AnnotationLayer, Document, annotation_field
 from transformers import LogitsProcessorList
 
 from pie_modules.annotations import BinaryRelation, LabeledSpan

@@ -27,7 +27,7 @@ from typing import (
 
 import numpy as np
 import torch
-from pytorch_ie.core import (
+from pie_core import (
     Annotation,
     AnnotationLayer,
     Document,

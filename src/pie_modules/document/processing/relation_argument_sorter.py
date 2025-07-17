@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import TypeVar
 
-from pytorch_ie.core import Annotation, AnnotationLayer, Document
+from pie_core import Annotation, AnnotationLayer, Document
 
 from pie_modules.annotations import BinaryRelation, LabeledMultiSpan, LabeledSpan
 

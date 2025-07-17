@@ -1,7 +1,7 @@
 import logging
 from typing import Optional, Sequence, Set, Tuple, TypeVar, Union
 
-from pytorch_ie.core import AnnotationLayer, Document
+from pie_core import AnnotationLayer, Document
 
 from pie_modules.annotations import BinaryRelation, LabeledMultiSpan, LabeledSpan
 from pie_modules.utils import resolve_type

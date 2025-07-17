@@ -15,7 +15,7 @@ from typing import (
 )
 
 import torch
-from pytorch_ie.core import Annotation, TaskEncoding, TaskModule
+from pie_core import Annotation, TaskEncoding, TaskModule
 from pytorch_ie.utils.window import get_window_around_slice
 from torchmetrics import MetricCollection
 from torchmetrics.classification import (

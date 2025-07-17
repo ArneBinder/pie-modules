@@ -4,7 +4,7 @@ import logging
 from typing import Tuple
 
 import pytest
-from pytorch_ie.core import AnnotationLayer, annotation_field
+from pie_core import AnnotationLayer, annotation_field
 
 from pie_modules.annotations import LabeledSpan
 from pie_modules.document.processing import RegexPartitioner

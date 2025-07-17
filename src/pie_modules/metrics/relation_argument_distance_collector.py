@@ -1,8 +1,8 @@
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Type, Union
 
-from pytorch_ie.core import Document, DocumentStatistic
-from pytorch_ie.utils.hydra import resolve_target
+from pie_core import Document, DocumentStatistic
+from pie_core.utils.hydra import resolve_target
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
 from pie_modules.annotations import BinaryRelation, NaryRelation, Span

@@ -1,7 +1,7 @@
 from typing import Optional, Type
 
 import pytest
-from pytorch_ie.core import Document
+from pie_core import Document
 from typing_extensions import TypeAlias
 
 from pie_modules.documents import TextDocumentWithLabeledSpansAndBinaryRelations

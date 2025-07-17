@@ -27,7 +27,7 @@ from typing import (
 
 import pandas as pd
 import torch
-from pytorch_ie.core import (
+from pie_core import (
     Annotation,
     AnnotationLayer,
     Document,

@@ -1,5 +1,7 @@
 import dataclasses
-from typing import Optional, Tuple
+from typing import Optional
+
+from pie_core import Annotation
 
 # re-export all annotations from pytorch_ie to have a single entry point
 from pytorch_ie.annotations import (
@@ -15,7 +17,6 @@ from pytorch_ie.annotations import (
     Span,
     _post_init_single_label,
 )
-from pytorch_ie.core import Annotation
 
 
 @dataclasses.dataclass(eq=True, frozen=True)

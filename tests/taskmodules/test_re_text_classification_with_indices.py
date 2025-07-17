@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Union
 
 import pytest
 import torch
-from pytorch_ie.core import (
+from pie_core import (
     Annotation,
     AnnotationLayer,
     Document,
