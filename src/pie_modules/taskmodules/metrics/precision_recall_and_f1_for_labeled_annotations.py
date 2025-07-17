@@ -4,9 +4,8 @@ from typing import Any, Collection, Dict, Iterable, Optional, Union
 
 import torch
 from pie_core import Annotation
+from pie_core.utils.dictionary import flatten_dict_s
 from torch import LongTensor
-
-from pie_modules.utils import flatten_dict
 
 from .common import MetricWithArbitraryCounts
 
@@ -133,6 +132,6 @@ class PrecisionRecallAndF1ForLabeledAnnotations(MetricWithArbitraryCounts):
             result = {f"{self.prefix}{k}": v for k, v in result.items()}
 
         if self.flatten_result_with_sep is not None:
-            return flatten_dict(result, sep=self.flatten_result_with_sep)
+            return flatten_dict_s(result, sep=self.flatten_result_with_sep)
         else:
             return result

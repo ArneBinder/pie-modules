@@ -14,6 +14,7 @@ from pie_core import (
     TaskEncoding,
     annotation_field,
 )
+from pie_core.utils.dictionary import flatten_dict_s
 from torch import tensor
 from torchmetrics import Metric, MetricCollection
 
@@ -30,7 +31,6 @@ from pie_modules.taskmodules.re_text_classification_with_indices import (
     get_relation_argument_spans_and_roles,
     span_distance,
 )
-from pie_modules.utils import flatten_dict
 from pie_modules.utils.span import distance_inner
 from tests import _config_to_str
 from tests.conftest import _TABULATE_AVAILABLE, TestDocument
@@ -2292,9 +2292,11 @@ def test_get_global_attention(taskmodule, batch, cfg):
 
 def get_metric_state(metric_or_collection: Union[Metric, MetricCollection]) -> Dict[str, Any]:
     if isinstance(metric_or_collection, Metric):
-        return {k: v.tolist() for k, v in flatten_dict(metric_or_collection.metric_state).items()}
+        return {
+            k: v.tolist() for k, v in flatten_dict_s(metric_or_collection.metric_state).items()
+        }
     elif isinstance(metric_or_collection, MetricCollection):
-        return flatten_dict({k: get_metric_state(v) for k, v in metric_or_collection.items()})
+        return flatten_dict_s({k: get_metric_state(v) for k, v in metric_or_collection.items()})
     else:
         raise ValueError(f"unsupported type: {type(metric_or_collection)}")
 

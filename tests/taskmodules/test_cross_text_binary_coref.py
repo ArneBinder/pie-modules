@@ -3,7 +3,7 @@ from typing import Any, Dict, Union
 
 import pytest
 import torch.testing
-from pie_core.utils.dictionary import list_of_dicts2dict_of_lists
+from pie_core.utils.dictionary import flatten_dict_s, list_of_dicts2dict_of_lists
 from torch import tensor
 from torchmetrics import Metric, MetricCollection
 
@@ -14,7 +14,6 @@ from pie_modules.documents import (
     TextPairDocumentWithLabeledSpansAndBinaryCorefRelations,
 )
 from pie_modules.taskmodules import CrossTextBinaryCorefTaskModule
-from pie_modules.utils import flatten_dict
 from tests import FIXTURES_ROOT, _config_to_str
 
 TOKENIZER_NAME_OR_PATH = "bert-base-cased"
@@ -306,9 +305,9 @@ def test_create_annotation_from_output(taskmodule, task_encodings, unbatched_out
 
 def get_metric_state(metric_or_collection: Union[Metric, MetricCollection]) -> Dict[str, Any]:
     if isinstance(metric_or_collection, Metric):
-        return flatten_dict(metric_or_collection.metric_state)
+        return flatten_dict_s(metric_or_collection.metric_state)
     elif isinstance(metric_or_collection, MetricCollection):
-        return flatten_dict({k: get_metric_state(v) for k, v in metric_or_collection.items()})
+        return flatten_dict_s({k: get_metric_state(v) for k, v in metric_or_collection.items()})
     else:
         raise ValueError(f"unsupported type: {type(metric_or_collection)}")
 

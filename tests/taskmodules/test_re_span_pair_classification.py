@@ -5,13 +5,13 @@ from typing import Any, Dict, Union
 import pytest
 import torch
 from pie_core import AnnotationLayer, annotation_field
+from pie_core.utils.dictionary import flatten_dict_s
 from torch import tensor
 from torchmetrics import Metric, MetricCollection
 
 from pie_modules.annotations import BinaryRelation, LabeledSpan
 from pie_modules.documents import TextBasedDocument
 from pie_modules.taskmodules import RESpanPairClassificationTaskModule
-from pie_modules.utils import flatten_dict
 from pie_modules.utils.span import distance
 from tests import _config_to_str
 
@@ -557,9 +557,11 @@ def test_create_annotations_from_output(
 
 def get_metric_state(metric_or_collection: Union[Metric, MetricCollection]) -> Dict[str, Any]:
     if isinstance(metric_or_collection, Metric):
-        return {k: v.tolist() for k, v in flatten_dict(metric_or_collection.metric_state).items()}
+        return {
+            k: v.tolist() for k, v in flatten_dict_s(metric_or_collection.metric_state).items()
+        }
     elif isinstance(metric_or_collection, MetricCollection):
-        return flatten_dict({k: get_metric_state(v) for k, v in metric_or_collection.items()})
+        return flatten_dict_s({k: get_metric_state(v) for k, v in metric_or_collection.items()})
     else:
         raise ValueError(f"unsupported type: {type(metric_or_collection)}")
 
