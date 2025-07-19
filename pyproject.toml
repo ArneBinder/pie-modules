@@ -25,6 +25,7 @@ classifiers = [
 [tool.poetry.dependencies]
 python = "^3.9"
 pie-core = ">=0.2.0,<0.3.0"
+# for show_as_markdown in metrics
 pandas = ">=2.0.3,<3.0.0"
 
 [tool.poetry.group.dev.dependencies]
