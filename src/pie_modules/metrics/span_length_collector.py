@@ -1,14 +1,10 @@
 import logging
 from collections import defaultdict
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Dict, List, Optional, Union
 
 from pie_core import Document, DocumentStatistic
-from pie_core.utils.hydra import resolve_type
-from transformers import AutoTokenizer, PreTrainedTokenizer
 
 from pie_modules.annotations import Span
-from pie_modules.document.processing import tokenize_document
-from pie_modules.documents import TextBasedDocument, TokenBasedDocument
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +22,8 @@ class SpanLengthCollector(DocumentStatistic):
     def __init__(
         self,
         layer: str,
-        tokenize: bool = False,
-        tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
-        tokenized_document_type: Optional[Union[str, Type[TokenBasedDocument]]] = None,
         labels: Optional[Union[List[str], str]] = None,
         label_attribute: str = "label",
-        tokenize_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -40,39 +32,9 @@ class SpanLengthCollector(DocumentStatistic):
             raise ValueError("labels must be a list of strings or 'INFERRED'")
         self.labels = labels
         self.label_field = label_attribute
-        self.tokenize = tokenize
-        if self.tokenize:
-            if tokenizer is None:
-                raise ValueError(
-                    "tokenizer must be provided to calculate the span length in means of tokens"
-                )
-            if isinstance(tokenizer, str):
-                tokenizer = AutoTokenizer.from_pretrained(tokenizer)
-            self.tokenizer = tokenizer
-            if tokenized_document_type is None:
-                raise ValueError(
-                    "tokenized_document_type must be provided to calculate the span length in means of tokens"
-                )
-            self.tokenized_document_type = resolve_type(
-                tokenized_document_type, expected_super_type=TokenBasedDocument
-            )
-            self.tokenize_kwargs = tokenize_kwargs or {}
 
     def _collect(self, doc: Document) -> Union[List[int], Dict[str, List[int]]]:
-        docs: Union[List[Document], List[TokenBasedDocument]]
-        if self.tokenize:
-            if not isinstance(doc, TextBasedDocument):
-                raise ValueError(
-                    "doc must be a TextBasedDocument to calculate the span length in means of tokens"
-                )
-            docs = tokenize_document(
-                doc,
-                tokenizer=self.tokenizer,
-                result_document_type=self.tokenized_document_type,
-                **self.tokenize_kwargs,
-            )
-        else:
-            docs = [doc]
+        docs = [doc]
 
         values: Dict[str, List[int]]
         if isinstance(self.labels, str):

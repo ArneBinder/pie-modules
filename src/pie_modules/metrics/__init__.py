@@ -8,5 +8,4 @@ from .statistics import (
     FieldLengthCollector,
     LabelCountCollector,
     SubFieldLengthCollector,
-    TokenCountCollector,
 )

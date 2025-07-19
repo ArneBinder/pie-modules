@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TypeVar
+from typing import Any, Dict, TypeVar
 
 from pie_core import AnnotationLayer, Document
 
@@ -45,6 +45,7 @@ def trim_text_spans(
 
     text = spans.target
 
+    original_kwargs: dict[str, Any]
     for span in spans:
         if isinstance(span, Span):
             starts_and_ends = [(span.start, span.end)]
@@ -99,6 +100,7 @@ def trim_text_spans(
                     )
                 removed_span_ids.append(span._id)
                 continue
+        new_kwargs: dict[str, Any]
         if isinstance(span, Span):
             if not len(new_starts_and_ends) == 1:
                 raise ValueError(f"Expected one span, got {len(new_starts_and_ends)}")

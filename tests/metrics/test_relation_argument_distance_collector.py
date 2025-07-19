@@ -82,107 +82,7 @@ def test_relation_argument_distance_collector_with_n_ary_relation():
     }
 
 
-def test_relation_argument_distance_collector_with_tokenize():
-    doc = TestDocument(
-        text="This is the first entity. This is the second entity. And, this is the third entity."
-    )
-
-    doc.entities.append(LabeledSpan(start=0, end=25, label="entity"))
-    doc.entities.append(LabeledSpan(start=26, end=52, label="entity"))
-    doc.entities.append(LabeledSpan(start=53, end=83, label="entity"))
-    doc.relations.append(
-        BinaryRelation(head=doc.entities[0], tail=doc.entities[1], label="relation_label_1")
-    )
-    doc.relations.append(
-        BinaryRelation(head=doc.entities[1], tail=doc.entities[2], label="relation_label_2")
-    )
-
-    @dataclasses.dataclass
-    class TokenizedTestDocument(TokenBasedDocument):
-        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="tokens")
-        relations: AnnotationLayer[BinaryRelation] = annotation_field(target="entities")
-
-    statistic = RelationArgumentDistanceCollector(
-        layer="relations",
-        tokenize=True,
-        tokenizer="bert-base-uncased",
-        tokenized_document_type=TokenizedTestDocument,
-    )
-    values = statistic(doc)
-    assert values == {
-        "ALL": {"len": 4, "mean": 13.0, "std": 1.0, "min": 12.0, "max": 14.0},
-        "relation_label_1": {"len": 2, "mean": 12.0, "std": 0.0, "min": 12.0, "max": 12.0},
-        "relation_label_2": {"len": 2, "mean": 14.0, "std": 0.0, "min": 14.0, "max": 14.0},
-    }
-
-
-def test_relation_argument_distance_collector_with_tokenize_missing_tokenizer():
-    with pytest.raises(ValueError) as excinfo:
-        RelationArgumentDistanceCollector(
-            layer="relations",
-            tokenize=True,
-            tokenized_document_type=TokenBasedDocument,
-        )
-    assert (
-        str(excinfo.value) == "tokenizer must be provided to calculate distance in means of tokens"
-    )
-
-
-def test_relation_argument_distance_collector_with_tokenize_missing_tokenized_document_type():
-    with pytest.raises(ValueError) as excinfo:
-        RelationArgumentDistanceCollector(
-            layer="relations",
-            tokenize=True,
-            tokenizer="bert-base-uncased",
-        )
-    assert (
-        str(excinfo.value)
-        == "tokenized_document_type must be provided to calculate distance in means of tokens"
-    )
-
-
-def test_relation_argument_distance_collector_with_tokenize_wrong_document_type():
-    @dataclasses.dataclass
-    class TestDocument(Document):
-        data: str
-        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="data")
-        relations: AnnotationLayer[BinaryRelation] = annotation_field(target="entities")
-
-    doc = TestDocument(
-        data="This is the first entity. This is the second entity. This is the third entity."
-    )
-
-    doc.entities.append(LabeledSpan(start=0, end=25, label="entity"))
-    doc.entities.append(LabeledSpan(start=26, end=52, label="entity"))
-    doc.entities.append(LabeledSpan(start=53, end=78, label="entity"))
-    doc.relations.append(
-        BinaryRelation(head=doc.entities[0], tail=doc.entities[1], label="relation_label_1")
-    )
-    doc.relations.append(
-        BinaryRelation(head=doc.entities[1], tail=doc.entities[2], label="relation_label_2")
-    )
-
-    @dataclasses.dataclass
-    class TokenizedTestDocument(TokenBasedDocument):
-        entities: AnnotationLayer[LabeledSpan] = annotation_field(target="tokens")
-        relations: AnnotationLayer[BinaryRelation] = annotation_field(target="entities")
-
-    statistic = RelationArgumentDistanceCollector(
-        layer="relations",
-        tokenize=True,
-        tokenizer="bert-base-uncased",
-        tokenized_document_type=TokenizedTestDocument,
-    )
-
-    with pytest.raises(ValueError) as excinfo:
-        statistic(doc)
-    assert (
-        str(excinfo.value)
-        == "doc must be a TextBasedDocument to calculate distance in means of tokens"
-    )
-
-
-def test_relation_argument_distance_collector_with_tokenize_wrong_span_annotation_type():
+def test_relation_argument_distance_collector_with_wrong_span_annotation_type():
     @dataclasses.dataclass(eq=True, frozen=True)
     class UnknownSpan(Annotation):
         start: int
@@ -216,7 +116,7 @@ def test_relation_argument_distance_collector_with_tokenize_wrong_span_annotatio
     )
 
 
-def test_relation_argument_distance_collector_with_tokenize_wrong_relation_annotation_type():
+def test_relation_argument_distance_collector_with_wrong_relation_annotation_type():
     @dataclasses.dataclass(eq=True, frozen=True)
     class UnknownRelation(Annotation):
         head: Annotation
