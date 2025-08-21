@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 import torch
 from transformers import (
@@ -18,7 +19,7 @@ from tests.models import trunc_number
 # this is a small model that can be used for testing
 MODEL_NAME_OR_PATH = "sshleifer/bart-tiny-random"
 DECODER_POSITION_ID_PATTERN = [0, 0, 1, 0, 0, 1, 1]
-CONFIGS = [{}, {"decoder_position_id_mode": "pattern"}]
+CONFIGS = [{}, {"decoder_position_id_mode": "pattern"}, {"torch_dtype": "torch.float16"}]
 CONFIG_DICT = {_config_to_str(cfg): cfg for cfg in CONFIGS}
 
 
@@ -80,8 +81,15 @@ def taskmodule(document):
 
 @pytest.fixture(scope="module")
 def model(config) -> BartAsPointerNetwork:
+    config = config.copy()
     model_name_or_path = MODEL_NAME_OR_PATH
-
+    torch_dtype_str = config.pop("torch_dtype", "torch.float32")
+    if torch_dtype_str == "torch.float16":
+        torch_dtype = torch.float16
+    elif torch_dtype_str == "torch.float32":
+        torch_dtype = torch.float32
+    else:
+        raise ValueError(f"Invalid torch_dtype: {torch_dtype_str}")
     torch.random.manual_seed(42)
     model = BartAsPointerNetwork.from_pretrained(
         model_name_or_path,
@@ -101,9 +109,10 @@ def model(config) -> BartAsPointerNetwork:
             50267: [354, 1215, 9006],
         },
         decoder_position_id_pattern=DECODER_POSITION_ID_PATTERN,
+        # torch_dtype=torch_dtype,
         **config,
     )
-
+    model = model.to(dtype=torch_dtype)
     return model
 
 
@@ -111,111 +120,209 @@ def test_model(model, config):
     assert model is not None
     named_parameters = dict(model.named_parameters())
     parameter_means = {k: trunc_number(v.mean().item(), 7) for k, v in named_parameters.items()}
-    parameter_means_expected = {
-        "model.shared.weight": -1.41e-05,
-        "model.encoder.embed_positions.weight": -0.0001324,
-        "model.encoder.layers.0.self_attn.k_proj.weight": -0.0004574,
-        "model.encoder.layers.0.self_attn.k_proj.bias": 0.0,
-        "model.encoder.layers.0.self_attn.v_proj.weight": -0.0005457,
-        "model.encoder.layers.0.self_attn.v_proj.bias": 0.0,
-        "model.encoder.layers.0.self_attn.q_proj.weight": -0.0009775,
-        "model.encoder.layers.0.self_attn.q_proj.bias": 0.0,
-        "model.encoder.layers.0.self_attn.out_proj.weight": -0.0001075,
-        "model.encoder.layers.0.self_attn.out_proj.bias": 0.0,
-        "model.encoder.layers.0.self_attn_layer_norm.weight": 1.0,
-        "model.encoder.layers.0.self_attn_layer_norm.bias": 0.0,
-        "model.encoder.layers.0.fc1.weight": -0.0008655,
-        "model.encoder.layers.0.fc1.bias": 0.0,
-        "model.encoder.layers.0.fc2.weight": 0.0015535,
-        "model.encoder.layers.0.fc2.bias": 0.0,
-        "model.encoder.layers.0.final_layer_norm.weight": 1.0,
-        "model.encoder.layers.0.final_layer_norm.bias": 0.0,
-        "model.encoder.layers.1.self_attn.k_proj.weight": -0.0007831,
-        "model.encoder.layers.1.self_attn.k_proj.bias": 0.0,
-        "model.encoder.layers.1.self_attn.v_proj.weight": 0.0001186,
-        "model.encoder.layers.1.self_attn.v_proj.bias": 0.0,
-        "model.encoder.layers.1.self_attn.q_proj.weight": 0.0006847,
-        "model.encoder.layers.1.self_attn.q_proj.bias": 0.0,
-        "model.encoder.layers.1.self_attn.out_proj.weight": 0.0011724,
-        "model.encoder.layers.1.self_attn.out_proj.bias": 0.0,
-        "model.encoder.layers.1.self_attn_layer_norm.weight": 1.0,
-        "model.encoder.layers.1.self_attn_layer_norm.bias": 0.0,
-        "model.encoder.layers.1.fc1.weight": 0.0007757,
-        "model.encoder.layers.1.fc1.bias": 0.0,
-        "model.encoder.layers.1.fc2.weight": -0.0002014,
-        "model.encoder.layers.1.fc2.bias": 0.0,
-        "model.encoder.layers.1.final_layer_norm.weight": 1.0,
-        "model.encoder.layers.1.final_layer_norm.bias": 0.0,
-        "model.encoder.layernorm_embedding.weight": 1.0,
-        "model.encoder.layernorm_embedding.bias": 0.0,
-        "model.decoder.embed_positions.weight": -0.0001275,
-        "model.decoder.layers.0.self_attn.k_proj.weight": -0.0010682,
-        "model.decoder.layers.0.self_attn.k_proj.bias": 0.0,
-        "model.decoder.layers.0.self_attn.v_proj.weight": 0.0005057,
-        "model.decoder.layers.0.self_attn.v_proj.bias": 0.0,
-        "model.decoder.layers.0.self_attn.q_proj.weight": 0.0003248,
-        "model.decoder.layers.0.self_attn.q_proj.bias": 0.0,
-        "model.decoder.layers.0.self_attn.out_proj.weight": -0.0002014,
-        "model.decoder.layers.0.self_attn.out_proj.bias": 0.0,
-        "model.decoder.layers.0.self_attn_layer_norm.weight": 1.0,
-        "model.decoder.layers.0.self_attn_layer_norm.bias": 0.0,
-        "model.decoder.layers.0.encoder_attn.k_proj.weight": -0.0004254,
-        "model.decoder.layers.0.encoder_attn.k_proj.bias": 0.0,
-        "model.decoder.layers.0.encoder_attn.v_proj.weight": -0.0004049,
-        "model.decoder.layers.0.encoder_attn.v_proj.bias": 0.0,
-        "model.decoder.layers.0.encoder_attn.q_proj.weight": -0.0003516,
-        "model.decoder.layers.0.encoder_attn.q_proj.bias": 0.0,
-        "model.decoder.layers.0.encoder_attn.out_proj.weight": 0.0009908,
-        "model.decoder.layers.0.encoder_attn.out_proj.bias": 0.0,
-        "model.decoder.layers.0.encoder_attn_layer_norm.weight": 1.0,
-        "model.decoder.layers.0.encoder_attn_layer_norm.bias": 0.0,
-        "model.decoder.layers.0.fc1.weight": 0.0008378,
-        "model.decoder.layers.0.fc1.bias": 0.0,
-        "model.decoder.layers.0.fc2.weight": -2e-05,
-        "model.decoder.layers.0.fc2.bias": 0.0,
-        "model.decoder.layers.0.final_layer_norm.weight": 1.0,
-        "model.decoder.layers.0.final_layer_norm.bias": 0.0,
-        "model.decoder.layers.1.self_attn.k_proj.weight": -0.0007669,
-        "model.decoder.layers.1.self_attn.k_proj.bias": 0.0,
-        "model.decoder.layers.1.self_attn.v_proj.weight": -0.0007123,
-        "model.decoder.layers.1.self_attn.v_proj.bias": 0.0,
-        "model.decoder.layers.1.self_attn.q_proj.weight": 0.0012958,
-        "model.decoder.layers.1.self_attn.q_proj.bias": 0.0,
-        "model.decoder.layers.1.self_attn.out_proj.weight": -0.0006818,
-        "model.decoder.layers.1.self_attn.out_proj.bias": 0.0,
-        "model.decoder.layers.1.self_attn_layer_norm.weight": 1.0,
-        "model.decoder.layers.1.self_attn_layer_norm.bias": 0.0,
-        "model.decoder.layers.1.encoder_attn.k_proj.weight": -0.0006906,
-        "model.decoder.layers.1.encoder_attn.k_proj.bias": 0.0,
-        "model.decoder.layers.1.encoder_attn.v_proj.weight": -0.0009213,
-        "model.decoder.layers.1.encoder_attn.v_proj.bias": 0.0,
-        "model.decoder.layers.1.encoder_attn.q_proj.weight": -0.000842,
-        "model.decoder.layers.1.encoder_attn.q_proj.bias": 0.0,
-        "model.decoder.layers.1.encoder_attn.out_proj.weight": 0.0008073,
-        "model.decoder.layers.1.encoder_attn.out_proj.bias": 0.0,
-        "model.decoder.layers.1.encoder_attn_layer_norm.weight": 1.0,
-        "model.decoder.layers.1.encoder_attn_layer_norm.bias": 0.0,
-        "model.decoder.layers.1.fc1.weight": 0.0015493,
-        "model.decoder.layers.1.fc1.bias": 0.0,
-        "model.decoder.layers.1.fc2.weight": -0.0009827,
-        "model.decoder.layers.1.fc2.bias": 0.0,
-        "model.decoder.layers.1.final_layer_norm.weight": 1.0,
-        "model.decoder.layers.1.final_layer_norm.bias": 0.0,
-        "model.decoder.layernorm_embedding.weight": 1.0,
-        "model.decoder.layernorm_embedding.bias": 0.0,
-        "pointer_head.encoder_mlp.0.weight": 0.0004805,
-        "pointer_head.encoder_mlp.0.bias": 0.0,
-        "pointer_head.encoder_mlp.3.weight": 0.0001837,
-        "pointer_head.encoder_mlp.3.bias": 0.0,
-    }
+    if config == {"torch_dtype": "torch.float16"}:
+        parameter_means_expected = {
+            "model.shared.weight": -1.41e-05,
+            "model.encoder.embed_positions.weight": -0.0001324,
+            "model.encoder.layers.0.self_attn.k_proj.weight": -0.0004575,
+            "model.encoder.layers.0.self_attn.k_proj.bias": 0.0,
+            "model.encoder.layers.0.self_attn.v_proj.weight": -0.0005455,
+            "model.encoder.layers.0.self_attn.v_proj.bias": 0.0,
+            "model.encoder.layers.0.self_attn.q_proj.weight": -0.0009775,
+            "model.encoder.layers.0.self_attn.q_proj.bias": 0.0,
+            "model.encoder.layers.0.self_attn.out_proj.weight": -0.0001074,
+            "model.encoder.layers.0.self_attn.out_proj.bias": 0.0,
+            "model.encoder.layers.0.self_attn_layer_norm.weight": 1.0,
+            "model.encoder.layers.0.self_attn_layer_norm.bias": 0.0,
+            "model.encoder.layers.0.fc1.weight": -0.0008654,
+            "model.encoder.layers.0.fc1.bias": 0.0,
+            "model.encoder.layers.0.fc2.weight": 0.0015535,
+            "model.encoder.layers.0.fc2.bias": 0.0,
+            "model.encoder.layers.0.final_layer_norm.weight": 1.0,
+            "model.encoder.layers.0.final_layer_norm.bias": 0.0,
+            "model.encoder.layers.1.self_attn.k_proj.weight": -0.0007829,
+            "model.encoder.layers.1.self_attn.k_proj.bias": 0.0,
+            "model.encoder.layers.1.self_attn.v_proj.weight": 0.0001187,
+            "model.encoder.layers.1.self_attn.v_proj.bias": 0.0,
+            "model.encoder.layers.1.self_attn.q_proj.weight": 0.0006847,
+            "model.encoder.layers.1.self_attn.q_proj.bias": 0.0,
+            "model.encoder.layers.1.self_attn.out_proj.weight": 0.001172,
+            "model.encoder.layers.1.self_attn.out_proj.bias": 0.0,
+            "model.encoder.layers.1.self_attn_layer_norm.weight": 1.0,
+            "model.encoder.layers.1.self_attn_layer_norm.bias": 0.0,
+            "model.encoder.layers.1.fc1.weight": 0.0007753,
+            "model.encoder.layers.1.fc1.bias": 0.0,
+            "model.encoder.layers.1.fc2.weight": -0.0002021,
+            "model.encoder.layers.1.fc2.bias": 0.0,
+            "model.encoder.layers.1.final_layer_norm.weight": 1.0,
+            "model.encoder.layers.1.final_layer_norm.bias": 0.0,
+            "model.encoder.layernorm_embedding.weight": 1.0,
+            "model.encoder.layernorm_embedding.bias": 0.0,
+            "model.decoder.embed_positions.weight": -0.0001275,
+            "model.decoder.layers.0.self_attn.k_proj.weight": -0.0010681,
+            "model.decoder.layers.0.self_attn.k_proj.bias": 0.0,
+            "model.decoder.layers.0.self_attn.v_proj.weight": 0.0005054,
+            "model.decoder.layers.0.self_attn.v_proj.bias": 0.0,
+            "model.decoder.layers.0.self_attn.q_proj.weight": 0.0003247,
+            "model.decoder.layers.0.self_attn.q_proj.bias": 0.0,
+            "model.decoder.layers.0.self_attn.out_proj.weight": -0.0002011,
+            "model.decoder.layers.0.self_attn.out_proj.bias": 0.0,
+            "model.decoder.layers.0.self_attn_layer_norm.weight": 1.0,
+            "model.decoder.layers.0.self_attn_layer_norm.bias": 0.0,
+            "model.decoder.layers.0.encoder_attn.k_proj.weight": -0.0004251,
+            "model.decoder.layers.0.encoder_attn.k_proj.bias": 0.0,
+            "model.decoder.layers.0.encoder_attn.v_proj.weight": -0.0004045,
+            "model.decoder.layers.0.encoder_attn.v_proj.bias": 0.0,
+            "model.decoder.layers.0.encoder_attn.q_proj.weight": -0.0003519,
+            "model.decoder.layers.0.encoder_attn.q_proj.bias": 0.0,
+            "model.decoder.layers.0.encoder_attn.out_proj.weight": 0.0009908,
+            "model.decoder.layers.0.encoder_attn.out_proj.bias": 0.0,
+            "model.decoder.layers.0.encoder_attn_layer_norm.weight": 1.0,
+            "model.decoder.layers.0.encoder_attn_layer_norm.bias": 0.0,
+            "model.decoder.layers.0.fc1.weight": 0.0008378,
+            "model.decoder.layers.0.fc1.bias": 0.0,
+            "model.decoder.layers.0.fc2.weight": -2e-05,
+            "model.decoder.layers.0.fc2.bias": 0.0,
+            "model.decoder.layers.0.final_layer_norm.weight": 1.0,
+            "model.decoder.layers.0.final_layer_norm.bias": 0.0,
+            "model.decoder.layers.1.self_attn.k_proj.weight": -0.0007667,
+            "model.decoder.layers.1.self_attn.k_proj.bias": 0.0,
+            "model.decoder.layers.1.self_attn.v_proj.weight": -0.0007123,
+            "model.decoder.layers.1.self_attn.v_proj.bias": 0.0,
+            "model.decoder.layers.1.self_attn.q_proj.weight": 0.001295,
+            "model.decoder.layers.1.self_attn.q_proj.bias": 0.0,
+            "model.decoder.layers.1.self_attn.out_proj.weight": -0.0006818,
+            "model.decoder.layers.1.self_attn.out_proj.bias": 0.0,
+            "model.decoder.layers.1.self_attn_layer_norm.weight": 1.0,
+            "model.decoder.layers.1.self_attn_layer_norm.bias": 0.0,
+            "model.decoder.layers.1.encoder_attn.k_proj.weight": -0.0006904,
+            "model.decoder.layers.1.encoder_attn.k_proj.bias": 0.0,
+            "model.decoder.layers.1.encoder_attn.v_proj.weight": -0.0009212,
+            "model.decoder.layers.1.encoder_attn.v_proj.bias": 0.0,
+            "model.decoder.layers.1.encoder_attn.q_proj.weight": -0.000842,
+            "model.decoder.layers.1.encoder_attn.q_proj.bias": 0.0,
+            "model.decoder.layers.1.encoder_attn.out_proj.weight": 0.0008072,
+            "model.decoder.layers.1.encoder_attn.out_proj.bias": 0.0,
+            "model.decoder.layers.1.encoder_attn_layer_norm.weight": 1.0,
+            "model.decoder.layers.1.encoder_attn_layer_norm.bias": 0.0,
+            "model.decoder.layers.1.fc1.weight": 0.0015497,
+            "model.decoder.layers.1.fc1.bias": 0.0,
+            "model.decoder.layers.1.fc2.weight": -0.0009822,
+            "model.decoder.layers.1.fc2.bias": 0.0,
+            "model.decoder.layers.1.final_layer_norm.weight": 1.0,
+            "model.decoder.layers.1.final_layer_norm.bias": 0.0,
+            "model.decoder.layernorm_embedding.weight": 1.0,
+            "model.decoder.layernorm_embedding.bias": 0.0,
+            "pointer_head.encoder_mlp.0.weight": 0.0004801,
+            "pointer_head.encoder_mlp.0.bias": 0.0,
+            "pointer_head.encoder_mlp.3.weight": 0.0001838,
+            "pointer_head.encoder_mlp.3.bias": 0.0,
+        }
+    else:
+        parameter_means_expected = {
+            "model.shared.weight": -1.41e-05,
+            "model.encoder.embed_positions.weight": -0.0001324,
+            "model.encoder.layers.0.self_attn.k_proj.weight": -0.0004574,
+            "model.encoder.layers.0.self_attn.k_proj.bias": 0.0,
+            "model.encoder.layers.0.self_attn.v_proj.weight": -0.0005457,
+            "model.encoder.layers.0.self_attn.v_proj.bias": 0.0,
+            "model.encoder.layers.0.self_attn.q_proj.weight": -0.0009775,
+            "model.encoder.layers.0.self_attn.q_proj.bias": 0.0,
+            "model.encoder.layers.0.self_attn.out_proj.weight": -0.0001075,
+            "model.encoder.layers.0.self_attn.out_proj.bias": 0.0,
+            "model.encoder.layers.0.self_attn_layer_norm.weight": 1.0,
+            "model.encoder.layers.0.self_attn_layer_norm.bias": 0.0,
+            "model.encoder.layers.0.fc1.weight": -0.0008655,
+            "model.encoder.layers.0.fc1.bias": 0.0,
+            "model.encoder.layers.0.fc2.weight": 0.0015535,
+            "model.encoder.layers.0.fc2.bias": 0.0,
+            "model.encoder.layers.0.final_layer_norm.weight": 1.0,
+            "model.encoder.layers.0.final_layer_norm.bias": 0.0,
+            "model.encoder.layers.1.self_attn.k_proj.weight": -0.0007831,
+            "model.encoder.layers.1.self_attn.k_proj.bias": 0.0,
+            "model.encoder.layers.1.self_attn.v_proj.weight": 0.0001186,
+            "model.encoder.layers.1.self_attn.v_proj.bias": 0.0,
+            "model.encoder.layers.1.self_attn.q_proj.weight": 0.0006847,
+            "model.encoder.layers.1.self_attn.q_proj.bias": 0.0,
+            "model.encoder.layers.1.self_attn.out_proj.weight": 0.0011724,
+            "model.encoder.layers.1.self_attn.out_proj.bias": 0.0,
+            "model.encoder.layers.1.self_attn_layer_norm.weight": 1.0,
+            "model.encoder.layers.1.self_attn_layer_norm.bias": 0.0,
+            "model.encoder.layers.1.fc1.weight": 0.0007757,
+            "model.encoder.layers.1.fc1.bias": 0.0,
+            "model.encoder.layers.1.fc2.weight": -0.0002014,
+            "model.encoder.layers.1.fc2.bias": 0.0,
+            "model.encoder.layers.1.final_layer_norm.weight": 1.0,
+            "model.encoder.layers.1.final_layer_norm.bias": 0.0,
+            "model.encoder.layernorm_embedding.weight": 1.0,
+            "model.encoder.layernorm_embedding.bias": 0.0,
+            "model.decoder.embed_positions.weight": -0.0001275,
+            "model.decoder.layers.0.self_attn.k_proj.weight": -0.0010682,
+            "model.decoder.layers.0.self_attn.k_proj.bias": 0.0,
+            "model.decoder.layers.0.self_attn.v_proj.weight": 0.0005057,
+            "model.decoder.layers.0.self_attn.v_proj.bias": 0.0,
+            "model.decoder.layers.0.self_attn.q_proj.weight": 0.0003248,
+            "model.decoder.layers.0.self_attn.q_proj.bias": 0.0,
+            "model.decoder.layers.0.self_attn.out_proj.weight": -0.0002014,
+            "model.decoder.layers.0.self_attn.out_proj.bias": 0.0,
+            "model.decoder.layers.0.self_attn_layer_norm.weight": 1.0,
+            "model.decoder.layers.0.self_attn_layer_norm.bias": 0.0,
+            "model.decoder.layers.0.encoder_attn.k_proj.weight": -0.0004254,
+            "model.decoder.layers.0.encoder_attn.k_proj.bias": 0.0,
+            "model.decoder.layers.0.encoder_attn.v_proj.weight": -0.0004049,
+            "model.decoder.layers.0.encoder_attn.v_proj.bias": 0.0,
+            "model.decoder.layers.0.encoder_attn.q_proj.weight": -0.0003516,
+            "model.decoder.layers.0.encoder_attn.q_proj.bias": 0.0,
+            "model.decoder.layers.0.encoder_attn.out_proj.weight": 0.0009908,
+            "model.decoder.layers.0.encoder_attn.out_proj.bias": 0.0,
+            "model.decoder.layers.0.encoder_attn_layer_norm.weight": 1.0,
+            "model.decoder.layers.0.encoder_attn_layer_norm.bias": 0.0,
+            "model.decoder.layers.0.fc1.weight": 0.0008378,
+            "model.decoder.layers.0.fc1.bias": 0.0,
+            "model.decoder.layers.0.fc2.weight": -2e-05,
+            "model.decoder.layers.0.fc2.bias": 0.0,
+            "model.decoder.layers.0.final_layer_norm.weight": 1.0,
+            "model.decoder.layers.0.final_layer_norm.bias": 0.0,
+            "model.decoder.layers.1.self_attn.k_proj.weight": -0.0007669,
+            "model.decoder.layers.1.self_attn.k_proj.bias": 0.0,
+            "model.decoder.layers.1.self_attn.v_proj.weight": -0.0007123,
+            "model.decoder.layers.1.self_attn.v_proj.bias": 0.0,
+            "model.decoder.layers.1.self_attn.q_proj.weight": 0.0012958,
+            "model.decoder.layers.1.self_attn.q_proj.bias": 0.0,
+            "model.decoder.layers.1.self_attn.out_proj.weight": -0.0006818,
+            "model.decoder.layers.1.self_attn.out_proj.bias": 0.0,
+            "model.decoder.layers.1.self_attn_layer_norm.weight": 1.0,
+            "model.decoder.layers.1.self_attn_layer_norm.bias": 0.0,
+            "model.decoder.layers.1.encoder_attn.k_proj.weight": -0.0006906,
+            "model.decoder.layers.1.encoder_attn.k_proj.bias": 0.0,
+            "model.decoder.layers.1.encoder_attn.v_proj.weight": -0.0009213,
+            "model.decoder.layers.1.encoder_attn.v_proj.bias": 0.0,
+            "model.decoder.layers.1.encoder_attn.q_proj.weight": -0.000842,
+            "model.decoder.layers.1.encoder_attn.q_proj.bias": 0.0,
+            "model.decoder.layers.1.encoder_attn.out_proj.weight": 0.0008073,
+            "model.decoder.layers.1.encoder_attn.out_proj.bias": 0.0,
+            "model.decoder.layers.1.encoder_attn_layer_norm.weight": 1.0,
+            "model.decoder.layers.1.encoder_attn_layer_norm.bias": 0.0,
+            "model.decoder.layers.1.fc1.weight": 0.0015493,
+            "model.decoder.layers.1.fc1.bias": 0.0,
+            "model.decoder.layers.1.fc2.weight": -0.0009827,
+            "model.decoder.layers.1.fc2.bias": 0.0,
+            "model.decoder.layers.1.final_layer_norm.weight": 1.0,
+            "model.decoder.layers.1.final_layer_norm.bias": 0.0,
+            "model.decoder.layernorm_embedding.weight": 1.0,
+            "model.decoder.layernorm_embedding.bias": 0.0,
+            "pointer_head.encoder_mlp.0.weight": 0.0004805,
+            "pointer_head.encoder_mlp.0.bias": 0.0,
+            "pointer_head.encoder_mlp.3.weight": 0.0001837,
+            "pointer_head.encoder_mlp.3.bias": 0.0,
+        }
+
     assert parameter_means == parameter_means_expected
     assert isinstance(model, BartAsPointerNetwork)
-    if config == {}:
-        assert isinstance(model.model, BartModel)
-    elif config == {"decoder_position_id_mode": "pattern"}:
+    if config == {"decoder_position_id_mode": "pattern"}:
         assert isinstance(model.model, BartModelWithDecoderPositionIds)
     else:
-        raise ValueError(f"Unknown config: {config}")
+        assert isinstance(model.model, BartModel)
 
 
 @pytest.fixture(scope="module")
@@ -308,58 +415,109 @@ def test_forward(model, batch, decoder_input_ids, config):
     # shape: (batch_size, output_seq_len, target_size=num_target_ids+num_offsets)
     assert outputs.logits.shape == (2, 8, 17)
     # check exact values only for the first sequence output
-    torch.testing.assert_close(
-        outputs.logits[:, 0, :],
-        torch.tensor(
-            [
+    if config == {"torch_dtype": "torch.float16"}:
+        torch.testing.assert_close(
+            outputs.logits[:, 0, :],
+            torch.tensor(
                 [
-                    -1.0000000138484279e24,
-                    -0.23238050937652588,
-                    0.2958170175552368,
-                    0.05529244244098663,
-                    0.04253090173006058,
-                    0.10081345587968826,
-                    -0.07145103067159653,
-                    0.12317530065774918,
-                    -0.06861806660890579,
-                    0.07819556444883347,
-                    0.006490768864750862,
-                    -0.040455855429172516,
-                    0.03176971897482872,
-                    0.05362509936094284,
-                    0.04528001323342323,
-                    -0.0684177577495575,
-                    -1.0000000331813535e32,
+                    [
+                        -65504.0,
+                        -0.2322998046875,
+                        0.295654296875,
+                        0.05535888671875,
+                        0.042449951171875,
+                        0.10089111328125,
+                        -0.07147216796875,
+                        0.12322998046875,
+                        -0.068603515625,
+                        0.0782470703125,
+                        0.00640869140625,
+                        -0.040435791015625,
+                        0.03179931640625,
+                        0.0535888671875,
+                        0.045318603515625,
+                        -0.06842041015625,
+                        -65504.0,
+                    ],
+                    [
+                        -65504.0,
+                        -0.232666015625,
+                        0.296142578125,
+                        0.055511474609375,
+                        0.042755126953125,
+                        0.10076904296875,
+                        -0.0714111328125,
+                        0.1231689453125,
+                        0.06494140625,
+                        0.0794677734375,
+                        -0.0794677734375,
+                        -65504.0,
+                        -65504.0,
+                        -65504.0,
+                        -65504.0,
+                        -65504.0,
+                        -65504.0,
+                    ],
                 ],
+                dtype=outputs.logits.dtype,
+            ),
+        )
+    else:
+        torch.testing.assert_close(
+            outputs.logits[:, 0, :],
+            torch.tensor(
                 [
-                    -1.0000000138484279e24,
-                    -0.23274855315685272,
-                    0.2960396707057953,
-                    0.05556505173444748,
-                    0.04273710399866104,
-                    0.10071954131126404,
-                    -0.071356862783432,
-                    0.12314081937074661,
-                    0.06498698145151138,
-                    0.07938676327466965,
-                    -0.07943986356258392,
-                    -1.0000000331813535e32,
-                    -1.0000000331813535e32,
-                    -1.0000000331813535e32,
-                    -1.0000000331813535e32,
-                    -1.0000000331813535e32,
-                    -1.0000000331813535e32,
+                    [
+                        -3.4028234663852886e38,
+                        -0.23238050937652588,
+                        0.2958170175552368,
+                        0.05529244244098663,
+                        0.04253090173006058,
+                        0.10081345587968826,
+                        -0.07145103067159653,
+                        0.12317530065774918,
+                        -0.06861806660890579,
+                        0.07819556444883347,
+                        0.006490768864750862,
+                        -0.040455855429172516,
+                        0.03176971897482872,
+                        0.05362509936094284,
+                        0.04528001323342323,
+                        -0.0684177577495575,
+                        -3.4028234663852886e38,
+                    ],
+                    [
+                        -3.4028234663852886e38,
+                        -0.23274855315685272,
+                        0.2960396707057953,
+                        0.05556505173444748,
+                        0.04273710399866104,
+                        0.10071954131126404,
+                        -0.071356862783432,
+                        0.12314081937074661,
+                        0.06498698145151138,
+                        0.07938676327466965,
+                        -0.07943986356258392,
+                        -3.4028234663852886e38,
+                        -3.4028234663852886e38,
+                        -3.4028234663852886e38,
+                        -3.4028234663852886e38,
+                        -3.4028234663852886e38,
+                        -3.4028234663852886e38,
+                    ],
                 ],
-            ]
-        ),
-    )
+                dtype=outputs.logits.dtype,
+            ),
+        )
     # check the sum of all logits
     if config == {}:
+        # ensure that no individual value is -inf
+        assert outputs.logits.min() > -np.inf
         torch.testing.assert_close(
             outputs.logits.sum(0).sum(0),
             torch.tensor(
                 [
-                    -1.6000000221574846e25,
+                    -np.inf,
                     -0.9064984321594238,
                     1.189674735069275,
                     0.9796359539031982,
@@ -370,21 +528,24 @@ def test_forward(model, batch, decoder_input_ids, config):
                     -0.12306825071573257,
                     0.6218758225440979,
                     -0.4374474287033081,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -1.6000000530901656e33,
-                ]
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                ],
+                dtype=outputs.logits.dtype,
             ),
         )
     elif config == {"decoder_position_id_mode": "pattern"}:
+        # ensure that no individual value is -inf
+        assert outputs.logits.min() > -np.inf
         torch.testing.assert_close(
             outputs.logits.sum(0).sum(0),
             torch.tensor(
                 [
-                    -1.6000000221574846e25,
+                    -np.inf,
                     -0.5539568662643433,
                     0.7004716396331787,
                     1.5720455646514893,
@@ -395,13 +556,42 @@ def test_forward(model, batch, decoder_input_ids, config):
                     -0.04344810172915459,
                     0.3674442768096924,
                     -0.6838937997817993,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -8.000000265450828e32,
-                    -1.6000000530901656e33,
-                ]
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                ],
+                dtype=outputs.logits.dtype,
+            ),
+        )
+    elif config == {"torch_dtype": "torch.float16"}:
+        # ensure that no individual value is -inf
+        assert outputs.logits.min() > -np.inf
+        torch.testing.assert_close(
+            outputs.logits.sum(0).sum(0),
+            torch.tensor(
+                [
+                    -np.inf,
+                    -0.90625,
+                    1.189453125,
+                    0.9794921875,
+                    0.183837890625,
+                    1.3076171875,
+                    -0.121337890625,
+                    0.53173828125,
+                    -0.12322998046875,
+                    0.6220703125,
+                    -0.437255859375,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                    -np.inf,
+                ],
+                dtype=outputs.logits.dtype,
             ),
         )
     else:
@@ -416,7 +606,13 @@ def test_forward_with_labels(model, batch, config):
     assert set(inputs) == {"input_ids", "attention_mask"}
     assert set(targets_without_constraints) == {"labels", "decoder_attention_mask"}
     torch.manual_seed(42)
-    outputs = model(**inputs, **targets_without_constraints)
+    if config == {"torch_dtype": "torch.float16"}:
+        with pytest.raises(RuntimeError) as excinfo:
+            outputs = model(**inputs, **targets_without_constraints)
+        assert str(excinfo.value) == "\"nll_loss_out_frame\" not implemented for 'Half'"
+        return  # skip the rest of the test
+    else:
+        outputs = model(**inputs, **targets_without_constraints)
     loss = outputs.loss
     if config == {}:
         torch.testing.assert_close(loss, torch.tensor(2.4516539573669434))
@@ -431,7 +627,13 @@ def test_forward_with_labels_and_constraints(model, batch_with_constraints, conf
     assert set(inputs) == {"input_ids", "attention_mask"}
     assert set(targets) == {"labels", "decoder_attention_mask", "constraints"}
     torch.manual_seed(42)
-    outputs = model(**inputs, **targets)
+    if config == {"torch_dtype": "torch.float16"}:
+        with pytest.raises(RuntimeError) as excinfo:
+            outputs = model(**inputs, **targets)
+        assert str(excinfo.value) == "\"nll_loss_out_frame\" not implemented for 'Half'"
+        return  # skip the rest of the test
+    else:
+        outputs = model(**inputs, **targets)
     loss = outputs.loss
     if config == {}:
         torch.testing.assert_close(loss, torch.tensor(4.776531219482422))
@@ -559,7 +761,7 @@ def test_prepare_inputs_for_generation(
     assert result["head_mask"] is None
     assert result["decoder_head_mask"] is None
     assert result["cross_attn_head_mask"] is None
-    if config == {}:
+    if config == {} or config == {"torch_dtype": "torch.float16"}:
         assert "decoder_position_ids" not in result
     elif config == {"decoder_position_id_mode": "pattern"}:
         torch.testing.assert_close(result["decoder_position_ids"], torch.tensor([[0], [0]]))
@@ -604,7 +806,7 @@ def test_prepare_inputs_for_generation_with_past_key_values(
     )
 
     result = model.prepare_inputs_for_generation(past_key_values=dummy_past_key_values, **kwargs)
-    if config == {}:
+    if config == {} or config == {"torch_dtype": "torch.float16"}:
         assert len(result) == 10
     elif config == {"decoder_position_id_mode": "pattern"}:
         assert len(result) == 11
@@ -646,7 +848,7 @@ def test_generate(model, batch, empty_decoder_input_ids, config):
     batch_size, seq_len = inputs["input_ids"].shape
     torch.manual_seed(42)
     outputs = model.generate(**inputs)
-    if config == {}:
+    if config == {} or config == {"torch_dtype": "torch.float16"}:
         assert outputs.shape == (batch_size, 20)  # note that 20 is the model.config.max_length
         torch.testing.assert_close(
             outputs,
