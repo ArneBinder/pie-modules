@@ -10,7 +10,7 @@ from torch import FloatTensor, LongTensor
 from torch.optim import Optimizer
 from transformers import PreTrainedModel, SchedulerType, get_scheduler
 from transformers.modeling_outputs import Seq2SeqLMOutput
-from typing_extensions import TypeAlias
+from typing_extensions import Self, TypeAlias
 
 from pie_modules.models.common import ModelWithBoilerplate
 
@@ -194,3 +194,7 @@ class SimpleGenerativeModel(
             return [optimizer], [{"scheduler": scheduler, "interval": "step"}]
         else:
             return optimizer
+
+    def to(self, *args: Any, **kwargs: Any) -> Self:
+        self.model = self.model.to(*args, **kwargs)
+        return self
