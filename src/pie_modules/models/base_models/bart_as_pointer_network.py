@@ -7,7 +7,7 @@ from torch.optim import Optimizer
 from transformers import BartConfig, BartModel, BartPreTrainedModel, GenerationConfig
 from transformers.modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
 from transformers.models.bart.modeling_bart import shift_tokens_right
-from transformers.utils import logging
+from transformers.utils import ModelOutput, logging
 
 from pie_modules.models.base_models.bart_with_decoder_position_ids import (
     BartModelWithDecoderPositionIds,
@@ -58,6 +58,7 @@ class BartAsPointerNetworkConfig(BartConfig):
         shared_decay: Optional[float] = None,
         encoder_layer_norm_decay: Optional[float] = 0.001,
         decoder_layer_norm_decay: Optional[float] = None,
+        use_key_value_cache: bool = True,
         # other BartConfig parameters
         **kwargs,
     ):
@@ -81,6 +82,8 @@ class BartAsPointerNetworkConfig(BartConfig):
         self.shared_decay = shared_decay
         self.encoder_layer_norm_decay = encoder_layer_norm_decay
         self.decoder_layer_norm_decay = decoder_layer_norm_decay
+
+        self.use_key_value_cache = use_key_value_cache
 
 
 class BartAsPointerNetwork(BartPreTrainedModel):
@@ -312,6 +315,14 @@ class BartAsPointerNetwork(BartPreTrainedModel):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
+
+    def _extract_past_from_model_output(
+        self, outputs: ModelOutput, standardize_cache_format: bool = False
+    ):
+        if not self.config.use_key_value_cache:
+            return None
+        else:
+            return super()._extract_past_from_model_output(outputs, standardize_cache_format)
 
     def prepare_inputs_for_generation(
         self,
