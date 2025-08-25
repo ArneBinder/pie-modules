@@ -30,8 +30,9 @@ class NltkSentenceSplitter:
         self,
         partition_layer_name: str = "labeled_partitions",
         text_field_name: str = "text",
-        sentencizer_url: str = "tokenizers/punkt/PY3/english.pickle",
+        language: str = "english",
         inplace: bool = True,
+        sentencizer_url: str = "",  # TODO: add deprecated warning and automatic conversion to language or just remove
     ):
         try:
             import nltk
@@ -45,8 +46,8 @@ class NltkSentenceSplitter:
         self.text_field_name = text_field_name
         self.inplace = inplace
         # download the NLTK Punkt tokenizer model
-        nltk.download("punkt")
-        self.sentencizer = nltk.data.load(sentencizer_url)
+        nltk.download("punkt_tab")
+        self.sentencizer = nltk.tokenize.PunktTokenizer(language)
 
     def __call__(self, document: D) -> D:
         if not self.inplace:
