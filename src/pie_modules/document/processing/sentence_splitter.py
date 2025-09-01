@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import TypeVar
 
 from pie_modules.annotations import LabeledSpan
@@ -32,7 +33,7 @@ class NltkSentenceSplitter:
         text_field_name: str = "text",
         language: str = "english",
         inplace: bool = True,
-        sentencizer_url: str = "",  # TODO: add deprecated warning and automatic conversion to language or just remove
+        sentencizer_url: str | None = None,
     ):
         try:
             import nltk
@@ -41,6 +42,13 @@ class NltkSentenceSplitter:
                 "NLTK must be installed to use the NltkSentenceSplitter. "
                 "You can install NLTK with `pip install nltk`."
             )
+
+        if sentencizer_url is not None:
+            logger.warning(
+                "The 'sentencizer_url' argument is deprecated. Please use 'language' instead."
+            )
+            if sentencizer_url[-7:] == ".pickle":
+                language = os.path.split(sentencizer_url[:-7])[-1]
 
         self.partition_layer_name = partition_layer_name
         self.text_field_name = text_field_name
