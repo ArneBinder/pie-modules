@@ -41,7 +41,7 @@ tabulate = "^0.9"
 # for TokenClassificationModelWithSeq2SeqEncoderAndCrf
 pytorch-crf = ">=0.7.2"
 # for rouge metric (tests only) and for NltkSentenceSplitter
-nltk = "^3.8.1"
+nltk = "^3.9.1"
 # for NltkSentenceSplitter
 flair = "^0.13.1"
 # for SpansViaRelationMerger

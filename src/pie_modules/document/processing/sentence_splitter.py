@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import TypeVar
 
 from pie_modules.annotations import LabeledSpan
@@ -30,8 +31,9 @@ class NltkSentenceSplitter:
         self,
         partition_layer_name: str = "labeled_partitions",
         text_field_name: str = "text",
-        sentencizer_url: str = "tokenizers/punkt/PY3/english.pickle",
+        language: str = "english",
         inplace: bool = True,
+        sentencizer_url: str | None = None,
     ):
         try:
             import nltk
@@ -41,12 +43,19 @@ class NltkSentenceSplitter:
                 "You can install NLTK with `pip install nltk`."
             )
 
+        if sentencizer_url is not None:
+            logger.warning(
+                "The 'sentencizer_url' argument is deprecated. Please use 'language' instead."
+            )
+            if sentencizer_url[-7:] == ".pickle":
+                language = os.path.split(sentencizer_url[:-7])[-1]
+
         self.partition_layer_name = partition_layer_name
         self.text_field_name = text_field_name
         self.inplace = inplace
         # download the NLTK Punkt tokenizer model
-        nltk.download("punkt")
-        self.sentencizer = nltk.data.load(sentencizer_url)
+        nltk.download("punkt_tab")
+        self.sentencizer = nltk.tokenize.PunktTokenizer(language)
 
     def __call__(self, document: D) -> D:
         if not self.inplace:

@@ -37,6 +37,35 @@ def test_nltk_sentence_splitter(caplog, inplace):
     assert str(doc.labeled_partitions[1]) == "This is another one."
 
 
+def test_nltk_sentence_splitter_deprecated_arg(caplog):
+    doc = TextDocumentWithLabeledPartitions(
+        text="This is a test sentence. This is another one.", id="test_doc"
+    )
+    # add a dummy text partition to trigger the warning (see below)
+    doc.labeled_partitions.append(LabeledSpan(start=0, end=len(doc.text), label="text"))
+    caplog.clear()
+    # create the sentence splitter
+    with caplog.at_level("WARNING"):
+        sentence_splitter = NltkSentenceSplitter(
+            inplace=True, sentencizer_url="tokenizers/punkt/PY3/english.pickle"
+        )
+    # call the sentence splitter
+    result = sentence_splitter(doc)
+
+    assert result is doc
+    # check the log messages
+    assert len(caplog.records) == 2
+    assert caplog.messages == [
+        "The 'sentencizer_url' argument is deprecated. Please use 'language' instead.",
+        "Layer labeled_partitions in document test_doc is not empty. "
+        "Clearing it before adding new sentence partitions.",
+    ]
+    # check the result
+    assert len(doc.labeled_partitions) == 2
+    assert str(doc.labeled_partitions[0]) == "This is a test sentence."
+    assert str(doc.labeled_partitions[1]) == "This is another one."
+
+
 @pytest.mark.parametrize("inplace", [True, False])
 def test_flair_segtok_sentence_splitter(caplog, inplace):
     doc = TextDocumentWithLabeledPartitions(
