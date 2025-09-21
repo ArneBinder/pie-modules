@@ -3,9 +3,7 @@ from typing import Generic, Iterable, Iterator, Optional, Sequence, Type, TypeVa
 
 from pie_core import (
     Document,
-    IterableTaskEncodingDataset,
     TaskEncoding,
-    TaskEncodingDataset,
     TaskEncodingSequence,
     TaskModule,
 )
@@ -80,8 +78,6 @@ class TaskModuleWithDocumentConverter(
         Sequence[TaskEncodingType],
         TaskEncodingSequence[TaskEncodingType, DocumentType],
         Iterator[TaskEncodingType],
-        TaskEncodingDataset[TaskEncodingType],
-        IterableTaskEncodingDataset[TaskEncodingType],
     ]:
         converted_documents: Union[DocumentType, Iterable[DocumentType]]
         if isinstance(documents, Document):
