@@ -55,7 +55,7 @@ def test_taskmodule_config(documents, taskmodule_config):
 
 def test_batch(documents, batch, taskmodule_config):
     taskmodule = RESpanPairClassificationTaskModule.from_config(taskmodule_config)
-    encodings = taskmodule.encode(documents, encode_target=True, as_dataset=True)
+    encodings = taskmodule.encode(documents, encode_target=True)
     batch_from_documents = taskmodule.collate(encodings[:4])
 
     inputs, targets = batch
