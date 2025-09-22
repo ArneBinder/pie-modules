@@ -1,5 +1,12 @@
 # pie-modules
 
+> ⚠️ **DEPRECATED**
+> This repository is no longer actively maintained.<br>
+> No further releases will be published to PyPI for this package.<br>
+> Please see the following alternatives:<br>
+> **•** For document & annotation type definitions and document processing utilities, use the [**pie-documents**](https://github.com/ArneBinder/pie-documents) repo.<br>
+> **•** For model and taskmodule implementations (torch-based), use [**pytorch-ie**](https://github.com/ArneBinder/pytorch-ie).
+
 <a href="https://pytorch.org/get-started/locally/"><img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-ee4c2c?logo=pytorch&logoColor=white"></a>
 <a href="https://pytorchlightning.ai/"><img alt="Lightning" src="https://img.shields.io/badge/-Lightning-792ee5?logo=pytorchlightning&logoColor=white"></a>
 <a href="https://github.com/ChristophAlt/pytorch-ie"><img alt="PyTorch-IE" src="https://img.shields.io/badge/-PyTorch--IE-017F2F?style=flat&logo=github&labelColor=gray"></a><br>
@@ -49,6 +56,18 @@ Document processing utilities:
 - [SentenceSplitter](src/pie_modules/document/processing/sentence_splitter.py)
 - [TextSpanTrimmer](src/pie_modules/document/processing/text_span_trimmer.py)
 - [tokenize_document](src/pie_modules/document/processing/tokenization.py)
+
+______________________________________________________________________
+
+## Important Notice
+
+This repository is **deprecated** and will receive no major updates.
+For ongoing maintenance and new features, please refer to:
+
+- [**pie-documents**](https://github.com/ArneBinder/pie-documents) — for document & annotation type definitions, and for document-processing utilities
+- [**pytorch-ie**](https://github.com/ArneBinder/pytorch-ie) — for model & taskmodule implementations using PyTorch
+
+______________________________________________________________________
 
 ## Setup
 
