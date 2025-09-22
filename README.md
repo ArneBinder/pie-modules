@@ -4,7 +4,7 @@
 > This repository is no longer actively maintained.<br>
 > No further releases will be published to PyPI for this package.<br>
 > Please see the following alternatives:<br>
-> **•** For document & annotation type definitions and document processing utilities, use the [**pie-documents**](https://github.com/ArneBinder/pie-documents) repo.<br>
+> **•** For document & annotation type definitions and document processing utilities & metrics, use the [**pie-documents**](https://github.com/ArneBinder/pie-documents) repo.<br>
 > **•** For model and taskmodule implementations (torch-based), use [**pytorch-ie**](https://github.com/ArneBinder/pytorch-ie).
 
 <a href="https://pytorch.org/get-started/locally/"><img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-ee4c2c?logo=pytorch&logoColor=white"></a>
